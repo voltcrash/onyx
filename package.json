@@ -27,11 +27,8 @@
     "vite": "catalog:",
     "vite-plus": "catalog:"
   },
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "11.22.0",
-      "onFail": "download"
-    }
-  }
+  "engines": {
+    "node": "24.x"
+  },
+  "packageManager": "pnpm@11.21.0"
 }
