@@ -1,244 +1,248 @@
 <script lang="ts">
-	import { Archive, Check, ChevronDown, ChevronRight, Cloud, FilePlus2, FileText, Folder, FolderOpen, FolderPlus, GripVertical, MoreHorizontal, PanelLeft, PanelLeftClose, Pencil, Search, Settings, Trash2, X } from '@lucide/svelte';
+	import { Bold, Check, ChevronRight, CloudOff, Code2, Columns2, Eye, FileText, Heading2, HelpCircle, Italic, Link, List, LoaderCircle, PanelLeft, PencilLine, Quote, RotateCcw, Save, X } from '@lucide/svelte';
 	import { onMount } from 'svelte';
 
-	type TreeNode = { id: string; name: string; type: 'folder' | 'file'; content?: string; children?: TreeNode[] };
-	type FlatNode = { node: TreeNode; depth: number; parentId: string | null };
+	type ViewMode = 'edit' | 'split' | 'preview';
+	type SaveState = 'loading' | 'saved' | 'saving' | 'unsaved' | 'error';
+	const FILE_NAME = 'welcome-to-onyx.md';
+	const INITIAL_MARKDOWN = `# Welcome to Onyx
 
-	const initialTree: TreeNode[] = [
-		{ id: 'projects', name: 'Projects', type: 'folder', children: [
-			{ id: 'atlas', name: 'Atlas', type: 'folder', children: [
-				{ id: 'atlas-overview', name: 'Overview.md', type: 'file', content: '# Atlas\n\nA quiet system for keeping projects, decisions, and ideas close at hand.\n\n## This week\n\n- Refine the capture flow\n- Review offline storage behavior\n- Prepare the September release\n\n## Decisions\n\nKeep the writing surface simple. Structure should stay in the sidebar, not interrupt the note.' },
-				{ id: 'research-notes', name: 'Research notes.md', type: 'file', content: '# Research notes\n\n## Local-first references\n\nCollect useful patterns here.' }
-			] },
-			{ id: 'onyx', name: 'Onyx', type: 'folder', children: [
-				{ id: 'roadmap', name: 'Roadmap.md', type: 'file', content: '# Roadmap\n\n## Now\n\nA fast, keyboard-friendly file manager.' },
-				{ id: 'design-notes', name: 'Design notes.md', type: 'file', content: '# Design notes\n\nLet the interface feel sturdy, quiet, and precise.' }
-			] }
-		] },
-		{ id: 'areas', name: 'Areas', type: 'folder', children: [
-			{ id: 'reading', name: 'Reading list.md', type: 'file', content: '# Reading list\n\n- Designing Data-Intensive Applications' },
-			{ id: 'ideas', name: 'Ideas.md', type: 'file', content: '# Ideas\n\nSmall thoughts worth returning to.' }
-		] },
-		{ id: 'quick-notes', name: 'Quick notes.md', type: 'file', content: '# Quick notes\n\nCapture first. Organize later.' }
-	];
+Onyx is a quiet place to think in Markdown. Your work stays on this device and saves automatically as you write.
 
-	let tree = $state<TreeNode[]>(initialTree);
-	let expanded = $state(new Set(['projects', 'atlas', 'onyx', 'areas']));
-	let selectedId = $state('atlas-overview');
-	let editingId = $state<string | null>(null);
-	let editingName = $state('');
-	let menuId = $state<string | null>(null);
-	let searchQuery = $state('');
-	let sidebarOpen = $state(true);
-	let deleteTarget = $state<TreeNode | null>(null);
-	let moveTarget = $state<TreeNode | null>(null);
-	let draggedId = $state<string | null>(null);
-	let saved = $state(true);
+## A focused writing space
 
-	const flatTree = $derived(flatten(tree, searchQuery));
-	const selected = $derived(findNode(tree, selectedId));
-	const folders = $derived(flattenAll(tree).filter(({ node }) => node.type === 'folder'));
-	const headings = $derived((selected?.content ?? '').split('\n').filter((line) => /^#{1,3}\s/.test(line)).map((line) => ({ level: line.match(/^#+/)?.[0].length ?? 1, label: line.replace(/^#{1,3}\s/, '') })));
+The editor keeps the tools you need close by, without getting in the way. Try selecting some text and making it **bold**, or switch to preview to see the finished document.
+
+> Good tools disappear into the work.
+
+### Today’s notes
+
+- [x] Open a fresh page
+- [ ] Capture the next idea
+- [ ] Shape it into something useful
+
+Use \`⌘ S\` to save now, or \`⌘ ⇧ P\` to toggle preview.`;
+
+	let markdown = $state(INITIAL_MARKDOWN);
+	let lastSavedMarkdown = $state(INITIAL_MARKDOWN);
+	let viewMode = $state<ViewMode>('split');
+	let saveState = $state<SaveState>('loading');
+	let saveTimer: number | undefined = $state();
+	let editor: HTMLTextAreaElement | undefined = $state();
+	let shortcutsOpen = $state(false);
+	let sidebarOpen = $state(false);
+	let storageError = $state('');
+
+	const wordCount = $derived(markdown.trim() ? markdown.trim().split(/\s+/).length : 0);
+	const characterCount = $derived(markdown.length);
+	const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
+	const renderedMarkdown = $derived(renderMarkdown(markdown));
 
 	onMount(() => {
-		const stored = localStorage.getItem('onyx-tree');
-		if (stored) {
-			try { tree = JSON.parse(stored); } catch { localStorage.removeItem('onyx-tree'); }
-		}
+		void loadDraft();
+		const onBeforeUnload = (event: BeforeUnloadEvent) => {
+			if (markdown === lastSavedMarkdown) return;
+			event.preventDefault();
+		};
+		const onKeydown = (event: KeyboardEvent) => handleShortcut(event);
+		const onVisibilityChange = () => {
+			if (document.visibilityState === 'hidden' && markdown !== lastSavedMarkdown) void saveDraft();
+		};
+		window.addEventListener('beforeunload', onBeforeUnload);
+		window.addEventListener('keydown', onKeydown);
+		document.addEventListener('visibilitychange', onVisibilityChange);
+		return () => {
+			window.removeEventListener('beforeunload', onBeforeUnload);
+			window.removeEventListener('keydown', onKeydown);
+			document.removeEventListener('visibilitychange', onVisibilityChange);
+			if (saveTimer) window.clearTimeout(saveTimer);
+		};
 	});
 
-	function flatten(nodes: TreeNode[], query: string, depth = 0, parentId: string | null = null): FlatNode[] {
-		const result: FlatNode[] = [];
-		const normalized = query.trim().toLowerCase();
-		for (const node of nodes) {
-			if (normalized) {
-				if (node.type === 'file' && node.name.toLowerCase().includes(normalized)) result.push({ node, depth: 0, parentId });
-				if (node.children) result.push(...flatten(node.children, query, 0, node.id));
-			} else {
-				result.push({ node, depth, parentId });
-				if (node.children && expanded.has(node.id)) result.push(...flatten(node.children, query, depth + 1, node.id));
+	async function getDraftFile(): Promise<FileSystemFileHandle> {
+		if (!navigator.storage?.getDirectory) throw new Error('OPFS is not supported by this browser.');
+		const root = await navigator.storage.getDirectory();
+		const drafts = await root.getDirectoryHandle('onyx', { create: true });
+		return drafts.getFileHandle(FILE_NAME, { create: true });
+	}
+
+	async function loadDraft(): Promise<void> {
+		try {
+			const handle = await getDraftFile();
+			const file = await handle.getFile();
+			if (file.size > 0) markdown = await file.text();
+			lastSavedMarkdown = markdown;
+			saveState = 'saved';
+			void navigator.storage.persist?.();
+			if (file.size === 0) await saveDraft();
+		} catch (error) {
+			storageError = error instanceof Error ? error.message : 'This draft could not be opened.';
+			saveState = 'error';
+		}
+	}
+
+	function queueSave(): void {
+		saveState = 'unsaved';
+		if (saveTimer) window.clearTimeout(saveTimer);
+		saveTimer = window.setTimeout(() => void saveDraft(), 700);
+	}
+
+	async function saveDraft(): Promise<void> {
+		if (saveTimer) window.clearTimeout(saveTimer);
+		saveTimer = undefined;
+		saveState = 'saving';
+		try {
+			const handle = await getDraftFile();
+			const writable = await handle.createWritable();
+			await writable.write(markdown);
+			await writable.close();
+			lastSavedMarkdown = markdown;
+			saveState = 'saved';
+			storageError = '';
+		} catch (error) {
+			storageError = error instanceof Error ? error.message : 'Autosave failed.';
+			saveState = 'error';
+		}
+	}
+
+	function updateMarkdown(value: string): void { markdown = value; queueSave(); }
+
+	function insertSyntax(before: string, after = before, placeholder = 'text'): void {
+		if (!editor) return;
+		const start = editor.selectionStart;
+		const end = editor.selectionEnd;
+		const selection = markdown.slice(start, end) || placeholder;
+		markdown = `${markdown.slice(0, start)}${before}${selection}${after}${markdown.slice(end)}`;
+		queueSave();
+		requestAnimationFrame(() => {
+			editor?.focus();
+			editor?.setSelectionRange(start + before.length, start + before.length + selection.length);
+		});
+	}
+
+	function prefixLine(prefix: string): void {
+		if (!editor) return;
+		const cursor = editor.selectionStart;
+		const start = markdown.lastIndexOf('\n', cursor - 1) + 1;
+		markdown = `${markdown.slice(0, start)}${prefix}${markdown.slice(start)}`;
+		queueSave();
+		requestAnimationFrame(() => { editor?.focus(); editor?.setSelectionRange(cursor + prefix.length, cursor + prefix.length); });
+	}
+
+	function handleShortcut(event: KeyboardEvent): void {
+		const command = event.metaKey || event.ctrlKey;
+		if (command && event.key.toLowerCase() === 's') { event.preventDefault(); void saveDraft(); }
+		else if (command && event.key.toLowerCase() === 'b') { event.preventDefault(); insertSyntax('**', '**', 'bold text'); }
+		else if (command && event.key.toLowerCase() === 'i') { event.preventDefault(); insertSyntax('_', '_', 'italic text'); }
+		else if (command && event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); viewMode = viewMode === 'preview' ? 'edit' : 'preview'; }
+		else if (event.key === '?' && !isTypingTarget(event.target)) shortcutsOpen = true;
+		else if (event.key === 'Escape') shortcutsOpen = false;
+	}
+
+	function isTypingTarget(target: EventTarget | null): boolean { return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement; }
+	function restoreSaved(): void { markdown = lastSavedMarkdown; saveState = 'saved'; if (saveTimer) window.clearTimeout(saveTimer); }
+
+	function renderMarkdown(source: string): string {
+		const lines = escapeHtml(source).split('\n');
+		const output: string[] = [];
+		let inCode = false;
+		let inList = false;
+		for (const line of lines) {
+			if (line.startsWith('```')) {
+				if (inList) { output.push('</ul>'); inList = false; }
+				output.push(inCode ? '</code></pre>' : '<pre><code>');
+				inCode = !inCode;
+				continue;
 			}
+			if (inCode) { output.push(`${line}\n`); continue; }
+			const heading = line.match(/^(#{1,3})\s+(.*)$/);
+			if (heading) {
+				if (inList) { output.push('</ul>'); inList = false; }
+				const level = heading[1].length;
+				output.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
+				continue;
+			}
+			const item = line.match(/^[-*]\s+(.*)$/);
+			if (item) {
+				if (!inList) { output.push('<ul>'); inList = true; }
+				const task = item[1].match(/^\[([ xX])\]\s+(.*)$/);
+				output.push(task ? `<li class="task"><span class="check ${task[1] !== ' ' ? 'done' : ''}">${task[1] !== ' ' ? '✓' : ''}</span>${inlineMarkdown(task[2])}</li>` : `<li>${inlineMarkdown(item[1])}</li>`);
+				continue;
+			}
+			if (inList) { output.push('</ul>'); inList = false; }
+			if (line.startsWith('&gt; ')) output.push(`<blockquote>${inlineMarkdown(line.slice(5))}</blockquote>`);
+			else if (line.trim()) output.push(`<p>${inlineMarkdown(line)}</p>`);
+			else output.push('<div class="spacer"></div>');
 		}
-		return result;
+		if (inList) output.push('</ul>');
+		if (inCode) output.push('</code></pre>');
+		return output.join('');
 	}
 
-	function flattenAll(nodes: TreeNode[], depth = 0, parentId: string | null = null): FlatNode[] {
-		return nodes.flatMap((node) => [{ node, depth, parentId }, ...(node.children ? flattenAll(node.children, depth + 1, node.id) : [])]);
+	function inlineMarkdown(value: string): string {
+		return value.replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/_([^_]+)_/g, '<em>$1</em>').replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
 	}
 
-	function findNode(nodes: TreeNode[], id: string): TreeNode | undefined {
-		for (const node of nodes) {
-			if (node.id === id) return node;
-			const found = node.children ? findNode(node.children, id) : undefined;
-			if (found) return found;
-		}
-	}
-
-	function findParent(nodes: TreeNode[], id: string, parent: TreeNode | null = null): TreeNode | null | undefined {
-		for (const node of nodes) {
-			if (node.id === id) return parent;
-			const found = node.children ? findParent(node.children, id, node) : undefined;
-			if (found !== undefined) return found;
-		}
-	}
-
-	function persist(): void { localStorage.setItem('onyx-tree', JSON.stringify(tree)); }
-
-	function toggleFolder(id: string): void {
-		expanded = new Set(expanded);
-		if (expanded.has(id)) expanded.delete(id);
-		else expanded.add(id);
-	}
-
-	function selectNode(node: TreeNode): void {
-		menuId = null;
-		if (node.type === 'folder') toggleFolder(node.id);
-		else { selectedId = node.id; sidebarOpen = window.innerWidth > 760; }
-	}
-
-	function createNode(type: 'folder' | 'file'): void {
-		const selectedNode = findNode(tree, selectedId);
-		const parent = selectedNode?.type === 'folder' ? selectedNode : findParent(tree, selectedId);
-		const base = type === 'folder' ? 'New folder' : 'Untitled.md';
-		const id = crypto.randomUUID();
-		const node: TreeNode = type === 'folder' ? { id, name: base, type, children: [] } : { id, name: base, type, content: '# Untitled\n\n' };
-		if (parent) {
-			parent.children ??= [];
-			parent.children.push(node);
-			expanded = new Set(expanded).add(parent.id);
-		} else tree.push(node);
-		tree = [...tree];
-		selectedId = id;
-		editingId = id;
-		editingName = base;
-		persist();
-		setTimeout(() => document.querySelector<HTMLInputElement>('.rename-input')?.select());
-	}
-
-	function beginRename(node: TreeNode): void {
-		editingId = node.id;
-		editingName = node.name;
-		menuId = null;
-		setTimeout(() => document.querySelector<HTMLInputElement>('.rename-input')?.select());
-	}
-
-	function commitRename(): void {
-		if (!editingId) return;
-		const node = findNode(tree, editingId);
-		const name = editingName.trim();
-		if (node && name) {
-			node.name = node.type === 'file' && !name.toLowerCase().endsWith('.md') ? `${name}.md` : name;
-			tree = [...tree];
-			persist();
-		}
-		editingId = null;
-	}
-
-	function removeFromTree(nodes: TreeNode[], id: string): TreeNode | undefined {
-		const index = nodes.findIndex((node) => node.id === id);
-		if (index >= 0) return nodes.splice(index, 1)[0];
-		for (const node of nodes) {
-			const removed = node.children ? removeFromTree(node.children, id) : undefined;
-			if (removed) return removed;
-		}
-	}
-
-	function confirmDelete(): void {
-		if (!deleteTarget) return;
-		const deletingSelected = deleteTarget.id === selectedId || Boolean(findNode(deleteTarget.children ?? [], selectedId));
-		removeFromTree(tree, deleteTarget.id);
-		tree = [...tree];
-		if (deletingSelected) selectedId = flattenAll(tree).find(({ node }) => node.type === 'file')?.node.id ?? '';
-		deleteTarget = null;
-		persist();
-	}
-
-	function moveNode(nodeId: string, folderId: string | null): void {
-		const node = findNode(tree, nodeId);
-		if (!node || nodeId === folderId || (node.children && folderId && findNode(node.children, folderId))) return;
-		const removed = removeFromTree(tree, nodeId);
-		if (!removed) return;
-		const folder = folderId ? findNode(tree, folderId) : undefined;
-		if (folder?.type === 'folder') {
-			folder.children ??= [];
-			folder.children.push(removed);
-			expanded = new Set(expanded).add(folder.id);
-		} else tree.push(removed);
-		tree = [...tree];
-		moveTarget = null;
-		persist();
-	}
-
-	function dropOn(target: TreeNode): void {
-		if (!draggedId) return;
-		const targetFolder = target.type === 'folder' ? target : findParent(tree, target.id);
-		moveNode(draggedId, targetFolder?.id ?? null);
-		draggedId = null;
-	}
-
-	function updateContent(value: string): void {
-		if (!selected || selected.type !== 'file') return;
-		selected.content = value;
-		tree = [...tree];
-		saved = false;
-		window.setTimeout(() => { persist(); saved = true; }, 350);
-	}
+	function escapeHtml(value: string): string { return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;'); }
 </script>
 
-<svelte:head><title>Onyx — Notes</title><meta name="description" content="A focused, local-first home for Markdown notes." /></svelte:head>
+<svelte:head><title>Onyx — Markdown editor</title><meta name="description" content="A focused, local-first Markdown editor with automatic saving." /></svelte:head>
 
-<div class="app-shell" class:sidebar-collapsed={!sidebarOpen}>
+<div class="app" class:sidebar-open={sidebarOpen}>
 	<header class="topbar">
-		<div class="brand-block"><div class="brand-mark">O</div><div><strong>Onyx</strong><span>Personal vault</span></div></div>
-		<div class="document-status"><Cloud size={15} /> {saved ? 'Saved locally' : 'Saving…'}</div>
-		<div class="top-actions"><button class="icon-button" aria-label="Open settings"><Settings size={18} /></button><div class="avatar">LK</div></div>
+		<div class="brand"><button class="mobile-menu icon-button" aria-label="Open files" onclick={() => (sidebarOpen = true)}><PanelLeft size={19} /></button><div class="brand-mark">O</div><span>Onyx</span></div>
+		<div class="document-path" aria-label="Current document"><span>Notes</span><ChevronRight size={14} /><strong>{FILE_NAME}</strong></div>
+		<div class="top-actions">
+			<div class="save-status" class:error={saveState === 'error'} aria-live="polite">
+				{#if saveState === 'loading' || saveState === 'saving'}<LoaderCircle class="spin" size={15} />{:else if saveState === 'error'}<CloudOff size={15} />{:else}<span class:unsaved={saveState === 'unsaved'}></span>{/if}
+				{saveState === 'loading' ? 'Opening…' : saveState === 'saving' ? 'Saving…' : saveState === 'unsaved' ? 'Unsaved' : saveState === 'error' ? 'Save failed' : 'Saved to this device'}
+			</div>
+			<button class="save-button" onclick={() => void saveDraft()} disabled={saveState === 'saving'}><Save size={16} /><span>Save</span><kbd>⌘S</kbd></button>
+			<button class="icon-button" aria-label="Keyboard shortcuts" title="Keyboard shortcuts" onclick={() => (shortcutsOpen = true)}><HelpCircle size={18} /></button>
+		</div>
 	</header>
 
-	<aside class="sidebar" aria-label="File manager">
-		<div class="sidebar-header"><div><span class="eyebrow">Workspace</span><h1>Notes</h1></div><button class="icon-button close-sidebar" onclick={() => (sidebarOpen = false)} aria-label="Close sidebar"><PanelLeftClose size={18} /></button></div>
-		<div class="search-wrap"><Search size={16} /><input bind:value={searchQuery} aria-label="Search notes" placeholder="Search notes" />{#if searchQuery}<button aria-label="Clear search" onclick={() => (searchQuery = '')}><X size={14} /></button>{/if}</div>
-		<div class="tree-toolbar"><span>Files</span><div><button aria-label="New note" title="New note" onclick={() => createNode('file')}><FilePlus2 size={16} /></button><button aria-label="New folder" title="New folder" onclick={() => createNode('folder')}><FolderPlus size={16} /></button></div></div>
-
-		<nav class="file-tree" aria-label="Notes and folders">
-			{#each flatTree as item (item.node.id)}
-				<div role="treeitem" aria-selected={item.node.id === selectedId} tabindex="-1" class="tree-row" class:selected={item.node.id === selectedId} class:dragging={item.node.id === draggedId} style={`--depth: ${item.depth}`} draggable="true" ondragstart={() => (draggedId = item.node.id)} ondragend={() => (draggedId = null)} ondragover={(event) => event.preventDefault()} ondrop={(event) => { event.preventDefault(); dropOn(item.node); }}>
-					<button class="node-main" onclick={() => selectNode(item.node)}>
-						<span class="chevron">{#if item.node.type === 'folder'}{#if expanded.has(item.node.id)}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}{/if}</span>
-						{#if item.node.type === 'folder'}{#if expanded.has(item.node.id)}<FolderOpen class="node-icon folder-icon" size={17} />{:else}<Folder class="node-icon folder-icon" size={17} />{/if}{:else}<FileText class="node-icon" size={16} />{/if}
-						{#if editingId === item.node.id}
-							<input class="rename-input" bind:value={editingName} onclick={(event) => event.stopPropagation()} onblur={commitRename} onkeydown={(event) => { if (event.key === 'Enter') commitRename(); if (event.key === 'Escape') editingId = null; }} />
-						{:else}<span class="node-name">{item.node.name.replace(/\.md$/i, '')}</span>{/if}
-					</button>
-					<button class="row-menu" aria-label={`Actions for ${item.node.name}`} onclick={() => (menuId = menuId === item.node.id ? null : item.node.id)}><MoreHorizontal size={16} /></button>
-					{#if menuId === item.node.id}<div class="context-menu"><button onclick={() => beginRename(item.node)}><Pencil size={14} /> Rename</button><button onclick={() => { moveTarget = item.node; menuId = null; }}><GripVertical size={14} /> Move to…</button><button class="danger" onclick={() => { deleteTarget = item.node; menuId = null; }}><Trash2 size={14} /> Delete</button></div>{/if}
-				</div>
-			{/each}
-			{#if flatTree.length === 0}<div class="empty-tree">No notes match “{searchQuery}”</div>{/if}
-		</nav>
-		<div class="sidebar-footer"><button><Archive size={17} /><span>Archive</span><span class="count">3</span></button><div class="storage"><span><i></i>2.4 MB of 1 GB</span><div><i></i></div></div></div>
+	<aside class="sidebar" aria-label="Files">
+		<div class="sidebar-heading"><span>Workspace</span><button class="icon-button mobile-close" aria-label="Close files" onclick={() => (sidebarOpen = false)}><X size={18} /></button></div>
+		<h1>Notes</h1>
+		<nav><button class="file active"><FileText size={17} /><span>{FILE_NAME.replace('.md', '')}</span><i></i></button></nav>
+		<div class="local-note"><span class="local-icon"><Check size={14} /></span><div><strong>Private by default</strong><p>Stored in your browser’s private file system.</p></div></div>
 	</aside>
 
 	<main class="workspace">
-		<button class="sidebar-toggle" onclick={() => (sidebarOpen = true)} aria-label="Open sidebar"><PanelLeft size={19} /></button>
-		{#if selected?.type === 'file'}
-			<div class="editor-wrap">
-				<div class="breadcrumb"><span>{findParent(tree, selected.id)?.name ?? 'Notes'}</span><ChevronRight size={13} /><strong>{selected.name}</strong></div>
-				<input class="note-title" aria-label="Note title" value={selected.name.replace(/\.md$/i, '')} onchange={(event) => { editingId = selected.id; editingName = event.currentTarget.value; commitRename(); }} />
-				<div class="note-meta"><span>Edited just now</span><span>·</span><span>Markdown</span><span class="private-pill"><Check size={12} /> Private</span></div>
-				<textarea class="markdown-editor" aria-label="Markdown content" spellcheck="true" value={selected.content} oninput={(event) => updateContent(event.currentTarget.value)}></textarea>
+		<div class="document-bar">
+			<div class="document-info"><FileText size={17} /><span>{FILE_NAME}</span></div>
+			<div class="view-switcher" aria-label="View mode">
+				<button class:active={viewMode === 'edit'} onclick={() => (viewMode = 'edit')} aria-label="Editor only" title="Editor only"><PencilLine size={16} /><span>Edit</span></button>
+				<button class:active={viewMode === 'split'} onclick={() => (viewMode = 'split')} aria-label="Split view" title="Split view"><Columns2 size={16} /><span>Split</span></button>
+				<button class:active={viewMode === 'preview'} onclick={() => (viewMode = 'preview')} aria-label="Preview only" title="Preview only"><Eye size={16} /><span>Preview</span></button>
 			</div>
-			<aside class="outline" aria-label="Note outline"><span class="eyebrow">On this page</span>{#each headings as heading}<a href={`#${heading.label.toLowerCase().replaceAll(' ', '-')}`} class:subheading={heading.level > 1}>{heading.label}</a>{/each}</aside>
-		{:else}
-			<div class="blank-state"><FileText size={28} /><h2>No note selected</h2><p>Choose a note from the sidebar or create a new one.</p><button onclick={() => createNode('file')}><FilePlus2 size={16} /> New note</button></div>
-		{/if}
+			<div class="document-stats"><span>{wordCount} words</span><span>{readingMinutes} min read</span></div>
+		</div>
+
+		{#if storageError}<div class="storage-error"><CloudOff size={16} /><span>{storageError} Your current text will remain open, but it may be lost when this tab closes.</span><button onclick={() => void saveDraft()}>Try again</button></div>{/if}
+
+		<section class="editor-shell" class:edit-only={viewMode === 'edit'} class:preview-only={viewMode === 'preview'}>
+			<div class="editor-pane" aria-hidden={viewMode === 'preview'}>
+				<div class="formatting-bar" aria-label="Formatting tools">
+					<button onclick={() => insertSyntax('**', '**', 'bold text')} title="Bold (⌘B)" aria-label="Bold"><Bold size={16} /></button><button onclick={() => insertSyntax('_', '_', 'italic text')} title="Italic (⌘I)" aria-label="Italic"><Italic size={16} /></button><span></span><button onclick={() => prefixLine('## ')} title="Heading" aria-label="Heading"><Heading2 size={17} /></button><button onclick={() => prefixLine('- ')} title="Bulleted list" aria-label="Bulleted list"><List size={17} /></button><button onclick={() => prefixLine('> ')} title="Quote" aria-label="Quote"><Quote size={16} /></button><button onclick={() => insertSyntax('`', '`', 'code')} title="Inline code" aria-label="Inline code"><Code2 size={17} /></button><button onclick={() => insertSyntax('[', '](https://)', 'link text')} title="Link" aria-label="Link"><Link size={16} /></button>
+				</div>
+				<textarea bind:this={editor} value={markdown} oninput={(event) => updateMarkdown(event.currentTarget.value)} aria-label="Markdown editor" spellcheck="true"></textarea>
+				<div class="editor-footer"><span>Markdown</span><span>{characterCount.toLocaleString()} characters</span></div>
+			</div>
+			<div class="preview-pane" aria-hidden={viewMode === 'edit'}><div class="preview-label"><Eye size={14} /> Preview</div><article class="prose">{@html renderedMarkdown}</article></div>
+		</section>
 	</main>
 </div>
 
-{#if deleteTarget}
-	<div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) deleteTarget = null; }}><div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-title" tabindex="-1"><div class="modal-icon danger-icon"><Trash2 size={20} /></div><h2 id="delete-title">Delete {deleteTarget.type}?</h2><p>“{deleteTarget.name}” {deleteTarget.type === 'folder' ? 'and everything inside it ' : ''}will be removed from this vault.</p><div class="modal-actions"><button class="secondary" onclick={() => (deleteTarget = null)}>Cancel</button><button class="destructive" onclick={confirmDelete}>Delete</button></div></div></div>
-{/if}
+{#if saveState === 'unsaved'}<div class="unsaved-bar" aria-live="polite"><span><i></i>Changes haven’t been saved yet</span><button onclick={restoreSaved}><RotateCcw size={14} /> Revert</button><button class="bar-save" onclick={() => void saveDraft()}><Save size={14} /> Save now</button></div>{/if}
 
-{#if moveTarget}
-	<div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) moveTarget = null; }}><div class="modal move-modal" role="dialog" aria-modal="true" aria-labelledby="move-title" tabindex="-1"><div class="modal-icon"><FolderOpen size={20} /></div><h2 id="move-title">Move “{moveTarget.name.replace(/\.md$/i, '')}”</h2><p>Choose a new location in your vault.</p><div class="folder-picker"><button onclick={() => moveNode(moveTarget!.id, null)}><Folder size={16} /><span>Notes</span><small>Vault root</small></button>{#each folders.filter(({ node }) => node.id !== moveTarget?.id && !(moveTarget?.children && findNode(moveTarget.children, node.id))) as folder}<button style={`--depth: ${folder.depth}`} onclick={() => moveNode(moveTarget!.id, folder.node.id)}><Folder size={16} /><span>{folder.node.name}</span></button>{/each}</div><div class="modal-actions"><button class="secondary" onclick={() => (moveTarget = null)}>Cancel</button></div></div></div>
+{#if shortcutsOpen}
+	<div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) shortcutsOpen = false; }}>
+		<div class="shortcut-modal" role="dialog" aria-modal="true" aria-labelledby="shortcut-title">
+			<div class="modal-title"><div><span>Reference</span><h2 id="shortcut-title">Keyboard shortcuts</h2></div><button class="icon-button" aria-label="Close shortcuts" onclick={() => (shortcutsOpen = false)}><X size={18} /></button></div>
+			<div class="shortcut-list"><div><span>Save document</span><kbd>⌘ S</kbd></div><div><span>Bold selection</span><kbd>⌘ B</kbd></div><div><span>Italic selection</span><kbd>⌘ I</kbd></div><div><span>Toggle preview</span><kbd>⌘ ⇧ P</kbd></div><div><span>Close this panel</span><kbd>Esc</kbd></div></div>
+			<p>Use Ctrl instead of ⌘ on Windows and Linux.</p>
+		</div>
+	</div>
 {/if}
