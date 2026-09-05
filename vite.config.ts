@@ -22,7 +22,7 @@ export default defineConfig({
           runes: ({ filename }) =>
             filename.split(/[/\\]/).includes("node_modules") ? undefined : true,
         },
-        adapter: adapter({ pages: "build", assets: "build" }),
+        adapter: adapter(),
       }),
     ]),
   ],
