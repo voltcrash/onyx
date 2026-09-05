@@ -1,12 +1,16 @@
 # onyx
+
 ---
+
 ### concept
+
 web-based markdown note-taking app that only stores files locally, while it uses GitHub to store your files for backup
 
 ### technologies
-- ***IndexedDB*** - noSQL database built in the browser
-- ***SvelteKit*** - full-stack framework
+
+- _**IndexedDB**_ - noSQL database built in the browser
+- _**SvelteKit**_ - full-stack framework
 - **Tailwind CSS & shadcn**: ui design
-- ***TypeScript*** - language
-- ***GitHub*** - auth and backup/restore
-- ***Vite+*** with ***pnpm***
+- _**TypeScript**_ - language
+- _**GitHub**_ - auth and backup/restore
+- _**Vite+**_ with _**pnpm**_
