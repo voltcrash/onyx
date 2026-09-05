@@ -6,7 +6,7 @@ import type {
   SearchState,
 } from "./types.js";
 
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 
 export interface SearchDocument {
   noteId: string;
@@ -32,6 +32,7 @@ interface SettingRecord<T> {
 export type StoreName =
   | "attachments"
   | "backupQueue"
+  | "noteContents"
   | "notes"
   | "searchDocuments"
   | "searchPostings"
@@ -85,6 +86,10 @@ export class VaultDatabase {
           cursor.continue();
         });
       }
+
+      if (event.oldVersion < 3) {
+        database.createObjectStore("noteContents", { keyPath: "noteId" });
+      }
     };
 
     const database = await requestResult(request);
@@ -106,15 +111,17 @@ export class VaultDatabase {
 
   async putNote(
     note: NoteMetadata,
+    markdown: string,
     searchDocument: SearchDocument,
     searchPostings: SearchPosting[],
     operation: BackupOperation,
   ): Promise<void> {
     const transaction = this.#database.transaction(
-      ["notes", "searchDocuments", "searchPostings", "backupQueue"],
+      ["notes", "noteContents", "searchDocuments", "searchPostings", "backupQueue"],
       "readwrite",
     );
     transaction.objectStore("notes").put(note);
+    transaction.objectStore("noteContents").put({ noteId: note.id, markdown });
     transaction.objectStore("searchDocuments").put(searchDocument);
     const postings = transaction.objectStore("searchPostings");
     const previousKeys = await requestResult<IDBValidKey[]>(
@@ -132,10 +139,11 @@ export class VaultDatabase {
     operations: BackupOperation[],
   ): Promise<void> {
     const transaction = this.#database.transaction(
-      ["notes", "attachments", "searchDocuments", "searchPostings", "backupQueue"],
+      ["notes", "noteContents", "attachments", "searchDocuments", "searchPostings", "backupQueue"],
       "readwrite",
     );
     transaction.objectStore("notes").delete(id);
+    transaction.objectStore("noteContents").delete(id);
     transaction.objectStore("searchDocuments").delete(id);
     const searchPostings = transaction.objectStore("searchPostings");
     const postingKeys = await requestResult<IDBValidKey[]>(
@@ -180,6 +188,11 @@ export class VaultDatabase {
 
   getSearchDocuments(): Promise<SearchDocument[]> {
     return this.#getAll<SearchDocument>("searchDocuments");
+  }
+
+  async getNoteMarkdown(noteId: string): Promise<string | undefined> {
+    const record = await this.#get<{ markdown: string }>("noteContents", noteId);
+    return record?.markdown;
   }
 
   async getSearchRecords(noteIds: string[]): Promise<{
@@ -242,17 +255,19 @@ export class VaultDatabase {
 
   async replaceVault(
     notes: NoteMetadata[],
+    noteContents: Array<{ markdown: string; noteId: string }>,
     attachments: AttachmentMetadata[],
     documents: SearchDocument[],
     postings: SearchPosting[],
     operations: BackupOperation[],
   ): Promise<void> {
     const transaction = this.#database.transaction(
-      ["notes", "attachments", "searchDocuments", "searchPostings", "backupQueue"],
+      ["notes", "noteContents", "attachments", "searchDocuments", "searchPostings", "backupQueue"],
       "readwrite",
     );
     const stores = {
       notes: transaction.objectStore("notes"),
+      noteContents: transaction.objectStore("noteContents"),
       attachments: transaction.objectStore("attachments"),
       documents: transaction.objectStore("searchDocuments"),
       postings: transaction.objectStore("searchPostings"),
@@ -260,6 +275,7 @@ export class VaultDatabase {
     };
     for (const store of Object.values(stores)) store.clear();
     for (const note of notes) stores.notes.put(note);
+    for (const contents of noteContents) stores.noteContents.put(contents);
     for (const attachment of attachments) stores.attachments.put(attachment);
     for (const document of documents) stores.documents.put(document);
     for (const posting of postings) stores.postings.put(posting);

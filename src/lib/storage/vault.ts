@@ -77,21 +77,36 @@ export class Vault {
       sourcePath: input.sourcePath ?? existing?.sourcePath,
     };
 
-    const previousMarkdown = existing ? await this.#filesystem.readText(path) : undefined;
-    await this.#filesystem.writeText(path, markdown);
+    const previousMarkdown = existing
+      ? ((await this.#database.getNoteMarkdown(id)) ?? (await this.#filesystem.readText(path)))
+      : undefined;
+    let fileSaved = true;
+    try {
+      await this.#filesystem.writeText(path, markdown);
+    } catch (error) {
+      if (!isQuotaExceededError(error)) throw error;
+      fileSaved = false;
+    }
     try {
       const searchDocument = toSearchDocument(metadata, markdown);
-      await this.#database.putNote(metadata, searchDocument, createSearchPostings(searchDocument), {
-        id: crypto.randomUUID(),
-        kind: "note:upsert",
-        entityId: id,
-        noteId: id,
-        path,
-        revision: metadata.revision,
-        createdAt: now,
-      });
+      await this.#database.putNote(
+        metadata,
+        markdown,
+        searchDocument,
+        createSearchPostings(searchDocument),
+        {
+          id: crypto.randomUUID(),
+          kind: "note:upsert",
+          entityId: id,
+          noteId: id,
+          path,
+          revision: metadata.revision,
+          createdAt: now,
+        },
+      );
     } catch (error) {
-      await this.#restoreNoteFile(path, previousMarkdown, error);
+      if (fileSaved) await this.#restoreNoteFile(path, previousMarkdown, error);
+      throw error;
     }
     return { ...metadata, markdown };
   }
@@ -99,7 +114,9 @@ export class Vault {
   async getNote(id: string): Promise<Note | undefined> {
     const metadata = await this.#database.getNote(id);
     if (!metadata) return undefined;
-    const markdown = await this.#filesystem.readText(metadata.path);
+    const markdown =
+      (await this.#database.getNoteMarkdown(id)) ??
+      (await this.#filesystem.readText(metadata.path));
     return { ...metadata, markdown };
   }
 
@@ -292,12 +309,19 @@ export class Vault {
     for (const operation of operations) latestByPath.set(operation.path, operation);
 
     const changes = await Promise.all(
-      [...latestByPath.values()].map(async (operation) => ({
-        contents: operation.kind.endsWith(":delete")
-          ? null
-          : await this.#filesystem.read(operation.path),
-        path: operation.path,
-      })),
+      [...latestByPath.values()].map(async (operation) => {
+        if (operation.kind.endsWith(":delete")) return { contents: null, path: operation.path };
+        if (operation.kind === "note:upsert") {
+          const markdown = await this.#database.getNoteMarkdown(operation.noteId);
+          if (markdown !== undefined) {
+            return {
+              contents: new Blob([markdown], { type: "text/markdown;charset=utf-8" }),
+              path: operation.path,
+            };
+          }
+        }
+        return { contents: await this.#filesystem.read(operation.path), path: operation.path };
+      }),
     );
     return { changes, operationIds: operations.map((operation) => operation.id) };
   }
@@ -352,6 +376,7 @@ export class Vault {
     await this.#filesystem.replace(restoredFiles, async () => {
       await this.#database.replaceVault(
         notes,
+        notes.map((note) => ({ noteId: note.id, markdown: markdownByPath.get(note.path) ?? "" })),
         attachments,
         documents,
         documents.flatMap(createSearchPostings),
@@ -513,6 +538,10 @@ function assertBrowser(): void {
   if (typeof window === "undefined" || typeof navigator === "undefined") {
     throw new Error("The vault can only be opened in a browser");
   }
+}
+
+function isQuotaExceededError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "QuotaExceededError";
 }
 
 function normalizeTags(tags: string[]): string[] {

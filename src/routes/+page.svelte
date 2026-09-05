@@ -2,7 +2,7 @@
 	import {
 		Bold, Check, ChevronRight, CloudDownload, CloudOff, Code2, Columns2, Eye, FileText, Heading2,
 		CloudUpload, Download, ExternalLink, FileArchive, FolderInput, FolderOutput, GitCommitHorizontal, HelpCircle, Italic, Link, List, LoaderCircle, LogOut, PanelLeft,
-		PencilLine, Plus, Quote, RotateCcw, Save, Search, X
+		PencilLine, Plus, Quote, RotateCcw, Save, Search, WifiOff, X
 	} from '@lucide/svelte';
 	import {
 		backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
@@ -49,6 +49,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	let shortcutsOpen = $state(false);
 	let sidebarOpen = $state(false);
 	let storageError = $state('');
+	let isOnline = $state(true);
 	let githubUser = $state<GithubUser>();
 	let githubState = $state<'loading' | 'connected' | 'disconnected' | 'error'>('loading');
 	let githubMessage = $state('');
@@ -80,28 +81,47 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	const renderedMarkdown = $derived(renderMarkdown(markdown));
 
 	onMount(() => {
-		void openVault();
-		void restoreGitHub();
+		isOnline = navigator.onLine;
+		void openVault().finally(() => registerServiceWorker());
+		if (isOnline) void restoreGitHub();
+		else githubState = 'disconnected';
 		const onBeforeUnload = (event: BeforeUnloadEvent) => {
 			if (markdown === lastSavedMarkdown) return;
 			event.preventDefault();
 		};
 		const onKeydown = (event: KeyboardEvent) => handleShortcut(event);
+		const onOnline = () => {
+			isOnline = true;
+			void restoreGitHub();
+		};
+		const onOffline = () => {
+			isOnline = false;
+			backupModalOpen = false;
+			restoreModalOpen = false;
+		};
 		const onVisibilityChange = () => {
 			if (document.visibilityState === 'hidden' && markdown !== lastSavedMarkdown) void saveDraft();
 		};
 		window.addEventListener('beforeunload', onBeforeUnload);
 		window.addEventListener('keydown', onKeydown);
+		window.addEventListener('online', onOnline);
+		window.addEventListener('offline', onOffline);
 		document.addEventListener('visibilitychange', onVisibilityChange);
 		return () => {
 			window.removeEventListener('beforeunload', onBeforeUnload);
 			window.removeEventListener('keydown', onKeydown);
+			window.removeEventListener('online', onOnline);
+			window.removeEventListener('offline', onOffline);
 			document.removeEventListener('visibilitychange', onVisibilityChange);
 			if (saveTimer) window.clearTimeout(saveTimer);
 			if (searchTimer) window.clearTimeout(searchTimer);
 			vault?.close();
 		};
 	});
+
+	function registerServiceWorker(): void {
+		if ('serviceWorker' in navigator) void navigator.serviceWorker.register('/service-worker.js').catch(() => undefined);
+	}
 
 	async function restoreGitHub(): Promise<void> {
 		const result = new URLSearchParams(location.search).get('github');
@@ -115,6 +135,11 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 						? 'The GitHub authorization response could not be verified. Please try again.'
 						: 'GitHub authentication failed. Please try again.';
 		}
+		if (!isOnline) {
+			githubState = githubUser ? 'connected' : 'disconnected';
+			return;
+		}
+		githubState = 'loading';
 		try {
 			githubUser = await restoreGithubSession();
 			githubState = githubUser ? 'connected' : githubMessage ? 'error' : 'disconnected';
@@ -125,6 +150,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	}
 
 	async function disconnectGitHub(): Promise<void> {
+		if (!isOnline) return;
 		try {
 			await disconnectGithub();
 			githubUser = undefined;
@@ -137,7 +163,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	}
 
 	async function beginBackup(): Promise<void> {
-		if (!vault || backupState === 'backing-up') return;
+		if (!isOnline || !vault || backupState === 'backing-up') return;
 		if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
 		if (!githubBackup) {
 			backupModalOpen = true;
@@ -147,7 +173,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	}
 
 	async function createBackupRepository(): Promise<void> {
-		if (!vault || !repositoryName.trim()) return;
+		if (!isOnline || !vault || !repositoryName.trim()) return;
 		backupState = 'backing-up';
 		backupMessage = 'Creating your private repository…';
 		backupModalOpen = false;
@@ -162,7 +188,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	}
 
 	async function runBackup(configuration: GithubBackupState): Promise<void> {
-		if (!vault) return;
+		if (!isOnline || !vault) return;
 		backupState = 'backing-up';
 		backupMessage = 'Preparing one GitHub commit…';
 		backupCommitUrl = '';
@@ -188,7 +214,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	}
 
 	async function openRestore(): Promise<void> {
-		if (!githubUser || restoreState === 'restoring') return;
+		if (!isOnline || !githubUser || restoreState === 'restoring') return;
 		restoreOwner = githubBackup?.owner ?? githubUser.login;
 		restoreRepository = githubBackup?.repository ?? 'onyx-vault';
 		restoreBranch = githubBackup?.branch ?? 'main';
@@ -211,7 +237,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	}
 
 	async function loadRestoreCommits(): Promise<void> {
-		if (!restoreOwner.trim() || !restoreRepository.trim() || !restoreBranch.trim()) return;
+		if (!isOnline || !restoreOwner.trim() || !restoreRepository.trim() || !restoreBranch.trim()) return;
 		restoreState = 'loading';
 		restoreMessage = '';
 		selectedRestoreSha = '';
@@ -228,7 +254,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	}
 
 	async function restoreSelectedCommit(): Promise<void> {
-		if (!vault || !selectedRestoreSha || restoreState === 'restoring') return;
+		if (!isOnline || !vault || !selectedRestoreSha || restoreState === 'restoring') return;
 		const previousSaveState = saveState;
 		if (saveTimer) window.clearTimeout(saveTimer);
 		if (searchTimer) window.clearTimeout(searchTimer);
@@ -583,13 +609,14 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	}
 </script>
 
-<svelte:head><title>Onyx — Markdown notes</title><meta name="description" content="A fast, local-first Markdown editor with full-text search." /></svelte:head>
+<svelte:head><title>Onyx — Markdown notes</title><meta name="description" content="A fast, local-first Markdown editor with full-text search that works offline." /></svelte:head>
 
 <div class="app" class:sidebar-open={sidebarOpen}>
 	<header class="topbar">
 		<div class="brand"><button class="mobile-menu icon-button" aria-label="Open files" onclick={() => (sidebarOpen = true)}><PanelLeft size={19} /></button><div class="brand-mark">O</div><span>Onyx</span></div>
 		<div class="document-path" aria-label="Current document"><span>Notes</span><ChevronRight size={14} /><strong>{noteTitle}.md</strong></div>
 		<div class="top-actions">
+			{#if !isOnline}<div class="offline-status" role="status" title="GitHub features are paused until your connection returns"><WifiOff size={14} /><span>Offline</span></div>{/if}
 			<div class="save-status" class:error={saveState === 'error'} aria-live="polite">
 				{#if saveState === 'loading' || saveState === 'saving'}<LoaderCircle class="spin" size={15} />{:else if saveState === 'error'}<CloudOff size={15} />{:else}<span class:unsaved={saveState === 'unsaved'}></span>{/if}
 				{saveState === 'loading' ? 'Opening…' : saveState === 'saving' ? 'Saving…' : saveState === 'unsaved' ? 'Unsaved' : saveState === 'error' ? 'Save failed' : 'Saved to this device'}
@@ -597,16 +624,18 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 			<button class="save-button" onclick={() => void saveDraft()} disabled={saveState === 'saving'}><Save size={16} /><span>Save</span><kbd>⌘S</kbd></button>
 			<button class="icon-button" aria-label="Import or export Markdown" title="Import or export Markdown" onclick={() => (transferModalOpen = true)}><FileArchive size={18} /></button>
 			{#if githubState === 'connected' && githubUser}
-				<button class="backup-button" class:success={backupState === 'success'} class:error={backupState === 'error'} onclick={() => void beginBackup()} disabled={!vault || backupState === 'backing-up'} title={githubBackup ? `Back up to ${githubBackup.owner}/${githubBackup.repository}` : 'Create a private repository and back up the vault'}>
+				<button class="backup-button" class:success={backupState === 'success'} class:error={backupState === 'error'} onclick={() => void beginBackup()} disabled={!isOnline || !vault || backupState === 'backing-up'} title={!isOnline ? 'GitHub backup is unavailable offline' : githubBackup ? `Back up to ${githubBackup.owner}/${githubBackup.repository}` : 'Create a private repository and back up the vault'}>
 					{#if backupState === 'backing-up'}<LoaderCircle class="spin" size={15} />{:else}<CloudUpload size={16} />{/if}
 					<span>{backupState === 'backing-up' ? 'Backing up…' : 'Back up'}</span>
 					{#if pendingBackupCount > 0}<i>{pendingBackupCount}</i>{/if}
 				</button>
-				<button class="backup-button restore-button" onclick={() => void openRestore()} disabled={!vault || restoreState === 'restoring'} title="Restore a GitHub backup commit">
+				<button class="backup-button restore-button" onclick={() => void openRestore()} disabled={!isOnline || !vault || restoreState === 'restoring'} title={isOnline ? 'Restore a GitHub backup commit' : 'GitHub restore is unavailable offline'}>
 					{#if restoreState === 'restoring'}<LoaderCircle class="spin" size={15} />{:else}<CloudDownload size={16} />{/if}
 					<span>{restoreState === 'restoring' ? 'Restoring…' : 'Restore'}</span>
 				</button>
-				<div class="github-account" title={`Connected as ${githubUser.login}`}><img src={githubUser.avatarUrl} alt="" /><span>@{githubUser.login}</span><button aria-label="Disconnect GitHub" title="Disconnect GitHub" onclick={() => void disconnectGitHub()}><LogOut size={14} /></button></div>
+				<div class="github-account" class:offline={!isOnline} title={isOnline ? `Connected as ${githubUser.login}` : `Connected as ${githubUser.login}; GitHub is unavailable offline`}><img src={githubUser.avatarUrl} alt="" /><span>@{githubUser.login}</span><button aria-label="Disconnect GitHub" title={isOnline ? 'Disconnect GitHub' : 'Disconnect is unavailable offline'} disabled={!isOnline} onclick={() => void disconnectGitHub()}><LogOut size={14} /></button></div>
+			{:else if !isOnline}
+				<button class="github-connect offline" disabled title="GitHub features are unavailable offline" aria-label="GitHub unavailable offline"><WifiOff size={16} /><span>GitHub unavailable</span></button>
 			{:else}
 				<a class="github-connect" class:error={githubState === 'error'} href="/auth/github/start" title={githubMessage || 'Connect GitHub for direct, private backups'} aria-label="Connect GitHub">{#if githubState === 'loading'}<LoaderCircle class="spin" size={15} />{:else}<CloudUpload size={16} />{/if}<span>{githubState === 'loading' ? 'Checking…' : 'Connect GitHub'}</span></a>
 			{/if}
@@ -628,7 +657,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 				<div class="empty-results"><Search size={20} /><strong>No notes found</strong><span>Try a different word or phrase.</span></div>
 			{/each}
 		</nav>
-		<div class="local-note"><span class="local-icon"><Check size={14} /></span><div><strong>Private by default</strong><p>Notes stay on this device. Backups go directly from your browser to GitHub.</p></div></div>
+		<div class="local-note"><span class="local-icon"><Check size={14} /></span><div><strong>Private and offline-ready</strong><p>Notes stay on this device and keep working offline. GitHub backup needs a connection.</p></div></div>
 	</aside>
 
 	<main class="workspace">
@@ -701,7 +730,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 				<div class="repository-field"><span>{githubUser?.login}/</span><input id="repository-name" bind:value={repositoryName} required pattern="[A-Za-z0-9._-]+" autocomplete="off" /></div>
 				<p>Onyx will create this repository as private. Each manual backup sends all pending file changes together in one commit.</p>
 			</div>
-			<div class="modal-actions"><button type="button" onclick={() => (backupModalOpen = false)}>Cancel</button><button class="primary" type="submit"><CloudUpload size={15} /> Create and back up</button></div>
+			<div class="modal-actions"><button type="button" onclick={() => (backupModalOpen = false)}>Cancel</button><button class="primary" type="submit" disabled={!isOnline}><CloudUpload size={15} /> Create and back up</button></div>
 		</form>
 	</div>
 {/if}
@@ -715,7 +744,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 				<label>Repository<input bind:value={restoreRepository} required autocomplete="off" /></label>
 				<label>Branch<input bind:value={restoreBranch} required autocomplete="off" /></label>
 				<label>Directory<input bind:value={restoreDirectory} autocomplete="off" /></label>
-				<button type="submit" disabled={restoreState === 'loading' || restoreState === 'restoring'}>{#if restoreState === 'loading'}<LoaderCircle class="spin" size={14} />{/if} Load commits</button>
+				<button type="submit" disabled={!isOnline || restoreState === 'loading' || restoreState === 'restoring'}>{#if restoreState === 'loading'}<LoaderCircle class="spin" size={14} />{/if} Load commits</button>
 			</form>
 			<div class="restore-list" aria-live="polite">
 				{#if restoreState === 'loading'}
@@ -732,7 +761,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 				{/if}
 			</div>
 			<div class="restore-warning"><strong>This replaces the local vault.</strong> Notes and attachments currently on this device will be removed and replaced by the selected commit.</div>
-			<div class="modal-actions"><button type="button" disabled={restoreState === 'restoring'} onclick={() => (restoreModalOpen = false)}>Cancel</button><button class="primary danger" type="button" disabled={!selectedRestoreSha || restoreState === 'restoring'} onclick={() => void restoreSelectedCommit()}>{#if restoreState === 'restoring'}<LoaderCircle class="spin" size={15} />{:else}<CloudDownload size={15} />{/if} {restoreState === 'restoring' ? 'Restoring…' : 'Restore selected'}</button></div>
+			<div class="modal-actions"><button type="button" disabled={restoreState === 'restoring'} onclick={() => (restoreModalOpen = false)}>Cancel</button><button class="primary danger" type="button" disabled={!isOnline || !selectedRestoreSha || restoreState === 'restoring'} onclick={() => void restoreSelectedCommit()}>{#if restoreState === 'restoring'}<LoaderCircle class="spin" size={15} />{:else}<CloudDownload size={15} />{/if} {restoreState === 'restoring' ? 'Restoring…' : 'Restore selected'}</button></div>
 		</div>
 	</div>
 {/if}

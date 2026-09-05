@@ -1,5 +1,32 @@
 import { expect, test } from "@playwright/test";
 
+test("keeps the editor usable and pauses GitHub features offline", async ({ context, page }) => {
+  await page.goto("/");
+  await expect(page.getByText("Saved to this device")).toBeVisible();
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
+    "href",
+    "/manifest.webmanifest",
+  );
+  await page.evaluate(async () => {
+    if (navigator.serviceWorker.controller) return;
+    await new Promise<void>((resolve) => {
+      navigator.serviceWorker.addEventListener("controllerchange", () => resolve(), { once: true });
+    });
+  });
+
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await page.evaluate(() => window.dispatchEvent(new Event("offline")));
+  await expect(page.getByText("Offline", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "GitHub unavailable offline" })).toBeDisabled();
+
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await editor.fill("# Written offline\n\nOnyx keeps working without a connection.");
+  await page.getByRole("button", { name: /Save/ }).first().click();
+  await expect(page.getByText("Saved to this device")).toBeVisible();
+});
+
 test("searches note titles and Markdown content", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("Saved to this device")).toBeVisible();

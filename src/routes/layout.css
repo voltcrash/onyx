@@ -109,6 +109,18 @@ textarea:focus-visible {
   gap: 9px;
   padding-right: 15px;
 }
+.offline-status {
+  height: 26px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #eee9e2;
+  color: #6f655b;
+  font-size: 11px;
+  font-weight: 600;
+}
 .save-status {
   min-width: 150px;
   display: flex;
@@ -209,7 +221,7 @@ textarea:focus-visible {
   color: var(--ink);
 }
 .backup-button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.65;
 }
 .backup-button.success {
@@ -232,6 +244,7 @@ textarea:focus-visible {
 }
 .github-connect {
   padding: 0 10px;
+  cursor: pointer;
   text-decoration: none;
 }
 .github-connect:hover {
@@ -241,6 +254,15 @@ textarea:focus-visible {
 .github-connect.error {
   border-color: #dba994;
   color: #a7422b;
+}
+.github-connect.offline,
+.github-account.offline {
+  border-color: #dfd8cf;
+  background: #f3f0eb;
+  color: #8a8178;
+}
+.github-connect.offline {
+  cursor: not-allowed;
 }
 .github-account {
   padding-left: 5px;
@@ -269,6 +291,10 @@ textarea:focus-visible {
 }
 .github-account button:hover {
   color: #a7422b;
+}
+.github-account button:disabled {
+  color: var(--faint);
+  cursor: not-allowed;
 }
 .mobile-menu,
 .mobile-close {
