@@ -45,19 +45,37 @@ test("searches note titles and Markdown content", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Project Aurora/ })).toBeVisible();
 });
 
-test("edits Markdown in inline live preview", async ({ page }) => {
+test("formats Markdown while editing in inline preview", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("Saved to this device")).toBeVisible();
 
-  await page.getByRole("button", { name: "Live preview" }).click();
-  await page.getByRole("button", { name: "Edit line 3" }).click();
+  await page.getByRole("button", { name: "Inline preview" }).click();
   const line = page.getByRole("textbox", { name: "Markdown line 3" });
   await line.fill("Onyx renders **Markdown** while you keep writing.");
-  await page.getByRole("button", { name: "Edit line 1", exact: true }).click();
+  await expect(line).toContainText("Onyx renders **Markdown** while you keep writing.");
+  await expect(line.locator("strong")).toHaveText("Markdown");
 
-  const renderedLine = page.getByRole("button", { name: "Edit line 3", exact: true });
-  await expect(renderedLine).toContainText("Onyx renders Markdown while you keep writing.");
-  await expect(renderedLine.getByText("Markdown", { exact: true })).toHaveCSS("font-weight", "700");
+  await line.fill("#");
+  await expect(line).not.toHaveClass(/heading-1/);
+  await line.press(" ");
+  await expect(line).toHaveClass(/heading-1/);
+  await expect(line.locator(".md-syntax")).toHaveText("# ");
+  await line.pressSequentially("Inline heading");
+  await expect(line).toContainText("# Inline heading");
+});
+
+test("can reveal the active Markdown source line in inline preview", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByText("Saved to this device")).toBeVisible();
+
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Editor", exact: true }).click();
+  await page.getByRole("radio", { name: /Reveal source line/ }).click();
+  await page.getByRole("button", { name: "Close settings" }).click();
+  await page.getByRole("button", { name: "Inline preview" }).click();
+
+  await page.getByRole("button", { name: "Edit line 3" }).click();
+  await expect(page.getByRole("textbox", { name: "Markdown line 3" })).toBeVisible();
 });
 
 test("imports a Markdown folder and exports its structure and attachments as ZIP", async ({

@@ -7,7 +7,7 @@
 		Settings, Sun, WifiOff, X
 	} from '@lucide/svelte';
 	import CommandPalette, { type PaletteItem } from '$lib/components/command-palette.svelte';
-	import SettingsDialog, { type SettingsSection } from '$lib/components/settings-dialog.svelte';
+	import SettingsDialog, { type InlinePreviewBehavior, type SettingsSection } from '$lib/components/settings-dialog.svelte';
 	import {
 		applyTheme, backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
 		createMarkdownExport, createMarkdownZip, importMarkdownFiles, listGithubBackupCommits, nextThemePreference,
@@ -16,7 +16,7 @@
 		type GithubBackupCommit, type GithubBackupState, type GithubUser, type NoteMetadata,
 		type ThemePreference, type VaultSearchResult
 	} from '$lib';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 
 	type ViewMode = 'edit' | 'live' | 'split' | 'preview';
 	type SaveState = 'loading' | 'saved' | 'saving' | 'unsaved' | 'error';
@@ -52,7 +52,9 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	let searchSequence = 0;
 	let editor: HTMLTextAreaElement | undefined = $state();
 	let liveEditor: HTMLTextAreaElement | undefined = $state();
+	let liveEditorContainer: HTMLDivElement | undefined = $state();
 	let liveLine = $state(0);
+	let inlinePreviewBehavior = $state<InlinePreviewBehavior>('rendered');
 	let searchInput: HTMLInputElement | undefined = $state();
 	let shortcutsOpen = $state(false);
 	let sidebarOpen = $state(false);
@@ -108,7 +110,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		{ id: 'save', group: 'Actions', label: 'Save note', shortcut: '⌘ S', icon: Save, keywords: 'write store', disabled: saveState === 'saving', run: () => void saveDraft() },
 		{ id: 'search', group: 'Actions', label: 'Search all notes', shortcut: '⌘ ⇧ F', icon: Search, keywords: 'find full text', run: () => focusSearch() },
 		{ id: 'view-edit', group: 'View', label: 'Editor only', shortcut: '⌘ ⇧ P', icon: PencilLine, keywords: 'write markdown pane', run: () => (viewMode = 'edit') },
-		{ id: 'view-live', group: 'View', label: 'Live preview', icon: Eye, keywords: 'inline rendered edit obsidian', run: () => openLivePreview() },
+		{ id: 'view-live', group: 'View', label: 'Inline preview', icon: Eye, keywords: 'live inline rendered edit obsidian', run: () => openInlinePreview() },
 		{ id: 'view-split', group: 'View', label: 'Split view', icon: Columns2, keywords: 'side by side pane', run: () => (viewMode = 'split') },
 		{ id: 'view-preview', group: 'View', label: 'Preview only', icon: Eye, keywords: 'rendered read pane', run: () => (viewMode = 'preview') },
 		{ id: 'toggle-sidebar', group: 'View', label: sidebarCollapsed ? 'Show the notes sidebar' : 'Hide the notes sidebar', shortcut: '⌘ \\', icon: PanelLeft, keywords: 'panel files list', run: () => toggleSidebar() },
@@ -128,6 +130,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 	onMount(() => {
 		isOnline = navigator.onLine;
+		inlinePreviewBehavior = localStorage.getItem('onyx:inline-preview-behavior') === 'source-line' ? 'source-line' : 'rendered';
 		theme = readThemePreference();
 		applyTheme(theme);
 		const stopThemeWatch = watchSystemTheme(() => applyTheme(theme));
@@ -580,19 +583,127 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		queueSave();
 	}
 
-	function openLivePreview(line = liveLine): void {
+	function openInlinePreview(line = liveLine): void {
 		viewMode = 'live';
 		liveLine = Math.min(Math.max(line, 0), markdownLines.length - 1);
-		requestAnimationFrame(() => liveEditor?.focus());
+		requestAnimationFrame(() => inlinePreviewBehavior === 'rendered' ? focusRenderedLine(liveLine) : liveEditor?.focus());
 	}
 
 	function activateLiveLine(line: number, position?: number): void {
 		liveLine = line;
+		if (inlinePreviewBehavior === 'rendered') {
+			requestAnimationFrame(() => focusRenderedLine(line, position));
+			return;
+		}
 		requestAnimationFrame(() => {
 			liveEditor?.focus();
 			const cursor = position ?? liveEditor?.value.length ?? 0;
 			liveEditor?.setSelectionRange(cursor, cursor);
 		});
+	}
+
+	function setInlinePreviewBehavior(behavior: InlinePreviewBehavior): void {
+		inlinePreviewBehavior = behavior;
+		localStorage.setItem('onyx:inline-preview-behavior', behavior);
+		if (viewMode === 'live') requestAnimationFrame(() => behavior === 'rendered' ? focusRenderedLine(liveLine) : liveEditor?.focus());
+	}
+
+	function updateRenderedLine(line: number, element: HTMLElement): void {
+		const position = getCaretOffset(element);
+		updateLiveLine(line, element.textContent ?? '');
+		void tick().then(() => focusRenderedLine(liveLine, position));
+	}
+
+	function handleRenderedLineKeydown(event: KeyboardEvent, line: number): void {
+		const element = event.currentTarget as HTMLElement;
+		const selection = getSourceSelection(element);
+		if (!selection) return;
+		const value = element.textContent ?? '';
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			const before = value.slice(0, selection.start);
+			const after = value.slice(selection.end);
+			const marker = before.match(/^(\s*(?:[-*]\s+(?:\[[ xX]\]\s+)?|>\s+))/)?.[1] ?? '';
+			const continuation = marker && before.trim() !== marker.trim() ? marker : '';
+			const lines = [...markdownLines];
+			lines.splice(line, 1, before, `${continuation}${after}`);
+			updateMarkdown(lines.join('\n'));
+			liveLine = line + 1;
+			requestAnimationFrame(() => focusRenderedLine(line + 1, continuation.length));
+		} else if (event.key === 'Backspace' && selection.start === 0 && selection.end === 0 && line > 0) {
+			event.preventDefault();
+			const lines = [...markdownLines];
+			const previousLength = lines[line - 1].length;
+			lines.splice(line - 1, 2, `${lines[line - 1]}${value}`);
+			updateMarkdown(lines.join('\n'));
+			liveLine = line - 1;
+			requestAnimationFrame(() => focusRenderedLine(line - 1, previousLength));
+		} else if (event.key === 'ArrowUp' && line > 0) {
+			event.preventDefault();
+			activateLiveLine(line - 1, Math.min(selection.start, markdownLines[line - 1].length));
+		} else if (event.key === 'ArrowDown' && line < markdownLines.length - 1) {
+			event.preventDefault();
+			activateLiveLine(line + 1, Math.min(selection.start, markdownLines[line + 1].length));
+		}
+	}
+
+	function getSourceSelection(element: HTMLElement): { start: number; end: number } | undefined {
+		const selection = window.getSelection();
+		if (!selection || selection.rangeCount === 0 || !element.contains(selection.anchorNode)) return;
+		const range = selection.getRangeAt(0);
+		const start = range.cloneRange();
+		start.selectNodeContents(element);
+		start.setEnd(range.startContainer, range.startOffset);
+		const end = range.cloneRange();
+		end.selectNodeContents(element);
+		end.setEnd(range.endContainer, range.endOffset);
+		return {
+			start: start.cloneContents().textContent?.length ?? 0,
+			end: end.cloneContents().textContent?.length ?? 0
+		};
+	}
+
+	function getCaretOffset(element: HTMLElement): number {
+		return getSourceSelection(element)?.end ?? (element.textContent?.length ?? 0);
+	}
+
+	function focusRenderedLine(line: number, position?: number): void {
+		const element = liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${line}"]`);
+		if (!element) return;
+		element.focus();
+		const target = Math.min(position ?? element.textContent?.length ?? 0, element.textContent?.length ?? 0);
+		setRenderedSelection(element, target, target);
+	}
+
+	function setRenderedSelection(element: HTMLElement, start: number, end: number): void {
+		const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+		let remaining = start;
+		let node = walker.nextNode();
+		while (node && remaining >= (node.textContent?.length ?? 0)) {
+			remaining -= node.textContent?.length ?? 0;
+			node = walker.nextNode();
+		}
+		const range = document.createRange();
+		if (node) range.setStart(node, remaining);
+		else {
+			range.selectNodeContents(element);
+			range.collapse(false);
+		}
+		if (end === start) range.collapse(true);
+		else {
+			const endWalker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+			let endRemaining = end;
+			let endNode = endWalker.nextNode();
+			while (endNode && endRemaining >= (endNode.textContent?.length ?? 0)) {
+				endRemaining -= endNode.textContent?.length ?? 0;
+				endNode = endWalker.nextNode();
+			}
+			if (endNode) range.setEnd(endNode, endRemaining);
+			else range.setEndAfter(element.lastChild ?? element);
+		}
+		const selection = window.getSelection();
+		selection?.removeAllRanges();
+		selection?.addRange(range);
 	}
 
 	function updateLiveLine(line: number, value: string): void {
@@ -649,6 +760,23 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	}
 
 	function insertSyntax(before: string, after = before, placeholder = 'text'): void {
+		if (viewMode === 'live' && inlinePreviewBehavior === 'rendered') {
+			const target = liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${liveLine}"]`);
+			const selection = target && getSourceSelection(target);
+			if (!target || !selection) return;
+			const lineOffset = markdownLines.slice(0, liveLine).reduce((total, line) => total + line.length + 1, 0);
+			const start = lineOffset + selection.start;
+			const end = lineOffset + selection.end;
+			const selected = markdown.slice(start, end) || placeholder;
+			markdown = `${markdown.slice(0, start)}${before}${selected}${after}${markdown.slice(end)}`;
+			queueSave();
+			requestAnimationFrame(() => {
+				focusRenderedLine(liveLine, selection.start + before.length);
+				const element = liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${liveLine}"]`);
+				if (element) setRenderedSelection(element, selection.start + before.length, selection.start + before.length + selected.length);
+			});
+			return;
+		}
 		const target = viewMode === 'live' ? liveEditor : editor;
 		if (!target) return;
 		const relativeStart = target.selectionStart;
@@ -668,6 +796,16 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	}
 
 	function prefixLine(prefix: string): void {
+		if (viewMode === 'live' && inlinePreviewBehavior === 'rendered') {
+			const target = liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${liveLine}"]`);
+			const selection = target && getSourceSelection(target);
+			if (!target || !selection) return;
+			const lineOffset = markdownLines.slice(0, liveLine).reduce((total, line) => total + line.length + 1, 0);
+			markdown = `${markdown.slice(0, lineOffset)}${prefix}${markdown.slice(lineOffset)}`;
+			queueSave();
+			requestAnimationFrame(() => focusRenderedLine(liveLine, selection.start + prefix.length));
+			return;
+		}
 		const target = viewMode === 'live' ? liveEditor : editor;
 		if (!target) return;
 		const relativeCursor = target.selectionStart;
@@ -840,6 +978,45 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		return renderMarkdown(line);
 	}
 
+	function liveLineKind(line: string, index: number): string {
+		let inCode = false;
+		for (let current = 0; current < index; current += 1) {
+			if (markdownLines[current].startsWith('```')) inCode = !inCode;
+		}
+		if (inCode || line.startsWith('```')) return 'code-line';
+		const heading = line.match(/^(#{1,3})\s+/);
+		if (heading) return `heading-${heading[1].length}`;
+		if (/^>\s+/.test(line)) return 'quote-line';
+		if (/^[-*]\s+/.test(line)) return 'list-line';
+		return '';
+	}
+
+	function renderEditableLine(line: string, index: number): string {
+		if (!line) return '<br>';
+		const kind = liveLineKind(line, index);
+		if (kind === 'code-line') {
+			const fence = line.match(/^(```)(.*)$/);
+			return fence ? `<span class="md-syntax">${fence[1]}</span>${escapeHtml(fence[2])}` : escapeHtml(line);
+		}
+		const heading = line.match(/^(#{1,3}\s+)(.*)$/);
+		if (heading) return `<span class="md-syntax">${escapeHtml(heading[1])}</span>${editableInlineMarkdown(heading[2])}`;
+		const task = line.match(/^([-*]\s+)(\[([ xX])\]\s+)(.*)$/);
+		if (task) return `<span class="md-syntax">${escapeHtml(task[1])}</span><span class="live-task-check ${task[3] !== ' ' ? 'done' : ''}"></span><span class="md-syntax">${escapeHtml(task[2])}</span>${editableInlineMarkdown(task[4])}`;
+		const list = line.match(/^([-*]\s+)(.*)$/);
+		if (list) return `<span class="md-syntax">${escapeHtml(list[1])}</span><span class="live-list-marker"></span>${editableInlineMarkdown(list[2])}`;
+		const quote = line.match(/^(>\s+)(.*)$/);
+		if (quote) return `<span class="md-syntax">${escapeHtml(quote[1])}</span>${editableInlineMarkdown(quote[2])}`;
+		return editableInlineMarkdown(line);
+	}
+
+	function editableInlineMarkdown(value: string): string {
+		return escapeHtml(value)
+			.replace(/`([^`]+)`/g, '<span class="md-syntax">`</span><code>$1</code><span class="md-syntax">`</span>')
+			.replace(/\*\*([^*]+)\*\*/g, '<span class="md-syntax">**</span><strong>$1</strong><span class="md-syntax">**</span>')
+			.replace(/_([^_]+)_/g, '<span class="md-syntax">_</span><em>$1</em><span class="md-syntax">_</span>')
+			.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, '<span class="md-syntax">[</span><a>$1</a><span class="md-syntax">]($2)</span>');
+	}
+
 	function inlineMarkdown(value: string): string {
 		return value.replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/_([^_]+)_/g, '<em>$1</em>').replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
 	}
@@ -915,7 +1092,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			<div class="document-info"><FileText size={17} /><span>{noteTitle}.md</span></div>
 			<div class="view-switcher" aria-label="View mode">
 				<button class:active={viewMode === 'edit'} onclick={() => (viewMode = 'edit')} aria-label="Editor only" title="Editor only"><PencilLine size={16} /><span>Edit</span></button>
-				<button class:active={viewMode === 'live'} onclick={() => openLivePreview()} aria-label="Live preview" title="Live preview"><Eye size={16} /><span>Live</span></button>
+				<button class:active={viewMode === 'live'} onclick={() => openInlinePreview()} aria-label="Inline preview" title="Inline preview"><Eye size={16} /><span>Inline</span></button>
 				<button class:active={viewMode === 'split'} onclick={() => (viewMode = 'split')} aria-label="Split view" title="Split view"><Columns2 size={16} /><span>Split</span></button>
 				<button class:active={viewMode === 'preview'} onclick={() => (viewMode = 'preview')} aria-label="Preview only" title="Preview only"><Eye size={16} /><span>Preview</span></button>
 			</div>
@@ -937,9 +1114,11 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 					<button onclick={() => insertSyntax('**', '**', 'bold text')} title="Bold (⌘B)" aria-label="Bold"><Bold size={16} /></button><button onclick={() => insertSyntax('_', '_', 'italic text')} title="Italic (⌘I)" aria-label="Italic"><Italic size={16} /></button><span></span><button onclick={() => prefixLine('## ')} title="Heading" aria-label="Heading"><Heading2 size={17} /></button><button onclick={() => prefixLine('- ')} title="Bulleted list" aria-label="Bulleted list"><List size={17} /></button><button onclick={() => prefixLine('> ')} title="Quote" aria-label="Quote"><Quote size={16} /></button><button onclick={() => insertSyntax('`', '`', 'code')} title="Inline code" aria-label="Inline code"><Code2 size={17} /></button><button onclick={() => insertSyntax('[', '](https://)', 'link text')} title="Link" aria-label="Link"><Link size={16} /></button>
 				</div>
 				{#if viewMode === 'live'}
-					<div class="live-editor" aria-label="Live preview editor">
+					<div class="live-editor" bind:this={liveEditorContainer} aria-label="Inline preview editor">
 						{#each markdownLines as line, index}
-							{#if index === liveLine}
+							{#if inlinePreviewBehavior === 'rendered'}
+								<div class="live-editable-line {liveLineKind(line, index)}" class:active={index === liveLine} contenteditable={saveState !== 'loading'} role="textbox" tabindex="0" aria-label={`Markdown line ${index + 1}`} aria-multiline="false" data-live-line={index} spellcheck="true" onfocus={() => (liveLine = index)} oninput={(event) => updateRenderedLine(index, event.currentTarget)} onkeydown={(event) => handleRenderedLineKeydown(event, index)}>{@html renderEditableLine(line, index)}</div>
+							{:else if index === liveLine}
 								<textarea class="live-source-line" bind:this={liveEditor} value={line} oninput={(event) => updateLiveLine(index, event.currentTarget.value)} onkeydown={(event) => handleLiveLineKeydown(event, index)} aria-label={`Markdown line ${index + 1}`} rows="1" spellcheck="true" disabled={saveState === 'loading'}></textarea>
 							{:else}
 								<div class="live-rendered-line" class:blank={!line} role="button" tabindex="0" aria-label={`Edit line ${index + 1}`} onclick={() => activateLiveLine(index)} onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activateLiveLine(index); } }}>{@html renderLiveLine(line, index)}</div>
@@ -949,7 +1128,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 				{:else}
 					<textarea bind:this={editor} value={markdown} oninput={(event) => updateMarkdown(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading'}></textarea>
 				{/if}
-				<div class="editor-footer"><span>{viewMode === 'live' ? 'Live preview' : 'Markdown'}</span><span>{characterCount.toLocaleString()} characters</span></div>
+				<div class="editor-footer"><span>{viewMode === 'live' ? 'Inline preview' : 'Markdown'}</span><span>{characterCount.toLocaleString()} characters</span></div>
 			</div>
 			<div class="preview-pane">
 				<div class="preview-label"><Eye size={14} /> Preview</div>
@@ -999,7 +1178,9 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		{backupCommitUrl}
 		{transferState}
 		{theme}
+		{inlinePreviewBehavior}
 		onThemeChange={setTheme}
+		onInlinePreviewBehaviorChange={setInlinePreviewBehavior}
 		bind:section={settingsSection}
 		onClose={() => (settingsOpen = false)}
 		onDisconnectGithub={() => void disconnectGitHub()}

@@ -18,9 +18,9 @@ web-based markdown note-taking app that only stores files locally, while it uses
 
 ### interface
 
-The workspace includes source, inline live preview, split, and read-only preview modes alongside the
-note list. Live preview renders inactive lines in place and reveals Markdown syntax on the line being
-edited. The workspace collapses to a single pane with a slide-over note list on narrow screens. Themes are light, dark, or matched to
+The workspace includes source, inline preview, split, and read-only preview modes alongside the note
+list. Inline preview formats Markdown as you type. Its editor setting can instead reveal the raw
+Markdown source for the active line. The workspace collapses to a single pane with a slide-over note list on narrow screens. Themes are light, dark, or matched to
 the operating system; the choice is stored per browser and applied before first paint.
 
 `⌘ K` opens the command palette, which jumps to any note by title and runs every action in the app

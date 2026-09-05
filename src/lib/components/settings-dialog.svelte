@@ -1,5 +1,6 @@
 <script module lang="ts">
 	export type SettingsSection =
+		| 'editor'
 		| 'appearance'
 		| 'github'
 		| 'repository'
@@ -7,6 +8,7 @@
 		| 'storage'
 		| 'transfer'
 		| 'vault';
+	export type InlinePreviewBehavior = 'rendered' | 'source-line';
 </script>
 
 <script lang="ts">
@@ -33,8 +35,10 @@
 		backupCommitUrl: string;
 		transferState: 'idle' | 'working' | 'error';
 		theme: ThemePreference;
+		inlinePreviewBehavior: InlinePreviewBehavior;
 		section?: SettingsSection;
 		onThemeChange: (preference: ThemePreference) => void;
+		onInlinePreviewBehaviorChange: (behavior: InlinePreviewBehavior) => void;
 		onClose: () => void;
 		onDisconnectGithub: () => void;
 		onCreateRepository: (name: string) => void;
@@ -51,12 +55,13 @@
 
 	let {
 		vault, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
-		backupState, backupMessage, backupCommitUrl, transferState, theme,
-		section = $bindable('github'), onThemeChange, onClose, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
+		backupState, backupMessage, backupCommitUrl, transferState, theme, inlinePreviewBehavior,
+		section = $bindable('github'), onThemeChange, onInlinePreviewBehaviorChange, onClose, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onVaultCleared
 	}: Props = $props();
 
 	const sections: Array<{ id: SettingsSection; label: string }> = [
+		{ id: 'editor', label: 'Editor' },
 		{ id: 'appearance', label: 'Appearance' },
 		{ id: 'github', label: 'GitHub account' },
 		{ id: 'repository', label: 'Repository' },
@@ -207,11 +212,24 @@
 			</nav>
 
 			<div class="settings-panel">
-				{#if !isOnline && section !== 'appearance' && section !== 'storage' && section !== 'transfer' && section !== 'vault'}
+				{#if !isOnline && section !== 'editor' && section !== 'appearance' && section !== 'storage' && section !== 'transfer' && section !== 'vault'}
 					<div class="settings-banner"><WifiOff size={15} /><span>GitHub settings are paused until your connection returns.</span></div>
 				{/if}
 
-				{#if section === 'appearance'}
+				{#if section === 'editor'}
+					<h3>Editor</h3>
+					<p class="settings-hint">Choose how Markdown behaves while you write in inline preview. This preference is remembered in this browser.</p>
+					<div class="preview-behavior-options" role="radiogroup" aria-label="Inline preview behavior">
+						<button class:active={inlinePreviewBehavior === 'rendered'} role="radio" aria-checked={inlinePreviewBehavior === 'rendered'} onclick={() => onInlinePreviewBehaviorChange('rendered')}>
+							<strong>Rendered editing</strong>
+							<small>Keep the active line formatted and hide recognized Markdown markers as you type.</small>
+						</button>
+						<button class:active={inlinePreviewBehavior === 'source-line'} role="radio" aria-checked={inlinePreviewBehavior === 'source-line'} onclick={() => onInlinePreviewBehaviorChange('source-line')}>
+							<strong>Reveal source line</strong>
+							<small>Show the raw Markdown for the active line while the rest stays rendered.</small>
+						</button>
+					</div>
+				{:else if section === 'appearance'}
 					<h3>Appearance</h3>
 					<p class="settings-hint">The theme applies to this browser and is remembered between visits. Press <kbd>⌘ ⇧ L</kbd> to cycle it from anywhere.</p>
 					<div class="theme-options" role="radiogroup" aria-label="Theme">
