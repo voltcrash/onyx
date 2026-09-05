@@ -16,6 +16,10 @@ overrides:
 importers:
 
   .:
+    dependencies:
+      '@zip.js/zip.js':
+        specifier: ^2.10.0
+        version: 2.10.0
     devDependencies:
       '@fontsource-variable/inter':
         specifier: ^5.3.0
@@ -1028,6 +1032,10 @@ packages:
 
   '@yuku-toolchain/types@0.5.43':
     resolution: {integrity: sha512-kSpvPntnXw5+lYjO71ffBEnQ5ycQ74KGIYknh0TS4xeyCuBkOqxyJumxZkMhLBBUCLjDAbx2+Icnr3Zh4ftjpQ==}
+
+  '@zip.js/zip.js@2.10.0':
+    resolution: {integrity: sha512-xRGsVpZiZlp/C/NkTAZHYE+gEhDZXJzvquuAmanDaGl3H81gQ1Di6xItqygySp8RlrzBf1GGW98LDLz0LaC6qA==}
+    engines: {bun: '>=0.7.0', deno: '>=1.0.0', node: '>=18.0.0'}
 
   abbrev@3.0.1:
     resolution: {integrity: sha512-AO2ac6pjRB3SJmGJo+v5/aK6Omggp6fsLrs6wN9bd35ulu4cCwaAU9+7ZhXjeqHVkaHThLuzH0nZr0YpCDhygg==}
@@ -2370,6 +2378,8 @@ snapshots:
     optional: true
 
   '@yuku-toolchain/types@0.5.43': {}
+
+  '@zip.js/zip.js@2.10.0': {}
 
   abbrev@3.0.1: {}
 

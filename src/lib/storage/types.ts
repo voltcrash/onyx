@@ -9,6 +9,7 @@ export interface NoteMetadata {
   updatedAt: string;
   revision: number;
   size: number;
+  sourcePath?: string;
 }
 
 export interface Note extends NoteMetadata {
@@ -20,6 +21,7 @@ export interface SaveNoteInput {
   title: string;
   markdown: string;
   tags?: string[];
+  sourcePath?: string;
 }
 
 export interface AttachmentMetadata {
@@ -31,6 +33,7 @@ export interface AttachmentMetadata {
   size: number;
   createdAt: string;
   updatedAt: string;
+  sourcePath?: string;
 }
 
 export interface SearchState {

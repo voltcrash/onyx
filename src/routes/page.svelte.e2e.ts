@@ -18,6 +18,43 @@ test("searches note titles and Markdown content", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Project Aurora/ })).toBeVisible();
 });
 
+test("imports a Markdown folder and exports its structure and attachments as ZIP", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByText("Saved to this device")).toBeVisible();
+
+  await page.getByRole("button", { name: "Import or export Markdown" }).click();
+  await page.locator('input[type="file"][webkitdirectory]').evaluate((element) => {
+    const input = element as HTMLInputElement;
+    const transfer = new DataTransfer();
+    const note = new File(
+      ["# Trip plans\n\nThe walking route is in ![the map](assets/map.png)."],
+      "plan.md",
+      { type: "text/markdown" },
+    );
+    const attachment = new File(["attachment fixture"], "map.png", { type: "image/png" });
+    Object.defineProperty(note, "webkitRelativePath", {
+      value: "markdown-import/travel/plan.md",
+    });
+    Object.defineProperty(attachment, "webkitRelativePath", {
+      value: "markdown-import/travel/assets/map.png",
+    });
+    transfer.items.add(note);
+    transfer.items.add(attachment);
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await expect(page.getByText("Imported 1 note and 1 attachment.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Trip plans/ })).toBeVisible();
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download ZIP" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^onyx-markdown-\d{4}-\d{2}-\d{2}\.zip$/);
+  await expect(page.getByText("Exported 3 files to ZIP.")).toBeVisible();
+});
+
 test("restores a selected GitHub commit into the local vault", async ({ page }) => {
   const commitSha = "a".repeat(40);
   const treeSha = "b".repeat(40);

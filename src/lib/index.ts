@@ -1,4 +1,5 @@
 export * from "./storage/index.js";
+export * from "./markdown-transfer.js";
 export {
   backupVaultToGithub,
   createPrivateGithubRepository,

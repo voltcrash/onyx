@@ -1,12 +1,13 @@
 <script lang="ts">
 	import {
 		Bold, Check, ChevronRight, CloudDownload, CloudOff, Code2, Columns2, Eye, FileText, Heading2,
-		CloudUpload, ExternalLink, GitCommitHorizontal, HelpCircle, Italic, Link, List, LoaderCircle, LogOut, PanelLeft,
+		CloudUpload, Download, ExternalLink, FileArchive, FolderInput, FolderOutput, GitCommitHorizontal, HelpCircle, Italic, Link, List, LoaderCircle, LogOut, PanelLeft,
 		PencilLine, Plus, Quote, RotateCcw, Save, Search, X
 	} from '@lucide/svelte';
 	import {
 		backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
-		listGithubBackupCommits, restoreGithubSession, restoreVaultFromGithub, Vault,
+		createMarkdownExport, createMarkdownZip, importMarkdownFiles, listGithubBackupCommits,
+		readMarkdownFolder, readMarkdownZip, restoreGithubSession, restoreVaultFromGithub, Vault, writeMarkdownFolder,
 		type GithubBackupCommit, type GithubBackupState, type GithubUser, type VaultSearchResult
 	} from '$lib';
 	import { onMount } from 'svelte';
@@ -67,6 +68,11 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	let restoreRepository = $state('onyx-vault');
 	let restoreBranch = $state('main');
 	let restoreDirectory = $state('vault');
+	let transferModalOpen = $state(false);
+	let transferState = $state<'idle' | 'working' | 'error'>('idle');
+	let transferMessage = $state('');
+	let folderInput: HTMLInputElement | undefined = $state();
+	let zipInput: HTMLInputElement | undefined = $state();
 
 	const wordCount = $derived(markdown.trim() ? markdown.trim().split(/\s+/).length : 0);
 	const characterCount = $derived(markdown.length);
@@ -324,6 +330,96 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 		}
 	}
 
+	async function importFolder(files: FileList | null): Promise<void> {
+		if (!files?.length) return;
+		await runImport(readMarkdownFolder(files));
+		if (folderInput) folderInput.value = '';
+	}
+
+	async function importZip(files: FileList | null): Promise<void> {
+		const file = files?.[0];
+		if (!file) return;
+		transferState = 'working';
+		transferMessage = 'Reading ZIP archive…';
+		try {
+			const entries = await readMarkdownZip(file);
+			transferState = 'idle';
+			await runImport(entries);
+		} catch (error) {
+			showTransferError(error, 'The ZIP archive could not be imported.');
+		} finally {
+			if (zipInput) zipInput.value = '';
+		}
+	}
+
+	async function runImport(files: ReturnType<typeof readMarkdownFolder>): Promise<void> {
+		if (!vault || transferState === 'working') return;
+		if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
+		transferState = 'working';
+		transferMessage = 'Importing Markdown and attachments…';
+		try {
+			const result = await importMarkdownFiles(vault, files);
+			searchQuery = '';
+			const notes = await vault.listNotes();
+			await loadNote(notes[0].id);
+			await runSearch('');
+			pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+			transferState = 'idle';
+			transferMessage = `Imported ${result.noteCount} ${result.noteCount === 1 ? 'note' : 'notes'} and ${result.attachmentCount} ${result.attachmentCount === 1 ? 'attachment' : 'attachments'}.`;
+		} catch (error) {
+			showTransferError(error, 'The Markdown folder could not be imported.');
+		}
+	}
+
+	async function exportZip(): Promise<void> {
+		if (!vault || transferState === 'working') return;
+		if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
+		transferState = 'working';
+		transferMessage = 'Building ZIP archive…';
+		try {
+			const files = await createMarkdownExport(vault);
+			const archive = await createMarkdownZip(files);
+			const url = URL.createObjectURL(archive);
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = `onyx-markdown-${new Date().toISOString().slice(0, 10)}.zip`;
+			link.click();
+			setTimeout(() => URL.revokeObjectURL(url), 0);
+			transferState = 'idle';
+			transferMessage = `Exported ${files.length} ${files.length === 1 ? 'file' : 'files'} to ZIP.`;
+		} catch (error) {
+			showTransferError(error, 'The ZIP archive could not be exported.');
+		}
+	}
+
+	async function exportFolder(): Promise<void> {
+		if (!vault || transferState === 'working') return;
+		const picker = (window as Window & { showDirectoryPicker?: (options?: { mode: 'readwrite' }) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker;
+		if (!picker) {
+			transferState = 'error';
+			transferMessage = 'Folder export is not supported by this browser. Use ZIP export instead.';
+			return;
+		}
+		if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
+		try {
+			const directory = await picker.call(window, { mode: 'readwrite' });
+			transferState = 'working';
+			transferMessage = 'Writing Markdown folder…';
+			const files = await createMarkdownExport(vault);
+			await writeMarkdownFolder(directory, files);
+			transferState = 'idle';
+			transferMessage = `Exported ${files.length} ${files.length === 1 ? 'file' : 'files'} to the selected folder.`;
+		} catch (error) {
+			if (error instanceof DOMException && error.name === 'AbortError') return;
+			showTransferError(error, 'The Markdown folder could not be exported.');
+		}
+	}
+
+	function showTransferError(error: unknown, fallback: string): void {
+		transferState = 'error';
+		transferMessage = error instanceof Error ? error.message : fallback;
+	}
+
 	function queueSave(): void {
 		saveState = 'unsaved';
 		if (saveTimer) window.clearTimeout(saveTimer);
@@ -499,6 +595,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 				{saveState === 'loading' ? 'Opening…' : saveState === 'saving' ? 'Saving…' : saveState === 'unsaved' ? 'Unsaved' : saveState === 'error' ? 'Save failed' : 'Saved to this device'}
 			</div>
 			<button class="save-button" onclick={() => void saveDraft()} disabled={saveState === 'saving'}><Save size={16} /><span>Save</span><kbd>⌘S</kbd></button>
+			<button class="icon-button" aria-label="Import or export Markdown" title="Import or export Markdown" onclick={() => (transferModalOpen = true)}><FileArchive size={18} /></button>
 			{#if githubState === 'connected' && githubUser}
 				<button class="backup-button" class:success={backupState === 'success'} class:error={backupState === 'error'} onclick={() => void beginBackup()} disabled={!vault || backupState === 'backing-up'} title={githubBackup ? `Back up to ${githubBackup.owner}/${githubBackup.repository}` : 'Create a private repository and back up the vault'}>
 					{#if backupState === 'backing-up'}<LoaderCircle class="spin" size={15} />{:else}<CloudUpload size={16} />{/if}
@@ -567,6 +664,31 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 		<span>{backupMessage}</span>
 		{#if backupCommitUrl}<a href={backupCommitUrl} target="_blank" rel="noreferrer">View commit <ExternalLink size={13} /></a>{/if}
 		<button aria-label="Dismiss backup status" onclick={() => (backupMessage = '')}><X size={14} /></button>
+	</div>
+{/if}
+
+{#if transferMessage}
+	<div class="backup-notice transfer-notice" class:error={transferState === 'error'} role="status">
+		{#if transferState === 'working'}<LoaderCircle class="spin" size={14} />{/if}
+		<span>{transferMessage}</span>
+		<button aria-label="Dismiss import or export status" onclick={() => (transferMessage = '')}><X size={14} /></button>
+	</div>
+{/if}
+
+{#if transferModalOpen}
+	<div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget && transferState !== 'working') transferModalOpen = false; }}>
+		<div class="shortcut-modal transfer-modal" role="dialog" aria-modal="true" aria-labelledby="transfer-title">
+			<div class="modal-title"><div><span>Portable Markdown</span><h2 id="transfer-title">Import or export</h2></div><button class="icon-button" aria-label="Close import and export" disabled={transferState === 'working'} onclick={() => (transferModalOpen = false)}><X size={18} /></button></div>
+			<div class="transfer-options">
+				<section><div><FolderInput size={20} /><span><strong>Import folder</strong><small>Add every Markdown file and its attachments.</small></span></div><button disabled={!vault || transferState === 'working'} onclick={() => folderInput?.click()}>Choose folder</button></section>
+				<section><div><FileArchive size={20} /><span><strong>Import ZIP</strong><small>Unpack a Markdown archive without flattening paths.</small></span></div><button disabled={!vault || transferState === 'working'} onclick={() => zipInput?.click()}>Choose ZIP</button></section>
+				<section><div><FolderOutput size={20} /><span><strong>Export folder</strong><small>Write notes and attachments into their original folders.</small></span></div><button disabled={!vault || transferState === 'working'} onclick={() => void exportFolder()}>Choose folder</button></section>
+				<section><div><Download size={20} /><span><strong>Export ZIP</strong><small>Download a portable archive of the entire vault.</small></span></div><button disabled={!vault || transferState === 'working'} onclick={() => void exportZip()}>Download ZIP</button></section>
+			</div>
+			<input class="transfer-input" bind:this={folderInput} type="file" webkitdirectory multiple onchange={(event) => void importFolder(event.currentTarget.files)} />
+			<input class="transfer-input" bind:this={zipInput} type="file" accept=".zip,application/zip" onchange={(event) => void importZip(event.currentTarget.files)} />
+			<p>Existing notes stay in your vault. Imported paths are retained for the next folder or ZIP export.</p>
+		</div>
 	</div>
 {/if}
 

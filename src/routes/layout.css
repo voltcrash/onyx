@@ -903,6 +903,72 @@ kbd {
   color: var(--faint);
   font-size: 11px;
 }
+.transfer-modal {
+  width: min(100%, 560px);
+}
+.transfer-options {
+  display: grid;
+  gap: 10px;
+  padding: 18px 22px;
+}
+.transfer-options section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  background: #fff;
+}
+.transfer-options section > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.transfer-options section > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+.transfer-options section span,
+.transfer-options strong,
+.transfer-options small {
+  display: block;
+}
+.transfer-options strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+.transfer-options small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.transfer-options button {
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f9f8f5;
+  color: #55524c;
+  cursor: pointer;
+  font-size: 12px;
+}
+.transfer-options button:hover {
+  border-color: #c6c2b8;
+  color: var(--ink);
+}
+.transfer-options button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+.transfer-input {
+  display: none;
+}
 .backup-form {
   padding: 20px 22px 4px;
 }
@@ -1115,6 +1181,9 @@ kbd {
   color: #426847;
   font-size: 12px;
   box-shadow: 0 10px 35px #0002;
+}
+.transfer-notice {
+  bottom: 66px;
 }
 .backup-notice.error {
   border-color: #edc5b6;

@@ -74,6 +74,7 @@ export class Vault {
       updatedAt: now,
       revision: (existing?.revision ?? 0) + 1,
       size: new Blob([markdown]).size,
+      sourcePath: input.sourcePath ?? existing?.sourcePath,
     };
 
     const previousMarkdown = existing ? await this.#filesystem.readText(path) : undefined;
@@ -142,7 +143,12 @@ export class Vault {
     return true;
   }
 
-  async saveAttachment(noteId: string, file: Blob, name?: string): Promise<AttachmentMetadata> {
+  async saveAttachment(
+    noteId: string,
+    file: Blob,
+    name?: string,
+    sourcePath?: string,
+  ): Promise<AttachmentMetadata> {
     if (!(await this.#database.getNote(noteId))) {
       throw new Error(`Cannot attach a file to missing note: ${noteId}`);
     }
@@ -159,6 +165,7 @@ export class Vault {
       size: file.size,
       createdAt: now,
       updatedAt: now,
+      sourcePath,
     };
 
     await this.#filesystem.write(path, file);
