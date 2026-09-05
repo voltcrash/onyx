@@ -18,7 +18,7 @@
 	} from '$lib';
 	import { onMount } from 'svelte';
 
-	type ViewMode = 'edit' | 'split' | 'preview';
+	type ViewMode = 'edit' | 'live' | 'split' | 'preview';
 	type SaveState = 'loading' | 'saved' | 'saving' | 'unsaved' | 'error';
 	const INITIAL_MARKDOWN = `# Welcome to Onyx
 
@@ -51,6 +51,8 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	let searchTimer: number | undefined = $state();
 	let searchSequence = 0;
 	let editor: HTMLTextAreaElement | undefined = $state();
+	let liveEditor: HTMLTextAreaElement | undefined = $state();
+	let liveLine = $state(0);
 	let searchInput: HTMLInputElement | undefined = $state();
 	let shortcutsOpen = $state(false);
 	let sidebarOpen = $state(false);
@@ -89,6 +91,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	const characterCount = $derived(markdown.length);
 	const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
 	const renderedMarkdown = $derived(renderMarkdown(markdown));
+	const markdownLines = $derived(markdown.split('\n'));
 	const hasContent = $derived(markdown.trim().length > 0);
 	const themeLabel = $derived(theme === 'system' ? 'Match system' : theme === 'dark' ? 'Dark' : 'Light');
 	const paletteItems = $derived<PaletteItem[]>([
@@ -105,6 +108,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		{ id: 'save', group: 'Actions', label: 'Save note', shortcut: '⌘ S', icon: Save, keywords: 'write store', disabled: saveState === 'saving', run: () => void saveDraft() },
 		{ id: 'search', group: 'Actions', label: 'Search all notes', shortcut: '⌘ ⇧ F', icon: Search, keywords: 'find full text', run: () => focusSearch() },
 		{ id: 'view-edit', group: 'View', label: 'Editor only', shortcut: '⌘ ⇧ P', icon: PencilLine, keywords: 'write markdown pane', run: () => (viewMode = 'edit') },
+		{ id: 'view-live', group: 'View', label: 'Live preview', icon: Eye, keywords: 'inline rendered edit obsidian', run: () => openLivePreview() },
 		{ id: 'view-split', group: 'View', label: 'Split view', icon: Columns2, keywords: 'side by side pane', run: () => (viewMode = 'split') },
 		{ id: 'view-preview', group: 'View', label: 'Preview only', icon: Eye, keywords: 'rendered read pane', run: () => (viewMode = 'preview') },
 		{ id: 'toggle-sidebar', group: 'View', label: sidebarCollapsed ? 'Show the notes sidebar' : 'Hide the notes sidebar', shortcut: '⌘ \\', icon: PanelLeft, keywords: 'panel files list', run: () => toggleSidebar() },
@@ -576,6 +580,61 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		queueSave();
 	}
 
+	function openLivePreview(line = liveLine): void {
+		viewMode = 'live';
+		liveLine = Math.min(Math.max(line, 0), markdownLines.length - 1);
+		requestAnimationFrame(() => liveEditor?.focus());
+	}
+
+	function activateLiveLine(line: number, position?: number): void {
+		liveLine = line;
+		requestAnimationFrame(() => {
+			liveEditor?.focus();
+			const cursor = position ?? liveEditor?.value.length ?? 0;
+			liveEditor?.setSelectionRange(cursor, cursor);
+		});
+	}
+
+	function updateLiveLine(line: number, value: string): void {
+		const lines = [...markdownLines];
+		const replacement = value.split('\n');
+		lines.splice(line, 1, ...replacement);
+		liveLine = line + replacement.length - 1;
+		updateMarkdown(lines.join('\n'));
+		if (replacement.length > 1) activateLiveLine(liveLine, replacement.at(-1)?.length ?? 0);
+	}
+
+	function handleLiveLineKeydown(event: KeyboardEvent, line: number): void {
+		if (!liveEditor) return;
+		const start = liveEditor.selectionStart;
+		const end = liveEditor.selectionEnd;
+		const value = liveEditor.value;
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			const before = value.slice(0, start);
+			const after = value.slice(end);
+			const marker = before.match(/^(\s*(?:[-*]\s+(?:\[[ xX]\]\s+)?|>\s+))/)?.[1] ?? '';
+			const continuation = marker && before.trim() !== marker.trim() ? marker : '';
+			const lines = [...markdownLines];
+			lines.splice(line, 1, before, `${continuation}${after}`);
+			updateMarkdown(lines.join('\n'));
+			activateLiveLine(line + 1, continuation.length);
+		} else if (event.key === 'Backspace' && start === 0 && end === 0 && line > 0) {
+			event.preventDefault();
+			const lines = [...markdownLines];
+			const previousLength = lines[line - 1].length;
+			lines.splice(line - 1, 2, `${lines[line - 1]}${value}`);
+			updateMarkdown(lines.join('\n'));
+			activateLiveLine(line - 1, previousLength);
+		} else if (event.key === 'ArrowUp' && start === 0 && end === 0 && line > 0) {
+			event.preventDefault();
+			activateLiveLine(line - 1);
+		} else if (event.key === 'ArrowDown' && start === value.length && end === value.length && line < markdownLines.length - 1) {
+			event.preventDefault();
+			activateLiveLine(line + 1, 0);
+		}
+	}
+
 	function queueSearch(value: string): void {
 		searchQuery = value;
 		if (searchTimer) window.clearTimeout(searchTimer);
@@ -590,27 +649,39 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	}
 
 	function insertSyntax(before: string, after = before, placeholder = 'text'): void {
-		if (!editor) return;
-		const start = editor.selectionStart;
-		const end = editor.selectionEnd;
+		const target = viewMode === 'live' ? liveEditor : editor;
+		if (!target) return;
+		const relativeStart = target.selectionStart;
+		const lineOffset = viewMode === 'live'
+			? markdownLines.slice(0, liveLine).reduce((total, line) => total + line.length + 1, 0)
+			: 0;
+		const start = lineOffset + relativeStart;
+		const end = lineOffset + target.selectionEnd;
 		const selection = markdown.slice(start, end) || placeholder;
 		markdown = `${markdown.slice(0, start)}${before}${selection}${after}${markdown.slice(end)}`;
 		queueSave();
 		requestAnimationFrame(() => {
-			editor?.focus();
-			editor?.setSelectionRange(start + before.length, start + before.length + selection.length);
+			target.focus();
+			const selectionStart = relativeStart + before.length;
+			target.setSelectionRange(selectionStart, selectionStart + selection.length);
 		});
 	}
 
 	function prefixLine(prefix: string): void {
-		if (!editor) return;
-		const cursor = editor.selectionStart;
+		const target = viewMode === 'live' ? liveEditor : editor;
+		if (!target) return;
+		const relativeCursor = target.selectionStart;
+		const lineOffset = viewMode === 'live'
+			? markdownLines.slice(0, liveLine).reduce((total, line) => total + line.length + 1, 0)
+			: 0;
+		const cursor = lineOffset + relativeCursor;
 		const start = markdown.lastIndexOf('\n', cursor - 1) + 1;
 		markdown = `${markdown.slice(0, start)}${prefix}${markdown.slice(start)}`;
 		queueSave();
 		requestAnimationFrame(() => {
-			editor?.focus();
-			editor?.setSelectionRange(cursor + prefix.length, cursor + prefix.length);
+			target.focus();
+			const nextCursor = relativeCursor + prefix.length;
+			target.setSelectionRange(nextCursor, nextCursor);
 		});
 	}
 
@@ -665,7 +736,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	}
 
 	function isTypingTarget(target: EventTarget | null): boolean {
-		return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+		return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLElement && target.isContentEditable;
 	}
 
 	function focusSearch(): void {
@@ -760,6 +831,15 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		return output.join('');
 	}
 
+	function renderLiveLine(line: string, index: number): string {
+		let inCode = false;
+		for (let current = 0; current < index; current += 1) {
+			if (markdownLines[current].startsWith('```')) inCode = !inCode;
+		}
+		if (inCode && !line.startsWith('```')) return `<pre><code>${escapeHtml(line) || ' '}</code></pre>`;
+		return renderMarkdown(line);
+	}
+
 	function inlineMarkdown(value: string): string {
 		return value.replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/_([^_]+)_/g, '<em>$1</em>').replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
 	}
@@ -835,6 +915,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			<div class="document-info"><FileText size={17} /><span>{noteTitle}.md</span></div>
 			<div class="view-switcher" aria-label="View mode">
 				<button class:active={viewMode === 'edit'} onclick={() => (viewMode = 'edit')} aria-label="Editor only" title="Editor only"><PencilLine size={16} /><span>Edit</span></button>
+				<button class:active={viewMode === 'live'} onclick={() => openLivePreview()} aria-label="Live preview" title="Live preview"><Eye size={16} /><span>Live</span></button>
 				<button class:active={viewMode === 'split'} onclick={() => (viewMode = 'split')} aria-label="Split view" title="Split view"><Columns2 size={16} /><span>Split</span></button>
 				<button class:active={viewMode === 'preview'} onclick={() => (viewMode = 'preview')} aria-label="Preview only" title="Preview only"><Eye size={16} /><span>Preview</span></button>
 			</div>
@@ -850,13 +931,25 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			</div>
 		{/if}
 
-		<section class="editor-shell" class:edit-only={viewMode === 'edit'} class:preview-only={viewMode === 'preview'}>
+		<section class="editor-shell" class:edit-only={viewMode === 'edit' || viewMode === 'live'} class:live-only={viewMode === 'live'} class:preview-only={viewMode === 'preview'}>
 			<div class="editor-pane">
 				<div class="formatting-bar" aria-label="Formatting tools">
 					<button onclick={() => insertSyntax('**', '**', 'bold text')} title="Bold (⌘B)" aria-label="Bold"><Bold size={16} /></button><button onclick={() => insertSyntax('_', '_', 'italic text')} title="Italic (⌘I)" aria-label="Italic"><Italic size={16} /></button><span></span><button onclick={() => prefixLine('## ')} title="Heading" aria-label="Heading"><Heading2 size={17} /></button><button onclick={() => prefixLine('- ')} title="Bulleted list" aria-label="Bulleted list"><List size={17} /></button><button onclick={() => prefixLine('> ')} title="Quote" aria-label="Quote"><Quote size={16} /></button><button onclick={() => insertSyntax('`', '`', 'code')} title="Inline code" aria-label="Inline code"><Code2 size={17} /></button><button onclick={() => insertSyntax('[', '](https://)', 'link text')} title="Link" aria-label="Link"><Link size={16} /></button>
 				</div>
-				<textarea bind:this={editor} value={markdown} oninput={(event) => updateMarkdown(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading'}></textarea>
-				<div class="editor-footer"><span>Markdown</span><span>{characterCount.toLocaleString()} characters</span></div>
+				{#if viewMode === 'live'}
+					<div class="live-editor" aria-label="Live preview editor">
+						{#each markdownLines as line, index}
+							{#if index === liveLine}
+								<textarea class="live-source-line" bind:this={liveEditor} value={line} oninput={(event) => updateLiveLine(index, event.currentTarget.value)} onkeydown={(event) => handleLiveLineKeydown(event, index)} aria-label={`Markdown line ${index + 1}`} rows="1" spellcheck="true" disabled={saveState === 'loading'}></textarea>
+							{:else}
+								<div class="live-rendered-line" class:blank={!line} role="button" tabindex="0" aria-label={`Edit line ${index + 1}`} onclick={() => activateLiveLine(index)} onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activateLiveLine(index); } }}>{@html renderLiveLine(line, index)}</div>
+							{/if}
+						{/each}
+					</div>
+				{:else}
+					<textarea bind:this={editor} value={markdown} oninput={(event) => updateMarkdown(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading'}></textarea>
+				{/if}
+				<div class="editor-footer"><span>{viewMode === 'live' ? 'Live preview' : 'Markdown'}</span><span>{characterCount.toLocaleString()} characters</span></div>
 			</div>
 			<div class="preview-pane">
 				<div class="preview-label"><Eye size={14} /> Preview</div>

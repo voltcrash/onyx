@@ -45,6 +45,21 @@ test("searches note titles and Markdown content", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Project Aurora/ })).toBeVisible();
 });
 
+test("edits Markdown in inline live preview", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByText("Saved to this device")).toBeVisible();
+
+  await page.getByRole("button", { name: "Live preview" }).click();
+  await page.getByRole("button", { name: "Edit line 3" }).click();
+  const line = page.getByRole("textbox", { name: "Markdown line 3" });
+  await line.fill("Onyx renders **Markdown** while you keep writing.");
+  await page.getByRole("button", { name: "Edit line 1", exact: true }).click();
+
+  const renderedLine = page.getByRole("button", { name: "Edit line 3", exact: true });
+  await expect(renderedLine).toContainText("Onyx renders Markdown while you keep writing.");
+  await expect(renderedLine.getByText("Markdown", { exact: true })).toHaveCSS("font-weight", "700");
+});
+
 test("imports a Markdown folder and exports its structure and attachments as ZIP", async ({
   page,
 }) => {
