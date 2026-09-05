@@ -1,5 +1,6 @@
 <script module lang="ts">
 	export type SettingsSection =
+		| 'appearance'
 		| 'github'
 		| 'repository'
 		| 'backup'
@@ -11,12 +12,12 @@
 <script lang="ts">
 	import {
 		CloudDownload, CloudOff, CloudUpload, Database, Download, ExternalLink, FileArchive, FolderInput,
-		FolderOutput, HardDrive, LoaderCircle, LogOut, RefreshCw, ShieldCheck, Trash2,
+		FolderOutput, HardDrive, LoaderCircle, LogOut, Monitor, Moon, RefreshCw, ShieldCheck, Sun, Trash2,
 		TriangleAlert, WifiOff, X
 	} from '@lucide/svelte';
 	import {
 		listGithubRepositories, type GithubBackupState, type GithubRepository, type GithubUser,
-		type Vault, type VaultStorageUsage
+		type ThemePreference, type Vault, type VaultStorageUsage
 	} from '$lib';
 
 	interface Props {
@@ -31,7 +32,9 @@
 		backupMessage: string;
 		backupCommitUrl: string;
 		transferState: 'idle' | 'working' | 'error';
+		theme: ThemePreference;
 		section?: SettingsSection;
+		onThemeChange: (preference: ThemePreference) => void;
 		onClose: () => void;
 		onDisconnectGithub: () => void;
 		onCreateRepository: (name: string) => void;
@@ -48,12 +51,13 @@
 
 	let {
 		vault, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
-		backupState, backupMessage, backupCommitUrl, transferState, section = $bindable('github'),
-		onClose, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
+		backupState, backupMessage, backupCommitUrl, transferState, theme,
+		section = $bindable('github'), onThemeChange, onClose, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onVaultCleared
 	}: Props = $props();
 
 	const sections: Array<{ id: SettingsSection; label: string }> = [
+		{ id: 'appearance', label: 'Appearance' },
 		{ id: 'github', label: 'GitHub account' },
 		{ id: 'repository', label: 'Repository' },
 		{ id: 'backup', label: 'Backup status' },
@@ -78,6 +82,11 @@
 	let clearMessage = $state('');
 
 	const connected = $derived(githubState === 'connected' && Boolean(githubUser));
+	const themes: Array<{ id: ThemePreference; label: string; hint: string; icon: typeof Sun }> = [
+		{ id: 'light', label: 'Light', hint: 'Warm paper, best in bright rooms.', icon: Sun },
+		{ id: 'dark', label: 'Dark', hint: 'Low-glare onyx for night writing.', icon: Moon },
+		{ id: 'system', label: 'System', hint: 'Follow the operating system setting.', icon: Monitor }
+	];
 	const usedFraction = $derived(
 		usage?.quota && usage.usage !== undefined ? Math.min(1, usage.usage / usage.quota) : 0
 	);
@@ -198,11 +207,23 @@
 			</nav>
 
 			<div class="settings-panel">
-				{#if !isOnline && section !== 'storage' && section !== 'transfer' && section !== 'vault'}
+				{#if !isOnline && section !== 'appearance' && section !== 'storage' && section !== 'transfer' && section !== 'vault'}
 					<div class="settings-banner"><WifiOff size={15} /><span>GitHub settings are paused until your connection returns.</span></div>
 				{/if}
 
-				{#if section === 'github'}
+				{#if section === 'appearance'}
+					<h3>Appearance</h3>
+					<p class="settings-hint">The theme applies to this browser and is remembered between visits. Press <kbd>⌘ ⇧ L</kbd> to cycle it from anywhere.</p>
+					<div class="theme-options" role="radiogroup" aria-label="Theme">
+						{#each themes as option (option.id)}
+							<button class:active={theme === option.id} role="radio" aria-checked={theme === option.id} onclick={() => onThemeChange(option.id)}>
+								<option.icon size={18} />
+								{option.label}
+								<small>{option.hint}</small>
+							</button>
+						{/each}
+					</div>
+				{:else if section === 'github'}
 					<h3>GitHub account</h3>
 					<p class="settings-hint">Onyx signs in with a GitHub App so backups go straight from this device to your repository.</p>
 					{#if connected && githubUser}

@@ -16,6 +16,30 @@ web-based markdown note-taking app that only stores files locally, while it uses
 - _**Vite+**_ with _**pnpm**_
 - deployed on Vercel
 
+### interface
+
+The workspace is a three-pane layout — note list, Markdown editor, live preview — that collapses to
+a single pane with a slide-over note list on narrow screens. Themes are light, dark, or matched to
+the operating system; the choice is stored per browser and applied before first paint.
+
+`⌘ K` opens the command palette, which jumps to any note by title and runs every action in the app
+(new note, save, view modes, theme, GitHub backup and restore, import and export, settings).
+
+| Shortcut       | Action                   |
+| -------------- | ------------------------ |
+| `⌘ K`          | Command palette          |
+| `⌘ ⇧ F` or `/` | Search all notes         |
+| `⌘ ⏎`          | New note                 |
+| `⌘ S`          | Save note                |
+| `⌘ B` / `⌘ I`  | Bold / italic selection  |
+| `⌘ ⇧ P`        | Toggle preview           |
+| `⌘ \`          | Toggle the note list     |
+| `⌘ ⇧ L`        | Cycle theme              |
+| `?`            | Keyboard shortcuts       |
+| `Esc`          | Close the top-most panel |
+
+Use `Ctrl` in place of `⌘` on Windows and Linux.
+
 ### local vault
 
 `Vault` is the browser-only persistence API exported from `$lib`. Markdown and attachment bytes live

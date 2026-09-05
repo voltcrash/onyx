@@ -1,15 +1,20 @@
 <script lang="ts">
 	import {
-		Bold, Check, ChevronRight, CloudDownload, CloudOff, Code2, Columns2, Eye, FileText, Heading2,
-		CloudUpload, ExternalLink, GitCommitHorizontal, HelpCircle, Italic, Link, List, LoaderCircle, LogOut, PanelLeft,
-		PencilLine, Plus, Quote, RotateCcw, Save, Search, Settings, WifiOff, X
+		Bold, Check, ChevronRight, CloudDownload, CloudOff, Code2, Columns2, Eye, FileArchive, FilePlus2,
+		FileText, FolderInput, FolderOutput, Heading2, CloudUpload, Download, ExternalLink,
+		GitCommitHorizontal, HardDrive, HelpCircle, Italic, Keyboard, Link, List, LoaderCircle, LogOut,
+		Monitor, Moon, PanelLeft, PanelLeftClose, PencilLine, Plus, Quote, RotateCcw, Save, Search,
+		Settings, Sun, WifiOff, X
 	} from '@lucide/svelte';
+	import CommandPalette, { type PaletteItem } from '$lib/components/command-palette.svelte';
 	import SettingsDialog, { type SettingsSection } from '$lib/components/settings-dialog.svelte';
 	import {
-		backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
-		createMarkdownExport, createMarkdownZip, importMarkdownFiles, listGithubBackupCommits,
-		readMarkdownFolder, readMarkdownZip, restoreGithubSession, restoreVaultFromGithub, Vault, writeMarkdownFolder,
-		type GithubBackupCommit, type GithubBackupState, type GithubUser, type VaultSearchResult
+		applyTheme, backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
+		createMarkdownExport, createMarkdownZip, importMarkdownFiles, listGithubBackupCommits, nextThemePreference,
+		readMarkdownFolder, readMarkdownZip, readThemePreference, restoreGithubSession, restoreVaultFromGithub,
+		Vault, watchSystemTheme, writeMarkdownFolder,
+		type GithubBackupCommit, type GithubBackupState, type GithubUser, type NoteMetadata,
+		type ThemePreference, type VaultSearchResult
 	} from '$lib';
 	import { onMount } from 'svelte';
 
@@ -31,7 +36,7 @@ Create as many notes as you need. Search checks every title and every word, whil
 - [ ] Capture the next idea
 - [ ] Shape it into something useful
 
-Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle preview.`;
+Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\` to toggle preview. Press \`?\` for every shortcut.`;
 
 	let vault = $state<Vault>();
 	let activeNoteId = $state('');
@@ -74,14 +79,54 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	let transferMessage = $state('');
 	let folderInput: HTMLInputElement | undefined = $state();
 	let zipInput: HTMLInputElement | undefined = $state();
+	let theme = $state<ThemePreference>('system');
+	let paletteOpen = $state(false);
+	let paletteNotes = $state<NoteMetadata[]>([]);
+	let sidebarCollapsed = $state(false);
+	let noteList: HTMLElement | undefined = $state();
 
 	const wordCount = $derived(markdown.trim() ? markdown.trim().split(/\s+/).length : 0);
 	const characterCount = $derived(markdown.length);
 	const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
 	const renderedMarkdown = $derived(renderMarkdown(markdown));
+	const hasContent = $derived(markdown.trim().length > 0);
+	const themeLabel = $derived(theme === 'system' ? 'Match system' : theme === 'dark' ? 'Dark' : 'Light');
+	const paletteItems = $derived<PaletteItem[]>([
+		...paletteNotes.map((note) => ({
+			id: `note-${note.id}`,
+			group: 'Notes',
+			label: note.title,
+			hint: note.id === activeNoteId ? 'Open note' : formatNoteDate(note.updatedAt),
+			icon: FileText,
+			keywords: 'note open jump',
+			run: () => void selectNote(note.id)
+		})),
+		{ id: 'new-note', group: 'Actions', label: 'New note', shortcut: '⌘ ⏎', icon: FilePlus2, keywords: 'create add page', run: () => void createNote() },
+		{ id: 'save', group: 'Actions', label: 'Save note', shortcut: '⌘ S', icon: Save, keywords: 'write store', disabled: saveState === 'saving', run: () => void saveDraft() },
+		{ id: 'search', group: 'Actions', label: 'Search all notes', shortcut: '⌘ ⇧ F', icon: Search, keywords: 'find full text', run: () => focusSearch() },
+		{ id: 'view-edit', group: 'View', label: 'Editor only', shortcut: '⌘ ⇧ P', icon: PencilLine, keywords: 'write markdown pane', run: () => (viewMode = 'edit') },
+		{ id: 'view-split', group: 'View', label: 'Split view', icon: Columns2, keywords: 'side by side pane', run: () => (viewMode = 'split') },
+		{ id: 'view-preview', group: 'View', label: 'Preview only', icon: Eye, keywords: 'rendered read pane', run: () => (viewMode = 'preview') },
+		{ id: 'toggle-sidebar', group: 'View', label: sidebarCollapsed ? 'Show the notes sidebar' : 'Hide the notes sidebar', shortcut: '⌘ \\', icon: PanelLeft, keywords: 'panel files list', run: () => toggleSidebar() },
+		{ id: 'theme-light', group: 'Appearance', label: 'Theme: Light', icon: Sun, keywords: 'bright day colour color', disabled: theme === 'light', run: () => setTheme('light') },
+		{ id: 'theme-dark', group: 'Appearance', label: 'Theme: Dark', icon: Moon, keywords: 'night colour color', disabled: theme === 'dark', run: () => setTheme('dark') },
+		{ id: 'theme-system', group: 'Appearance', label: 'Theme: Match system', icon: Monitor, keywords: 'auto os colour color', disabled: theme === 'system', run: () => setTheme('system') },
+		{ id: 'backup', group: 'GitHub', label: 'Back up to GitHub', icon: CloudUpload, keywords: 'commit push sync', disabled: !isOnline || githubState !== 'connected', run: () => void beginBackup() },
+		{ id: 'restore', group: 'GitHub', label: 'Restore from a GitHub commit', icon: CloudDownload, keywords: 'download history rollback', disabled: !isOnline || githubState !== 'connected', run: () => void openRestore() },
+		{ id: 'import-folder', group: 'Transfer', label: 'Import a Markdown folder', icon: FolderInput, keywords: 'open files load', run: () => folderInput?.click() },
+		{ id: 'import-zip', group: 'Transfer', label: 'Import a ZIP archive', icon: FileArchive, keywords: 'open files load', run: () => zipInput?.click() },
+		{ id: 'export-folder', group: 'Transfer', label: 'Export to a folder', icon: FolderOutput, keywords: 'save files write', run: () => void exportFolder() },
+		{ id: 'export-zip', group: 'Transfer', label: 'Export a ZIP archive', icon: Download, keywords: 'save download backup', run: () => void exportZip() },
+		{ id: 'settings', group: 'Onyx', label: 'Open settings', icon: Settings, keywords: 'preferences options github storage', run: () => openSettings(githubState === 'connected' ? 'backup' : 'appearance') },
+		{ id: 'storage', group: 'Onyx', label: 'Storage on this device', icon: HardDrive, keywords: 'space quota usage persistent', run: () => openSettings('storage') },
+		{ id: 'shortcuts', group: 'Onyx', label: 'Keyboard shortcuts', shortcut: '?', icon: Keyboard, keywords: 'help keys reference', run: () => (shortcutsOpen = true) }
+	]);
 
 	onMount(() => {
 		isOnline = navigator.onLine;
+		theme = readThemePreference();
+		applyTheme(theme);
+		const stopThemeWatch = watchSystemTheme(() => applyTheme(theme));
 		void openVault().finally(() => registerServiceWorker());
 		if (isOnline) void restoreGitHub();
 		else githubState = 'disconnected';
@@ -112,6 +157,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 			window.removeEventListener('online', onOnline);
 			window.removeEventListener('offline', onOffline);
 			document.removeEventListener('visibilitychange', onVisibilityChange);
+			stopThemeWatch();
 			if (saveTimer) window.clearTimeout(saveTimer);
 			if (searchTimer) window.clearTimeout(searchTimer);
 			vault?.close();
@@ -327,6 +373,11 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 			restoreState = 'error';
 			restoreMessage = error instanceof Error ? error.message : 'The GitHub backup could not be restored.';
 		}
+	}
+
+	function formatNoteDate(value: string): string {
+		if (!value) return '';
+		return `Edited ${new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value))}`;
 	}
 
 	function formatCommitDate(value: string): string {
@@ -565,35 +616,98 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 
 	function handleShortcut(event: KeyboardEvent): void {
 		const command = event.metaKey || event.ctrlKey;
-		if (command && event.key.toLowerCase() === 'k') {
+		const key = event.key.toLowerCase();
+		if (command && key === 'k') {
 			event.preventDefault();
-			searchInput?.focus();
-			searchInput?.select();
-		} else if (command && event.key.toLowerCase() === 's') {
+			togglePalette();
+			return;
+		}
+		if (paletteOpen) return;
+		if (command && key === 's') {
 			event.preventDefault();
 			void saveDraft();
-		} else if (command && event.key.toLowerCase() === 'b') {
+		} else if (command && key === 'enter') {
+			event.preventDefault();
+			void createNote();
+		} else if (command && event.shiftKey && key === 'f') {
+			event.preventDefault();
+			focusSearch();
+		} else if (command && event.shiftKey && key === 'l') {
+			event.preventDefault();
+			setTheme(nextThemePreference(theme));
+		} else if (command && key === '\\') {
+			event.preventDefault();
+			toggleSidebar();
+		} else if (command && key === 'b') {
 			event.preventDefault();
 			insertSyntax('**', '**', 'bold text');
-		} else if (command && event.key.toLowerCase() === 'i') {
+		} else if (command && key === 'i') {
 			event.preventDefault();
 			insertSyntax('_', '_', 'italic text');
-		} else if (command && event.shiftKey && event.key.toLowerCase() === 'p') {
+		} else if (command && event.shiftKey && key === 'p') {
 			event.preventDefault();
 			viewMode = viewMode === 'preview' ? 'edit' : 'preview';
 		} else if (event.key === '?' && !isTypingTarget(event.target)) {
 			shortcutsOpen = true;
+		} else if (event.key === '/' && !isTypingTarget(event.target)) {
+			event.preventDefault();
+			focusSearch();
 		} else if (event.key === 'Escape') {
-			if (searchQuery) {
+			if (restoreModalOpen && restoreState !== 'restoring') restoreModalOpen = false;
+			else if (shortcutsOpen) shortcutsOpen = false;
+			else if (settingsOpen) settingsOpen = false;
+			else if (sidebarOpen) sidebarOpen = false;
+			else if (searchQuery) {
 				queueSearch('');
 				searchInput?.blur();
-			} else if (settingsOpen) settingsOpen = false;
-			else shortcutsOpen = false;
+			}
 		}
 	}
 
 	function isTypingTarget(target: EventTarget | null): boolean {
 		return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+	}
+
+	function focusSearch(): void {
+		sidebarCollapsed = false;
+		if (window.innerWidth <= 900) sidebarOpen = true;
+		requestAnimationFrame(() => {
+			searchInput?.focus();
+			searchInput?.select();
+		});
+	}
+
+	function toggleSidebar(): void {
+		if (window.innerWidth <= 900) sidebarOpen = !sidebarOpen;
+		else sidebarCollapsed = !sidebarCollapsed;
+	}
+
+	function setTheme(preference: ThemePreference): void {
+		theme = preference;
+		applyTheme(preference);
+	}
+
+	function togglePalette(): void {
+		if (paletteOpen) {
+			paletteOpen = false;
+			return;
+		}
+		void openPalette();
+	}
+
+	async function openPalette(): Promise<void> {
+		paletteNotes = vault ? await vault.listNotes() : [];
+		paletteOpen = true;
+	}
+
+	function moveNoteFocus(event: KeyboardEvent): void {
+		if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+		const files = [...(noteList?.querySelectorAll<HTMLButtonElement>('.file') ?? [])];
+		const current = files.indexOf(document.activeElement as HTMLButtonElement);
+		if (files.length === 0) return;
+		event.preventDefault();
+		const next = event.key === 'ArrowDown' ? current + 1 : current - 1;
+		files[(next + files.length) % files.length]?.focus();
 	}
 
 	function restoreSaved(): void {
@@ -657,9 +771,9 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 
 <svelte:head><title>Onyx — Markdown notes</title><meta name="description" content="A fast, local-first Markdown editor with full-text search that works offline." /></svelte:head>
 
-<div class="app" class:sidebar-open={sidebarOpen}>
+<div class="app" class:sidebar-open={sidebarOpen} class:sidebar-collapsed={sidebarCollapsed}>
 	<header class="topbar">
-		<div class="brand"><button class="mobile-menu icon-button" aria-label="Open files" onclick={() => (sidebarOpen = true)}><PanelLeft size={19} /></button><div class="brand-mark">O</div><span>Onyx</span></div>
+		<div class="brand"><button class="icon-button" aria-label={sidebarCollapsed ? 'Show notes sidebar' : 'Hide notes sidebar'} title="Toggle sidebar (⌘\\)" onclick={toggleSidebar}>{#if sidebarCollapsed}<PanelLeft size={19} />{:else}<PanelLeftClose size={19} />{/if}</button><div class="brand-mark">O</div><span>Onyx</span></div>
 		<div class="document-path" aria-label="Current document"><span>Notes</span><ChevronRight size={14} /><strong>{noteTitle}.md</strong></div>
 		<div class="top-actions">
 			{#if !isOnline}<div class="offline-status" role="status" title="GitHub features are paused until your connection returns"><WifiOff size={14} /><span>Offline</span></div>{/if}
@@ -668,6 +782,10 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 				{saveState === 'loading' ? 'Opening…' : saveState === 'saving' ? 'Saving…' : saveState === 'unsaved' ? 'Unsaved' : saveState === 'error' ? 'Save failed' : 'Saved to this device'}
 			</div>
 			<button class="save-button" onclick={() => void saveDraft()} disabled={saveState === 'saving'}><Save size={16} /><span>Save</span><kbd>⌘S</kbd></button>
+			<button class="palette-trigger" aria-label="Open the command palette" title="Command palette (⌘K)" onclick={() => void openPalette()}><Search size={15} /><span>Search or run…</span><kbd>⌘K</kbd></button>
+			<button class="icon-button optional" aria-label={`Theme: ${themeLabel}. Change theme`} title={`Theme: ${themeLabel} (⌘⇧L)`} onclick={() => setTheme(nextThemePreference(theme))}>
+				{#if theme === 'system'}<Monitor size={18} />{:else if theme === 'dark'}<Moon size={18} />{:else}<Sun size={18} />{/if}
+			</button>
 			<button class="icon-button" aria-label="Settings" title="Settings" onclick={() => openSettings(githubState === 'connected' ? 'backup' : 'github')}><Settings size={18} /></button>
 			{#if githubState === 'connected' && githubUser}
 				<button class="backup-button" class:success={backupState === 'success'} class:error={backupState === 'error'} onclick={() => void beginBackup()} disabled={!isOnline || !vault || backupState === 'backing-up'} title={!isOnline ? 'GitHub backup is unavailable offline' : githubBackup ? `Back up to ${githubBackup.owner}/${githubBackup.repository}` : 'Create a private repository and back up the vault'}>
@@ -685,22 +803,28 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 			{:else}
 				<a class="github-connect" class:error={githubState === 'error'} href="/auth/github/start" title={githubMessage || 'Connect GitHub for direct, private backups'} aria-label="Connect GitHub">{#if githubState === 'loading'}<LoaderCircle class="spin" size={15} />{:else}<CloudUpload size={16} />{/if}<span>{githubState === 'loading' ? 'Checking…' : 'Connect GitHub'}</span></a>
 			{/if}
-			<button class="icon-button" aria-label="Keyboard shortcuts" title="Keyboard shortcuts" onclick={() => (shortcutsOpen = true)}><HelpCircle size={18} /></button>
+			<button class="icon-button optional" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onclick={() => (shortcutsOpen = true)}><HelpCircle size={18} /></button>
 		</div>
 	</header>
 
 	<aside class="sidebar" aria-label="Notes">
 		<div class="sidebar-heading"><span>Workspace</span><button class="icon-button mobile-close" aria-label="Close files" onclick={() => (sidebarOpen = false)}><X size={18} /></button></div>
 		<div class="notes-heading"><h1>Notes</h1><button class="new-note" aria-label="New note" title="New note" onclick={() => void createNote()}><Plus size={17} /></button></div>
-		<label class="search-box"><Search size={15} /><input bind:this={searchInput} type="search" placeholder="Search all notes" value={searchQuery} oninput={(event) => queueSearch(event.currentTarget.value)} /><kbd>⌘K</kbd></label>
+		<label class="search-box"><Search size={15} /><input bind:this={searchInput} type="search" placeholder="Search all notes" value={searchQuery} oninput={(event) => queueSearch(event.currentTarget.value)} /><kbd>⌘⇧F</kbd></label>
 		<div class="result-count" aria-live="polite">{searchQuery ? `${results.length} ${results.length === 1 ? 'result' : 'results'}` : `${results.length} ${results.length === 1 ? 'note' : 'notes'}`}</div>
-		<nav class="note-list">
+		<nav class="note-list" bind:this={noteList}>
 			{#each results as result (result.note.id)}
-				<button class="file" class:active={result.note.id === activeNoteId} onclick={() => void selectNote(result.note.id)}>
+				<button class="file" class:active={result.note.id === activeNoteId} aria-current={result.note.id === activeNoteId ? 'true' : undefined} onkeydown={moveNoteFocus} onclick={() => void selectNote(result.note.id)}>
 					<FileText size={16} /><span><strong>{result.note.title}</strong>{#if searchQuery}<small>{result.excerpt || 'Title match'}</small>{/if}</span>{#if result.note.id === activeNoteId}<i></i>{/if}
 				</button>
 			{:else}
-				<div class="empty-results"><Search size={20} /><strong>No notes found</strong><span>Try a different word or phrase.</span></div>
+				{#if saveState === 'loading' && !storageError}
+					<div class="empty-results"><LoaderCircle class="spin" size={20} /><strong>Opening your vault…</strong><span>Notes are read from this device.</span></div>
+				{:else if searchQuery}
+					<div class="empty-results"><Search size={20} /><strong>No notes match “{searchQuery}”</strong><span>Search covers every title and every word.</span><button onclick={() => queueSearch('')}><X size={13} /> Clear search</button></div>
+				{:else}
+					<div class="empty-results"><FileText size={20} /><strong>No notes yet</strong><span>Your first note is one keystroke away.</span><button onclick={() => void createNote()}><Plus size={13} /> New note</button></div>
+				{/if}
 			{/each}
 		</nav>
 		<div class="local-note"><span class="local-icon"><Check size={14} /></span><div><strong>Private and offline-ready</strong><p>Notes stay on this device and keep working offline. GitHub backup needs a connection.</p></div></div>
@@ -717,17 +841,31 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 			<div class="document-stats"><span>{wordCount} words</span><span>{readingMinutes} min read</span></div>
 		</div>
 
-		{#if storageError}<div class="storage-error"><CloudOff size={16} /><span>{storageError} Your current text will remain open, but it may be lost when this tab closes.</span><button onclick={() => void saveDraft()}>Try again</button></div>{/if}
+		{#if storageError}
+			<div class="storage-error" role="alert">
+				<CloudOff size={16} />
+				<span>{storageError} Your current text stays open, but it may be lost when this tab closes. Copy it somewhere safe if the retry keeps failing.</span>
+				<button onclick={() => void saveDraft()}>Try again</button>
+				<button onclick={() => location.reload()}>Reload</button>
+			</div>
+		{/if}
 
 		<section class="editor-shell" class:edit-only={viewMode === 'edit'} class:preview-only={viewMode === 'preview'}>
-			<div class="editor-pane" aria-hidden={viewMode === 'preview'}>
+			<div class="editor-pane">
 				<div class="formatting-bar" aria-label="Formatting tools">
 					<button onclick={() => insertSyntax('**', '**', 'bold text')} title="Bold (⌘B)" aria-label="Bold"><Bold size={16} /></button><button onclick={() => insertSyntax('_', '_', 'italic text')} title="Italic (⌘I)" aria-label="Italic"><Italic size={16} /></button><span></span><button onclick={() => prefixLine('## ')} title="Heading" aria-label="Heading"><Heading2 size={17} /></button><button onclick={() => prefixLine('- ')} title="Bulleted list" aria-label="Bulleted list"><List size={17} /></button><button onclick={() => prefixLine('> ')} title="Quote" aria-label="Quote"><Quote size={16} /></button><button onclick={() => insertSyntax('`', '`', 'code')} title="Inline code" aria-label="Inline code"><Code2 size={17} /></button><button onclick={() => insertSyntax('[', '](https://)', 'link text')} title="Link" aria-label="Link"><Link size={16} /></button>
 				</div>
-				<textarea bind:this={editor} value={markdown} oninput={(event) => updateMarkdown(event.currentTarget.value)} aria-label="Markdown editor" spellcheck="true" disabled={saveState === 'loading'}></textarea>
+				<textarea bind:this={editor} value={markdown} oninput={(event) => updateMarkdown(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading'}></textarea>
 				<div class="editor-footer"><span>Markdown</span><span>{characterCount.toLocaleString()} characters</span></div>
 			</div>
-			<div class="preview-pane" aria-hidden={viewMode === 'edit'}><div class="preview-label"><Eye size={14} /> Preview</div><article class="prose">{@html renderedMarkdown}</article></div>
+			<div class="preview-pane">
+				<div class="preview-label"><Eye size={14} /> Preview</div>
+				{#if hasContent}
+					<article class="prose">{@html renderedMarkdown}</article>
+				{:else}
+					<div class="preview-empty"><PencilLine size={26} /><strong>Nothing to preview yet</strong><span>Whatever you type in the editor is rendered here as you write.</span></div>
+				{/if}
+			</div>
 		</section>
 	</main>
 </div>
@@ -750,6 +888,10 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	</div>
 {/if}
 
+{#if paletteOpen}
+	<CommandPalette items={paletteItems} onClose={() => (paletteOpen = false)} />
+{/if}
+
 {#if settingsOpen}
 	<SettingsDialog
 		{vault}
@@ -763,6 +905,8 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 		{backupMessage}
 		{backupCommitUrl}
 		{transferState}
+		{theme}
+		onThemeChange={setTheme}
 		bind:section={settingsSection}
 		onClose={() => (settingsOpen = false)}
 		onDisconnectGithub={() => void disconnectGitHub()}
@@ -817,7 +961,20 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	<div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) shortcutsOpen = false; }}>
 		<div class="shortcut-modal" role="dialog" aria-modal="true" aria-labelledby="shortcut-title">
 			<div class="modal-title"><div><span>Reference</span><h2 id="shortcut-title">Keyboard shortcuts</h2></div><button class="icon-button" aria-label="Close shortcuts" onclick={() => (shortcutsOpen = false)}><X size={18} /></button></div>
-			<div class="shortcut-list"><div><span>Search notes</span><kbd>⌘ K</kbd></div><div><span>Save document</span><kbd>⌘ S</kbd></div><div><span>Bold selection</span><kbd>⌘ B</kbd></div><div><span>Italic selection</span><kbd>⌘ I</kbd></div><div><span>Toggle preview</span><kbd>⌘ ⇧ P</kbd></div><div><span>Close this panel</span><kbd>Esc</kbd></div></div>
+			<div class="shortcut-list">
+				<div><span>Command palette</span><kbd>⌘ K</kbd></div>
+				<div><span>Search all notes</span><kbd>⌘ ⇧ F</kbd> </div>
+				<div><span>New note</span><kbd>⌘ ⏎</kbd></div>
+				<div><span>Save note</span><kbd>⌘ S</kbd></div>
+				<div><span>Bold selection</span><kbd>⌘ B</kbd></div>
+				<div><span>Italic selection</span><kbd>⌘ I</kbd></div>
+				<div><span>Toggle preview</span><kbd>⌘ ⇧ P</kbd></div>
+				<div><span>Toggle sidebar</span><kbd>⌘ \</kbd></div>
+				<div><span>Cycle theme</span><kbd>⌘ ⇧ L</kbd></div>
+				<div><span>Focus search</span><kbd>/</kbd></div>
+				<div><span>Open this panel</span><kbd>?</kbd></div>
+				<div><span>Close any panel</span><kbd>Esc</kbd></div>
+			</div>
 			<p>Use Ctrl instead of ⌘ on Windows and Linux.</p>
 		</div>
 	</div>

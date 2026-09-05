@@ -16,3 +16,12 @@ export {
   type GithubRepository,
   type GithubUser,
 } from "./github.js";
+export {
+  applyTheme,
+  nextThemePreference,
+  readThemePreference,
+  resolveTheme,
+  watchSystemTheme,
+  type ResolvedTheme,
+  type ThemePreference,
+} from "./theme.js";
