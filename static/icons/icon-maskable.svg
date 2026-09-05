@@ -18,38 +18,42 @@
     </linearGradient>
     <linearGradient id="rim" x1="0.15" y1="0.1" x2="1" y2="0.85">
       <stop offset="0" stop-color="#cfd5e0" stop-opacity="0"/>
-      <stop offset="0.55" stop-color="#cfd5e0" stop-opacity="0.45"/>
-      <stop offset="1" stop-color="#cfd5e0" stop-opacity="0.15"/>
+      <stop offset="0.55" stop-color="#cfd5e0" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#cfd5e0" stop-opacity="0.18"/>
     </linearGradient>
+    <clipPath id="clip-stone">
+      <path d="M256 76C206 168 128 252 128 322 128 398 186 452 256 452 326 452 384 398 384 322 384 252 306 168 256 76Z"/>
+    </clipPath>
     <clipPath id="clip-right">
-      <path d="M276 86 372 190 392 300 356 366 Q292 302 238 306 Q260 194 276 86Z"/>
+      <path d="M256 76Q244 200 226 336Q302 322 380 374L448 448 448 20Z"/>
     </clipPath>
-    <clipPath id="clip-dark">
-      <path d="M276 86 372 190 392 300 356 366 Q292 302 238 306 Q260 194 276 86Z"/>
-      <path d="M238 306 Q292 302 356 366 L330 448 232 452 152 404 Q198 344 238 306Z"/>
-    </clipPath>
-    <clipPath id="clip-bottom">
-      <path d="M238 306 Q292 302 356 366 L330 448 232 452 152 404 Q198 344 238 306Z"/>
+    <clipPath id="clip-bottomface">
+      <path d="M104 408Q186 356 226 336Q302 322 384 380L424 540 72 540Z"/>
     </clipPath>
   </defs>
 
   <rect width="512" height="512" fill="#1c1c1a"/>
-  <g id="stone" transform="translate(256 246) scale(0.74) translate(-256 -256)">
-    <path d="M276 86 372 190 392 300 356 366 Q292 302 238 306 Q260 194 276 86Z" fill="url(#face-right)"/>
+  <g id="stone" clip-path="url(#clip-stone)" transform="translate(256 246) scale(0.76) translate(-256 -256)">
+    <rect width="512" height="512" fill="url(#face-right)"/>
     <g clip-path="url(#clip-right)" fill="none" stroke-linecap="round">
-      <path d="M248 154 Q324 184 408 152" stroke="#f6f8fb" stroke-opacity="0.95" stroke-width="20"/>
-      <path d="M242 198 Q324 228 406 196" stroke="#f6f8fb" stroke-opacity="0.42" stroke-width="8"/>
+      <path d="M232 166Q310 196 404 164" stroke="#f6f8fb" stroke-opacity="0.95" stroke-width="21"/>
+      <path d="M226 212Q312 242 400 210" stroke="#f6f8fb" stroke-opacity="0.42" stroke-width="8"/>
     </g>
 
-    <path d="M276 86 168 176 120 300 152 404 Q198 344 238 306 Q260 194 276 86Z" fill="url(#face-left)"/>
+    <path d="M256 76Q246 200 228 337Q188 368 132 398L24 470 24 24Z" fill="url(#face-left)"/>
 
-    <path d="M238 306 Q292 302 356 366 L330 448 232 452 152 404 Q198 344 238 306Z" fill="url(#face-bottom)"/>
-    <g clip-path="url(#clip-bottom)" fill="none" stroke-linecap="round">
-      <path d="M140 392 Q248 356 370 412" stroke="#f6f8fb" stroke-opacity="0.85" stroke-width="11"/>
+    <path d="M104 408Q186 356 226 336Q302 322 384 380L424 540 72 540Z" fill="url(#face-bottom)"/>
+    <g clip-path="url(#clip-bottomface)" fill="none" stroke-linecap="round">
+      <path d="M96 400Q244 350 392 398" stroke="#f6f8fb" stroke-opacity="0.85" stroke-width="11"/>
     </g>
 
-    <path clip-path="url(#clip-dark)"
-          d="M276 86 372 190 392 300 356 366 330 448 232 452 152 404 120 300 168 176Z"
-          fill="none" stroke="url(#rim)" stroke-width="6" stroke-linejoin="round"/>
+    <g clip-path="url(#clip-right)">
+      <path d="M256 76C206 168 128 252 128 322 128 398 186 452 256 452 326 452 384 398 384 322 384 252 306 168 256 76Z"
+            fill="none" stroke="url(#rim)" stroke-width="7"/>
+    </g>
+    <g clip-path="url(#clip-bottomface)">
+      <path d="M256 76C206 168 128 252 128 322 128 398 186 452 256 452 326 452 384 398 384 322 384 252 306 168 256 76Z"
+            fill="none" stroke="url(#rim)" stroke-width="7"/>
+    </g>
   </g>
 </svg>
