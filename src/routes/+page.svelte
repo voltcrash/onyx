@@ -1,9 +1,10 @@
 <script lang="ts">
 	import {
 		Bold, Check, ChevronRight, CloudDownload, CloudOff, Code2, Columns2, Eye, FileText, Heading2,
-		CloudUpload, Download, ExternalLink, FileArchive, FolderInput, FolderOutput, GitCommitHorizontal, HelpCircle, Italic, Link, List, LoaderCircle, LogOut, PanelLeft,
-		PencilLine, Plus, Quote, RotateCcw, Save, Search, WifiOff, X
+		CloudUpload, ExternalLink, GitCommitHorizontal, HelpCircle, Italic, Link, List, LoaderCircle, LogOut, PanelLeft,
+		PencilLine, Plus, Quote, RotateCcw, Save, Search, Settings, WifiOff, X
 	} from '@lucide/svelte';
+	import SettingsDialog, { type SettingsSection } from '$lib/components/settings-dialog.svelte';
 	import {
 		backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
 		createMarkdownExport, createMarkdownZip, importMarkdownFiles, listGithubBackupCommits,
@@ -57,8 +58,8 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	let backupState = $state<'idle' | 'backing-up' | 'success' | 'error'>('idle');
 	let backupMessage = $state('');
 	let backupCommitUrl = $state('');
-	let backupModalOpen = $state(false);
-	let repositoryName = $state('onyx-vault');
+	let settingsOpen = $state(false);
+	let settingsSection = $state<SettingsSection>('github');
 	let pendingBackupCount = $state(0);
 	let restoreModalOpen = $state(false);
 	let restoreState = $state<'idle' | 'loading' | 'restoring' | 'error'>('idle');
@@ -69,7 +70,6 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	let restoreRepository = $state('onyx-vault');
 	let restoreBranch = $state('main');
 	let restoreDirectory = $state('vault');
-	let transferModalOpen = $state(false);
 	let transferState = $state<'idle' | 'working' | 'error'>('idle');
 	let transferMessage = $state('');
 	let folderInput: HTMLInputElement | undefined = $state();
@@ -96,7 +96,6 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 		};
 		const onOffline = () => {
 			isOnline = false;
-			backupModalOpen = false;
 			restoreModalOpen = false;
 		};
 		const onVisibilityChange = () => {
@@ -166,19 +165,65 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 		if (!isOnline || !vault || backupState === 'backing-up') return;
 		if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
 		if (!githubBackup) {
-			backupModalOpen = true;
+			openSettings('repository');
 			return;
 		}
 		await runBackup(githubBackup);
 	}
 
-	async function createBackupRepository(): Promise<void> {
-		if (!isOnline || !vault || !repositoryName.trim()) return;
+	function openSettings(target: SettingsSection = 'github'): void {
+		settingsSection = target;
+		settingsOpen = true;
+	}
+
+	async function selectBackupRepository(state: Omit<GithubBackupState, 'updatedAt'>): Promise<void> {
+		if (!vault) return;
+		try {
+			await vault.saveGithubBackupState(state);
+			githubBackup = await vault.getGithubBackupState();
+			backupState = 'idle';
+			backupCommitUrl = '';
+			backupMessage = `Backups now target ${state.owner}/${state.repository}.`;
+			settingsSection = 'backup';
+		} catch (error) {
+			showBackupError(error);
+		}
+	}
+
+	async function forgetBackupRepository(): Promise<void> {
+		if (!vault) return;
+		try {
+			await vault.clearGithubBackupState();
+			githubBackup = undefined;
+			backupCommitUrl = '';
+			backupState = 'idle';
+			backupMessage = 'Onyx is no longer backing up to a repository.';
+		} catch (error) {
+			showBackupError(error);
+		}
+	}
+
+	async function reloadVault(): Promise<void> {
+		if (!vault) return;
+		if (saveTimer) window.clearTimeout(saveTimer);
+		saveTimer = undefined;
+		let notes = await vault.listNotes();
+		if (notes.length === 0) {
+			notes = [await vault.saveNote({ title: titleFromMarkdown(INITIAL_MARKDOWN), markdown: INITIAL_MARKDOWN })];
+		}
+		searchQuery = '';
+		await loadNote(notes[0].id);
+		await runSearch('');
+		pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+	}
+
+	async function createBackupRepository(name: string): Promise<void> {
+		if (!isOnline || !vault || !name.trim()) return;
 		backupState = 'backing-up';
 		backupMessage = 'Creating your private repository…';
-		backupModalOpen = false;
+		settingsOpen = false;
 		try {
-			const configuration = await createPrivateGithubRepository(repositoryName);
+			const configuration = await createPrivateGithubRepository(name);
 			await vault.saveGithubBackupState(configuration);
 			githubBackup = configuration;
 			await runBackup(configuration);
@@ -542,7 +587,8 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 			if (searchQuery) {
 				queueSearch('');
 				searchInput?.blur();
-			} else shortcutsOpen = false;
+			} else if (settingsOpen) settingsOpen = false;
+			else shortcutsOpen = false;
 		}
 	}
 
@@ -622,7 +668,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 				{saveState === 'loading' ? 'Opening…' : saveState === 'saving' ? 'Saving…' : saveState === 'unsaved' ? 'Unsaved' : saveState === 'error' ? 'Save failed' : 'Saved to this device'}
 			</div>
 			<button class="save-button" onclick={() => void saveDraft()} disabled={saveState === 'saving'}><Save size={16} /><span>Save</span><kbd>⌘S</kbd></button>
-			<button class="icon-button" aria-label="Import or export Markdown" title="Import or export Markdown" onclick={() => (transferModalOpen = true)}><FileArchive size={18} /></button>
+			<button class="icon-button" aria-label="Settings" title="Settings" onclick={() => openSettings(githubState === 'connected' ? 'backup' : 'github')}><Settings size={18} /></button>
 			{#if githubState === 'connected' && githubUser}
 				<button class="backup-button" class:success={backupState === 'success'} class:error={backupState === 'error'} onclick={() => void beginBackup()} disabled={!isOnline || !vault || backupState === 'backing-up'} title={!isOnline ? 'GitHub backup is unavailable offline' : githubBackup ? `Back up to ${githubBackup.owner}/${githubBackup.repository}` : 'Create a private repository and back up the vault'}>
 					{#if backupState === 'backing-up'}<LoaderCircle class="spin" size={15} />{:else}<CloudUpload size={16} />{/if}
@@ -704,36 +750,37 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	</div>
 {/if}
 
-{#if transferModalOpen}
-	<div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget && transferState !== 'working') transferModalOpen = false; }}>
-		<div class="shortcut-modal transfer-modal" role="dialog" aria-modal="true" aria-labelledby="transfer-title">
-			<div class="modal-title"><div><span>Portable Markdown</span><h2 id="transfer-title">Import or export</h2></div><button class="icon-button" aria-label="Close import and export" disabled={transferState === 'working'} onclick={() => (transferModalOpen = false)}><X size={18} /></button></div>
-			<div class="transfer-options">
-				<section><div><FolderInput size={20} /><span><strong>Import folder</strong><small>Add every Markdown file and its attachments.</small></span></div><button disabled={!vault || transferState === 'working'} onclick={() => folderInput?.click()}>Choose folder</button></section>
-				<section><div><FileArchive size={20} /><span><strong>Import ZIP</strong><small>Unpack a Markdown archive without flattening paths.</small></span></div><button disabled={!vault || transferState === 'working'} onclick={() => zipInput?.click()}>Choose ZIP</button></section>
-				<section><div><FolderOutput size={20} /><span><strong>Export folder</strong><small>Write notes and attachments into their original folders.</small></span></div><button disabled={!vault || transferState === 'working'} onclick={() => void exportFolder()}>Choose folder</button></section>
-				<section><div><Download size={20} /><span><strong>Export ZIP</strong><small>Download a portable archive of the entire vault.</small></span></div><button disabled={!vault || transferState === 'working'} onclick={() => void exportZip()}>Download ZIP</button></section>
-			</div>
-			<input class="transfer-input" bind:this={folderInput} type="file" webkitdirectory multiple onchange={(event) => void importFolder(event.currentTarget.files)} />
-			<input class="transfer-input" bind:this={zipInput} type="file" accept=".zip,application/zip" onchange={(event) => void importZip(event.currentTarget.files)} />
-			<p>Existing notes stay in your vault. Imported paths are retained for the next folder or ZIP export.</p>
-		</div>
-	</div>
+{#if settingsOpen}
+	<SettingsDialog
+		{vault}
+		{isOnline}
+		{githubUser}
+		{githubState}
+		{githubMessage}
+		{githubBackup}
+		{pendingBackupCount}
+		{backupState}
+		{backupMessage}
+		{backupCommitUrl}
+		{transferState}
+		bind:section={settingsSection}
+		onClose={() => (settingsOpen = false)}
+		onDisconnectGithub={() => void disconnectGitHub()}
+		onCreateRepository={(name) => void createBackupRepository(name)}
+		onSelectRepository={(state) => void selectBackupRepository(state)}
+		onForgetRepository={() => void forgetBackupRepository()}
+		onBackup={() => void beginBackup()}
+		onRestore={() => { settingsOpen = false; void openRestore(); }}
+		onImportFolder={() => folderInput?.click()}
+		onImportZip={() => zipInput?.click()}
+		onExportFolder={() => void exportFolder()}
+		onExportZip={() => void exportZip()}
+		onVaultCleared={() => void reloadVault()}
+	/>
 {/if}
 
-{#if backupModalOpen}
-	<div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) backupModalOpen = false; }}>
-		<form class="shortcut-modal backup-modal" onsubmit={(event) => { event.preventDefault(); void createBackupRepository(); }}>
-			<div class="modal-title"><div><span>GitHub backup</span><h2>Create a private repository</h2></div><button type="button" class="icon-button" aria-label="Close GitHub backup" onclick={() => (backupModalOpen = false)}><X size={18} /></button></div>
-			<div class="backup-form">
-				<label for="repository-name">Repository name</label>
-				<div class="repository-field"><span>{githubUser?.login}/</span><input id="repository-name" bind:value={repositoryName} required pattern="[A-Za-z0-9._-]+" autocomplete="off" /></div>
-				<p>Onyx will create this repository as private. Each manual backup sends all pending file changes together in one commit.</p>
-			</div>
-			<div class="modal-actions"><button type="button" onclick={() => (backupModalOpen = false)}>Cancel</button><button class="primary" type="submit" disabled={!isOnline}><CloudUpload size={15} /> Create and back up</button></div>
-		</form>
-	</div>
-{/if}
+<input class="transfer-input" bind:this={folderInput} type="file" webkitdirectory multiple onchange={(event) => void importFolder(event.currentTarget.files)} />
+<input class="transfer-input" bind:this={zipInput} type="file" accept=".zip,application/zip" onchange={(event) => void importZip(event.currentTarget.files)} />
 
 {#if restoreModalOpen}
 	<div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget && restoreState !== 'restoring') restoreModalOpen = false; }}>

@@ -7,10 +7,12 @@ export {
   GithubRequestError,
   githubRequest,
   listGithubBackupCommits,
+  listGithubRepositories,
   restoreVaultFromGithub,
   restoreGithubSession,
   type GithubBackupCommit,
   type GithubBackupResult,
   type GithubRestoreResult,
+  type GithubRepository,
   type GithubUser,
 } from "./github.js";

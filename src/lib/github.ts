@@ -32,6 +32,7 @@ interface GithubRepositoryResponse {
   default_branch: string;
   name: string;
   owner: { login: string };
+  permissions?: { push?: boolean };
   private: boolean;
 }
 
@@ -70,6 +71,13 @@ interface GithubBlobResponse {
   encoding?: string;
   sha: string;
   size?: number;
+}
+
+export interface GithubRepository {
+  branch: string;
+  name: string;
+  owner: string;
+  private: boolean;
 }
 
 export interface GithubBackupResult {
@@ -150,6 +158,19 @@ export async function createPrivateGithubRepository(name: string): Promise<Githu
     directory: "vault",
     updatedAt: new Date().toISOString(),
   };
+}
+
+export async function listGithubRepositories(): Promise<GithubRepository[]> {
+  const parameters = new URLSearchParams({ per_page: "100", sort: "pushed" });
+  const repositories = await githubRequest<GithubRepositoryResponse[]>(`/user/repos?${parameters}`);
+  return repositories
+    .filter((repository) => repository.permissions?.push !== false)
+    .map((repository) => ({
+      branch: repository.default_branch || "main",
+      name: repository.name,
+      owner: repository.owner.login,
+      private: repository.private,
+    }));
 }
 
 export async function backupVaultToGithub(

@@ -19,6 +19,7 @@ import type {
   VaultRestoreFile,
   VaultRestoreResult,
   VaultSearchResult,
+  VaultStorageUsage,
 } from "./types.js";
 
 const DEFAULT_DATABASE_NAME = "onyx-vault";
@@ -57,6 +58,24 @@ export class Vault {
 
   isStoragePersistent(): Promise<boolean> {
     return navigator.storage.persisted();
+  }
+
+  async getStorageUsage(): Promise<VaultStorageUsage> {
+    const [notes, attachments, persistent, estimate] = await Promise.all([
+      this.#database.getNotes(),
+      this.#database.getAttachments(),
+      this.isStoragePersistent(),
+      navigator.storage.estimate?.() ?? Promise.resolve({} as StorageEstimate),
+    ]);
+    return {
+      attachmentBytes: attachments.reduce((total, attachment) => total + attachment.size, 0),
+      attachmentCount: attachments.length,
+      noteBytes: notes.reduce((total, note) => total + note.size, 0),
+      noteCount: notes.length,
+      persistent,
+      quota: estimate.quota,
+      usage: estimate.usage,
+    };
   }
 
   async saveNote(input: SaveNoteInput): Promise<Note> {
@@ -297,6 +316,41 @@ export class Vault {
 
   saveGithubBackupState(state: Omit<GithubBackupState, "updatedAt">): Promise<void> {
     return this.#database.setGithubBackupState({ ...state, updatedAt: new Date().toISOString() });
+  }
+
+  clearGithubBackupState(): Promise<void> {
+    return this.#database.deleteGithubBackupState();
+  }
+
+  async clear(): Promise<void> {
+    const now = new Date().toISOString();
+    const [notes, attachments] = await Promise.all([
+      this.#database.getNotes(),
+      this.#database.getAttachments(),
+    ]);
+    const operations = [
+      ...attachments.map((attachment): BackupOperation => ({
+        id: crypto.randomUUID(),
+        kind: "attachment:delete",
+        entityId: attachment.id,
+        noteId: attachment.noteId,
+        path: attachment.path,
+        revision: 1,
+        createdAt: now,
+      })),
+      ...notes.map((note): BackupOperation => ({
+        id: crypto.randomUUID(),
+        kind: "note:delete",
+        entityId: note.id,
+        noteId: note.id,
+        path: note.path,
+        revision: note.revision + 1,
+        createdAt: now,
+      })),
+    ];
+    await this.#filesystem.replace([], () =>
+      this.#database.replaceVault([], [], [], [], [], operations),
+    );
   }
 
   getPendingBackupOperations(): Promise<BackupOperation[]> {

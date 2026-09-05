@@ -241,6 +241,10 @@ export class VaultDatabase {
     return this.#putSetting("githubBackup", state);
   }
 
+  deleteGithubBackupState(): Promise<void> {
+    return this.#deleteSetting("githubBackup");
+  }
+
   getBackupOperations(): Promise<BackupOperation[]> {
     return this.#getAll<BackupOperation>("backupQueue", "createdAt");
   }
@@ -303,6 +307,12 @@ export class VaultDatabase {
   async #getSetting<T>(key: string): Promise<T | undefined> {
     const record = await this.#get<SettingRecord<T>>("settings", key);
     return record?.value;
+  }
+
+  async #deleteSetting(key: string): Promise<void> {
+    const transaction = this.#database.transaction("settings", "readwrite");
+    transaction.objectStore("settings").delete(key);
+    await transactionDone(transaction);
   }
 
   async #putSetting<T>(key: string, value: T): Promise<void> {

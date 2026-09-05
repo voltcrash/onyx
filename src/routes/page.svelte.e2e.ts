@@ -51,7 +51,8 @@ test("imports a Markdown folder and exports its structure and attachments as ZIP
   await page.goto("/");
   await expect(page.getByText("Saved to this device")).toBeVisible();
 
-  await page.getByRole("button", { name: "Import or export Markdown" }).click();
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Import & export", exact: true }).click();
   await page.locator('input[type="file"][webkitdirectory]').evaluate((element) => {
     const input = element as HTMLInputElement;
     const transfer = new DataTransfer();

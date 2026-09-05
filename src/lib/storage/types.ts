@@ -96,6 +96,16 @@ export interface VaultRestoreResult {
   noteCount: number;
 }
 
+export interface VaultStorageUsage {
+  attachmentBytes: number;
+  attachmentCount: number;
+  noteBytes: number;
+  noteCount: number;
+  persistent: boolean;
+  quota?: number;
+  usage?: number;
+}
+
 export interface VaultSearchResult {
   note: NoteMetadata;
   excerpt: string;
