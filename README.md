@@ -42,12 +42,21 @@ After a GitHub backup succeeds, pass the uploaded operation IDs to
 `acknowledgeBackupOperations`. Authentication tokens are intentionally not part of the persisted
 backup state.
 
+Once GitHub is connected, **Back up** creates a private repository on first use and uploads every
+pending note and attachment change in one Git commit. Later backups reuse that repository and
+advance its configured branch without force-pushing. Vault contents travel directly from the
+browser to GitHub.
+
 ### GitHub App authentication
 
 Onyx uses the GitHub App web authorization flow with PKCE. Configure the app callback URL as
 `https://your-onyx-domain.example/auth/github/callback`, grant only the repository permissions the
 backup feature needs, and set the variables in `.env.example` in the deployment environment.
 Generate `GITHUB_AUTH_COOKIE_SECRET` with at least 32 random characters.
+
+The GitHub App needs **Administration: write** to create the private backup repository and
+**Contents: write** to create blobs, trees, commits, and update its branch. Install it for all
+repositories so the newly created backup repository is immediately accessible.
 
 The server handles only authorization-code exchange and token refresh. GitHub credentials are kept
 in an encrypted, HTTP-only cookie, and the active access token is held only in browser memory. GitHub

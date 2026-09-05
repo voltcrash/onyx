@@ -67,6 +67,16 @@ export interface BackupOperation {
   createdAt: string;
 }
 
+export interface VaultBackupChange {
+  contents: Blob | null;
+  path: string;
+}
+
+export interface VaultBackupSnapshot {
+  changes: VaultBackupChange[];
+  operationIds: string[];
+}
+
 export interface VaultSearchResult {
   note: NoteMetadata;
   excerpt: string;

@@ -14,6 +14,7 @@ import type {
   SaveNoteInput,
   SearchState,
   VaultOptions,
+  VaultBackupSnapshot,
   VaultSearchResult,
 } from "./types.js";
 
@@ -273,6 +274,22 @@ export class Vault {
 
   getPendingBackupOperations(): Promise<BackupOperation[]> {
     return this.#database.getBackupOperations();
+  }
+
+  async createBackupSnapshot(): Promise<VaultBackupSnapshot> {
+    const operations = await this.#database.getBackupOperations();
+    const latestByPath = new Map<string, BackupOperation>();
+    for (const operation of operations) latestByPath.set(operation.path, operation);
+
+    const changes = await Promise.all(
+      [...latestByPath.values()].map(async (operation) => ({
+        contents: operation.kind.endsWith(":delete")
+          ? null
+          : await this.#filesystem.read(operation.path),
+        path: operation.path,
+      })),
+    );
+    return { changes, operationIds: operations.map((operation) => operation.id) };
   }
 
   acknowledgeBackupOperations(ids: string[]): Promise<void> {

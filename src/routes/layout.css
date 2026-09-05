@@ -188,7 +188,8 @@ textarea:focus-visible {
   cursor: wait;
 }
 .github-connect,
-.github-account {
+.github-account,
+.backup-button {
   height: 34px;
   display: flex;
   align-items: center;
@@ -198,6 +199,36 @@ textarea:focus-visible {
   background: #fff;
   color: #4c4a45;
   font-size: 12px;
+}
+.backup-button {
+  padding: 0 10px;
+  cursor: pointer;
+}
+.backup-button:hover {
+  border-color: #c6c2b8;
+  color: var(--ink);
+}
+.backup-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.backup-button.success {
+  border-color: #a9c5a9;
+  color: #47714b;
+}
+.backup-button.error {
+  border-color: #dba994;
+  color: #a7422b;
+}
+.backup-button i {
+  min-width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #ece9e2;
+  font-size: 9px;
+  font-style: normal;
 }
 .github-connect {
   padding: 0 10px;
@@ -872,6 +903,122 @@ kbd {
   color: var(--faint);
   font-size: 11px;
 }
+.backup-form {
+  padding: 20px 22px 4px;
+}
+.backup-form label {
+  display: block;
+  margin-bottom: 7px;
+  color: #55524c;
+  font-size: 12px;
+  font-weight: 600;
+}
+.repository-field {
+  height: 39px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+}
+.repository-field:focus-within {
+  border-color: #c9987d;
+  box-shadow: 0 0 0 2px #f1ded3;
+}
+.repository-field span {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding: 0 0 0 10px;
+  color: var(--faint);
+  font-size: 13px;
+}
+.repository-field input {
+  min-width: 0;
+  flex: 1;
+  height: 100%;
+  padding: 0 10px 0 2px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+}
+.backup-form p {
+  margin: 11px 0 14px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 22px 18px;
+  border-top: 1px solid var(--line-soft);
+}
+.modal-actions button {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+.modal-actions button.primary {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+.backup-notice {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(440px, calc(100vw - 36px));
+  padding: 10px 10px 10px 13px;
+  border: 1px solid #b7cdb6;
+  border-radius: 9px;
+  background: #f3f8f1;
+  color: #426847;
+  font-size: 12px;
+  box-shadow: 0 10px 35px #0002;
+}
+.backup-notice.error {
+  border-color: #edc5b6;
+  background: #fff1ea;
+  color: #92452f;
+}
+.backup-notice span {
+  line-height: 1.4;
+}
+.backup-notice a {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: inherit;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.backup-notice button {
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
 @media (max-width: 900px) {
   .app {
     grid-template-columns: minmax(0, 1fr);
@@ -934,13 +1081,19 @@ kbd {
   }
   .save-button kbd,
   .save-button > span,
+  .backup-button > span,
+  .github-account > span,
   .top-actions > .icon-button {
     display: none;
   }
-  .save-button {
+  .save-button,
+  .backup-button {
     width: 34px;
     justify-content: center;
     padding: 0;
+  }
+  .backup-button i {
+    display: none;
   }
   .document-bar {
     grid-template-columns: 1fr auto;

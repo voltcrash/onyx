@@ -1,10 +1,13 @@
 <script lang="ts">
 	import {
 		Bold, Check, ChevronRight, CloudOff, Code2, Columns2, Eye, FileText, Heading2,
-		CloudUpload, HelpCircle, Italic, Link, List, LoaderCircle, LogOut, PanelLeft, PencilLine,
-		Plus, Quote, RotateCcw, Save, Search, X
+		CloudUpload, ExternalLink, HelpCircle, Italic, Link, List, LoaderCircle, LogOut, PanelLeft,
+		PencilLine, Plus, Quote, RotateCcw, Save, Search, X
 	} from '@lucide/svelte';
-	import { disconnectGithub, restoreGithubSession, Vault, type GithubUser, type VaultSearchResult } from '$lib';
+	import {
+		backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
+		restoreGithubSession, Vault, type GithubBackupState, type GithubUser, type VaultSearchResult
+	} from '$lib';
 	import { onMount } from 'svelte';
 
 	type ViewMode = 'edit' | 'split' | 'preview';
@@ -27,7 +30,7 @@ Create as many notes as you need. Search checks every title and every word, whil
 
 Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle preview.`;
 
-	let vault: Vault | undefined;
+	let vault = $state<Vault>();
 	let activeNoteId = $state('');
 	let markdown = $state(INITIAL_MARKDOWN);
 	let lastSavedMarkdown = $state(INITIAL_MARKDOWN);
@@ -47,6 +50,13 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	let githubUser = $state<GithubUser>();
 	let githubState = $state<'loading' | 'connected' | 'disconnected' | 'error'>('loading');
 	let githubMessage = $state('');
+	let githubBackup = $state<GithubBackupState>();
+	let backupState = $state<'idle' | 'backing-up' | 'success' | 'error'>('idle');
+	let backupMessage = $state('');
+	let backupCommitUrl = $state('');
+	let backupModalOpen = $state(false);
+	let repositoryName = $state('onyx-vault');
+	let pendingBackupCount = $state(0);
 
 	const wordCount = $derived(markdown.trim() ? markdown.trim().split(/\s+/).length : 0);
 	const characterCount = $derived(markdown.length);
@@ -110,6 +120,57 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 		}
 	}
 
+	async function beginBackup(): Promise<void> {
+		if (!vault || backupState === 'backing-up') return;
+		if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
+		if (!githubBackup) {
+			backupModalOpen = true;
+			return;
+		}
+		await runBackup(githubBackup);
+	}
+
+	async function createBackupRepository(): Promise<void> {
+		if (!vault || !repositoryName.trim()) return;
+		backupState = 'backing-up';
+		backupMessage = 'Creating your private repository…';
+		backupModalOpen = false;
+		try {
+			const configuration = await createPrivateGithubRepository(repositoryName);
+			await vault.saveGithubBackupState(configuration);
+			githubBackup = configuration;
+			await runBackup(configuration);
+		} catch (error) {
+			showBackupError(error);
+		}
+	}
+
+	async function runBackup(configuration: GithubBackupState): Promise<void> {
+		if (!vault) return;
+		backupState = 'backing-up';
+		backupMessage = 'Preparing one GitHub commit…';
+		backupCommitUrl = '';
+		try {
+			const result = await backupVaultToGithub(vault, configuration);
+			githubBackup = result.state;
+			pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+			backupState = 'success';
+			backupCommitUrl = result.commitUrl ?? '';
+			backupMessage = result.commitUrl
+				? `Backed up ${result.fileCount} ${result.fileCount === 1 ? 'file' : 'files'} in one commit.`
+				: 'Your GitHub backup is already up to date.';
+		} catch (error) {
+			showBackupError(error);
+		}
+	}
+
+	function showBackupError(error: unknown): void {
+		backupState = 'error';
+		backupMessage = error instanceof GithubRequestError && error.status === 422
+			? 'GitHub could not create that repository or update its branch. Check the name and try again.'
+			: error instanceof Error ? error.message : 'The GitHub backup failed.';
+	}
+
 	async function openVault(): Promise<void> {
 		try {
 			vault = await Vault.open();
@@ -122,6 +183,8 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 			}
 			await loadNote(notes[0].id);
 			await runSearch('');
+			githubBackup = await vault.getGithubBackupState();
+			pendingBackupCount = (await vault.getPendingBackupOperations()).length;
 			void vault.requestPersistentStorage();
 		} catch (error) {
 			storageError = error instanceof Error ? error.message : 'Your notes could not be opened.';
@@ -194,6 +257,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 			saveState = markdown === contents ? 'saved' : 'unsaved';
 			storageError = '';
 			await runSearch(searchQuery);
+			pendingBackupCount = (await vault.getPendingBackupOperations()).length;
 			return true;
 		} catch (error) {
 			storageError = error instanceof Error ? error.message : 'Autosave failed.';
@@ -350,6 +414,11 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 			</div>
 			<button class="save-button" onclick={() => void saveDraft()} disabled={saveState === 'saving'}><Save size={16} /><span>Save</span><kbd>⌘S</kbd></button>
 			{#if githubState === 'connected' && githubUser}
+				<button class="backup-button" class:success={backupState === 'success'} class:error={backupState === 'error'} onclick={() => void beginBackup()} disabled={!vault || backupState === 'backing-up'} title={githubBackup ? `Back up to ${githubBackup.owner}/${githubBackup.repository}` : 'Create a private repository and back up the vault'}>
+					{#if backupState === 'backing-up'}<LoaderCircle class="spin" size={15} />{:else}<CloudUpload size={16} />{/if}
+					<span>{backupState === 'backing-up' ? 'Backing up…' : 'Back up'}</span>
+					{#if pendingBackupCount > 0}<i>{pendingBackupCount}</i>{/if}
+				</button>
 				<div class="github-account" title={`Connected as ${githubUser.login}`}><img src={githubUser.avatarUrl} alt="" /><span>@{githubUser.login}</span><button aria-label="Disconnect GitHub" title="Disconnect GitHub" onclick={() => void disconnectGitHub()}><LogOut size={14} /></button></div>
 			{:else}
 				<a class="github-connect" class:error={githubState === 'error'} href="/auth/github/start" title={githubMessage || 'Connect GitHub for direct, private backups'} aria-label="Connect GitHub">{#if githubState === 'loading'}<LoaderCircle class="spin" size={15} />{:else}<CloudUpload size={16} />{/if}<span>{githubState === 'loading' ? 'Checking…' : 'Connect GitHub'}</span></a>
@@ -402,6 +471,28 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 </div>
 
 {#if saveState === 'unsaved'}<div class="unsaved-bar" aria-live="polite"><span><i></i>Changes haven’t been saved yet</span><button onclick={restoreSaved}><RotateCcw size={14} /> Revert</button><button class="bar-save" onclick={() => void saveDraft()}><Save size={14} /> Save now</button></div>{/if}
+
+{#if backupMessage}
+	<div class="backup-notice" class:error={backupState === 'error'} role="status">
+		<span>{backupMessage}</span>
+		{#if backupCommitUrl}<a href={backupCommitUrl} target="_blank" rel="noreferrer">View commit <ExternalLink size={13} /></a>{/if}
+		<button aria-label="Dismiss backup status" onclick={() => (backupMessage = '')}><X size={14} /></button>
+	</div>
+{/if}
+
+{#if backupModalOpen}
+	<div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) backupModalOpen = false; }}>
+		<form class="shortcut-modal backup-modal" onsubmit={(event) => { event.preventDefault(); void createBackupRepository(); }}>
+			<div class="modal-title"><div><span>GitHub backup</span><h2>Create a private repository</h2></div><button type="button" class="icon-button" aria-label="Close GitHub backup" onclick={() => (backupModalOpen = false)}><X size={18} /></button></div>
+			<div class="backup-form">
+				<label for="repository-name">Repository name</label>
+				<div class="repository-field"><span>{githubUser?.login}/</span><input id="repository-name" bind:value={repositoryName} required pattern="[A-Za-z0-9._-]+" autocomplete="off" /></div>
+				<p>Onyx will create this repository as private. Each manual backup sends all pending file changes together in one commit.</p>
+			</div>
+			<div class="modal-actions"><button type="button" onclick={() => (backupModalOpen = false)}>Cancel</button><button class="primary" type="submit"><CloudUpload size={15} /> Create and back up</button></div>
+		</form>
+	</div>
+{/if}
 
 {#if shortcutsOpen}
 	<div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) shortcutsOpen = false; }}>
