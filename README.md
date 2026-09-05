@@ -14,6 +14,7 @@ web-based markdown note-taking app that only stores files locally, while it uses
 - _**TypeScript**_ - language
 - _**GitHub**_ - auth and backup/restore
 - _**Vite+**_ with _**pnpm**_
+- deployed on Vercel
 
 ### local vault
 
