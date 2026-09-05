@@ -187,6 +187,58 @@ textarea:focus-visible {
   opacity: 0.6;
   cursor: wait;
 }
+.github-connect,
+.github-account {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #d8d5cc;
+  border-radius: 7px;
+  background: #fff;
+  color: #4c4a45;
+  font-size: 12px;
+}
+.github-connect {
+  padding: 0 10px;
+  text-decoration: none;
+}
+.github-connect:hover {
+  border-color: #c6c2b8;
+  color: var(--ink);
+}
+.github-connect.error {
+  border-color: #dba994;
+  color: #a7422b;
+}
+.github-account {
+  padding-left: 5px;
+}
+.github-account img {
+  width: 23px;
+  height: 23px;
+  border-radius: 5px;
+}
+.github-account > span {
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.github-account button {
+  width: 29px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid var(--line-soft);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.github-account button:hover {
+  color: #a7422b;
+}
 .mobile-menu,
 .mobile-close {
   display: none;

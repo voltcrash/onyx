@@ -1,10 +1,10 @@
 <script lang="ts">
 	import {
 		Bold, Check, ChevronRight, CloudOff, Code2, Columns2, Eye, FileText, Heading2,
-		HelpCircle, Italic, Link, List, LoaderCircle, PanelLeft, PencilLine, Plus, Quote,
-		RotateCcw, Save, Search, X
+		CloudUpload, HelpCircle, Italic, Link, List, LoaderCircle, LogOut, PanelLeft, PencilLine,
+		Plus, Quote, RotateCcw, Save, Search, X
 	} from '@lucide/svelte';
-	import { Vault, type VaultSearchResult } from '$lib';
+	import { disconnectGithub, restoreGithubSession, Vault, type GithubUser, type VaultSearchResult } from '$lib';
 	import { onMount } from 'svelte';
 
 	type ViewMode = 'edit' | 'split' | 'preview';
@@ -44,6 +44,9 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	let shortcutsOpen = $state(false);
 	let sidebarOpen = $state(false);
 	let storageError = $state('');
+	let githubUser = $state<GithubUser>();
+	let githubState = $state<'loading' | 'connected' | 'disconnected' | 'error'>('loading');
+	let githubMessage = $state('');
 
 	const wordCount = $derived(markdown.trim() ? markdown.trim().split(/\s+/).length : 0);
 	const characterCount = $derived(markdown.length);
@@ -52,6 +55,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 
 	onMount(() => {
 		void openVault();
+		void restoreGitHub();
 		const onBeforeUnload = (event: BeforeUnloadEvent) => {
 			if (markdown === lastSavedMarkdown) return;
 			event.preventDefault();
@@ -72,6 +76,39 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 			vault?.close();
 		};
 	});
+
+	async function restoreGitHub(): Promise<void> {
+		const result = new URLSearchParams(location.search).get('github');
+		if (result) history.replaceState(history.state, '', location.pathname + location.hash);
+		if (result && result !== 'connected') {
+			githubMessage = result === 'configuration'
+				? 'GitHub authentication has not been configured for this deployment.'
+				: result === 'denied'
+					? 'GitHub authorization was cancelled.'
+					: result === 'invalid'
+						? 'The GitHub authorization response could not be verified. Please try again.'
+						: 'GitHub authentication failed. Please try again.';
+		}
+		try {
+			githubUser = await restoreGithubSession();
+			githubState = githubUser ? 'connected' : githubMessage ? 'error' : 'disconnected';
+		} catch (error) {
+			githubState = 'error';
+			githubMessage = error instanceof Error ? error.message : 'GitHub authentication failed.';
+		}
+	}
+
+	async function disconnectGitHub(): Promise<void> {
+		try {
+			await disconnectGithub();
+			githubUser = undefined;
+			githubState = 'disconnected';
+			githubMessage = '';
+		} catch (error) {
+			githubState = 'error';
+			githubMessage = error instanceof Error ? error.message : 'GitHub could not be disconnected.';
+		}
+	}
 
 	async function openVault(): Promise<void> {
 		try {
@@ -312,6 +349,11 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 				{saveState === 'loading' ? 'Opening…' : saveState === 'saving' ? 'Saving…' : saveState === 'unsaved' ? 'Unsaved' : saveState === 'error' ? 'Save failed' : 'Saved to this device'}
 			</div>
 			<button class="save-button" onclick={() => void saveDraft()} disabled={saveState === 'saving'}><Save size={16} /><span>Save</span><kbd>⌘S</kbd></button>
+			{#if githubState === 'connected' && githubUser}
+				<div class="github-account" title={`Connected as ${githubUser.login}`}><img src={githubUser.avatarUrl} alt="" /><span>@{githubUser.login}</span><button aria-label="Disconnect GitHub" title="Disconnect GitHub" onclick={() => void disconnectGitHub()}><LogOut size={14} /></button></div>
+			{:else}
+				<a class="github-connect" class:error={githubState === 'error'} href="/auth/github/start" title={githubMessage || 'Connect GitHub for direct, private backups'} aria-label="Connect GitHub">{#if githubState === 'loading'}<LoaderCircle class="spin" size={15} />{:else}<CloudUpload size={16} />{/if}<span>{githubState === 'loading' ? 'Checking…' : 'Connect GitHub'}</span></a>
+			{/if}
 			<button class="icon-button" aria-label="Keyboard shortcuts" title="Keyboard shortcuts" onclick={() => (shortcutsOpen = true)}><HelpCircle size={18} /></button>
 		</div>
 	</header>
@@ -330,7 +372,7 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 				<div class="empty-results"><Search size={20} /><strong>No notes found</strong><span>Try a different word or phrase.</span></div>
 			{/each}
 		</nav>
-		<div class="local-note"><span class="local-icon"><Check size={14} /></span><div><strong>Private by default</strong><p>Notes and the search index stay on this device.</p></div></div>
+		<div class="local-note"><span class="local-icon"><Check size={14} /></span><div><strong>Private by default</strong><p>Notes stay on this device. Backups go directly from your browser to GitHub.</p></div></div>
 	</aside>
 
 	<main class="workspace">

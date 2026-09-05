@@ -41,3 +41,15 @@ const pending = await vault.getPendingBackupOperations();
 After a GitHub backup succeeds, pass the uploaded operation IDs to
 `acknowledgeBackupOperations`. Authentication tokens are intentionally not part of the persisted
 backup state.
+
+### GitHub App authentication
+
+Onyx uses the GitHub App web authorization flow with PKCE. Configure the app callback URL as
+`https://your-onyx-domain.example/auth/github/callback`, grant only the repository permissions the
+backup feature needs, and set the variables in `.env.example` in the deployment environment.
+Generate `GITHUB_AUTH_COOKIE_SECRET` with at least 32 random characters.
+
+The server handles only authorization-code exchange and token refresh. GitHub credentials are kept
+in an encrypted, HTTP-only cookie, and the active access token is held only in browser memory. GitHub
+API requests are sent from the browser directly to `api.github.com`; note and attachment contents do
+not pass through the Onyx backend.
