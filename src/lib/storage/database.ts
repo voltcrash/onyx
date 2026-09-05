@@ -6,7 +6,7 @@ import type {
   SearchState,
 } from "./types.js";
 
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 
 export interface SearchDocument {
   noteId: string;
@@ -16,12 +16,26 @@ export interface SearchDocument {
   updatedAt: string;
 }
 
+export interface SearchPosting {
+  term: string;
+  noteId: string;
+  titleMatches: number;
+  bodyMatches: number;
+  tagMatches: number;
+}
+
 interface SettingRecord<T> {
   key: string;
   value: T;
 }
 
-export type StoreName = "attachments" | "backupQueue" | "notes" | "searchDocuments" | "settings";
+export type StoreName =
+  | "attachments"
+  | "backupQueue"
+  | "notes"
+  | "searchDocuments"
+  | "searchPostings"
+  | "settings";
 
 export class VaultDatabase {
   readonly #database: IDBDatabase;
@@ -37,21 +51,40 @@ export class VaultDatabase {
 
     const request = indexedDB.open(name, DATABASE_VERSION);
 
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const database = request.result;
-      const notes = database.createObjectStore("notes", { keyPath: "id" });
-      notes.createIndex("updatedAt", "updatedAt");
-      notes.createIndex("title", "title");
+      if (event.oldVersion < 1) {
+        const notes = database.createObjectStore("notes", { keyPath: "id" });
+        notes.createIndex("updatedAt", "updatedAt");
+        notes.createIndex("title", "title");
 
-      const attachments = database.createObjectStore("attachments", { keyPath: "id" });
-      attachments.createIndex("noteId", "noteId");
+        const attachments = database.createObjectStore("attachments", { keyPath: "id" });
+        attachments.createIndex("noteId", "noteId");
 
-      database.createObjectStore("searchDocuments", { keyPath: "noteId" });
-      database.createObjectStore("settings", { keyPath: "key" });
+        database.createObjectStore("searchDocuments", { keyPath: "noteId" });
+        database.createObjectStore("settings", { keyPath: "key" });
 
-      const backupQueue = database.createObjectStore("backupQueue", { keyPath: "id" });
-      backupQueue.createIndex("createdAt", "createdAt");
-      backupQueue.createIndex("noteId", "noteId");
+        const backupQueue = database.createObjectStore("backupQueue", { keyPath: "id" });
+        backupQueue.createIndex("createdAt", "createdAt");
+        backupQueue.createIndex("noteId", "noteId");
+      }
+
+      if (event.oldVersion < 2) {
+        const postings = database.createObjectStore("searchPostings", {
+          keyPath: ["term", "noteId"],
+        });
+        postings.createIndex("noteId", "noteId");
+
+        const documents = request.transaction?.objectStore("searchDocuments");
+        documents?.openCursor().addEventListener("success", (event) => {
+          const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
+          if (!cursor) return;
+          for (const posting of createSearchPostings(cursor.value as SearchDocument)) {
+            postings.put(posting);
+          }
+          cursor.continue();
+        });
+      }
     };
 
     const database = await requestResult(request);
@@ -74,14 +107,21 @@ export class VaultDatabase {
   async putNote(
     note: NoteMetadata,
     searchDocument: SearchDocument,
+    searchPostings: SearchPosting[],
     operation: BackupOperation,
   ): Promise<void> {
     const transaction = this.#database.transaction(
-      ["notes", "searchDocuments", "backupQueue"],
+      ["notes", "searchDocuments", "searchPostings", "backupQueue"],
       "readwrite",
     );
     transaction.objectStore("notes").put(note);
     transaction.objectStore("searchDocuments").put(searchDocument);
+    const postings = transaction.objectStore("searchPostings");
+    const previousKeys = await requestResult<IDBValidKey[]>(
+      postings.index("noteId").getAllKeys(note.id),
+    );
+    for (const key of previousKeys) postings.delete(key);
+    for (const posting of searchPostings) postings.put(posting);
     transaction.objectStore("backupQueue").put(operation);
     await transactionDone(transaction);
   }
@@ -92,11 +132,16 @@ export class VaultDatabase {
     operations: BackupOperation[],
   ): Promise<void> {
     const transaction = this.#database.transaction(
-      ["notes", "attachments", "searchDocuments", "backupQueue"],
+      ["notes", "attachments", "searchDocuments", "searchPostings", "backupQueue"],
       "readwrite",
     );
     transaction.objectStore("notes").delete(id);
     transaction.objectStore("searchDocuments").delete(id);
+    const searchPostings = transaction.objectStore("searchPostings");
+    const postingKeys = await requestResult<IDBValidKey[]>(
+      searchPostings.index("noteId").getAllKeys(id),
+    );
+    for (const key of postingKeys) searchPostings.delete(key);
 
     const attachments = transaction.objectStore("attachments");
     for (const attachmentId of attachmentIds) attachments.delete(attachmentId);
@@ -135,6 +180,36 @@ export class VaultDatabase {
 
   getSearchDocuments(): Promise<SearchDocument[]> {
     return this.#getAll<SearchDocument>("searchDocuments");
+  }
+
+  async getSearchRecords(noteIds: string[]): Promise<{
+    documents: SearchDocument[];
+    notes: NoteMetadata[];
+  }> {
+    const transaction = this.#database.transaction(["searchDocuments", "notes"], "readonly");
+    const documents = transaction.objectStore("searchDocuments");
+    const notes = transaction.objectStore("notes");
+    const [documentRecords, noteRecords] = await Promise.all([
+      Promise.all(
+        noteIds.map((id) => requestResult<SearchDocument | undefined>(documents.get(id))),
+      ),
+      Promise.all(noteIds.map((id) => requestResult<NoteMetadata | undefined>(notes.get(id)))),
+    ]);
+    await transactionDone(transaction);
+    return {
+      documents: documentRecords.filter((value): value is SearchDocument => value !== undefined),
+      notes: noteRecords.filter((value): value is NoteMetadata => value !== undefined),
+    };
+  }
+
+  async getSearchPostings(term: string): Promise<SearchPosting[]> {
+    const transaction = this.#database.transaction("searchPostings", "readonly");
+    const range = IDBKeyRange.bound([term], [`${term}\uffff`]);
+    const postings = await requestResult<SearchPosting[]>(
+      transaction.objectStore("searchPostings").getAll(range),
+    );
+    await transactionDone(transaction);
+    return postings;
   }
 
   getSearchState(): Promise<SearchState | undefined> {
@@ -192,6 +267,37 @@ export class VaultDatabase {
     transaction.objectStore("settings").put({ key, value } satisfies SettingRecord<T>);
     await transactionDone(transaction);
   }
+}
+
+export function createSearchPostings(document: SearchDocument): SearchPosting[] {
+  const terms = new Map<string, SearchPosting>();
+  addTerms(terms, document, tokenize(document.title), "titleMatches");
+  addTerms(terms, document, tokenize(document.body), "bodyMatches");
+  addTerms(terms, document, document.tags.flatMap(tokenize), "tagMatches");
+  return [...terms.values()];
+}
+
+function addTerms(
+  postings: Map<string, SearchPosting>,
+  document: SearchDocument,
+  values: string[],
+  field: "bodyMatches" | "tagMatches" | "titleMatches",
+): void {
+  for (const term of values) {
+    const posting = postings.get(term) ?? {
+      term,
+      noteId: document.noteId,
+      titleMatches: 0,
+      bodyMatches: 0,
+      tagMatches: 0,
+    };
+    posting[field] += 1;
+    postings.set(term, posting);
+  }
+}
+
+function tokenize(value: string): string[] {
+  return value.match(/[\p{L}\p{M}\p{N}]+(?:['’_-][\p{L}\p{M}\p{N}]+)*/gu) ?? [];
 }
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {

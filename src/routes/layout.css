@@ -31,6 +31,7 @@ body {
   overflow: hidden;
 }
 button,
+input,
 textarea {
   font: inherit;
 }
@@ -38,6 +39,7 @@ button {
   color: inherit;
 }
 button:focus-visible,
+input:focus-visible,
 textarea:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -211,15 +213,81 @@ textarea:focus-visible {
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
+.notes-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 7px 14px 9px;
+}
 .sidebar h1 {
-  margin: 8px 9px 20px;
+  margin: 0;
   font-family: Georgia, "Times New Roman", serif;
   font-size: 25px;
   font-weight: 500;
   letter-spacing: -0.035em;
 }
-.sidebar nav {
+.new-note {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+}
+.new-note:hover {
+  border-color: #c7c3b8;
+  color: var(--ink);
+}
+.search-box {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 4px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--faint);
+}
+.search-box:focus-within {
+  border-color: #c9987d;
+  box-shadow: 0 0 0 2px #f1ded3;
+}
+.search-box input {
+  min-width: 0;
   flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+}
+.search-box input::placeholder {
+  color: var(--faint);
+}
+.search-box input::-webkit-search-cancel-button {
+  display: none;
+}
+.search-box kbd {
+  color: var(--faint);
+  font-size: 9px;
+}
+.result-count {
+  padding: 11px 10px 6px;
+  color: var(--faint);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.sidebar .note-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 .file {
   position: relative;
@@ -254,9 +322,28 @@ textarea:focus-visible {
   color: #8b877e;
 }
 .file span {
+  min-width: 0;
+  display: block;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file strong,
+.file small {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.file strong {
+  font-size: 12px;
+  font-weight: 560;
+}
+.file small {
+  margin-top: 3px;
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 400;
 }
 .file i {
   width: 6px;
@@ -264,6 +351,24 @@ textarea:focus-visible {
   margin-left: auto;
   border-radius: 50%;
   background: #76a276;
+}
+.empty-results {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 30px 12px;
+  color: var(--faint);
+  text-align: center;
+}
+.empty-results strong {
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.empty-results span {
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 1.4;
 }
 .local-note {
   display: flex;

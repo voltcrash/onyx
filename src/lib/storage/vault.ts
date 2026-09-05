@@ -1,4 +1,9 @@
-import { VaultDatabase, type SearchDocument } from "./database.js";
+import {
+  createSearchPostings,
+  VaultDatabase,
+  type SearchDocument,
+  type SearchPosting,
+} from "./database.js";
 import { VaultFilesystem } from "./filesystem.js";
 import type {
   AttachmentMetadata,
@@ -70,7 +75,8 @@ export class Vault {
     const previousMarkdown = existing ? await this.#filesystem.readText(path) : undefined;
     await this.#filesystem.writeText(path, markdown);
     try {
-      await this.#database.putNote(metadata, toSearchDocument(metadata, markdown), {
+      const searchDocument = toSearchDocument(metadata, markdown);
+      await this.#database.putNote(metadata, searchDocument, createSearchPostings(searchDocument), {
         id: crypto.randomUUID(),
         kind: "note:upsert",
         entityId: id,
@@ -198,17 +204,46 @@ export class Vault {
   }
 
   async search(query: string, tags: string[] = []): Promise<VaultSearchResult[]> {
-    const terms = normalizeSearchText(query).split(" ").filter(Boolean);
+    const terms = tokenize(normalizeSearchText(query));
     const requiredTags = normalizeTags(tags);
-    const [documents, notes] = await Promise.all([
-      this.#database.getSearchDocuments(),
-      this.#database.getNotes(),
-    ]);
+    if (terms.length === 0) {
+      const [documents, notes] = await Promise.all([
+        this.#database.getSearchDocuments(),
+        this.#database.getNotes(),
+      ]);
+      const metadataById = new Map(notes.map((note) => [note.id, note]));
+      return documents
+        .filter((document) => requiredTags.every((tag) => document.tags.includes(tag)))
+        .map((document) => scoreDocument(document, [], metadataById.get(document.noteId), []))
+        .filter((result): result is VaultSearchResult => result !== undefined)
+        .sort((left, right) => right.note.updatedAt.localeCompare(left.note.updatedAt));
+    }
+
+    const postingsByTerm = await Promise.all(
+      terms.map((term) => this.#database.getSearchPostings(term)),
+    );
+    const matchingNoteIds = intersectPostingNoteIds(postingsByTerm);
+    if (matchingNoteIds.length === 0) return [];
+
+    const { documents, notes } = await this.#database.getSearchRecords(matchingNoteIds);
     const metadataById = new Map(notes.map((note) => [note.id, note]));
+    const postingsByNote = new Map<string, SearchPosting[]>();
+    for (const posting of postingsByTerm.flat()) {
+      const postings = postingsByNote.get(posting.noteId) ?? [];
+      postings.push(posting);
+      postingsByNote.set(posting.noteId, postings);
+    }
 
     return documents
       .filter((document) => requiredTags.every((tag) => document.tags.includes(tag)))
-      .map((document) => scoreDocument(document, terms, metadataById.get(document.noteId)))
+      .map((document) =>
+        scoreDocument(
+          document,
+          terms,
+          metadataById.get(document.noteId),
+          postingsByNote.get(document.noteId) ?? [],
+        ),
+      )
       .filter((result): result is VaultSearchResult => result !== undefined)
       .sort(
         (left, right) =>
@@ -302,30 +337,32 @@ function scoreDocument(
   document: SearchDocument,
   terms: string[],
   note: NoteMetadata | undefined,
+  postings: SearchPosting[],
 ): VaultSearchResult | undefined {
   if (!note) return undefined;
   if (terms.length === 0) return { note, excerpt: excerpt(document.body, ""), score: 0 };
 
-  let score = 0;
-  for (const term of terms) {
-    const titleMatches = countMatches(document.title, term);
-    const bodyMatches = countMatches(document.body, term);
-    const tagMatches = document.tags.filter((tag) => tag.includes(term)).length;
-    if (titleMatches + bodyMatches + tagMatches === 0) return undefined;
-    score += titleMatches * 5 + tagMatches * 3 + bodyMatches;
-  }
+  const score = postings.reduce(
+    (total, posting) =>
+      total + posting.titleMatches * 5 + posting.tagMatches * 3 + posting.bodyMatches,
+    0,
+  );
 
   return { note, excerpt: excerpt(document.body, terms[0]), score };
 }
 
-function countMatches(value: string, term: string): number {
-  let matches = 0;
-  let position = 0;
-  while ((position = value.indexOf(term, position)) !== -1) {
-    matches += 1;
-    position += term.length;
+function intersectPostingNoteIds(groups: SearchPosting[][]): string[] {
+  if (groups.length === 0) return [];
+  let matches = new Set(groups[0].map((posting) => posting.noteId));
+  for (const group of groups.slice(1)) {
+    const noteIds = new Set(group.map((posting) => posting.noteId));
+    matches = new Set([...matches].filter((id) => noteIds.has(id)));
   }
-  return matches;
+  return [...matches];
+}
+
+function tokenize(value: string): string[] {
+  return [...new Set(value.match(/[\p{L}\p{M}\p{N}]+(?:['’_-][\p{L}\p{M}\p{N}]+)*/gu) ?? [])];
 }
 
 function excerpt(body: string, term: string): string {
