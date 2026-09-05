@@ -1,59 +1,44 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <title>Onyx</title>
   <defs>
-    <linearGradient id="face-left" x1="0.1" y1="0" x2="0.9" y2="1">
+    <linearGradient id="body" x1="0.9" y1="0.15" x2="0.2" y2="1">
+      <stop offset="0" stop-color="#4a4e57"/>
+      <stop offset="0.45" stop-color="#1d2024"/>
+      <stop offset="1" stop-color="#08090b"/>
+    </linearGradient>
+    <linearGradient id="pale" x1="0.05" y1="0" x2="0.85" y2="0.9">
       <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="0.5" stop-color="#e4e7ec"/>
-      <stop offset="1" stop-color="#9ea4b0"/>
+      <stop offset="0.55" stop-color="#e6e9ee"/>
+      <stop offset="1" stop-color="#aab0bb"/>
     </linearGradient>
-    <linearGradient id="face-right" x1="0.95" y1="0.05" x2="0.15" y2="1">
-      <stop offset="0" stop-color="#565b65"/>
-      <stop offset="0.5" stop-color="#23262b"/>
-      <stop offset="1" stop-color="#0b0c0f"/>
-    </linearGradient>
-    <linearGradient id="face-bottom" x1="0.05" y1="0" x2="0.95" y2="1">
-      <stop offset="0" stop-color="#949aa5"/>
-      <stop offset="0.45" stop-color="#40434b"/>
-      <stop offset="1" stop-color="#111317"/>
-    </linearGradient>
-    <linearGradient id="rim" x1="0.15" y1="0.1" x2="1" y2="0.85">
-      <stop offset="0" stop-color="#cfd5e0" stop-opacity="0"/>
-      <stop offset="0.55" stop-color="#cfd5e0" stop-opacity="0.4"/>
-      <stop offset="1" stop-color="#cfd5e0" stop-opacity="0.18"/>
+    <radialGradient id="dome" cx="0.35" cy="0.28" r="0.78">
+      <stop offset="0.45" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.42"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0.1" y1="0.05" x2="0.95" y2="0.95">
+      <stop offset="0" stop-color="#dfe4ec" stop-opacity="0"/>
+      <stop offset="0.6" stop-color="#dfe4ec" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#dfe4ec" stop-opacity="0.2"/>
     </linearGradient>
     <clipPath id="clip-stone">
-      <path d="M256 76C206 168 128 252 128 322 128 398 186 452 256 452 326 452 384 398 384 322 384 252 306 168 256 76Z"/>
-    </clipPath>
-    <clipPath id="clip-right">
-      <path d="M256 76Q244 200 226 336Q302 322 380 374L448 448 448 20Z"/>
-    </clipPath>
-    <clipPath id="clip-bottomface">
-      <path d="M104 408Q186 356 226 336Q302 322 384 380L424 540 72 540Z"/>
+      <circle cx="256" cy="256" r="228"/>
     </clipPath>
   </defs>
 
   <rect width="512" height="512" fill="#1c1c1a"/>
-  <g id="stone" clip-path="url(#clip-stone)" transform="translate(256 246) scale(0.76) translate(-256 -256)">
-    <rect width="512" height="512" fill="url(#face-right)"/>
-    <g clip-path="url(#clip-right)" fill="none" stroke-linecap="round">
-      <path d="M232 166Q310 196 404 164" stroke="#f6f8fb" stroke-opacity="0.95" stroke-width="21"/>
-      <path d="M226 212Q312 242 400 210" stroke="#f6f8fb" stroke-opacity="0.42" stroke-width="8"/>
+  <g id="stone" clip-path="url(#clip-stone)" transform="translate(256 256) scale(0.8) translate(-256 -256)">
+    <rect width="512" height="512" fill="url(#body)"/>
+
+    <path d="M35 355Q135 135 355 35L-30 -30Z" fill="url(#pale)"/>
+    <path d="M-15 305Q85 85 305 -15" fill="none" stroke="#20242a" stroke-opacity="0.14" stroke-width="12" stroke-linecap="round"/>
+
+    <g fill="none" stroke-linecap="round">
+      <path d="M70 390Q170 170 390 70" stroke="#f6f8fb" stroke-opacity="0.95" stroke-width="27"/>
+      <path d="M107 427Q207 207 427 107" stroke="#f6f8fb" stroke-opacity="0.45" stroke-width="11"/>
+      <path d="M155 475Q255 255 475 155" stroke="#dfe6f0" stroke-opacity="0.1" stroke-width="15"/>
     </g>
 
-    <path d="M256 76Q246 200 228 337Q188 368 132 398L24 470 24 24Z" fill="url(#face-left)"/>
-
-    <path d="M104 408Q186 356 226 336Q302 322 384 380L424 540 72 540Z" fill="url(#face-bottom)"/>
-    <g clip-path="url(#clip-bottomface)" fill="none" stroke-linecap="round">
-      <path d="M96 400Q244 350 392 398" stroke="#f6f8fb" stroke-opacity="0.85" stroke-width="11"/>
-    </g>
-
-    <g clip-path="url(#clip-right)">
-      <path d="M256 76C206 168 128 252 128 322 128 398 186 452 256 452 326 452 384 398 384 322 384 252 306 168 256 76Z"
-            fill="none" stroke="url(#rim)" stroke-width="7"/>
-    </g>
-    <g clip-path="url(#clip-bottomface)">
-      <path d="M256 76C206 168 128 252 128 322 128 398 186 452 256 452 326 452 384 398 384 322 384 252 306 168 256 76Z"
-            fill="none" stroke="url(#rim)" stroke-width="7"/>
-    </g>
+    <rect width="512" height="512" fill="url(#dome)"/>
+    <circle cx="256" cy="256" r="228" fill="none" stroke="url(#rim)" stroke-width="12"/>
   </g>
 </svg>
