@@ -1,24 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <title>Onyx</title>
   <defs>
-    <linearGradient id="body" x1="0.9" y1="0.15" x2="0.2" y2="1">
-      <stop offset="0" stop-color="#4a4e57"/>
-      <stop offset="0.45" stop-color="#1d2024"/>
-      <stop offset="1" stop-color="#08090b"/>
-    </linearGradient>
-    <linearGradient id="pale" x1="0.05" y1="0" x2="0.85" y2="0.9">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="0.55" stop-color="#e6e9ee"/>
-      <stop offset="1" stop-color="#aab0bb"/>
-    </linearGradient>
-    <radialGradient id="dome" cx="0.35" cy="0.28" r="0.78">
-      <stop offset="0.45" stop-color="#000000" stop-opacity="0"/>
-      <stop offset="1" stop-color="#000000" stop-opacity="0.42"/>
+    <radialGradient id="body" cx="0.34" cy="0.27" r="0.92">
+      <stop offset="0" stop-color="#2e333b"/>
+      <stop offset="0.3" stop-color="#121417"/>
+      <stop offset="0.68" stop-color="#060607"/>
+      <stop offset="1" stop-color="#020203"/>
     </radialGradient>
-    <linearGradient id="rim" x1="0.1" y1="0.05" x2="0.95" y2="0.95">
-      <stop offset="0" stop-color="#dfe4ec" stop-opacity="0"/>
-      <stop offset="0.6" stop-color="#dfe4ec" stop-opacity="0.42"/>
-      <stop offset="1" stop-color="#dfe4ec" stop-opacity="0.2"/>
+    <linearGradient id="veil" x1="0.15" y1="0.1" x2="0.9" y2="0.95">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.1"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="gloss" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.96"/>
+      <stop offset="0.3" stop-color="#ffffff" stop-opacity="0.6"/>
+      <stop offset="0.62" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="sheen" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#eaf0ff" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#eaf0ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bounce" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0.3" stop-color="#c9d2e3" stop-opacity="0"/>
+      <stop offset="1" stop-color="#c9d2e3" stop-opacity="0.5"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0.1" y1="0.05" x2="0.75" y2="0.8">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.75"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
     <clipPath id="clip-stone">
       <circle cx="256" cy="256" r="228"/>
@@ -28,16 +37,21 @@
   <g id="stone" clip-path="url(#clip-stone)">
     <rect width="512" height="512" fill="url(#body)"/>
 
-    <path d="M35 355Q135 135 355 35L-30 -30Z" fill="url(#pale)"/>
-    <path d="M-15 305Q85 85 305 -15" fill="none" stroke="#20242a" stroke-opacity="0.14" stroke-width="12" stroke-linecap="round"/>
-
     <g fill="none" stroke-linecap="round">
-      <path d="M70 390Q170 170 390 70" stroke="#f6f8fb" stroke-opacity="0.95" stroke-width="27"/>
-      <path d="M107 427Q207 207 427 107" stroke="#f6f8fb" stroke-opacity="0.45" stroke-width="11"/>
-      <path d="M155 475Q255 255 475 155" stroke="#dfe6f0" stroke-opacity="0.1" stroke-width="15"/>
+      <path d="M112 432Q212 212 432 112" stroke="#8d93a0" stroke-opacity="0.18" stroke-width="46"/>
+      <path d="M112 432Q212 212 432 112" stroke="#f5f8fd" stroke-opacity="0.97" stroke-width="17"/>
+      <path d="M84 404Q184 184 404 84" stroke="#dbe2ee" stroke-opacity="0.42" stroke-width="6"/>
+      <path d="M146 466Q246 246 466 146" stroke="#ccd4e2" stroke-opacity="0.3" stroke-width="8"/>
+      <path d="M182 502Q282 282 502 182" stroke="#aab3c4" stroke-opacity="0.13" stroke-width="4"/>
     </g>
 
-    <rect width="512" height="512" fill="url(#dome)"/>
-    <circle cx="256" cy="256" r="228" fill="none" stroke="url(#rim)" stroke-width="12"/>
+    <rect width="512" height="512" fill="url(#veil)"/>
+
+    <ellipse cx="188" cy="168" rx="132" ry="72" transform="rotate(-45 188 168)" fill="url(#sheen)"/>
+    <ellipse cx="180" cy="158" rx="78" ry="31" transform="rotate(-45 180 158)" fill="url(#gloss)"/>
+    <ellipse cx="316" cy="112" rx="40" ry="15" transform="rotate(-28 316 112)" fill="url(#gloss)" opacity="0.45"/>
+
+    <circle cx="256" cy="256" r="221" fill="none" stroke="url(#bounce)" stroke-width="14"/>
+    <circle cx="256" cy="256" r="224" fill="none" stroke="url(#edge)" stroke-width="7"/>
   </g>
 </svg>
