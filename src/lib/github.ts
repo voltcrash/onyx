@@ -1,4 +1,9 @@
-import type { GithubBackupState, Vault } from "./storage/index.js";
+import type {
+  GithubBackupState,
+  Vault,
+  VaultBackupManifest,
+  VaultRestoreFile,
+} from "./storage/index.js";
 
 const API_ROOT = "https://api.github.com";
 const API_VERSION = "2026-03-10";
@@ -35,24 +40,55 @@ interface GithubReferenceResponse {
 }
 
 interface GithubCommitResponse {
+  author?: { date: string; name: string };
+  committer?: { date: string; name: string };
   html_url: string;
+  message?: string;
   sha: string;
   tree: { sha: string };
 }
 
+interface GithubCommitListResponse {
+  author: { login: string } | null;
+  commit: {
+    author: { date: string; name: string } | null;
+    committer: { date: string; name: string } | null;
+    message: string;
+  };
+  html_url: string;
+  sha: string;
+}
+
 interface GithubTreeResponse {
   sha: string;
-  tree: Array<{ path: string; type: string }>;
+  tree: Array<{ path: string; sha: string; size?: number; type: string }>;
   truncated?: boolean;
 }
 
 interface GithubBlobResponse {
+  content?: string;
+  encoding?: string;
   sha: string;
+  size?: number;
 }
 
 export interface GithubBackupResult {
   commitUrl?: string;
   fileCount: number;
+  state: GithubBackupState;
+}
+
+export interface GithubBackupCommit {
+  author: string;
+  committedAt: string;
+  message: string;
+  sha: string;
+  url: string;
+}
+
+export interface GithubRestoreResult {
+  attachmentCount: number;
+  noteCount: number;
   state: GithubBackupState;
 }
 
@@ -121,16 +157,11 @@ export async function backupVaultToGithub(
   backupState: GithubBackupState,
 ): Promise<GithubBackupResult> {
   const snapshot = await vault.createBackupSnapshot();
-  if (snapshot.operationIds.length === 0) {
-    return { fileCount: 0, state: backupState };
-  }
-
-  const repositoryPath =
-    `/repos/${encodeURIComponent(backupState.owner)}/${encodeURIComponent(backupState.repository)}` as const;
+  const repositoryPath = repositoryApiPath(backupState);
   const branchPath = backupState.branch.split("/").map(encodeURIComponent).join("/");
   let parentSha: string | undefined;
   let baseTreeSha: string | undefined;
-  let remotePaths = new Set<string>();
+  let remoteBlobs = new Map<string, string>();
 
   try {
     const reference = await githubRequest<GithubReferenceResponse>(
@@ -145,34 +176,48 @@ export async function backupVaultToGithub(
       `${repositoryPath}/git/trees/${baseTreeSha}?recursive=1`,
     );
     if (remoteTree.truncated) throw new Error("The GitHub backup is too large to update safely");
-    remotePaths = new Set(
-      remoteTree.tree.filter((entry) => entry.type === "blob").map((entry) => entry.path),
+    remoteBlobs = new Map(
+      remoteTree.tree
+        .filter((entry) => entry.type === "blob")
+        .map((entry) => [entry.path, entry.sha]),
     );
   } catch (error) {
     if (!(error instanceof GithubRequestError) || error.status !== 404) throw error;
   }
 
   const prefix = backupState.directory.replace(/^\/+|\/+$/g, "");
-  const tree = (
+  const manifestPath = prefix ? `${prefix}/.onyx.json` : ".onyx.json";
+  const pendingTree = (
     await Promise.all(
       snapshot.changes.map(async (change) => {
         const path = prefix ? `${prefix}/${change.path}` : change.path;
         if (!change.contents) {
-          return remotePaths.has(path)
+          return remoteBlobs.has(path)
             ? { path, mode: "100644" as const, type: "blob" as const, sha: null }
             : undefined;
         }
-        const blob = await githubRequest<GithubBlobResponse>(`${repositoryPath}/git/blobs`, {
-          method: "POST",
-          body: JSON.stringify({
-            content: await blobToBase64(change.contents),
-            encoding: "base64",
-          }),
-        });
+        const blob = await createGithubBlob(repositoryPath, change.contents);
+        if (remoteBlobs.get(path) === blob.sha) return undefined;
         return { path, mode: "100644" as const, type: "blob" as const, sha: blob.sha };
       }),
     )
   ).filter((entry) => entry !== undefined);
+  const manifest = new Blob([JSON.stringify(await vault.createBackupManifest())], {
+    type: "application/json",
+  });
+  const manifestBlob = await createGithubBlob(repositoryPath, manifest);
+  const tree =
+    remoteBlobs.get(manifestPath) === manifestBlob.sha
+      ? pendingTree
+      : [
+          ...pendingTree,
+          {
+            path: manifestPath,
+            mode: "100644" as const,
+            type: "blob" as const,
+            sha: manifestBlob.sha,
+          },
+        ];
 
   if (tree.length === 0) {
     await vault.acknowledgeBackupOperations(snapshot.operationIds);
@@ -214,6 +259,90 @@ export async function backupVaultToGithub(
   return { commitUrl: commit.html_url, fileCount: tree.length, state };
 }
 
+export async function listGithubBackupCommits(
+  backupState: GithubBackupState,
+): Promise<GithubBackupCommit[]> {
+  const parameters = new URLSearchParams({
+    sha: backupState.branch,
+    path: normalizedDirectory(backupState.directory),
+    per_page: "50",
+  });
+  const commits = await githubRequest<GithubCommitListResponse[]>(
+    `${repositoryApiPath(backupState)}/commits?${parameters}`,
+  );
+  return commits.map((commit) => ({
+    author: commit.author?.login ?? commit.commit.author?.name ?? "Unknown author",
+    committedAt: commit.commit.committer?.date ?? commit.commit.author?.date ?? "",
+    message: commit.commit.message.split("\n", 1)[0],
+    sha: commit.sha,
+    url: commit.html_url,
+  }));
+}
+
+export async function restoreVaultFromGithub(
+  vault: Vault,
+  backupState: GithubBackupState,
+  commitSha: string,
+): Promise<GithubRestoreResult> {
+  if (!/^[0-9a-f]{40}$/i.test(commitSha)) throw new Error("Select a valid GitHub backup commit");
+  const repositoryPath = repositoryApiPath(backupState);
+  const selectedCommit = await githubRequest<GithubCommitResponse>(
+    `${repositoryPath}/git/commits/${commitSha}`,
+  );
+  const selectedTree = await getGithubTree(repositoryPath, selectedCommit.tree.sha);
+  const currentReference = await githubRequest<GithubReferenceResponse>(
+    `${repositoryPath}/git/ref/heads/${backupState.branch.split("/").map(encodeURIComponent).join("/")}`,
+  );
+  const currentCommit =
+    currentReference.object.sha === selectedCommit.sha
+      ? selectedCommit
+      : await githubRequest<GithubCommitResponse>(
+          `${repositoryPath}/git/commits/${currentReference.object.sha}`,
+        );
+  const currentTree =
+    currentCommit.sha === selectedCommit.sha
+      ? selectedTree
+      : await getGithubTree(repositoryPath, currentCommit.tree.sha);
+  const selectedBlobs = vaultBlobs(selectedTree, backupState.directory);
+  const currentBlobs = vaultBlobs(currentTree, backupState.directory);
+  const files = await Promise.all(
+    [...selectedBlobs.entries()]
+      .filter(([path]) => isVaultFile(path))
+      .map(async ([path, sha]): Promise<VaultRestoreFile> => ({
+        path,
+        contents: await downloadGithubBlob(repositoryPath, sha),
+      })),
+  );
+  if (!files.some((file) => file.path.startsWith("notes/"))) {
+    throw new Error("The selected commit does not contain an Onyx vault in that directory");
+  }
+  const manifestSha = selectedBlobs.get(".onyx.json");
+  const manifest = manifestSha
+    ? await parseBackupManifest(await downloadGithubBlob(repositoryPath, manifestSha))
+    : undefined;
+  const changedPaths = new Set<string>();
+  for (const [path, sha] of selectedBlobs) {
+    if (isVaultFile(path) && currentBlobs.get(path) !== sha) changedPaths.add(path);
+  }
+  for (const path of currentBlobs.keys()) {
+    if (isVaultFile(path) && !selectedBlobs.has(path)) changedPaths.add(path);
+  }
+  const restoredAt =
+    selectedCommit.committer?.date ?? selectedCommit.author?.date ?? new Date().toISOString();
+  const result = await vault.restoreBackup(files, {
+    manifest,
+    pendingPaths: [...changedPaths],
+    restoredAt,
+  });
+  const state: GithubBackupState = {
+    ...backupState,
+    lastCommitSha: selectedCommit.sha,
+    updatedAt: new Date().toISOString(),
+  };
+  await vault.saveGithubBackupState(state);
+  return { ...result, state };
+}
+
 export async function githubRequest<T>(path: `/${string}`, init: RequestInit = {}): Promise<T> {
   if (!accessToken) throw new Error("Connect GitHub before making an API request");
   const headers = new Headers(init.headers);
@@ -247,4 +376,71 @@ function blobToBase64(blob: Blob): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error("Could not read a vault file"));
     reader.readAsDataURL(blob);
   });
+}
+
+function repositoryApiPath(state: GithubBackupState): `/repos/${string}` {
+  return `/repos/${encodeURIComponent(state.owner)}/${encodeURIComponent(state.repository)}`;
+}
+
+function normalizedDirectory(directory: string): string {
+  return directory.replace(/^\/+|\/+$/g, "");
+}
+
+async function createGithubBlob(
+  repositoryPath: `/repos/${string}`,
+  contents: Blob,
+): Promise<GithubBlobResponse> {
+  return githubRequest<GithubBlobResponse>(`${repositoryPath}/git/blobs`, {
+    method: "POST",
+    body: JSON.stringify({ content: await blobToBase64(contents), encoding: "base64" }),
+  });
+}
+
+async function getGithubTree(
+  repositoryPath: `/repos/${string}`,
+  sha: string,
+): Promise<GithubTreeResponse> {
+  const tree = await githubRequest<GithubTreeResponse>(
+    `${repositoryPath}/git/trees/${sha}?recursive=1`,
+  );
+  if (tree.truncated) throw new Error("The GitHub backup is too large to restore safely");
+  return tree;
+}
+
+function vaultBlobs(tree: GithubTreeResponse, directory: string): Map<string, string> {
+  const prefix = normalizedDirectory(directory);
+  const directoryPrefix = prefix ? `${prefix}/` : "";
+  return new Map(
+    tree.tree.flatMap((entry) =>
+      entry.type === "blob" && entry.path.startsWith(directoryPrefix)
+        ? [[entry.path.slice(directoryPrefix.length), entry.sha] as const]
+        : [],
+    ),
+  );
+}
+
+function isVaultFile(path: string): boolean {
+  return /^notes\/[^/]+\.md$/.test(path) || /^attachments\/[^/]+\/[^/]+$/.test(path);
+}
+
+async function downloadGithubBlob(repositoryPath: `/repos/${string}`, sha: string): Promise<Blob> {
+  const blob = await githubRequest<GithubBlobResponse>(`${repositoryPath}/git/blobs/${sha}`);
+  if (blob.encoding !== "base64" || blob.content === undefined) {
+    throw new Error("GitHub returned an unsupported backup file");
+  }
+  const binary = atob(blob.content.replace(/\s/g, ""));
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return new Blob([bytes]);
+}
+
+async function parseBackupManifest(blob: Blob): Promise<VaultBackupManifest> {
+  const manifest = JSON.parse(await blob.text()) as Partial<VaultBackupManifest>;
+  if (
+    manifest.version !== 1 ||
+    !Array.isArray(manifest.notes) ||
+    !Array.isArray(manifest.attachments)
+  ) {
+    throw new Error("The selected commit has an invalid Onyx backup manifest");
+  }
+  return manifest as VaultBackupManifest;
 }

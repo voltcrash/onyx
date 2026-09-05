@@ -1,12 +1,13 @@
 <script lang="ts">
 	import {
-		Bold, Check, ChevronRight, CloudOff, Code2, Columns2, Eye, FileText, Heading2,
-		CloudUpload, ExternalLink, HelpCircle, Italic, Link, List, LoaderCircle, LogOut, PanelLeft,
+		Bold, Check, ChevronRight, CloudDownload, CloudOff, Code2, Columns2, Eye, FileText, Heading2,
+		CloudUpload, ExternalLink, GitCommitHorizontal, HelpCircle, Italic, Link, List, LoaderCircle, LogOut, PanelLeft,
 		PencilLine, Plus, Quote, RotateCcw, Save, Search, X
 	} from '@lucide/svelte';
 	import {
 		backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
-		restoreGithubSession, Vault, type GithubBackupState, type GithubUser, type VaultSearchResult
+		listGithubBackupCommits, restoreGithubSession, restoreVaultFromGithub, Vault,
+		type GithubBackupCommit, type GithubBackupState, type GithubUser, type VaultSearchResult
 	} from '$lib';
 	import { onMount } from 'svelte';
 
@@ -57,6 +58,15 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 	let backupModalOpen = $state(false);
 	let repositoryName = $state('onyx-vault');
 	let pendingBackupCount = $state(0);
+	let restoreModalOpen = $state(false);
+	let restoreState = $state<'idle' | 'loading' | 'restoring' | 'error'>('idle');
+	let restoreMessage = $state('');
+	let restoreCommits = $state<GithubBackupCommit[]>([]);
+	let selectedRestoreSha = $state('');
+	let restoreOwner = $state('');
+	let restoreRepository = $state('onyx-vault');
+	let restoreBranch = $state('main');
+	let restoreDirectory = $state('vault');
 
 	const wordCount = $derived(markdown.trim() ? markdown.trim().split(/\s+/).length : 0);
 	const characterCount = $derived(markdown.length);
@@ -169,6 +179,82 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 		backupMessage = error instanceof GithubRequestError && error.status === 422
 			? 'GitHub could not create that repository or update its branch. Check the name and try again.'
 			: error instanceof Error ? error.message : 'The GitHub backup failed.';
+	}
+
+	async function openRestore(): Promise<void> {
+		if (!githubUser || restoreState === 'restoring') return;
+		restoreOwner = githubBackup?.owner ?? githubUser.login;
+		restoreRepository = githubBackup?.repository ?? 'onyx-vault';
+		restoreBranch = githubBackup?.branch ?? 'main';
+		restoreDirectory = githubBackup?.directory ?? 'vault';
+		restoreCommits = [];
+		selectedRestoreSha = '';
+		restoreMessage = '';
+		restoreModalOpen = true;
+		await loadRestoreCommits();
+	}
+
+	function restoreConfiguration(): GithubBackupState {
+		return {
+			owner: restoreOwner.trim(),
+			repository: restoreRepository.trim(),
+			branch: restoreBranch.trim(),
+			directory: restoreDirectory.trim().replace(/^\/+|\/+$/g, ''),
+			updatedAt: new Date().toISOString()
+		};
+	}
+
+	async function loadRestoreCommits(): Promise<void> {
+		if (!restoreOwner.trim() || !restoreRepository.trim() || !restoreBranch.trim()) return;
+		restoreState = 'loading';
+		restoreMessage = '';
+		selectedRestoreSha = '';
+		try {
+			restoreCommits = await listGithubBackupCommits(restoreConfiguration());
+			selectedRestoreSha = restoreCommits[0]?.sha ?? '';
+			restoreMessage = restoreCommits.length === 0 ? 'No backup commits were found in this repository and directory.' : '';
+			restoreState = 'idle';
+		} catch (error) {
+			restoreCommits = [];
+			restoreState = 'error';
+			restoreMessage = error instanceof Error ? error.message : 'GitHub backups could not be loaded.';
+		}
+	}
+
+	async function restoreSelectedCommit(): Promise<void> {
+		if (!vault || !selectedRestoreSha || restoreState === 'restoring') return;
+		const previousSaveState = saveState;
+		if (saveTimer) window.clearTimeout(saveTimer);
+		if (searchTimer) window.clearTimeout(searchTimer);
+		saveTimer = undefined;
+		searchTimer = undefined;
+		searchSequence += 1;
+		saveState = 'loading';
+		restoreState = 'restoring';
+		restoreMessage = 'Downloading and rebuilding your local vault…';
+		try {
+			const result = await restoreVaultFromGithub(vault, restoreConfiguration(), selectedRestoreSha);
+			githubBackup = result.state;
+			pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+			const notes = await vault.listNotes();
+			searchQuery = '';
+			await loadNote(notes[0].id);
+			await runSearch('');
+			restoreModalOpen = false;
+			restoreState = 'idle';
+			backupState = 'success';
+			backupMessage = `Restored ${result.noteCount} ${result.noteCount === 1 ? 'note' : 'notes'} and ${result.attachmentCount} ${result.attachmentCount === 1 ? 'attachment' : 'attachments'} from GitHub.`;
+			backupCommitUrl = restoreCommits.find((commit) => commit.sha === selectedRestoreSha)?.url ?? '';
+		} catch (error) {
+			saveState = previousSaveState;
+			restoreState = 'error';
+			restoreMessage = error instanceof Error ? error.message : 'The GitHub backup could not be restored.';
+		}
+	}
+
+	function formatCommitDate(value: string): string {
+		if (!value) return 'Unknown date';
+		return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 	}
 
 	async function openVault(): Promise<void> {
@@ -419,6 +505,10 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 					<span>{backupState === 'backing-up' ? 'Backing up…' : 'Back up'}</span>
 					{#if pendingBackupCount > 0}<i>{pendingBackupCount}</i>{/if}
 				</button>
+				<button class="backup-button restore-button" onclick={() => void openRestore()} disabled={!vault || restoreState === 'restoring'} title="Restore a GitHub backup commit">
+					{#if restoreState === 'restoring'}<LoaderCircle class="spin" size={15} />{:else}<CloudDownload size={16} />{/if}
+					<span>{restoreState === 'restoring' ? 'Restoring…' : 'Restore'}</span>
+				</button>
 				<div class="github-account" title={`Connected as ${githubUser.login}`}><img src={githubUser.avatarUrl} alt="" /><span>@{githubUser.login}</span><button aria-label="Disconnect GitHub" title="Disconnect GitHub" onclick={() => void disconnectGitHub()}><LogOut size={14} /></button></div>
 			{:else}
 				<a class="github-connect" class:error={githubState === 'error'} href="/auth/github/start" title={githubMessage || 'Connect GitHub for direct, private backups'} aria-label="Connect GitHub">{#if githubState === 'loading'}<LoaderCircle class="spin" size={15} />{:else}<CloudUpload size={16} />{/if}<span>{githubState === 'loading' ? 'Checking…' : 'Connect GitHub'}</span></a>
@@ -491,6 +581,37 @@ Use \`⌘ S\` to save now, \`⌘ K\` to search, or \`⌘ ⇧ P\` to toggle previ
 			</div>
 			<div class="modal-actions"><button type="button" onclick={() => (backupModalOpen = false)}>Cancel</button><button class="primary" type="submit"><CloudUpload size={15} /> Create and back up</button></div>
 		</form>
+	</div>
+{/if}
+
+{#if restoreModalOpen}
+	<div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget && restoreState !== 'restoring') restoreModalOpen = false; }}>
+		<div class="shortcut-modal restore-modal" role="dialog" aria-modal="true" aria-labelledby="restore-title">
+			<div class="modal-title"><div><span>GitHub restore</span><h2 id="restore-title">Choose a backup commit</h2></div><button type="button" class="icon-button" aria-label="Close GitHub restore" disabled={restoreState === 'restoring'} onclick={() => (restoreModalOpen = false)}><X size={18} /></button></div>
+			<form class="restore-source" onsubmit={(event) => { event.preventDefault(); void loadRestoreCommits(); }}>
+				<label>Owner<input bind:value={restoreOwner} required autocomplete="off" /></label>
+				<label>Repository<input bind:value={restoreRepository} required autocomplete="off" /></label>
+				<label>Branch<input bind:value={restoreBranch} required autocomplete="off" /></label>
+				<label>Directory<input bind:value={restoreDirectory} autocomplete="off" /></label>
+				<button type="submit" disabled={restoreState === 'loading' || restoreState === 'restoring'}>{#if restoreState === 'loading'}<LoaderCircle class="spin" size={14} />{/if} Load commits</button>
+			</form>
+			<div class="restore-list" aria-live="polite">
+				{#if restoreState === 'loading'}
+					<div class="restore-placeholder"><LoaderCircle class="spin" size={20} /> Loading backup history…</div>
+				{:else}
+					{#each restoreCommits as commit (commit.sha)}
+						<label class:selected={selectedRestoreSha === commit.sha}>
+							<input type="radio" name="restore-commit" value={commit.sha} bind:group={selectedRestoreSha} />
+							<GitCommitHorizontal size={17} />
+							<span><strong>{commit.message}</strong><small>{formatCommitDate(commit.committedAt)} · {commit.author} · {commit.sha.slice(0, 7)}</small></span>
+						</label>
+					{/each}
+					{#if restoreMessage}<div class="restore-placeholder" class:error={restoreState === 'error'}>{restoreMessage}</div>{/if}
+				{/if}
+			</div>
+			<div class="restore-warning"><strong>This replaces the local vault.</strong> Notes and attachments currently on this device will be removed and replaced by the selected commit.</div>
+			<div class="modal-actions"><button type="button" disabled={restoreState === 'restoring'} onclick={() => (restoreModalOpen = false)}>Cancel</button><button class="primary danger" type="button" disabled={!selectedRestoreSha || restoreState === 'restoring'} onclick={() => void restoreSelectedCommit()}>{#if restoreState === 'restoring'}<LoaderCircle class="spin" size={15} />{:else}<CloudDownload size={15} />{/if} {restoreState === 'restoring' ? 'Restoring…' : 'Restore selected'}</button></div>
+		</div>
 	</div>
 {/if}
 

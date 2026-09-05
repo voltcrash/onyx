@@ -15,6 +15,9 @@ import type {
   SearchState,
   VaultOptions,
   VaultBackupSnapshot,
+  VaultBackupManifest,
+  VaultRestoreFile,
+  VaultRestoreResult,
   VaultSearchResult,
 } from "./types.js";
 
@@ -296,6 +299,61 @@ export class Vault {
     return this.#database.removeBackupOperations(ids);
   }
 
+  async createBackupManifest(): Promise<VaultBackupManifest> {
+    const [notes, attachments] = await Promise.all([
+      this.#database.getNotes(),
+      this.#database.getAttachments(),
+    ]);
+    return { version: 1, notes, attachments };
+  }
+
+  async restoreBackup(
+    files: VaultRestoreFile[],
+    options: {
+      manifest?: VaultBackupManifest;
+      pendingPaths?: string[];
+      restoredAt: string;
+    },
+  ): Promise<VaultRestoreResult> {
+    const filesByPath = new Map(files.map((file) => [file.path, file]));
+    const notes = options.manifest
+      ? validateManifestNotes(options.manifest.notes, filesByPath)
+      : await inferNotes(files, options.restoredAt);
+    const noteIds = new Set(notes.map((note) => note.id));
+    const attachments = options.manifest
+      ? validateManifestAttachments(options.manifest.attachments, filesByPath, noteIds)
+      : inferAttachments(files, noteIds, options.restoredAt);
+    const acceptedPaths = new Set([
+      ...notes.map((note) => note.path),
+      ...attachments.map((attachment) => attachment.path),
+    ]);
+    const restoredFiles = files.filter((file) => acceptedPaths.has(file.path));
+    const markdownByPath = new Map(
+      await Promise.all(
+        restoredFiles
+          .filter((file) => file.path.startsWith("notes/"))
+          .map(async (file) => [file.path, await file.contents.text()] as const),
+      ),
+    );
+    const documents = notes.map((note) =>
+      toSearchDocument(note, markdownByPath.get(note.path) ?? ""),
+    );
+    const operations = (options.pendingPaths ?? [])
+      .map((path) => restoreOperation(path, acceptedPaths.has(path), options.restoredAt))
+      .filter((operation): operation is BackupOperation => operation !== undefined);
+
+    await this.#filesystem.replace(restoredFiles, async () => {
+      await this.#database.replaceVault(
+        notes,
+        attachments,
+        documents,
+        documents.flatMap(createSearchPostings),
+        operations,
+      );
+    });
+    return { attachmentCount: attachments.length, noteCount: notes.length };
+  }
+
   async #restoreNoteFile(
     path: string,
     previousMarkdown: string | undefined,
@@ -324,6 +382,124 @@ export class Vault {
     }
     throw error;
   }
+}
+
+async function inferNotes(files: VaultRestoreFile[], restoredAt: string): Promise<NoteMetadata[]> {
+  return Promise.all(
+    files.flatMap((file) => {
+      const match = file.path.match(/^notes\/([^/]+)\.md$/);
+      if (!match) return [];
+      return [
+        file.contents.text().then((markdown): NoteMetadata => ({
+          id: match[1],
+          title: titleFromMarkdown(markdown),
+          path: file.path,
+          tags: [],
+          createdAt: restoredAt,
+          updatedAt: restoredAt,
+          revision: 1,
+          size: file.contents.size,
+        })),
+      ];
+    }),
+  );
+}
+
+function inferAttachments(
+  files: VaultRestoreFile[],
+  noteIds: Set<string>,
+  restoredAt: string,
+): AttachmentMetadata[] {
+  return files.flatMap((file) => {
+    const match = file.path.match(/^attachments\/([^/]+)\/([^/]+)$/);
+    if (!match || !noteIds.has(match[1])) return [];
+    return [
+      {
+        id: match[2],
+        noteId: match[1],
+        name: match[2],
+        path: file.path,
+        type: file.contents.type || "application/octet-stream",
+        size: file.contents.size,
+        createdAt: restoredAt,
+        updatedAt: restoredAt,
+      },
+    ];
+  });
+}
+
+function validateManifestNotes(
+  notes: NoteMetadata[],
+  files: Map<string, VaultRestoreFile>,
+): NoteMetadata[] {
+  return notes.map((note) => {
+    const file = files.get(note.path);
+    if (!file || !note.path.match(/^notes\/[^/]+\.md$/) || note.path !== `notes/${note.id}.md`) {
+      throw new Error("The backup manifest contains an invalid note");
+    }
+    return { ...note, tags: normalizeTags(note.tags), size: file.contents.size };
+  });
+}
+
+function validateManifestAttachments(
+  attachments: AttachmentMetadata[],
+  files: Map<string, VaultRestoreFile>,
+  noteIds: Set<string>,
+): AttachmentMetadata[] {
+  return attachments.map((attachment) => {
+    const file = files.get(attachment.path);
+    if (
+      !file ||
+      !noteIds.has(attachment.noteId) ||
+      attachment.path !== `attachments/${attachment.noteId}/${attachment.id}`
+    ) {
+      throw new Error("The backup manifest contains an invalid attachment");
+    }
+    return { ...attachment, size: file.contents.size };
+  });
+}
+
+function restoreOperation(
+  path: string,
+  exists: boolean,
+  restoredAt: string,
+): BackupOperation | undefined {
+  const note = path.match(/^notes\/([^/]+)\.md$/);
+  if (note) {
+    return {
+      id: crypto.randomUUID(),
+      kind: exists ? "note:upsert" : "note:delete",
+      entityId: note[1],
+      noteId: note[1],
+      path,
+      revision: 1,
+      createdAt: restoredAt,
+    };
+  }
+  const attachment = path.match(/^attachments\/([^/]+)\/([^/]+)$/);
+  if (!attachment) return undefined;
+  return {
+    id: crypto.randomUUID(),
+    kind: exists ? "attachment:upsert" : "attachment:delete",
+    entityId: attachment[2],
+    noteId: attachment[1],
+    path,
+    revision: 1,
+    createdAt: restoredAt,
+  };
+}
+
+function titleFromMarkdown(value: string): string {
+  const firstLine =
+    value
+      .split("\n")
+      .find((line) => line.trim())
+      ?.trim() ?? "";
+  const title = firstLine
+    .replace(/^#{1,6}\s*/, "")
+    .replace(/[*_`~[\]]/g, "")
+    .trim();
+  return title.slice(0, 80) || "Untitled";
 }
 
 function assertBrowser(): void {

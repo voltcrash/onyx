@@ -47,6 +47,12 @@ pending note and attachment change in one Git commit. Later backups reuse that r
 advance its configured branch without force-pushing. Vault contents travel directly from the
 browser to GitHub.
 
+**Restore** loads the commit history for a configured backup (or an owner, repository, branch, and
+directory entered on a new device). Choosing a commit downloads its vault files directly into OPFS,
+replaces the local vault, and rebuilds IndexedDB metadata and the full-text search index. Current
+backups include an Onyx metadata manifest; commits created before the manifest was introduced are
+restored from their `notes/` and `attachments/` paths.
+
 ### GitHub App authentication
 
 Onyx uses the GitHub App web authorization flow with PKCE. Configure the app callback URL as

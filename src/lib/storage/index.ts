@@ -11,6 +11,9 @@ export type {
   VaultId,
   VaultOptions,
   VaultBackupChange,
+  VaultBackupManifest,
   VaultBackupSnapshot,
+  VaultRestoreFile,
+  VaultRestoreResult,
   VaultSearchResult,
 } from "./types.js";

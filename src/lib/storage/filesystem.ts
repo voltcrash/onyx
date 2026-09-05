@@ -57,6 +57,44 @@ export class VaultFilesystem {
     }
   }
 
+  async replace(
+    files: Array<{ contents: Blob; path: string }>,
+    commit: () => Promise<void>,
+  ): Promise<void> {
+    const previousFiles = await this.#listFiles();
+    try {
+      await this.#replaceFiles(files);
+      await commit();
+    } catch (error) {
+      try {
+        await this.#replaceFiles(previousFiles);
+      } catch (rollbackError) {
+        throw new AggregateError(
+          [error, rollbackError],
+          "Failed to restore the vault and roll back its files",
+        );
+      }
+      throw error;
+    }
+  }
+
+  async #replaceFiles(files: Array<{ contents: Blob; path: string }>): Promise<void> {
+    await this.#root.removeEntry("notes", { recursive: true }).catch(ignoreMissing);
+    await this.#root.removeEntry("attachments", { recursive: true }).catch(ignoreMissing);
+    await this.#root.getDirectoryHandle("notes", { create: true });
+    await this.#root.getDirectoryHandle("attachments", { create: true });
+    for (const file of files) await this.write(file.path, file.contents);
+  }
+
+  async #listFiles(): Promise<Array<{ contents: Blob; path: string }>> {
+    const files: Array<{ contents: Blob; path: string }> = [];
+    for (const directoryName of ["notes", "attachments"]) {
+      const directory = await this.#root.getDirectoryHandle(directoryName, { create: true });
+      await collectFiles(directory, directoryName, files);
+    }
+    return files;
+  }
+
   async #resolveParent(
     path: string,
     create: boolean,
@@ -73,4 +111,24 @@ export class VaultFilesystem {
     }
     return { directory, name };
   }
+}
+
+async function collectFiles(
+  directory: FileSystemDirectoryHandle,
+  prefix: string,
+  files: Array<{ contents: Blob; path: string }>,
+): Promise<void> {
+  for await (const [name, handle] of directory.entries()) {
+    const path = `${prefix}/${name}`;
+    if (handle.kind === "file") {
+      files.push({ contents: await handle.getFile(), path });
+    } else {
+      await collectFiles(handle, path, files);
+    }
+  }
+}
+
+function ignoreMissing(error: unknown): void {
+  if (error instanceof DOMException && error.name === "NotFoundError") return;
+  throw error;
 }

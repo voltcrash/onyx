@@ -240,6 +240,33 @@ export class VaultDatabase {
     await transactionDone(transaction);
   }
 
+  async replaceVault(
+    notes: NoteMetadata[],
+    attachments: AttachmentMetadata[],
+    documents: SearchDocument[],
+    postings: SearchPosting[],
+    operations: BackupOperation[],
+  ): Promise<void> {
+    const transaction = this.#database.transaction(
+      ["notes", "attachments", "searchDocuments", "searchPostings", "backupQueue"],
+      "readwrite",
+    );
+    const stores = {
+      notes: transaction.objectStore("notes"),
+      attachments: transaction.objectStore("attachments"),
+      documents: transaction.objectStore("searchDocuments"),
+      postings: transaction.objectStore("searchPostings"),
+      operations: transaction.objectStore("backupQueue"),
+    };
+    for (const store of Object.values(stores)) store.clear();
+    for (const note of notes) stores.notes.put(note);
+    for (const attachment of attachments) stores.attachments.put(attachment);
+    for (const document of documents) stores.documents.put(document);
+    for (const posting of postings) stores.postings.put(posting);
+    for (const operation of operations) stores.operations.put(operation);
+    await transactionDone(transaction);
+  }
+
   async #get<T>(storeName: StoreName, key: IDBValidKey): Promise<T | undefined> {
     const transaction = this.#database.transaction(storeName, "readonly");
     const value = await requestResult<T | undefined>(transaction.objectStore(storeName).get(key));

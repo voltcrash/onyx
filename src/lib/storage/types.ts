@@ -77,6 +77,22 @@ export interface VaultBackupSnapshot {
   operationIds: string[];
 }
 
+export interface VaultBackupManifest {
+  version: 1;
+  notes: NoteMetadata[];
+  attachments: AttachmentMetadata[];
+}
+
+export interface VaultRestoreFile {
+  contents: Blob;
+  path: string;
+}
+
+export interface VaultRestoreResult {
+  attachmentCount: number;
+  noteCount: number;
+}
+
 export interface VaultSearchResult {
   note: NoteMetadata;
   excerpt: string;
