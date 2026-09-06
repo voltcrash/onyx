@@ -14,7 +14,6 @@ import type {
   Note,
   NoteMetadata,
   SaveNoteInput,
-  SearchState,
   VaultOptions,
   VaultBackupSnapshot,
   VaultBackupManifest,
@@ -182,83 +181,6 @@ export class Vault {
     return notes.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
 
-  async deleteNote(id: string): Promise<boolean> {
-    const note = await this.#database.getNote(id);
-    if (!note) return false;
-
-    const now = new Date().toISOString();
-    const attachments = await this.#database.getAttachments(id);
-    await this.#database.deleteNote(
-      id,
-      attachments.map((attachment) => attachment.id),
-      [
-        ...attachments.map((attachment): BackupOperation => ({
-          id: crypto.randomUUID(),
-          kind: "attachment:delete",
-          entityId: attachment.id,
-          noteId: id,
-          path: attachment.path,
-          revision: 1,
-          createdAt: now,
-        })),
-        {
-          id: crypto.randomUUID(),
-          kind: "note:delete",
-          entityId: id,
-          noteId: id,
-          path: note.path,
-          revision: note.revision + 1,
-          createdAt: now,
-        },
-      ],
-    );
-    await this.#filesystem.remove(note.path, { ignoreMissing: true });
-    await this.#filesystem.remove(`attachments/${id}`, { recursive: true, ignoreMissing: true });
-    return true;
-  }
-
-  async saveAttachment(
-    noteId: string,
-    file: Blob,
-    name?: string,
-    sourcePath?: string,
-  ): Promise<AttachmentMetadata> {
-    if (!(await this.#database.getNote(noteId))) {
-      throw new Error(`Cannot attach a file to missing note: ${noteId}`);
-    }
-
-    const id = crypto.randomUUID();
-    const now = new Date().toISOString();
-    const path = `attachments/${noteId}/${id}`;
-    const metadata: AttachmentMetadata = {
-      id,
-      noteId,
-      name: name?.trim() || (file instanceof File ? file.name : "attachment"),
-      path,
-      type: file.type || "application/octet-stream",
-      size: file.size,
-      createdAt: now,
-      updatedAt: now,
-      sourcePath,
-    };
-
-    await this.#filesystem.write(path, file);
-    try {
-      await this.#database.putAttachment(metadata, {
-        id: crypto.randomUUID(),
-        kind: "attachment:upsert",
-        entityId: id,
-        noteId,
-        path,
-        revision: 1,
-        createdAt: now,
-      });
-    } catch (error) {
-      await this.#removeFailedWrite(path, error);
-    }
-    return metadata;
-  }
-
   async importNotes(inputs: ImportNoteInput[]): Promise<VaultRestoreResult> {
     if (inputs.length === 0) return { attachmentCount: 0, noteCount: 0 };
 
@@ -380,23 +302,6 @@ export class Vault {
     return this.#database.getAttachments(noteId);
   }
 
-  async deleteAttachment(id: string): Promise<boolean> {
-    const attachment = await this.#database.getAttachment(id);
-    if (!attachment) return false;
-
-    await this.#database.deleteAttachment(id, {
-      id: crypto.randomUUID(),
-      kind: "attachment:delete",
-      entityId: id,
-      noteId: attachment.noteId,
-      path: attachment.path,
-      revision: 1,
-      createdAt: new Date().toISOString(),
-    });
-    await this.#filesystem.remove(attachment.path, { ignoreMissing: true });
-    return true;
-  }
-
   async search(query: string, tags: string[] = []): Promise<VaultSearchResult[]> {
     const terms = tokenize(normalizeSearchText(query));
     const requiredTags = normalizeTags(tags);
@@ -443,18 +348,6 @@ export class Vault {
         (left, right) =>
           right.score - left.score || right.note.updatedAt.localeCompare(left.note.updatedAt),
       );
-  }
-
-  getSearchState(): Promise<SearchState | undefined> {
-    return this.#database.getSearchState();
-  }
-
-  saveSearchState(state: Omit<SearchState, "updatedAt">): Promise<void> {
-    return this.#database.setSearchState({
-      ...state,
-      tags: normalizeTags(state.tags),
-      updatedAt: new Date().toISOString(),
-    });
   }
 
   getGithubBackupState(): Promise<GithubBackupState | undefined> {
@@ -600,18 +493,6 @@ export class Vault {
       }
     } catch (rollbackError) {
       throw new AggregateError([error, rollbackError], "Failed to save note and restore its file");
-    }
-    throw error;
-  }
-
-  async #removeFailedWrite(path: string, error: unknown): Promise<never> {
-    try {
-      await this.#filesystem.remove(path, { ignoreMissing: true });
-    } catch (rollbackError) {
-      throw new AggregateError(
-        [error, rollbackError],
-        "Failed to save attachment and remove its file",
-      );
     }
     throw error;
   }

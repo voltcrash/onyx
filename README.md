@@ -1,97 +1,102 @@
-# onyx
+# Onyx
 
----
+Onyx is a local-first Markdown notes app. It autosaves notes in the browser, provides full-text
+search and several editing views, and can back up the vault to a private GitHub repository.
 
-### concept
+## What is implemented
 
-web-based markdown note-taking app that only stores files locally, while it uses GitHub to store your files for backup
+- Create and autosave Markdown notes locally.
+- Search note titles and contents from an on-device index.
+- Write in source, rendered inline, split, or read-only preview mode.
+- Switch between light, dark, and system themes.
+- Import Markdown folders or ZIP archives, including locally referenced attachments.
+- Export the complete vault to a folder when the browser supports the File System Access API, or
+  download it as a ZIP in other browsers.
+- Connect a GitHub account, select or create a private repository, back up pending changes in one
+  commit, and restore the vault from a selected backup commit.
+- Continue editing offline after the app has been loaded; GitHub actions pause until connectivity
+  returns.
+- Inspect browser storage usage, request persistent storage, or clear the local vault in Settings.
 
-### technologies
+The interface is responsive: desktop layouts have a collapsible note sidebar, while narrow layouts
+use a slide-over note list. Preferences are saved per browser when local storage is available.
 
-- _**IndexedDB**_ - noSQL database built in the browser
-- _**SvelteKit**_ - full-stack framework
-- **Tailwind CSS & shadcn**: ui design
-- _**TypeScript**_ - language
-- _**GitHub**_ - auth and backup/restore
-- _**Vite+**_ with _**pnpm**_
-- deployed on Vercel
+## Keyboard shortcuts
 
-### interface
+| Shortcut       | Action                  |
+| -------------- | ----------------------- |
+| `⌘ K`          | Open command palette    |
+| `⌘ ⇧ F` or `/` | Search all notes        |
+| `⌘ ⏎`          | Create a note           |
+| `⌘ S`          | Save the active note    |
+| `⌘ B` / `⌘ I`  | Format selected text    |
+| `⌘ ⇧ P`        | Toggle source/preview   |
+| `⌘ \`          | Toggle the note sidebar |
+| `⌘ ⇧ L`        | Cycle the theme         |
+| `?`            | Show all shortcuts      |
+| `Esc`          | Close the active panel  |
 
-The workspace includes source, inline preview, split, and read-only preview modes alongside the note
-list. Inline preview formats Markdown as you type. Its editor setting can instead reveal the raw
-Markdown source for the active line. The workspace collapses to a single pane with a slide-over note list on narrow screens. Themes are light, dark, or matched to
-the operating system; the choice is stored per browser and applied before first paint.
+Use `Ctrl` instead of `⌘` on Windows and Linux.
 
-`⌘ K` opens the command palette, which jumps to any note by title and runs every action in the app
-(new note, save, view modes, theme, GitHub backup and restore, import and export, settings).
+## Storage model
 
-| Shortcut       | Action                   |
-| -------------- | ------------------------ |
-| `⌘ K`          | Command palette          |
-| `⌘ ⇧ F` or `/` | Search all notes         |
-| `⌘ ⏎`          | New note                 |
-| `⌘ S`          | Save note                |
-| `⌘ B` / `⌘ I`  | Bold / italic selection  |
-| `⌘ ⇧ P`        | Toggle preview           |
-| `⌘ \`          | Toggle the note list     |
-| `⌘ ⇧ L`        | Cycle theme              |
-| `?`            | Keyboard shortcuts       |
-| `Esc`          | Close the top-most panel |
+Onyx requires IndexedDB and the origin private file system (OPFS). IndexedDB stores note and
+attachment metadata, the latest note text, the search index, GitHub backup configuration, and the
+ordered backup queue. Markdown files and attachment bytes are written to OPFS. Keeping the latest
+note text in IndexedDB also lets an edit survive when an OPFS write fails because the site has
+reached its storage quota.
 
-Use `Ctrl` in place of `⌘` on Windows and Linux.
+Browser storage is not the same as a user-selected folder. Clearing site data removes the local
+vault, and browsers may evict non-persistent storage under space pressure. Onyx reports unavailable
+storage capabilities in the workspace and exposes persistence status in Settings, so important
+vaults should also be exported or backed up.
 
-### local vault
+## GitHub backup and restore
 
-`Vault` is the browser-only persistence API exported from `$lib`. Markdown and attachment bytes live
-in the origin private file system (OPFS); IndexedDB stores note and attachment metadata, the local
-search index and UI state, GitHub backup configuration, and an ordered backup-operation queue.
+Onyx authenticates through a GitHub App using the authorization-code flow with PKCE. The server
+handles the code exchange and token refresh; credentials stay in an encrypted HTTP-only cookie and
+the active access token exists only in browser memory. Vault data is sent from the browser directly
+to `api.github.com` and does not pass through the Onyx server.
 
-```ts
-import { Vault } from "$lib";
+Backups target private, active repositories where the connected account has write access. A backup
+coalesces pending changes by path and advances the configured branch without force-pushing. Restore
+downloads the files from a chosen commit, replaces the local notes and attachments, and rebuilds the
+IndexedDB metadata and search index. Current backups contain an Onyx manifest; older backups can be
+reconstructed from their `notes/` and `attachments/` paths.
 
-const vault = await Vault.open();
-await vault.requestPersistentStorage();
+Configure the GitHub App callback URL as
+`https://your-onyx-domain.example/auth/github/callback` and set the variables listed in
+[`.env.example`](.env.example). `GITHUB_AUTH_COOKIE_SECRET` must contain at least 32 random
+characters. The app needs **Administration: write** to create a private repository and
+**Contents: write** to create and update backup commits. Install it for all repositories if newly
+created backup repositories should become available immediately.
 
-const note = await vault.saveNote({
-  title: "Local first",
-  markdown: "# Stored in OPFS",
-  tags: ["architecture"],
-});
+## Architecture
 
-const results = await vault.search("stored", ["architecture"]);
-const pending = await vault.getPendingBackupOperations();
+- `src/routes/+page.svelte` owns application state and coordinates persistence, transfer, and
+  GitHub workflows.
+- `src/lib/components/` contains focused workspace, navigation, dialog, and status components.
+- `src/routes/styles/` separates base tokens, application shell, editor, dialog, command-palette,
+  and responsive styles.
+- `src/lib/storage/` implements the IndexedDB and OPFS vault.
+- `src/lib/markdown-transfer.ts` implements folder and ZIP import/export.
+- `src/lib/github.ts` implements repository validation, backup, and restore.
+- `src/service-worker.ts` caches the application shell for offline use.
+
+The app uses SvelteKit, TypeScript, Tailwind CSS, shadcn-svelte, and Vite+. It is configured for
+Vercel deployment.
+
+## Development
+
+Use the latest Node.js LTS release and Vite+ for project commands:
+
+```sh
+vp install
+vp dev
+vp check
+vp test
+vp build
 ```
 
-After a GitHub backup succeeds, pass the uploaded operation IDs to
-`acknowledgeBackupOperations`. Authentication tokens are intentionally not part of the persisted
-backup state.
-
-Once GitHub is connected, **Back up** creates a private repository on first use and uploads every
-pending note and attachment change in one Git commit. Later backups reuse that repository and
-advance its configured branch without force-pushing. Vault contents travel directly from the
-browser to GitHub. Onyx only offers private, writable, active repositories and verifies those
-properties again before every backup. The saved target is bound to the authenticated GitHub account,
-so switching accounts requires selecting the repository again.
-
-**Restore** loads the commit history for a configured backup (or an owner, repository, branch, and
-directory entered on a new device). Choosing a commit downloads its vault files directly into OPFS,
-replaces the local vault, and rebuilds IndexedDB metadata and the full-text search index. Current
-backups include an Onyx metadata manifest; commits created before the manifest was introduced are
-restored from their `notes/` and `attachments/` paths.
-
-### GitHub App authentication
-
-Onyx uses the GitHub App web authorization flow with PKCE. Configure the app callback URL as
-`https://your-onyx-domain.example/auth/github/callback`, grant only the repository permissions the
-backup feature needs, and set the variables in `.env.example` in the deployment environment.
-Generate `GITHUB_AUTH_COOKIE_SECRET` with at least 32 random characters.
-
-The GitHub App needs **Administration: write** to create the private backup repository and
-**Contents: write** to create blobs, trees, commits, and update its branch. Install it for all
-repositories so the newly created backup repository is immediately accessible.
-
-The server handles only authorization-code exchange and token refresh. GitHub credentials are kept
-in an encrypted, HTTP-only cookie, and the active access token is held only in browser memory. GitHub
-API requests are sent from the browser directly to `api.github.com`; note and attachment contents do
-not pass through the Onyx backend.
+GitHub authentication requires the environment variables in `.env.example`; local note editing and
+browser storage do not.

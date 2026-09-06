@@ -1,29 +1,30 @@
 <script lang="ts">
 	import {
-		Bold, CloudDownload, CloudOff, Code2, Columns2, Eye, FileArchive, FilePlus2,
-		FileText, FolderInput, FolderOutput, Heading2, CloudUpload, Download, ExternalLink,
-		GitCommitHorizontal, HardDrive, HelpCircle, Italic, Keyboard, Link, List, LoaderCircle, LogOut,
-		Monitor, Moon, PanelLeft, PanelLeftClose, PencilLine, Plus, Quote, Save, Search,
-		Settings, Sun, WifiOff, X
+		CloudDownload, CloudUpload, Columns2, Download, Eye, FileArchive, FilePlus2, FileText,
+		FolderInput, FolderOutput, HardDrive, Keyboard, Monitor, Moon, PanelLeft, PencilLine, Save,
+		Search, Settings, Sun
 	} from '@lucide/svelte';
+	import AppHeader from '$lib/components/app-header.svelte';
+	import MarkdownWorkspace from '$lib/components/markdown-workspace.svelte';
+	import NotesSidebar from '$lib/components/notes-sidebar.svelte';
+	import RestoreDialog from '$lib/components/restore-dialog.svelte';
+	import ShortcutsDialog from '$lib/components/shortcuts-dialog.svelte';
+	import StatusNotices from '$lib/components/status-notices.svelte';
+	import type { BackupState, GithubState, RestoreState, SaveState, TransferState, ViewMode } from '$lib/components/app-types';
 	import CommandPalette, { type PaletteItem } from '$lib/components/command-palette.svelte';
 	import SettingsDialog, { type InlinePreviewBehavior, type SettingsSection } from '$lib/components/settings-dialog.svelte';
 	import { renderMarkdown, resolveLocalAttachmentUrl, type LocalAttachmentUrl } from '$lib/markdown';
-	import { manageModalFocus } from '$lib/modal-focus';
 	import {
 		applyTheme, backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
-		browserStorageWarnings, detectBrowserStorageSupport,
-		createMarkdownExport, createMarkdownZip, importMarkdownFiles, listGithubBackupCommits, nextThemePreference,
-		readLocalStorage, readMarkdownFolder, readMarkdownZip, readThemePreference, restoreGithubSession, restoreVaultFromGithub,
-		validateGithubBackupRepository,
-		Vault, watchSystemTheme, writeLocalStorage, writeMarkdownFolder,
-		type GithubBackupCommit, type GithubBackupState, type GithubUser, type NoteMetadata,
-		type ThemePreference, type VaultSearchResult
+		browserStorageWarnings, detectBrowserStorageSupport, createMarkdownExport, createMarkdownZip,
+		importMarkdownFiles, listGithubBackupCommits, nextThemePreference, readLocalStorage,
+		readMarkdownFolder, readMarkdownZip, readThemePreference, restoreGithubSession,
+		restoreVaultFromGithub, validateGithubBackupRepository, Vault, watchSystemTheme,
+		writeLocalStorage, writeMarkdownFolder, type GithubBackupCommit, type GithubBackupState,
+		type GithubUser, type NoteMetadata, type ThemePreference, type VaultSearchResult
 	} from '$lib';
 	import { onMount, tick } from 'svelte';
 
-	type ViewMode = 'edit' | 'live' | 'split' | 'preview';
-	type SaveState = 'loading' | 'saved' | 'saving' | 'unsaved' | 'error';
 	const NOTE_PAGE_SIZE = 100;
 	const PREVIEW_DELAY_MS = 120;
 	const INITIAL_MARKDOWN = `# Welcome to Onyx
@@ -72,17 +73,17 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	let storageNotice = $state('');
 	let isOnline = $state(true);
 	let githubUser = $state<GithubUser>();
-	let githubState = $state<'loading' | 'connected' | 'disconnected' | 'error'>('loading');
+	let githubState = $state<GithubState>('loading');
 	let githubMessage = $state('');
 	let githubBackup = $state<GithubBackupState>();
-	let backupState = $state<'idle' | 'backing-up' | 'success' | 'error'>('idle');
+	let backupState = $state<BackupState>('idle');
 	let backupMessage = $state('');
 	let backupCommitUrl = $state('');
 	let settingsOpen = $state(false);
 	let settingsSection = $state<SettingsSection>('github');
 	let pendingBackupCount = $state(0);
 	let restoreModalOpen = $state(false);
-	let restoreState = $state<'idle' | 'loading' | 'restoring' | 'error'>('idle');
+	let restoreState = $state<RestoreState>('idle');
 	let restoreMessage = $state('');
 	let restoreCommits = $state<GithubBackupCommit[]>([]);
 	let selectedRestoreSha = $state('');
@@ -90,7 +91,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	let restoreRepository = $state('onyx-vault');
 	let restoreBranch = $state('main');
 	let restoreDirectory = $state('vault');
-	let transferState = $state<'idle' | 'working' | 'error'>('idle');
+	let transferState = $state<TransferState>('idle');
 	let transferMessage = $state('');
 	let folderInput: HTMLInputElement | undefined = $state();
 	let zipInput: HTMLInputElement | undefined = $state();
@@ -1109,143 +1110,56 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 <svelte:head><title>Onyx — Markdown notes</title><meta name="description" content="A fast, local-first Markdown editor with full-text search that works offline." /></svelte:head>
 
 <div class="app" class:sidebar-open={sidebarOpen} class:sidebar-collapsed={sidebarCollapsed} inert={paletteOpen || settingsOpen || restoreModalOpen || shortcutsOpen}>
-	<header class="topbar">
-		<button class="icon-button collapsed-sidebar-toggle" aria-label="Show notes sidebar" title="Show sidebar (⌘\\)" onclick={toggleSidebar}><PanelLeft size={19} /></button>
-		<div class="topbar-view">
-			<div class="view-switcher" aria-label="View mode">
-				<button class:active={viewMode === 'edit'} aria-pressed={viewMode === 'edit'} onclick={() => (viewMode = 'edit')} aria-label="Editor only" title="Editor only"><PencilLine size={16} /><span>Edit</span></button>
-				<button class:active={viewMode === 'live'} aria-pressed={viewMode === 'live'} onclick={() => openInlinePreview()} aria-label="Inline preview" title="Inline preview"><Eye size={16} /><span>Inline</span></button>
-				<button class:active={viewMode === 'split'} aria-pressed={viewMode === 'split'} onclick={() => (viewMode = 'split')} aria-label="Split view" title="Split view"><Columns2 size={16} /><span>Split</span></button>
-				<button class:active={viewMode === 'preview'} aria-pressed={viewMode === 'preview'} onclick={() => (viewMode = 'preview')} aria-label="Preview only" title="Preview only"><Eye size={16} /><span>Preview</span></button>
-			</div>
-		</div>
-		<div class="top-actions">
-			{#if !isOnline}<div class="offline-status" role="status" title="GitHub features are paused until your connection returns"><WifiOff size={14} /><span>Offline</span></div>{/if}
-			{#if saveState === 'loading' || saveState === 'error'}
-				<div class="save-status" class:error={saveState === 'error'} aria-live="polite">
-					{#if saveState === 'loading'}<LoaderCircle class="spin" size={15} />{:else}<CloudOff size={15} />{/if}
-					{saveState === 'loading' ? 'Opening…' : 'Save failed'}
-				</div>
-			{/if}
-			<button class="save-button" onclick={() => void saveDraft()} disabled={saveState === 'saving' || transferState === 'working'}><Save size={16} /><span>Save</span><kbd>⌘S</kbd></button>
-			<button class="palette-trigger" aria-label="Open the command palette" aria-haspopup="dialog" aria-expanded={paletteOpen} aria-controls="command-palette" title="Command palette (⌘K)" onclick={() => void openPalette()}><Search size={15} /><span>Search or run…</span><kbd>⌘K</kbd></button>
-			<button class="icon-button optional" aria-label={`Theme: ${themeLabel}. Change theme`} title={`Theme: ${themeLabel} (⌘⇧L)`} onclick={() => setTheme(nextThemePreference(theme))}>
-				{#if theme === 'system'}<Monitor size={18} />{:else if theme === 'dark'}<Moon size={18} />{:else}<Sun size={18} />{/if}
-			</button>
-			<button class="icon-button" aria-label="Settings" aria-haspopup="dialog" aria-expanded={settingsOpen} aria-controls="settings-dialog" title="Settings" onclick={() => openSettings(githubState === 'connected' ? 'backup' : 'github')}><Settings size={18} /></button>
-			{#if githubState === 'connected' && githubUser}
-				<button class="backup-button" class:success={backupState === 'success'} class:error={backupState === 'error'} onclick={() => void beginBackup()} disabled={!isOnline || !vault || backupState === 'backing-up'} title={!isOnline ? 'GitHub backup is unavailable offline' : githubBackup ? `Back up to ${githubBackup.owner}/${githubBackup.repository}` : 'Create a private repository and back up the vault'}>
-					{#if backupState === 'backing-up'}<LoaderCircle class="spin" size={15} />{:else}<CloudUpload size={16} />{/if}
-					<span>{backupState === 'backing-up' ? 'Backing up…' : 'Back up'}</span>
-					{#if pendingBackupCount > 0}<i>{pendingBackupCount}</i>{/if}
-				</button>
-				<button class="backup-button restore-button" aria-haspopup="dialog" aria-expanded={restoreModalOpen} aria-controls="restore-dialog" onclick={() => void openRestore()} disabled={!isOnline || !vault || restoreState === 'restoring'} title={isOnline ? 'Restore a GitHub backup commit' : 'GitHub restore is unavailable offline'}>
-					{#if restoreState === 'restoring'}<LoaderCircle class="spin" size={15} />{:else}<CloudDownload size={16} />{/if}
-					<span>{restoreState === 'restoring' ? 'Restoring…' : 'Restore'}</span>
-				</button>
-				<div class="github-account" class:offline={!isOnline} title={isOnline ? `Connected as ${githubUser.login}` : `Connected as ${githubUser.login}; GitHub is unavailable offline`}><img src={githubUser.avatarUrl} alt="" /><span>@{githubUser.login}</span><button aria-label="Disconnect GitHub" title={isOnline ? 'Disconnect GitHub' : 'Disconnect is unavailable offline'} disabled={!isOnline} onclick={() => void disconnectGitHub()}><LogOut size={14} /></button></div>
-			{:else if !isOnline}
-				<button class="github-connect offline" disabled title="GitHub features are unavailable offline" aria-label="GitHub unavailable offline"><WifiOff size={16} /><span>GitHub unavailable</span></button>
-			{:else}
-				<a class="github-connect" class:error={githubState === 'error'} href="/auth/github/start" title={githubMessage || 'Connect GitHub for direct, private backups'} aria-label="Connect GitHub">{#if githubState === 'loading'}<LoaderCircle class="spin" size={15} />{:else}<CloudUpload size={16} />{/if}<span>{githubState === 'loading' ? 'Checking…' : 'Connect GitHub'}</span></a>
-			{/if}
-			<button class="icon-button optional" aria-label="Keyboard shortcuts" aria-haspopup="dialog" aria-expanded={shortcutsOpen} aria-controls="shortcuts-dialog" title="Keyboard shortcuts (?)" onclick={() => (shortcutsOpen = true)}><HelpCircle size={18} /></button>
-		</div>
-	</header>
-
-	<aside class="sidebar" aria-label="Notes">
-		<div class="notes-heading"><div class="notes-title"><button class="icon-button sidebar-toggle" aria-label="Hide notes sidebar" title="Toggle sidebar (⌘\\)" onclick={toggleSidebar}><PanelLeftClose size={19} /></button><h1>Notes</h1></div><div class="notes-actions"><button class="new-note" aria-label="New note" title="New note" disabled={transferState === 'working'} onclick={() => void createNote()}><Plus size={17} /></button></div></div>
-		<label class="search-box"><Search size={15} /><input bind:this={searchInput} type="search" placeholder="Search all notes" value={searchQuery} oninput={(event) => queueSearch(event.currentTarget.value)} /><kbd>⌘⇧F</kbd></label>
-		<div class="result-count" aria-live="polite">{searchQuery ? `${results.length} ${results.length === 1 ? 'result' : 'results'}` : `${results.length} ${results.length === 1 ? 'note' : 'notes'}`}</div>
-		<nav class="note-list" bind:this={noteList}>
-			{#each visibleResults as result (result.note.id)}
-				<button class="file" class:active={result.note.id === activeNoteId} aria-current={result.note.id === activeNoteId ? 'true' : undefined} disabled={transferState === 'working'} onkeydown={moveNoteFocus} onclick={() => void selectNote(result.note.id)}>
-					<FileText size={16} /><span><strong>{result.note.title}</strong>{#if searchQuery}<small>{result.excerpt || 'Title match'}</small>{/if}</span>{#if result.note.id === activeNoteId}<i></i>{/if}
-				</button>
-			{:else}
-				{#if saveState === 'loading' && !storageError}
-					<div class="empty-results"><LoaderCircle class="spin" size={20} /><strong>Opening your vault…</strong><span>Notes are read from this device.</span></div>
-				{:else if searchQuery}
-					<div class="empty-results"><Search size={20} /><strong>No notes match “{searchQuery}”</strong><span>Search covers every title and every word.</span><button onclick={() => queueSearch('')}><X size={13} /> Clear search</button></div>
-				{:else}
-					<div class="empty-results"><FileText size={20} /><strong>No notes yet</strong><span>Your first note is one keystroke away.</span><button onclick={() => void createNote()}><Plus size={13} /> New note</button></div>
-				{/if}
-			{/each}
-		</nav>
-		{#if notePageCount > 1}
-			<div class="note-pagination" aria-label="Note list pages">
-				<button disabled={notePage === 0} onclick={() => changeNotePage(notePage - 1)}>Previous</button>
-				<span>Page {notePage + 1} of {notePageCount}</span>
-				<button disabled={notePage === notePageCount - 1} onclick={() => changeNotePage(notePage + 1)}>Next</button>
-			</div>
-		{/if}
-	</aside>
-
-	<main class="workspace">
-		{#if storageNotice}
-			<div class="storage-notice" role="status">
-				<HardDrive size={16} />
-				<span>{storageNotice}</span>
-			</div>
-		{/if}
-		{#if storageError}
-			<div class="storage-error" role="alert">
-				<CloudOff size={16} />
-				<span>{storageError} Your current text stays open, but it may be lost when this tab closes. Copy it somewhere safe if the retry keeps failing.</span>
-				<button onclick={() => void (vault ? saveDraft() : openVault())}>Try again</button>
-				<button onclick={() => location.reload()}>Reload</button>
-			</div>
-		{/if}
-
-		<section class="editor-shell" class:edit-only={viewMode === 'edit' || viewMode === 'live'} class:live-only={viewMode === 'live'} class:preview-only={viewMode === 'preview'}>
-			<div class="editor-pane">
-				<div class="formatting-bar" aria-label="Formatting tools">
-					<button onclick={() => insertSyntax('**', '**', 'bold text')} title="Bold (⌘B)" aria-label="Bold"><Bold size={16} /></button><button onclick={() => insertSyntax('_', '_', 'italic text')} title="Italic (⌘I)" aria-label="Italic"><Italic size={16} /></button><span></span><button onclick={() => prefixLine('## ')} title="Heading" aria-label="Heading"><Heading2 size={17} /></button><button onclick={() => prefixLine('- ')} title="Bulleted list" aria-label="Bulleted list"><List size={17} /></button><button onclick={() => prefixLine('> ')} title="Quote" aria-label="Quote"><Quote size={16} /></button><button onclick={() => insertSyntax('`', '`', 'code')} title="Inline code" aria-label="Inline code"><Code2 size={17} /></button><button onclick={() => insertSyntax('[', '](https://)', 'link text')} title="Link" aria-label="Link"><Link size={16} /></button>
-				</div>
-				{#if viewMode === 'live'}
-					<div class="live-editor" bind:this={liveEditorContainer} aria-label="Inline preview editor">
-						{#each markdownLines as line, index}
-							{#if inlinePreviewBehavior === 'rendered'}
-								<div class="live-editable-line {liveLineKind(line, index)}" class:active={index === liveLine} contenteditable={saveState !== 'loading' && transferState !== 'working'} role="textbox" tabindex="0" aria-label={`Markdown line ${index + 1}`} aria-multiline="false" data-live-line={index} spellcheck="true" onfocus={() => (liveLine = index)} oninput={(event) => updateRenderedLine(index, event.currentTarget)} onkeydown={(event) => handleRenderedLineKeydown(event, index)}>{@html renderEditableLine(line, index)}</div>
-							{:else if index === liveLine}
-								<textarea class="live-source-line" bind:this={liveEditor} value={line} oninput={(event) => updateLiveLine(index, event.currentTarget.value)} onkeydown={(event) => handleLiveLineKeydown(event, index)} aria-label={`Markdown line ${index + 1}`} rows="1" spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
-							{:else}
-								<div class="live-rendered-line" class:blank={!line} role="button" tabindex="0" aria-label={`Edit line ${index + 1}`} onclick={() => activateLiveLine(index)} onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activateLiveLine(index); } }}>{@html renderLiveLine(line, index)}</div>
-							{/if}
-						{/each}
-					</div>
-				{:else}
-					<textarea bind:this={editor} value={markdown} oninput={(event) => updateMarkdown(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
-				{/if}
-				<div class="editor-footer"><span>{wordCount} words&nbsp;&nbsp;&nbsp;{readingMinutes} min read</span></div>
-			</div>
-			<div class="preview-pane">
-				<div class="preview-label"><Eye size={14} /> Preview</div>
-				{#if hasContent}
-					<article class="prose">{@html renderedMarkdown}</article>
-				{:else}
-					<div class="preview-empty"><PencilLine size={26} /><strong>Nothing to preview yet</strong><span>Whatever you type in the editor is rendered here as you write.</span></div>
-				{/if}
-			</div>
-		</section>
-	</main>
+	<AppHeader
+		{viewMode} {isOnline} {saveState} {transferState} {paletteOpen} {theme} {themeLabel}
+		{settingsOpen} {githubState} {githubUser} {githubMessage} {githubBackup} {backupState}
+		{pendingBackupCount} {restoreModalOpen} {restoreState} {shortcutsOpen} {vault}
+		onToggleSidebar={toggleSidebar}
+		onViewModeChange={(mode) => (viewMode = mode)}
+		onOpenInlinePreview={() => openInlinePreview()}
+		onSave={() => void saveDraft()}
+		onOpenPalette={() => void openPalette()}
+		onCycleTheme={() => setTheme(nextThemePreference(theme))}
+		onOpenSettings={() => openSettings(githubState === 'connected' ? 'backup' : 'github')}
+		onBackup={() => void beginBackup()}
+		onRestore={() => void openRestore()}
+		onDisconnectGithub={() => void disconnectGitHub()}
+		onOpenShortcuts={() => (shortcutsOpen = true)}
+	/>
+	<NotesSidebar
+		{activeNoteId} {results} {visibleResults} {searchQuery} {notePage} {notePageCount}
+		{saveState} {transferState} {storageError} bind:searchInput bind:noteList
+		onToggleSidebar={toggleSidebar}
+		onCreateNote={() => void createNote()}
+		onSearch={queueSearch}
+		onMoveNoteFocus={moveNoteFocus}
+		onSelectNote={(id) => void selectNote(id)}
+		onChangePage={changeNotePage}
+	/>
+	<MarkdownWorkspace
+		{storageNotice} {storageError} {viewMode} {inlinePreviewBehavior} {markdown} {markdownLines}
+		{liveLine} {saveState} {transferState} {wordCount} {readingMinutes} {hasContent}
+		{renderedMarkdown} bind:editor bind:liveEditor bind:liveEditorContainer
+		onRetryStorage={() => void (vault ? saveDraft() : openVault())}
+		onReload={() => location.reload()}
+		onInsertSyntax={insertSyntax}
+		onPrefixLine={prefixLine}
+		onMarkdownChange={updateMarkdown}
+		onLiveLineFocus={(line) => (liveLine = line)}
+		onRenderedLineInput={updateRenderedLine}
+		onRenderedLineKeydown={handleRenderedLineKeydown}
+		onLiveLineChange={updateLiveLine}
+		onLiveLineKeydown={handleLiveLineKeydown}
+		onActivateLiveLine={activateLiveLine}
+		{renderEditableLine} {renderLiveLine} {liveLineKind}
+	/>
 </div>
 
-{#if backupMessage}
-	<div class="backup-notice" class:error={backupState === 'error'} role={backupState === 'error' ? 'alert' : 'status'}>
-		<span>{backupMessage}</span>
-		{#if backupCommitUrl}<a href={backupCommitUrl} target="_blank" rel="noreferrer">View commit <ExternalLink size={13} /></a>{/if}
-		<button aria-label="Dismiss backup status" onclick={() => (backupMessage = '')}><X size={14} /></button>
-	</div>
-{/if}
-
-{#if transferMessage}
-	<div class="backup-notice transfer-notice" class:error={transferState === 'error'} role={transferState === 'error' ? 'alert' : 'status'}>
-		{#if transferState === 'working'}<LoaderCircle class="spin" size={14} />{/if}
-		<span>{transferMessage}</span>
-		<button aria-label="Dismiss import or export status" onclick={() => (transferMessage = '')}><X size={14} /></button>
-	</div>
-{/if}
+<StatusNotices
+	{backupMessage} {backupState} {backupCommitUrl} {transferMessage} {transferState}
+	onDismissBackup={() => (backupMessage = '')}
+	onDismissTransfer={() => (transferMessage = '')}
+/>
 
 {#if paletteOpen}
 	<CommandPalette items={paletteItems} onClose={() => (paletteOpen = false)} />
@@ -1288,55 +1202,16 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 <input class="transfer-input" bind:this={zipInput} type="file" accept=".zip,application/zip" onchange={(event) => void importZip(event.currentTarget.files)} />
 
 {#if restoreModalOpen}
-	<div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget && restoreState !== 'restoring') restoreModalOpen = false; }}>
-		<div id="restore-dialog" class="shortcut-modal restore-modal" role="dialog" aria-modal="true" aria-labelledby="restore-title" aria-describedby="restore-warning" aria-busy={restoreState === 'loading' || restoreState === 'restoring'} tabindex="-1" use:manageModalFocus>
-			<div class="modal-title"><div><span>GitHub restore</span><h2 id="restore-title">Choose a backup commit</h2></div><button type="button" class="icon-button" aria-label="Close GitHub restore" disabled={restoreState === 'restoring'} onclick={() => (restoreModalOpen = false)}><X size={18} /></button></div>
-			<form class="restore-source" onsubmit={(event) => { event.preventDefault(); void loadRestoreCommits(); }}>
-				<label>Owner<input bind:value={restoreOwner} required autocomplete="off" /></label>
-				<label>Repository<input bind:value={restoreRepository} required autocomplete="off" /></label>
-				<label>Branch<input bind:value={restoreBranch} required autocomplete="off" /></label>
-				<label>Directory<input bind:value={restoreDirectory} autocomplete="off" /></label>
-				<button type="submit" disabled={!isOnline || restoreState === 'loading' || restoreState === 'restoring'}>{#if restoreState === 'loading'}<LoaderCircle class="spin" size={14} />{/if} Load commits</button>
-			</form>
-			<div class="restore-list" aria-live="polite">
-				{#if restoreState === 'loading'}
-					<div class="restore-placeholder"><LoaderCircle class="spin" size={20} /> Loading backup history…</div>
-				{:else}
-					{#each restoreCommits as commit (commit.sha)}
-						<label class:selected={selectedRestoreSha === commit.sha}>
-							<input type="radio" name="restore-commit" value={commit.sha} bind:group={selectedRestoreSha} />
-							<GitCommitHorizontal size={17} />
-							<span><strong>{commit.message}</strong><small>{formatCommitDate(commit.committedAt)} · {commit.author} · {commit.sha.slice(0, 7)}</small></span>
-						</label>
-					{/each}
-					{#if restoreMessage}<div class="restore-placeholder" class:error={restoreState === 'error'}>{restoreMessage}</div>{/if}
-				{/if}
-			</div>
-			<div id="restore-warning" class="restore-warning"><strong>This replaces the local vault.</strong> Notes and attachments currently on this device will be removed and replaced by the selected commit.</div>
-			<div class="modal-actions"><button type="button" disabled={restoreState === 'restoring'} onclick={() => (restoreModalOpen = false)}>Cancel</button><button class="primary danger" type="button" disabled={!isOnline || !selectedRestoreSha || restoreState === 'restoring'} onclick={() => void restoreSelectedCommit()}>{#if restoreState === 'restoring'}<LoaderCircle class="spin" size={15} />{:else}<CloudDownload size={15} />{/if} {restoreState === 'restoring' ? 'Restoring…' : 'Restore selected'}</button></div>
-		</div>
-	</div>
+	<RestoreDialog
+		{isOnline} {restoreState} {restoreMessage} {restoreCommits}
+		bind:selectedRestoreSha bind:restoreOwner bind:restoreRepository bind:restoreBranch bind:restoreDirectory
+		onClose={() => (restoreModalOpen = false)}
+		onLoadCommits={() => void loadRestoreCommits()}
+		onRestore={() => void restoreSelectedCommit()}
+		{formatCommitDate}
+	/>
 {/if}
 
 {#if shortcutsOpen}
-	<div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) shortcutsOpen = false; }}>
-		<div id="shortcuts-dialog" class="shortcut-modal" role="dialog" aria-modal="true" aria-labelledby="shortcut-title" tabindex="-1" use:manageModalFocus>
-			<div class="modal-title"><div><span>Reference</span><h2 id="shortcut-title">Keyboard shortcuts</h2></div><button class="icon-button" aria-label="Close shortcuts" onclick={() => (shortcutsOpen = false)}><X size={18} /></button></div>
-			<div class="shortcut-list">
-				<div><span>Command palette</span><kbd>⌘ K</kbd></div>
-				<div><span>Search all notes</span><kbd>⌘ ⇧ F</kbd> </div>
-				<div><span>New note</span><kbd>⌘ ⏎</kbd></div>
-				<div><span>Save note</span><kbd>⌘ S</kbd></div>
-				<div><span>Bold selection</span><kbd>⌘ B</kbd></div>
-				<div><span>Italic selection</span><kbd>⌘ I</kbd></div>
-				<div><span>Toggle preview</span><kbd>⌘ ⇧ P</kbd></div>
-				<div><span>Toggle sidebar</span><kbd>⌘ \</kbd></div>
-				<div><span>Cycle theme</span><kbd>⌘ ⇧ L</kbd></div>
-				<div><span>Focus search</span><kbd>/</kbd></div>
-				<div><span>Open this panel</span><kbd>?</kbd></div>
-				<div><span>Close any panel</span><kbd>Esc</kbd></div>
-			</div>
-			<p>Use Ctrl instead of ⌘ on Windows and Linux.</p>
-		</div>
-	</div>
+	<ShortcutsDialog onClose={() => (shortcutsOpen = false)} />
 {/if}

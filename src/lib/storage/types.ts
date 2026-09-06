@@ -49,14 +49,6 @@ export interface AttachmentMetadata {
   sourcePath?: string;
 }
 
-export interface SearchState {
-  query: string;
-  tags: string[];
-  sort: "created" | "title" | "updated";
-  direction: "asc" | "desc";
-  updatedAt: string;
-}
-
 export interface GithubBackupState {
   githubAccountId: number;
   githubAccountLogin: string;

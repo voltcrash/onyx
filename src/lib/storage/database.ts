@@ -3,7 +3,6 @@ import type {
   BackupOperation,
   GithubBackupState,
   NoteMetadata,
-  SearchState,
 } from "./types.js";
 
 const DATABASE_VERSION = 3;
@@ -133,31 +132,6 @@ export class VaultDatabase {
     await transactionDone(transaction);
   }
 
-  async deleteNote(
-    id: string,
-    attachmentIds: string[],
-    operations: BackupOperation[],
-  ): Promise<void> {
-    const transaction = this.#database.transaction(
-      ["notes", "noteContents", "attachments", "searchDocuments", "searchPostings", "backupQueue"],
-      "readwrite",
-    );
-    transaction.objectStore("notes").delete(id);
-    transaction.objectStore("noteContents").delete(id);
-    transaction.objectStore("searchDocuments").delete(id);
-    const searchPostings = transaction.objectStore("searchPostings");
-    const postingKeys = await requestResult<IDBValidKey[]>(
-      searchPostings.index("noteId").getAllKeys(id),
-    );
-    for (const key of postingKeys) searchPostings.delete(key);
-
-    const attachments = transaction.objectStore("attachments");
-    for (const attachmentId of attachmentIds) attachments.delete(attachmentId);
-
-    for (const operation of operations) transaction.objectStore("backupQueue").put(operation);
-    await transactionDone(transaction);
-  }
-
   getAttachment(id: string): Promise<AttachmentMetadata | undefined> {
     return this.#get<AttachmentMetadata>("attachments", id);
   }
@@ -170,20 +144,6 @@ export class VaultDatabase {
     const attachments = await requestResult<AttachmentMetadata[]>(request);
     await transactionDone(transaction);
     return attachments;
-  }
-
-  async putAttachment(attachment: AttachmentMetadata, operation: BackupOperation): Promise<void> {
-    const transaction = this.#database.transaction(["attachments", "backupQueue"], "readwrite");
-    transaction.objectStore("attachments").put(attachment);
-    transaction.objectStore("backupQueue").put(operation);
-    await transactionDone(transaction);
-  }
-
-  async deleteAttachment(id: string, operation: BackupOperation): Promise<void> {
-    const transaction = this.#database.transaction(["attachments", "backupQueue"], "readwrite");
-    transaction.objectStore("attachments").delete(id);
-    transaction.objectStore("backupQueue").put(operation);
-    await transactionDone(transaction);
   }
 
   getSearchDocuments(): Promise<SearchDocument[]> {
@@ -223,14 +183,6 @@ export class VaultDatabase {
     );
     await transactionDone(transaction);
     return postings;
-  }
-
-  getSearchState(): Promise<SearchState | undefined> {
-    return this.#getSetting<SearchState>("search");
-  }
-
-  setSearchState(state: SearchState): Promise<void> {
-    return this.#putSetting("search", state);
   }
 
   getGithubBackupState(): Promise<GithubBackupState | undefined> {

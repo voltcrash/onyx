@@ -1,0 +1,167 @@
+@media (max-width: 900px) {
+  .app,
+  .app.sidebar-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .topbar,
+  .sidebar-collapsed .topbar {
+    grid-column: 1;
+    grid-template-columns: auto 1fr auto;
+  }
+  .sidebar-open .topbar {
+    grid-template-columns: 1fr auto;
+  }
+  .topbar > .collapsed-sidebar-toggle {
+    display: grid;
+    margin-left: 2px;
+  }
+  .sidebar-open .topbar > .collapsed-sidebar-toggle {
+    display: none;
+  }
+  .topbar-view {
+    padding: 0 8px;
+  }
+  .sidebar,
+  .sidebar-collapsed .sidebar {
+    position: fixed;
+    inset: 58px auto 0 0;
+    z-index: 20;
+    display: flex;
+    width: 258px;
+    box-shadow: var(--shadow-panel);
+    transform: translateX(-105%);
+    transition: transform 0.22s ease;
+  }
+  .sidebar-open .sidebar {
+    transform: translateX(0);
+  }
+  .sidebar-open::after {
+    content: "";
+    position: fixed;
+    inset: 58px 0 0;
+    z-index: 15;
+    background: var(--scrim);
+  }
+  .workspace {
+    grid-column: 1;
+  }
+  .palette-trigger span {
+    display: none;
+  }
+  .palette-trigger {
+    width: 34px;
+    justify-content: center;
+    padding: 0;
+  }
+  .palette-trigger kbd {
+    display: none;
+  }
+}
+@media (max-width: 700px) {
+  .save-status {
+    min-width: 0;
+    font-size: 0;
+  }
+  .save-status svg {
+    width: 16px;
+    height: 16px;
+  }
+  .save-button kbd,
+  .save-button > span,
+  .backup-button > span,
+  .github-connect > span,
+  .github-account > span,
+  .top-actions > .icon-button.optional {
+    display: none;
+  }
+  .save-button,
+  .backup-button,
+  .github-connect {
+    width: 34px;
+    justify-content: center;
+    padding: 0;
+  }
+  .backup-button i {
+    display: none;
+  }
+  .view-switcher button span {
+    display: none;
+  }
+  .view-switcher button {
+    width: 32px;
+    justify-content: center;
+    padding: 0;
+  }
+  .editor-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .editor-shell:not(.preview-only) .preview-pane {
+    display: none;
+  }
+  .editor-shell:not(.preview-only) .editor-pane {
+    display: flex;
+  }
+  .editor-pane > textarea {
+    padding: 28px 22px 70px;
+    font-size: 14px;
+  }
+  .live-editor {
+    padding: 28px 25px 70px;
+  }
+  .prose {
+    padding: 36px 25px 80px;
+  }
+  .theme-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .settings-body {
+    grid-template-columns: minmax(0, 1fr);
+    max-height: min(76vh, 600px);
+  }
+  .settings-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .settings-nav button {
+    white-space: nowrap;
+  }
+  .settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .settings-row {
+    flex-wrap: wrap;
+  }
+  .restore-source {
+    grid-template-columns: 1fr 1fr;
+  }
+  .restore-source button {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+  .palette-backdrop {
+    padding: 12px;
+  }
+  .palette {
+    max-height: min(80vh, 560px);
+  }
+  .palette-footer {
+    display: none;
+  }
+  .backup-notice {
+    right: 12px;
+    left: 12px;
+    max-width: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

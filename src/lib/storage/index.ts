@@ -9,7 +9,6 @@ export type {
   Note,
   NoteMetadata,
   SaveNoteInput,
-  SearchState,
   VaultId,
   VaultOptions,
   VaultBackupChange,
