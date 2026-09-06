@@ -21,6 +21,7 @@
 		listGithubRepositories, type GithubBackupState, type GithubRepository, type GithubUser,
 		type ThemePreference, type Vault, type VaultStorageUsage
 	} from '$lib';
+	import { manageModalFocus } from '$lib/modal-focus';
 
 	interface Props {
 		vault?: Vault;
@@ -201,7 +202,7 @@
 </script>
 
 <div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget && clearState !== 'clearing') onClose(); }}>
-	<div class="shortcut-modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+	<div id="settings-dialog" class="shortcut-modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1" use:manageModalFocus>
 		<div class="modal-title">
 			<div><span>Preferences</span><h2 id="settings-title">Settings</h2></div>
 			<button class="icon-button" aria-label="Close settings" onclick={onClose}><X size={18} /></button>
@@ -210,7 +211,7 @@
 		<div class="settings-body">
 			<nav class="settings-nav" aria-label="Settings sections">
 				{#each sections as item (item.id)}
-					<button class:active={section === item.id} onclick={() => (section = item.id)}>{item.label}</button>
+					<button class:active={section === item.id} aria-current={section === item.id ? 'page' : undefined} onclick={() => (section = item.id)}>{item.label}</button>
 				{/each}
 			</nav>
 

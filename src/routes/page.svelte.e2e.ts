@@ -1,5 +1,92 @@
 import { expect, test } from "@playwright/test";
 
+test("traps modal focus and returns it to the opener", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  const settings = page.getByRole("button", { name: "Settings", exact: true });
+  await settings.click();
+  await expect(settings).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "Close settings" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Close settings" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(settings).toBeFocused();
+  await expect(settings).toHaveAttribute("aria-expanded", "false");
+
+  const palette = page.getByRole("button", { name: "Open the command palette" });
+  await palette.click();
+  await expect(page.getByRole("combobox", { name: "Search notes and commands" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(palette).toBeFocused();
+});
+
+test("persists edits made while an earlier save is still in flight", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await page.evaluate(() => {
+    const prototype = FileSystemFileHandle.prototype;
+    const createWritable = Reflect.get(
+      prototype,
+      "createWritable",
+    ) as FileSystemFileHandle["createWritable"];
+    const state = window as typeof window & {
+      onyxReleaseWrite?: () => void;
+      onyxWriteBlocked?: boolean;
+    };
+    prototype.createWritable = async function (...parameters) {
+      const writable = await createWritable.apply(this, parameters);
+      const write = writable.write.bind(writable);
+      Object.defineProperty(writable, "write", {
+        value: async (data: FileSystemWriteChunkType) => {
+          state.onyxWriteBlocked = true;
+          await new Promise<void>((resolve) => {
+            state.onyxReleaseWrite = resolve;
+          });
+          return write(data);
+        },
+      });
+      prototype.createWritable = createWritable;
+      return writable;
+    };
+  });
+
+  await editor.fill("# First edit");
+  await page.getByRole("button", { name: /Save/ }).first().click();
+  await page.waitForFunction(() =>
+    Boolean((window as typeof window & { onyxWriteBlocked?: boolean }).onyxWriteBlocked),
+  );
+  await editor.fill("# Latest concurrent edit");
+  await page.evaluate(() =>
+    (window as typeof window & { onyxReleaseWrite?: () => void }).onyxReleaseWrite?.(),
+  );
+
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const database = await new Promise<IDBDatabase>((resolve, reject) => {
+          const request = indexedDB.open("onyx-vault");
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        const transaction = database.transaction("noteContents", "readonly");
+        const records = await new Promise<Array<{ markdown: string }>>((resolve, reject) => {
+          const request = transaction.objectStore("noteContents").getAll();
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        database.close();
+        return records.some((record) => record.markdown === "# Latest concurrent edit");
+      }),
+    )
+    .toBe(true);
+  await page.reload();
+  await expect(editor).toHaveValue("# Latest concurrent edit");
+});
+
 test("keeps startup usable when localStorage and persistent storage are unavailable", async ({
   page,
 }) => {
@@ -194,7 +281,7 @@ test("binds a backup repository to the authenticated GitHub account", async ({ p
   await page.getByRole("button", { name: "Back up now" }).click();
 
   await expect(
-    page.getByRole("status").getByText(/belongs to @octocat.*re-select.*@hubot/i),
+    page.getByRole("alert").getByText(/belongs to @octocat.*re-select.*@hubot/i),
   ).toBeVisible();
   expect(repositoryChecks).toBe(1);
 });
@@ -258,7 +345,7 @@ test("refuses to upload a backup when its repository is public", async ({ page }
   await page.getByRole("button", { name: "Use this repository" }).click();
 
   await expect(
-    page.getByRole("status").getByText("Onyx refuses to back up to a public GitHub repository"),
+    page.getByRole("alert").getByText("Onyx refuses to back up to a public GitHub repository"),
   ).toBeVisible();
   expect(writeRequests).toBe(0);
 });

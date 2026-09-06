@@ -9,6 +9,7 @@
 	import CommandPalette, { type PaletteItem } from '$lib/components/command-palette.svelte';
 	import SettingsDialog, { type InlinePreviewBehavior, type SettingsSection } from '$lib/components/settings-dialog.svelte';
 	import { renderMarkdown, resolveLocalAttachmentUrl, type LocalAttachmentUrl } from '$lib/markdown';
+	import { manageModalFocus } from '$lib/modal-focus';
 	import {
 		applyTheme, backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
 		browserStorageWarnings, detectBrowserStorageSupport,
@@ -1107,15 +1108,15 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 <svelte:head><title>Onyx — Markdown notes</title><meta name="description" content="A fast, local-first Markdown editor with full-text search that works offline." /></svelte:head>
 
-<div class="app" class:sidebar-open={sidebarOpen} class:sidebar-collapsed={sidebarCollapsed}>
+<div class="app" class:sidebar-open={sidebarOpen} class:sidebar-collapsed={sidebarCollapsed} inert={paletteOpen || settingsOpen || restoreModalOpen || shortcutsOpen}>
 	<header class="topbar">
 		<button class="icon-button collapsed-sidebar-toggle" aria-label="Show notes sidebar" title="Show sidebar (⌘\\)" onclick={toggleSidebar}><PanelLeft size={19} /></button>
 		<div class="topbar-view">
 			<div class="view-switcher" aria-label="View mode">
-				<button class:active={viewMode === 'edit'} onclick={() => (viewMode = 'edit')} aria-label="Editor only" title="Editor only"><PencilLine size={16} /><span>Edit</span></button>
-				<button class:active={viewMode === 'live'} onclick={() => openInlinePreview()} aria-label="Inline preview" title="Inline preview"><Eye size={16} /><span>Inline</span></button>
-				<button class:active={viewMode === 'split'} onclick={() => (viewMode = 'split')} aria-label="Split view" title="Split view"><Columns2 size={16} /><span>Split</span></button>
-				<button class:active={viewMode === 'preview'} onclick={() => (viewMode = 'preview')} aria-label="Preview only" title="Preview only"><Eye size={16} /><span>Preview</span></button>
+				<button class:active={viewMode === 'edit'} aria-pressed={viewMode === 'edit'} onclick={() => (viewMode = 'edit')} aria-label="Editor only" title="Editor only"><PencilLine size={16} /><span>Edit</span></button>
+				<button class:active={viewMode === 'live'} aria-pressed={viewMode === 'live'} onclick={() => openInlinePreview()} aria-label="Inline preview" title="Inline preview"><Eye size={16} /><span>Inline</span></button>
+				<button class:active={viewMode === 'split'} aria-pressed={viewMode === 'split'} onclick={() => (viewMode = 'split')} aria-label="Split view" title="Split view"><Columns2 size={16} /><span>Split</span></button>
+				<button class:active={viewMode === 'preview'} aria-pressed={viewMode === 'preview'} onclick={() => (viewMode = 'preview')} aria-label="Preview only" title="Preview only"><Eye size={16} /><span>Preview</span></button>
 			</div>
 		</div>
 		<div class="top-actions">
@@ -1127,18 +1128,18 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 				</div>
 			{/if}
 			<button class="save-button" onclick={() => void saveDraft()} disabled={saveState === 'saving' || transferState === 'working'}><Save size={16} /><span>Save</span><kbd>⌘S</kbd></button>
-			<button class="palette-trigger" aria-label="Open the command palette" title="Command palette (⌘K)" onclick={() => void openPalette()}><Search size={15} /><span>Search or run…</span><kbd>⌘K</kbd></button>
+			<button class="palette-trigger" aria-label="Open the command palette" aria-haspopup="dialog" aria-expanded={paletteOpen} aria-controls="command-palette" title="Command palette (⌘K)" onclick={() => void openPalette()}><Search size={15} /><span>Search or run…</span><kbd>⌘K</kbd></button>
 			<button class="icon-button optional" aria-label={`Theme: ${themeLabel}. Change theme`} title={`Theme: ${themeLabel} (⌘⇧L)`} onclick={() => setTheme(nextThemePreference(theme))}>
 				{#if theme === 'system'}<Monitor size={18} />{:else if theme === 'dark'}<Moon size={18} />{:else}<Sun size={18} />{/if}
 			</button>
-			<button class="icon-button" aria-label="Settings" title="Settings" onclick={() => openSettings(githubState === 'connected' ? 'backup' : 'github')}><Settings size={18} /></button>
+			<button class="icon-button" aria-label="Settings" aria-haspopup="dialog" aria-expanded={settingsOpen} aria-controls="settings-dialog" title="Settings" onclick={() => openSettings(githubState === 'connected' ? 'backup' : 'github')}><Settings size={18} /></button>
 			{#if githubState === 'connected' && githubUser}
 				<button class="backup-button" class:success={backupState === 'success'} class:error={backupState === 'error'} onclick={() => void beginBackup()} disabled={!isOnline || !vault || backupState === 'backing-up'} title={!isOnline ? 'GitHub backup is unavailable offline' : githubBackup ? `Back up to ${githubBackup.owner}/${githubBackup.repository}` : 'Create a private repository and back up the vault'}>
 					{#if backupState === 'backing-up'}<LoaderCircle class="spin" size={15} />{:else}<CloudUpload size={16} />{/if}
 					<span>{backupState === 'backing-up' ? 'Backing up…' : 'Back up'}</span>
 					{#if pendingBackupCount > 0}<i>{pendingBackupCount}</i>{/if}
 				</button>
-				<button class="backup-button restore-button" onclick={() => void openRestore()} disabled={!isOnline || !vault || restoreState === 'restoring'} title={isOnline ? 'Restore a GitHub backup commit' : 'GitHub restore is unavailable offline'}>
+				<button class="backup-button restore-button" aria-haspopup="dialog" aria-expanded={restoreModalOpen} aria-controls="restore-dialog" onclick={() => void openRestore()} disabled={!isOnline || !vault || restoreState === 'restoring'} title={isOnline ? 'Restore a GitHub backup commit' : 'GitHub restore is unavailable offline'}>
 					{#if restoreState === 'restoring'}<LoaderCircle class="spin" size={15} />{:else}<CloudDownload size={16} />{/if}
 					<span>{restoreState === 'restoring' ? 'Restoring…' : 'Restore'}</span>
 				</button>
@@ -1148,7 +1149,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			{:else}
 				<a class="github-connect" class:error={githubState === 'error'} href="/auth/github/start" title={githubMessage || 'Connect GitHub for direct, private backups'} aria-label="Connect GitHub">{#if githubState === 'loading'}<LoaderCircle class="spin" size={15} />{:else}<CloudUpload size={16} />{/if}<span>{githubState === 'loading' ? 'Checking…' : 'Connect GitHub'}</span></a>
 			{/if}
-			<button class="icon-button optional" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onclick={() => (shortcutsOpen = true)}><HelpCircle size={18} /></button>
+			<button class="icon-button optional" aria-label="Keyboard shortcuts" aria-haspopup="dialog" aria-expanded={shortcutsOpen} aria-controls="shortcuts-dialog" title="Keyboard shortcuts (?)" onclick={() => (shortcutsOpen = true)}><HelpCircle size={18} /></button>
 		</div>
 	</header>
 
@@ -1231,7 +1232,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 </div>
 
 {#if backupMessage}
-	<div class="backup-notice" class:error={backupState === 'error'} role="status">
+	<div class="backup-notice" class:error={backupState === 'error'} role={backupState === 'error' ? 'alert' : 'status'}>
 		<span>{backupMessage}</span>
 		{#if backupCommitUrl}<a href={backupCommitUrl} target="_blank" rel="noreferrer">View commit <ExternalLink size={13} /></a>{/if}
 		<button aria-label="Dismiss backup status" onclick={() => (backupMessage = '')}><X size={14} /></button>
@@ -1239,7 +1240,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 {/if}
 
 {#if transferMessage}
-	<div class="backup-notice transfer-notice" class:error={transferState === 'error'} role="status">
+	<div class="backup-notice transfer-notice" class:error={transferState === 'error'} role={transferState === 'error' ? 'alert' : 'status'}>
 		{#if transferState === 'working'}<LoaderCircle class="spin" size={14} />{/if}
 		<span>{transferMessage}</span>
 		<button aria-label="Dismiss import or export status" onclick={() => (transferMessage = '')}><X size={14} /></button>
@@ -1288,7 +1289,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 {#if restoreModalOpen}
 	<div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget && restoreState !== 'restoring') restoreModalOpen = false; }}>
-		<div class="shortcut-modal restore-modal" role="dialog" aria-modal="true" aria-labelledby="restore-title">
+		<div id="restore-dialog" class="shortcut-modal restore-modal" role="dialog" aria-modal="true" aria-labelledby="restore-title" aria-describedby="restore-warning" aria-busy={restoreState === 'loading' || restoreState === 'restoring'} tabindex="-1" use:manageModalFocus>
 			<div class="modal-title"><div><span>GitHub restore</span><h2 id="restore-title">Choose a backup commit</h2></div><button type="button" class="icon-button" aria-label="Close GitHub restore" disabled={restoreState === 'restoring'} onclick={() => (restoreModalOpen = false)}><X size={18} /></button></div>
 			<form class="restore-source" onsubmit={(event) => { event.preventDefault(); void loadRestoreCommits(); }}>
 				<label>Owner<input bind:value={restoreOwner} required autocomplete="off" /></label>
@@ -1311,7 +1312,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 					{#if restoreMessage}<div class="restore-placeholder" class:error={restoreState === 'error'}>{restoreMessage}</div>{/if}
 				{/if}
 			</div>
-			<div class="restore-warning"><strong>This replaces the local vault.</strong> Notes and attachments currently on this device will be removed and replaced by the selected commit.</div>
+			<div id="restore-warning" class="restore-warning"><strong>This replaces the local vault.</strong> Notes and attachments currently on this device will be removed and replaced by the selected commit.</div>
 			<div class="modal-actions"><button type="button" disabled={restoreState === 'restoring'} onclick={() => (restoreModalOpen = false)}>Cancel</button><button class="primary danger" type="button" disabled={!isOnline || !selectedRestoreSha || restoreState === 'restoring'} onclick={() => void restoreSelectedCommit()}>{#if restoreState === 'restoring'}<LoaderCircle class="spin" size={15} />{:else}<CloudDownload size={15} />{/if} {restoreState === 'restoring' ? 'Restoring…' : 'Restore selected'}</button></div>
 		</div>
 	</div>
@@ -1319,7 +1320,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 {#if shortcutsOpen}
 	<div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) shortcutsOpen = false; }}>
-		<div class="shortcut-modal" role="dialog" aria-modal="true" aria-labelledby="shortcut-title">
+		<div id="shortcuts-dialog" class="shortcut-modal" role="dialog" aria-modal="true" aria-labelledby="shortcut-title" tabindex="-1" use:manageModalFocus>
 			<div class="modal-title"><div><span>Reference</span><h2 id="shortcut-title">Keyboard shortcuts</h2></div><button class="icon-button" aria-label="Close shortcuts" onclick={() => (shortcutsOpen = false)}><X size={18} /></button></div>
 			<div class="shortcut-list">
 				<div><span>Command palette</span><kbd>⌘ K</kbd></div>

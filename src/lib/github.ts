@@ -131,15 +131,23 @@ export async function restoreGithubSession(): Promise<GithubUser | undefined> {
     return undefined;
   }
   if (!response.ok) throw new Error("GitHub authentication could not be restored");
-  accessToken = ((await response.json()) as SessionResponse).accessToken;
-  const user = await githubRequest<GithubUserResponse>("/user");
-  authenticatedUser = {
-    avatarUrl: user.avatar_url,
-    id: user.id,
-    login: user.login,
-    name: user.name,
-  };
-  return authenticatedUser;
+  const session = (await response.json()) as Partial<SessionResponse>;
+  if (!session.accessToken) throw new Error("GitHub authentication could not be restored");
+  accessToken = session.accessToken;
+  try {
+    const user = await githubRequest<GithubUserResponse>("/user");
+    authenticatedUser = {
+      avatarUrl: user.avatar_url,
+      id: user.id,
+      login: user.login,
+      name: user.name,
+    };
+    return authenticatedUser;
+  } catch (error) {
+    accessToken = undefined;
+    authenticatedUser = undefined;
+    throw error;
+  }
 }
 
 export async function disconnectGithub(): Promise<void> {
