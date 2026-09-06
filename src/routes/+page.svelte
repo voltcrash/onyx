@@ -23,6 +23,8 @@
 
 	type ViewMode = 'edit' | 'live' | 'split' | 'preview';
 	type SaveState = 'loading' | 'saved' | 'saving' | 'unsaved' | 'error';
+	const NOTE_PAGE_SIZE = 100;
+	const PREVIEW_DELAY_MS = 120;
 	const INITIAL_MARKDOWN = `# Welcome to Onyx
 
 Onyx is a quiet place to think in Markdown. Your work stays on this device and saves automatically as you write.
@@ -44,8 +46,10 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	let vault = $state<Vault>();
 	let activeNoteId = $state('');
 	let markdown = $state(INITIAL_MARKDOWN);
+	let previewMarkdown = $state(INITIAL_MARKDOWN);
 	let lastSavedMarkdown = $state(INITIAL_MARKDOWN);
 	let results = $state<VaultSearchResult[]>([]);
+	let notePage = $state(0);
 	let searchQuery = $state('');
 	let viewMode = $state<ViewMode>('split');
 	let saveState = $state<SaveState>('loading');
@@ -53,6 +57,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	let saveRun: Promise<boolean> | undefined;
 	let saveRequested = false;
 	let searchTimer: number | undefined = $state();
+	let previewTimer: number | undefined = $state();
 	let searchSequence = 0;
 	let editor: HTMLTextAreaElement | undefined = $state();
 	let liveEditor: HTMLTextAreaElement | undefined = $state();
@@ -96,11 +101,22 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	let activeNoteSourcePath: string | undefined = $state();
 	let localAttachmentUrls = $state<LocalAttachmentUrl[]>([]);
 	let noteLoadSequence = 0;
+	const liveRenderCache = new Map<string, string>();
 
 	const wordCount = $derived(markdown.trim() ? markdown.trim().split(/\s+/).length : 0);
 	const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
-	const renderedMarkdown = $derived(renderMarkdown(markdown, resolveAttachmentUrl));
+	const renderedMarkdown = $derived(renderMarkdown(previewMarkdown, resolveAttachmentUrl));
 	const markdownLines = $derived(markdown.split('\n'));
+	const liveCodeLines = $derived.by(() => {
+		let inCode = false;
+		return markdownLines.map((line) => {
+			const codeLine = inCode || line.startsWith('```');
+			if (line.startsWith('```')) inCode = !inCode;
+			return codeLine;
+		});
+	});
+	const notePageCount = $derived(Math.max(1, Math.ceil(results.length / NOTE_PAGE_SIZE)));
+	const visibleResults = $derived(results.slice(notePage * NOTE_PAGE_SIZE, (notePage + 1) * NOTE_PAGE_SIZE));
 	const hasContent = $derived(markdown.trim().length > 0);
 	const themeLabel = $derived(theme === 'system' ? 'Match system' : theme === 'dark' ? 'Dark' : 'Light');
 	const paletteItems = $derived<PaletteItem[]>([
@@ -176,6 +192,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			stopThemeWatch();
 			if (saveTimer) window.clearTimeout(saveTimer);
 			if (searchTimer) window.clearTimeout(searchTimer);
+			if (previewTimer) window.clearTimeout(previewTimer);
 			releaseLocalAttachmentUrls();
 			vault?.close();
 		};
@@ -468,9 +485,11 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		}
 		releaseLocalAttachmentUrls();
 		localAttachmentUrls = nextUrls;
+		liveRenderCache.clear();
 		activeNoteSourcePath = note.sourcePath;
 		activeNoteId = note.id;
 		markdown = note.markdown;
+		updatePreviewImmediately(note.markdown);
 		lastSavedMarkdown = note.markdown;
 		saveState = 'saved';
 		storageError = '';
@@ -668,7 +687,22 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 	function updateMarkdown(value: string): void {
 		markdown = value;
+		queuePreview(value);
 		queueSave();
+	}
+
+	function queuePreview(value: string): void {
+		if (previewTimer) window.clearTimeout(previewTimer);
+		previewTimer = window.setTimeout(() => {
+			previewTimer = undefined;
+			previewMarkdown = value;
+		}, PREVIEW_DELAY_MS);
+	}
+
+	function updatePreviewImmediately(value: string): void {
+		if (previewTimer) window.clearTimeout(previewTimer);
+		previewTimer = undefined;
+		previewMarkdown = value;
 	}
 
 	function openInlinePreview(line = liveLine): void {
@@ -836,6 +870,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 	function queueSearch(value: string): void {
 		searchQuery = value;
+		notePage = 0;
 		if (searchTimer) window.clearTimeout(searchTimer);
 		searchTimer = window.setTimeout(() => void runSearch(value), 120);
 	}
@@ -844,7 +879,15 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		if (!vault) return;
 		const sequence = ++searchSequence;
 		const nextResults = await vault.search(query);
-		if (sequence === searchSequence) results = nextResults;
+		if (sequence === searchSequence) {
+			results = nextResults;
+			notePage = 0;
+		}
+	}
+
+	function changeNotePage(page: number): void {
+		notePage = Math.min(Math.max(page, 0), notePageCount - 1);
+		noteList?.scrollTo({ top: 0 });
 	}
 
 	function insertSyntax(before: string, after = before, placeholder = 'text'): void {
@@ -856,8 +899,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			const start = lineOffset + selection.start;
 			const end = lineOffset + selection.end;
 			const selected = markdown.slice(start, end) || placeholder;
-			markdown = `${markdown.slice(0, start)}${before}${selected}${after}${markdown.slice(end)}`;
-			queueSave();
+			updateMarkdown(`${markdown.slice(0, start)}${before}${selected}${after}${markdown.slice(end)}`);
 			requestAnimationFrame(() => {
 				focusRenderedLine(liveLine, selection.start + before.length);
 				const element = liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${liveLine}"]`);
@@ -874,8 +916,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		const start = lineOffset + relativeStart;
 		const end = lineOffset + target.selectionEnd;
 		const selection = markdown.slice(start, end) || placeholder;
-		markdown = `${markdown.slice(0, start)}${before}${selection}${after}${markdown.slice(end)}`;
-		queueSave();
+		updateMarkdown(`${markdown.slice(0, start)}${before}${selection}${after}${markdown.slice(end)}`);
 		requestAnimationFrame(() => {
 			target.focus();
 			const selectionStart = relativeStart + before.length;
@@ -889,8 +930,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			const selection = target && getSourceSelection(target);
 			if (!target || !selection) return;
 			const lineOffset = markdownLines.slice(0, liveLine).reduce((total, line) => total + line.length + 1, 0);
-			markdown = `${markdown.slice(0, lineOffset)}${prefix}${markdown.slice(lineOffset)}`;
-			queueSave();
+			updateMarkdown(`${markdown.slice(0, lineOffset)}${prefix}${markdown.slice(lineOffset)}`);
 			requestAnimationFrame(() => focusRenderedLine(liveLine, selection.start + prefix.length));
 			return;
 		}
@@ -902,8 +942,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			: 0;
 		const cursor = lineOffset + relativeCursor;
 		const start = markdown.lastIndexOf('\n', cursor - 1) + 1;
-		markdown = `${markdown.slice(0, start)}${prefix}${markdown.slice(start)}`;
-		queueSave();
+		updateMarkdown(`${markdown.slice(0, start)}${prefix}${markdown.slice(start)}`);
 		requestAnimationFrame(() => {
 			target.focus();
 			const nextCursor = relativeCursor + prefix.length;
@@ -1014,20 +1053,20 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	}
 
 	function renderLiveLine(line: string, index: number): string {
-		let inCode = false;
-		for (let current = 0; current < index; current += 1) {
-			if (markdownLines[current].startsWith('```')) inCode = !inCode;
-		}
-		if (inCode && !line.startsWith('```')) return `<pre><code>${escapeHtml(line) || ' '}</code></pre>`;
-		return renderMarkdown(line, resolveAttachmentUrl);
+		const inCode = liveCodeLines[index] && !line.startsWith('```');
+		const cacheKey = `${inCode ? 'code' : 'markdown'}\0${line}`;
+		const cached = liveRenderCache.get(cacheKey);
+		if (cached !== undefined) return cached;
+		const rendered = inCode
+			? `<pre><code>${escapeHtml(line) || ' '}</code></pre>`
+			: renderMarkdown(line, resolveAttachmentUrl);
+		if (liveRenderCache.size >= 1_000) liveRenderCache.delete(liveRenderCache.keys().next().value ?? '');
+		liveRenderCache.set(cacheKey, rendered);
+		return rendered;
 	}
 
 	function liveLineKind(line: string, index: number): string {
-		let inCode = false;
-		for (let current = 0; current < index; current += 1) {
-			if (markdownLines[current].startsWith('```')) inCode = !inCode;
-		}
-		if (inCode || line.startsWith('```')) return 'code-line';
+		if (liveCodeLines[index]) return 'code-line';
 		const heading = line.match(/^(#{1,3})\s+/);
 		if (heading) return `heading-${heading[1].length}`;
 		if (/^>\s+/.test(line)) return 'quote-line';
@@ -1118,7 +1157,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		<label class="search-box"><Search size={15} /><input bind:this={searchInput} type="search" placeholder="Search all notes" value={searchQuery} oninput={(event) => queueSearch(event.currentTarget.value)} /><kbd>⌘⇧F</kbd></label>
 		<div class="result-count" aria-live="polite">{searchQuery ? `${results.length} ${results.length === 1 ? 'result' : 'results'}` : `${results.length} ${results.length === 1 ? 'note' : 'notes'}`}</div>
 		<nav class="note-list" bind:this={noteList}>
-			{#each results as result (result.note.id)}
+			{#each visibleResults as result (result.note.id)}
 				<button class="file" class:active={result.note.id === activeNoteId} aria-current={result.note.id === activeNoteId ? 'true' : undefined} disabled={transferState === 'working'} onkeydown={moveNoteFocus} onclick={() => void selectNote(result.note.id)}>
 					<FileText size={16} /><span><strong>{result.note.title}</strong>{#if searchQuery}<small>{result.excerpt || 'Title match'}</small>{/if}</span>{#if result.note.id === activeNoteId}<i></i>{/if}
 				</button>
@@ -1132,6 +1171,13 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 				{/if}
 			{/each}
 		</nav>
+		{#if notePageCount > 1}
+			<div class="note-pagination" aria-label="Note list pages">
+				<button disabled={notePage === 0} onclick={() => changeNotePage(notePage - 1)}>Previous</button>
+				<span>Page {notePage + 1} of {notePageCount}</span>
+				<button disabled={notePage === notePageCount - 1} onclick={() => changeNotePage(notePage + 1)}>Next</button>
+			</div>
+		{/if}
 	</aside>
 
 	<main class="workspace">

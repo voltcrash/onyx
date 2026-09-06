@@ -7,6 +7,10 @@ import type {
 
 const API_ROOT = "https://api.github.com";
 const API_VERSION = "2026-03-10";
+const MAX_REQUEST_ATTEMPTS = 4;
+const MAX_RETRY_DELAY_MS = 30_000;
+const GITHUB_FILE_CONCURRENCY = 4;
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 let accessToken: string | undefined;
 let authenticatedUser: GithubUser | undefined;
@@ -109,6 +113,7 @@ export class GithubRequestError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly retryAt?: Date,
   ) {
     super(message);
     this.name = "GithubRequestError";
@@ -232,19 +237,17 @@ export async function backupVaultToGithub(
   const prefix = backupState.directory.replace(/^\/+|\/+$/g, "");
   const manifestPath = prefix ? `${prefix}/.onyx.json` : ".onyx.json";
   const pendingTree = (
-    await Promise.all(
-      snapshot.changes.map(async (change) => {
-        const path = prefix ? `${prefix}/${change.path}` : change.path;
-        if (!change.contents) {
-          return remoteBlobs.has(path)
-            ? { path, mode: "100644" as const, type: "blob" as const, sha: null }
-            : undefined;
-        }
-        const blob = await createGithubBlob(repositoryPath, change.contents);
-        if (remoteBlobs.get(path) === blob.sha) return undefined;
-        return { path, mode: "100644" as const, type: "blob" as const, sha: blob.sha };
-      }),
-    )
+    await mapWithConcurrency(snapshot.changes, GITHUB_FILE_CONCURRENCY, async (change) => {
+      const path = prefix ? `${prefix}/${change.path}` : change.path;
+      if (!change.contents) {
+        return remoteBlobs.has(path)
+          ? { path, mode: "100644" as const, type: "blob" as const, sha: null }
+          : undefined;
+      }
+      const blob = await createGithubBlob(repositoryPath, change.contents);
+      if (remoteBlobs.get(path) === blob.sha) return undefined;
+      return { path, mode: "100644" as const, type: "blob" as const, sha: blob.sha };
+    })
   ).filter((entry) => entry !== undefined);
   const manifest = new Blob([JSON.stringify(await vault.createBackupManifest())], {
     type: "application/json",
@@ -351,13 +354,13 @@ export async function restoreVaultFromGithub(
       : await getGithubTree(repositoryPath, currentCommit.tree.sha);
   const selectedBlobs = vaultBlobs(selectedTree, backupState.directory);
   const currentBlobs = vaultBlobs(currentTree, backupState.directory);
-  const files = await Promise.all(
-    [...selectedBlobs.entries()]
-      .filter(([path]) => isVaultFile(path))
-      .map(async ([path, sha]): Promise<VaultRestoreFile> => ({
-        path,
-        contents: await downloadGithubBlob(repositoryPath, sha),
-      })),
+  const files = await mapWithConcurrency(
+    [...selectedBlobs.entries()].filter(([path]) => isVaultFile(path)),
+    GITHUB_FILE_CONCURRENCY,
+    async ([path, sha]): Promise<VaultRestoreFile> => ({
+      path,
+      contents: await downloadGithubBlob(repositoryPath, sha),
+    }),
   );
   if (!files.some((file) => file.path.startsWith("notes/"))) {
     throw new Error("The selected commit does not contain an Onyx vault in that directory");
@@ -396,17 +399,92 @@ export async function githubRequest<T>(path: `/${string}`, init: RequestInit = {
   headers.set("Authorization", `Bearer ${accessToken}`);
   if (init.body) headers.set("Content-Type", "application/json");
   headers.set("X-GitHub-Api-Version", API_VERSION);
-  const response = await fetch(`${API_ROOT}${path}`, { ...init, headers });
-  if (!response.ok) {
+  for (let attempt = 0; attempt < MAX_REQUEST_ATTEMPTS; attempt += 1) {
+    let response: Response;
+    try {
+      response = await fetch(`${API_ROOT}${path}`, { ...init, headers });
+    } catch (error) {
+      if (attempt === MAX_REQUEST_ATTEMPTS - 1 || !isIdempotentRequest(init.method)) throw error;
+      await retryDelay(exponentialDelay(attempt));
+      continue;
+    }
+    if (response.ok) return (await response.json()) as T;
+
     const result = (await response.json().catch(() => undefined)) as
       | { message?: string }
       | undefined;
-    throw new GithubRequestError(
-      response.status,
-      result?.message || `GitHub request failed (${response.status})`,
-    );
+    const retryAt = githubRetryAt(response);
+    const rateLimited = isRateLimited(response, result?.message);
+    const delay = retryAt ? Math.max(0, retryAt.getTime() - Date.now()) : exponentialDelay(attempt);
+    if (
+      attempt < MAX_REQUEST_ATTEMPTS - 1 &&
+      (rateLimited || RETRYABLE_STATUSES.has(response.status)) &&
+      delay <= MAX_RETRY_DELAY_MS
+    ) {
+      await retryDelay(delay);
+      continue;
+    }
+    const message = rateLimited
+      ? retryAt
+        ? `GitHub's rate limit is exhausted. Try again after ${retryAt.toLocaleTimeString()}.`
+        : "GitHub is temporarily rate limiting requests. Try again shortly."
+      : result?.message || `GitHub request failed (${response.status})`;
+    throw new GithubRequestError(response.status, message, retryAt);
   }
-  return (await response.json()) as T;
+  throw new Error("GitHub request failed after multiple attempts");
+}
+
+function isIdempotentRequest(method = "GET"): boolean {
+  return ["GET", "HEAD", "OPTIONS", "PUT", "DELETE"].includes(method.toUpperCase());
+}
+
+function isRateLimited(response: Response, message?: string): boolean {
+  return (
+    response.status === 429 ||
+    (response.status === 403 &&
+      (response.headers.get("X-RateLimit-Remaining") === "0" ||
+        /rate limit|secondary rate/i.test(message ?? "")))
+  );
+}
+
+function githubRetryAt(response: Response): Date | undefined {
+  const retryAfter = response.headers.get("Retry-After");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    const timestamp = Number.isFinite(seconds)
+      ? Date.now() + seconds * 1_000
+      : Date.parse(retryAfter);
+    if (Number.isFinite(timestamp)) return new Date(timestamp);
+  }
+  const reset = Number(response.headers.get("X-RateLimit-Reset"));
+  return Number.isFinite(reset) && reset > 0 ? new Date(reset * 1_000) : undefined;
+}
+
+function exponentialDelay(attempt: number): number {
+  const base = Math.min(1_000 * 2 ** attempt, 8_000);
+  return base + Math.floor(Math.random() * Math.max(1, base / 4));
+}
+
+function retryDelay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  map: (value: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = Array.from<R>({ length: values.length });
+  let nextIndex = 0;
+  async function worker(): Promise<void> {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await map(values[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, () => worker()));
+  return results;
 }
 
 function blobToBase64(blob: Blob): Promise<string> {
