@@ -700,35 +700,6 @@ label:focus-visible,
   border-color: var(--line-hover);
   color: var(--ink);
 }
-.local-note {
-  display: flex;
-  gap: 10px;
-  margin: 12px 3px 0;
-  padding: 13px 10px;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-}
-.local-icon {
-  flex: 0 0 auto;
-  width: 23px;
-  height: 23px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--ok-icon-bg);
-  color: var(--ok-icon);
-}
-.local-note strong {
-  display: block;
-  color: var(--ink-soft);
-  font-size: 12px;
-  font-weight: 600;
-}
-.local-note p {
-  margin: 4px 0 0;
-  font-size: 11px;
-  line-height: 1.45;
-}
 .workspace {
   grid-row: 2;
   min-width: 0;

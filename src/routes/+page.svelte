@@ -1,6 +1,6 @@
 <script lang="ts">
 	import {
-		Bold, Check, CloudDownload, CloudOff, Code2, Columns2, Eye, FileArchive, FilePlus2,
+		Bold, CloudDownload, CloudOff, Code2, Columns2, Eye, FileArchive, FilePlus2,
 		FileText, FolderInput, FolderOutput, Heading2, CloudUpload, Download, ExternalLink,
 		GitCommitHorizontal, HardDrive, HelpCircle, Italic, Keyboard, Link, List, LoaderCircle, LogOut,
 		Monitor, Moon, PanelLeft, PanelLeftClose, PencilLine, Plus, Quote, RotateCcw, Save, Search,
@@ -1090,7 +1090,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 				{/if}
 			{/each}
 		</nav>
-		<div class="local-note"><span class="local-icon"><Check size={14} /></span><div><strong>Private and offline-ready</strong><p>Notes stay on this device and keep working offline. GitHub backup needs a connection.</p></div></div>
 	</aside>
 
 	<main class="workspace">
