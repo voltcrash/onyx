@@ -8,6 +8,7 @@
 	} from '@lucide/svelte';
 	import CommandPalette, { type PaletteItem } from '$lib/components/command-palette.svelte';
 	import SettingsDialog, { type InlinePreviewBehavior, type SettingsSection } from '$lib/components/settings-dialog.svelte';
+	import { renderMarkdown } from '$lib/markdown';
 	import {
 		applyTheme, backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
 		createMarkdownExport, createMarkdownZip, importMarkdownFiles, listGithubBackupCommits, nextThemePreference,
@@ -926,43 +927,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		return title.slice(0, 80) || 'Untitled';
 	}
 
-	function renderMarkdown(source: string): string {
-		const lines = escapeHtml(source).split('\n');
-		const output: string[] = [];
-		let inCode = false;
-		let inList = false;
-		for (const line of lines) {
-			if (line.startsWith('```')) {
-				if (inList) { output.push('</ul>'); inList = false; }
-				output.push(inCode ? '</code></pre>' : '<pre><code>');
-				inCode = !inCode;
-				continue;
-			}
-			if (inCode) { output.push(`${line}\n`); continue; }
-			const heading = line.match(/^(#{1,3})\s+(.*)$/);
-			if (heading) {
-				if (inList) { output.push('</ul>'); inList = false; }
-				const level = heading[1].length;
-				output.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
-				continue;
-			}
-			const item = line.match(/^[-*]\s+(.*)$/);
-			if (item) {
-				if (!inList) { output.push('<ul>'); inList = true; }
-				const task = item[1].match(/^\[([ xX])\]\s+(.*)$/);
-				output.push(task ? `<li class="task"><span class="check ${task[1] !== ' ' ? 'done' : ''}">${task[1] !== ' ' ? '✓' : ''}</span>${inlineMarkdown(task[2])}</li>` : `<li>${inlineMarkdown(item[1])}</li>`);
-				continue;
-			}
-			if (inList) { output.push('</ul>'); inList = false; }
-			if (line.startsWith('&gt; ')) output.push(`<blockquote>${inlineMarkdown(line.slice(5))}</blockquote>`);
-			else if (line.trim()) output.push(`<p>${inlineMarkdown(line)}</p>`);
-			else output.push('<div class="spacer"></div>');
-		}
-		if (inList) output.push('</ul>');
-		if (inCode) output.push('</code></pre>');
-		return output.join('');
-	}
-
 	function renderLiveLine(line: string, index: number): string {
 		let inCode = false;
 		for (let current = 0; current < index; current += 1) {
@@ -1009,10 +973,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			.replace(/\*\*([^*]+)\*\*/g, '<span class="md-syntax">**</span><strong>$1</strong><span class="md-syntax">**</span>')
 			.replace(/_([^_]+)_/g, '<span class="md-syntax">_</span><em>$1</em><span class="md-syntax">_</span>')
 			.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, '<span class="md-syntax">[</span><a>$1</a><span class="md-syntax">]($2)</span>');
-	}
-
-	function inlineMarkdown(value: string): string {
-		return value.replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/_([^_]+)_/g, '<em>$1</em>').replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
 	}
 
 	function escapeHtml(value: string): string {

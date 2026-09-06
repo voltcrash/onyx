@@ -1102,7 +1102,10 @@ label:focus-visible,
 }
 .prose h1,
 .prose h2,
-.prose h3 {
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
   color: var(--ink-strong);
   line-height: 1.2;
   letter-spacing: -0.035em;
@@ -1122,6 +1125,13 @@ label:focus-visible,
   font-size: 19px;
   font-weight: 600;
 }
+.prose h4,
+.prose h5,
+.prose h6 {
+  margin: 26px 0 9px;
+  font-size: 17px;
+  font-weight: 700;
+}
 .prose p {
   margin: 0 0 17px;
 }
@@ -1139,7 +1149,8 @@ label:focus-visible,
   font-size: 19px;
   font-style: italic;
 }
-.prose ul {
+.prose ul,
+.prose ol {
   margin: 12px 0 22px;
   padding-left: 24px;
 }
@@ -1147,30 +1158,16 @@ label:focus-visible,
   margin: 7px 0;
   padding-left: 3px;
 }
-.prose li.task {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
+.prose li.task-list-item {
   list-style: none;
   margin-left: -22px;
 }
-.prose .check {
-  flex: 0 0 auto;
+.prose .task-list-item input {
   width: 16px;
   height: 16px;
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid var(--line-hover);
-  border-radius: 4px;
-  color: #fff;
-  font:
-    10px/1 Inter,
-    sans-serif;
-  transform: translateY(-1px);
-}
-.prose .check.done {
-  border-color: var(--accent);
-  background: var(--accent);
+  margin: 0 9px 0 0;
+  accent-color: var(--accent);
+  transform: translateY(2px);
 }
 .prose code {
   padding: 2px 5px;
@@ -1197,6 +1194,30 @@ label:focus-visible,
   color: var(--accent-link);
   text-decoration-color: var(--accent-underline);
   text-underline-offset: 3px;
+}
+.prose table {
+  width: 100%;
+  margin: 24px 0;
+  border-collapse: collapse;
+  font-family: Inter, sans-serif;
+  font-size: 0.88em;
+}
+.prose th,
+.prose td {
+  padding: 8px 11px;
+  border: 1px solid var(--line-hover);
+}
+.prose th {
+  color: var(--ink-strong);
+  background: var(--subtle);
+  font-weight: 650;
+}
+.prose img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 24px auto;
+  border-radius: 8px;
 }
 .unsaved-bar {
   position: fixed;
