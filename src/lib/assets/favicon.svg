@@ -18,6 +18,8 @@
     </filter>
   </defs>
 
+  <rect id="plate" width="512" height="512" fill="#ffffff"/>
+
   <g clip-path="url(#ring)">
     <rect width="512" height="512" fill="#0a0a0c"/>
     <g transform="rotate(-24 256.0 256.0)">
