@@ -90,7 +90,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	let noteList: HTMLElement | undefined = $state();
 
 	const wordCount = $derived(markdown.trim() ? markdown.trim().split(/\s+/).length : 0);
-	const characterCount = $derived(markdown.length);
 	const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
 	const renderedMarkdown = $derived(renderMarkdown(markdown));
 	const markdownLines = $derived(markdown.split('\n'));
@@ -1096,7 +1095,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 				<button class:active={viewMode === 'split'} onclick={() => (viewMode = 'split')} aria-label="Split view" title="Split view"><Columns2 size={16} /><span>Split</span></button>
 				<button class:active={viewMode === 'preview'} onclick={() => (viewMode = 'preview')} aria-label="Preview only" title="Preview only"><Eye size={16} /><span>Preview</span></button>
 			</div>
-			<div class="document-stats"><span>{wordCount} words</span><span>{readingMinutes} min read</span></div>
 		</div>
 
 		{#if storageError}
@@ -1128,7 +1126,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 				{:else}
 					<textarea bind:this={editor} value={markdown} oninput={(event) => updateMarkdown(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading'}></textarea>
 				{/if}
-				<div class="editor-footer"><span>{viewMode === 'live' ? 'Inline preview' : 'Markdown'}</span><span>{characterCount.toLocaleString()} characters</span></div>
+				<div class="editor-footer"><span>{viewMode === 'live' ? 'Inline preview' : 'Markdown'}</span><span>{wordCount} words&nbsp;&nbsp;&nbsp;{readingMinutes} min read</span></div>
 			</div>
 			<div class="preview-pane">
 				<div class="preview-label"><Eye size={14} /> Preview</div>

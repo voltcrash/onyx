@@ -772,13 +772,6 @@ label:focus-visible,
   flex: 0 0 auto;
   color: var(--accent);
 }
-.document-stats {
-  display: flex;
-  justify-content: flex-end;
-  gap: 17px;
-  color: var(--faint);
-  font-size: 11px;
-}
 .view-switcher {
   display: flex;
   gap: 2px;
@@ -2388,9 +2381,6 @@ kbd {
   .document-bar {
     grid-template-columns: 1fr auto;
     padding: 0 12px;
-  }
-  .document-stats {
-    display: none;
   }
   .view-switcher button span {
     display: none;
