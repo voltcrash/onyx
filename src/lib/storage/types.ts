@@ -24,6 +24,19 @@ export interface SaveNoteInput {
   sourcePath?: string;
 }
 
+export interface ImportAttachmentInput {
+  contents: Blob;
+  name: string;
+  sourcePath: string;
+}
+
+export interface ImportNoteInput {
+  attachments: ImportAttachmentInput[];
+  markdown: string;
+  sourcePath: string;
+  title: string;
+}
+
 export interface AttachmentMetadata {
   id: VaultId;
   noteId: VaultId;

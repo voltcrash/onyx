@@ -51,30 +51,26 @@ export async function importMarkdownFiles(
   const markdown = await Promise.all(
     notes.map(async (file) => ({ file, text: await file.contents.text() })),
   );
-  const noteIds = new Map<string, string>();
+  const attachmentsByNote = new Map<string, MarkdownTransferFile[]>();
+  for (const attachment of attachments) {
+    const ownerPath = findAttachmentOwner(attachment.path, markdown).file.path;
+    const owned = attachmentsByNote.get(ownerPath) ?? [];
+    owned.push(attachment);
+    attachmentsByNote.set(ownerPath, owned);
+  }
 
-  for (const note of markdown) {
-    const saved = await vault.saveNote({
+  return vault.importNotes(
+    markdown.map((note) => ({
+      attachments: (attachmentsByNote.get(note.file.path) ?? []).map((attachment) => ({
+        contents: attachment.contents,
+        name: basename(attachment.path),
+        sourcePath: attachment.path,
+      })),
       markdown: note.text,
       sourcePath: note.file.path,
       title: titleFromMarkdown(note.text, note.file.path),
-    });
-    noteIds.set(note.file.path, saved.id);
-  }
-
-  for (const attachment of attachments) {
-    const owner = findAttachmentOwner(attachment.path, markdown);
-    const noteId = noteIds.get(owner.file.path);
-    if (!noteId) continue;
-    await vault.saveAttachment(
-      noteId,
-      attachment.contents,
-      basename(attachment.path),
-      attachment.path,
-    );
-  }
-
-  return { attachmentCount: attachments.length, noteCount: notes.length };
+    })),
+  );
 }
 
 export async function createMarkdownExport(vault: Vault): Promise<MarkdownTransferFile[]> {
@@ -116,6 +112,19 @@ export async function writeMarkdownFolder(
   root: FileSystemDirectoryHandle,
   files: MarkdownTransferFile[],
 ): Promise<void> {
+  const conflicts = (
+    await Promise.all(
+      files.map(async (file) => ((await exportPathExists(root, file.path)) ? file.path : "")),
+    )
+  ).filter(Boolean);
+  if (conflicts.length > 0) {
+    const shown = conflicts.slice(0, 3).join(", ");
+    const remaining = conflicts.length > 3 ? ` and ${conflicts.length - 3} more` : "";
+    throw new Error(
+      `Export stopped because existing files would be overwritten: ${shown}${remaining}. Choose an empty folder.`,
+    );
+  }
+
   for (const file of files) {
     const parts = file.path.split("/");
     const name = parts.pop();
@@ -125,9 +134,50 @@ export async function writeMarkdownFolder(
       directory = await directory.getDirectoryHandle(part, { create: true });
     const handle = await directory.getFileHandle(name, { create: true });
     const writable = await handle.createWritable();
-    await writable.write(file.contents);
-    await writable.close();
+    try {
+      await writable.write(file.contents);
+      await writable.close();
+    } catch (error) {
+      await writable.abort().catch(() => undefined);
+      throw error;
+    }
   }
+}
+
+async function exportPathExists(root: FileSystemDirectoryHandle, path: string): Promise<boolean> {
+  const parts = path.split("/");
+  const name = parts.pop();
+  if (!name) return true;
+  let directory = root;
+  try {
+    for (const part of parts) directory = await directory.getDirectoryHandle(part);
+  } catch (error) {
+    if (isMissingEntry(error)) return false;
+    if (isTypeMismatch(error)) return true;
+    throw error;
+  }
+
+  try {
+    await directory.getFileHandle(name);
+    return true;
+  } catch (error) {
+    if (!isMissingEntry(error) && !isTypeMismatch(error)) throw error;
+  }
+  try {
+    await directory.getDirectoryHandle(name);
+    return true;
+  } catch (error) {
+    if (isMissingEntry(error) || isTypeMismatch(error)) return false;
+    throw error;
+  }
+}
+
+function isMissingEntry(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "NotFoundError";
+}
+
+function isTypeMismatch(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "TypeMismatchError";
 }
 
 function normalizeEntries(files: MarkdownTransferFile[]): MarkdownTransferFile[] {

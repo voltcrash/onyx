@@ -23,8 +23,9 @@ test("keeps the editor usable and pauses GitHub features offline", async ({ cont
 
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
   await editor.fill("# Written offline\n\nOnyx keeps working without a connection.");
+  await expect(page.getByText("Unsaved", { exact: true })).toBeHidden();
+  await expect(page.getByText("Saving…", { exact: true })).toBeHidden();
   await page.getByRole("button", { name: /Save/ }).first().click();
-  await expect(page.getByText("Unsaved")).toBeHidden();
 });
 
 test("searches note titles and Markdown content", async ({ page }) => {
@@ -39,9 +40,9 @@ test("searches note titles and Markdown content", async ({ page }) => {
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
   await editor.fill("# Project Aurora\n\nThe neutrino research summary is ready.");
   await expect(editor).toHaveValue(/Project Aurora/);
-  await expect(page.getByText("Unsaved")).toBeVisible();
+  await expect(page.getByText("Unsaved", { exact: true })).toBeHidden();
+  await expect(page.getByText("Saving…", { exact: true })).toBeHidden();
   await page.getByRole("button", { name: /Save/ }).first().click();
-  await expect(page.getByText("Unsaved")).toBeHidden();
 
   await page.getByPlaceholder("Search all notes").fill("neut");
   await expect(page.getByText("1 result")).toBeVisible();

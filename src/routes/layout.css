@@ -274,17 +274,6 @@ label:focus-visible,
   color: var(--muted);
   font-size: 12px;
 }
-.save-status > span {
-  width: 7px;
-  height: 7px;
-  border-radius: 99px;
-  background: var(--ok);
-  box-shadow: 0 0 0 3px var(--ok-ring);
-}
-.save-status > span.unsaved {
-  background: var(--warn);
-  box-shadow: 0 0 0 3px var(--warn-ring);
-}
 .save-status.error {
   color: var(--danger);
 }
@@ -1199,62 +1188,6 @@ label:focus-visible,
   height: auto;
   margin: 24px auto;
   border-radius: 8px;
-}
-.unsaved-bar {
-  position: fixed;
-  left: 50%;
-  bottom: 18px;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 7px 6px 13px;
-  border: 1px solid var(--inverse-border);
-  border-radius: 9px;
-  background: var(--inverse-bg);
-  color: var(--inverse-text);
-  font-size: 12px;
-  box-shadow: var(--shadow-md);
-  transform: translateX(-50%);
-  animation: rise 0.2s ease-out;
-}
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 7px);
-  }
-}
-.unsaved-bar > span {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-right: 8px;
-}
-.unsaved-bar i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--warn);
-}
-.unsaved-bar button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 9px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--inverse-muted);
-  cursor: pointer;
-  font-size: 11px;
-}
-.unsaved-bar button:hover {
-  background: var(--inverse-hover);
-  color: var(--inverse-text);
-}
-.unsaved-bar button.bar-save {
-  background: var(--inverse-text);
-  color: var(--inverse-bg);
 }
 .modal-backdrop {
   position: fixed;
@@ -2288,9 +2221,6 @@ kbd {
     width: 16px;
     height: 16px;
   }
-  .save-status > span {
-    display: block;
-  }
   .save-button kbd,
   .save-button > span,
   .backup-button > span,
@@ -2335,13 +2265,6 @@ kbd {
   }
   .prose {
     padding: 36px 25px 80px;
-  }
-  .unsaved-bar {
-    width: calc(100% - 24px);
-    bottom: 12px;
-  }
-  .unsaved-bar > span {
-    flex: 1;
   }
   .theme-options {
     grid-template-columns: minmax(0, 1fr);

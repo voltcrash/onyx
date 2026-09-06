@@ -4,6 +4,8 @@ export type {
   BackupOperation,
   BackupOperationKind,
   GithubBackupState,
+  ImportAttachmentInput,
+  ImportNoteInput,
   Note,
   NoteMetadata,
   SaveNoteInput,

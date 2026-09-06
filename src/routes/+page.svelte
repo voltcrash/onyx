@@ -3,7 +3,7 @@
 		Bold, CloudDownload, CloudOff, Code2, Columns2, Eye, FileArchive, FilePlus2,
 		FileText, FolderInput, FolderOutput, Heading2, CloudUpload, Download, ExternalLink,
 		GitCommitHorizontal, HardDrive, HelpCircle, Italic, Keyboard, Link, List, LoaderCircle, LogOut,
-		Monitor, Moon, PanelLeft, PanelLeftClose, PencilLine, Plus, Quote, RotateCcw, Save, Search,
+		Monitor, Moon, PanelLeft, PanelLeftClose, PencilLine, Plus, Quote, Save, Search,
 		Settings, Sun, WifiOff, X
 	} from '@lucide/svelte';
 	import CommandPalette, { type PaletteItem } from '$lib/components/command-palette.svelte';
@@ -49,6 +49,8 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	let viewMode = $state<ViewMode>('split');
 	let saveState = $state<SaveState>('loading');
 	let saveTimer: number | undefined = $state();
+	let saveRun: Promise<boolean> | undefined;
+	let saveRequested = false;
 	let searchTimer: number | undefined = $state();
 	let searchSequence = 0;
 	let editor: HTMLTextAreaElement | undefined = $state();
@@ -109,8 +111,8 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			keywords: 'note open jump',
 			run: () => void selectNote(note.id)
 		})),
-		{ id: 'new-note', group: 'Actions', label: 'New note', shortcut: '⌘ ⏎', icon: FilePlus2, keywords: 'create add page', run: () => void createNote() },
-		{ id: 'save', group: 'Actions', label: 'Save note', shortcut: '⌘ S', icon: Save, keywords: 'write store', disabled: saveState === 'saving', run: () => void saveDraft() },
+		{ id: 'new-note', group: 'Actions', label: 'New note', shortcut: '⌘ ⏎', icon: FilePlus2, keywords: 'create add page', disabled: transferState === 'working', run: () => void createNote() },
+		{ id: 'save', group: 'Actions', label: 'Save note', shortcut: '⌘ S', icon: Save, keywords: 'write store', disabled: saveState === 'saving' || transferState === 'working', run: () => void saveDraft() },
 		{ id: 'search', group: 'Actions', label: 'Search all notes', shortcut: '⌘ ⇧ F', icon: Search, keywords: 'find full text', run: () => focusSearch() },
 		{ id: 'view-edit', group: 'View', label: 'Editor only', shortcut: '⌘ ⇧ P', icon: PencilLine, keywords: 'write markdown pane', run: () => (viewMode = 'edit') },
 		{ id: 'view-live', group: 'View', label: 'Inline preview', icon: Eye, keywords: 'live inline rendered edit obsidian', run: () => openInlinePreview() },
@@ -470,13 +472,13 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	}
 
 	async function selectNote(id: string): Promise<void> {
-		if (id === activeNoteId) return;
+		if (id === activeNoteId || transferState === 'working') return;
 		if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
 		await loadNote(id);
 	}
 
 	async function createNote(): Promise<void> {
-		if (!vault) return;
+		if (!vault || transferState === 'working') return;
 		saveState = 'loading';
 		if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
 		try {
@@ -515,9 +517,13 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 	async function runImport(files: ReturnType<typeof readMarkdownFolder>): Promise<void> {
 		if (!vault || transferState === 'working') return;
-		if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
 		transferState = 'working';
 		transferMessage = 'Importing Markdown and attachments…';
+		if (!(await settleDraft())) {
+			transferState = 'idle';
+			transferMessage = '';
+			return;
+		}
 		try {
 			const result = await importMarkdownFiles(vault, files);
 			searchQuery = '';
@@ -534,9 +540,13 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 	async function exportZip(): Promise<void> {
 		if (!vault || transferState === 'working') return;
-		if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
 		transferState = 'working';
 		transferMessage = 'Building ZIP archive…';
+		if (!(await settleDraft())) {
+			transferState = 'idle';
+			transferMessage = '';
+			return;
+		}
 		try {
 			const files = await createMarkdownExport(vault);
 			const archive = await createMarkdownZip(files);
@@ -561,11 +571,15 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			transferMessage = 'Folder export is not supported by this browser. Use ZIP export instead.';
 			return;
 		}
-		if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
 		try {
 			const directory = await picker.call(window, { mode: 'readwrite' });
 			transferState = 'working';
 			transferMessage = 'Writing Markdown folder…';
+			if (!(await settleDraft())) {
+				transferState = 'idle';
+				transferMessage = '';
+				return;
+			}
 			const files = await createMarkdownExport(vault);
 			await writeMarkdownFolder(directory, files);
 			transferState = 'idle';
@@ -581,6 +595,13 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		transferMessage = error instanceof Error ? error.message : fallback;
 	}
 
+	async function settleDraft(): Promise<boolean> {
+		if (markdown !== lastSavedMarkdown) return saveDraft();
+		if (saveTimer) window.clearTimeout(saveTimer);
+		saveTimer = undefined;
+		return saveRun ? await saveRun : true;
+	}
+
 	function queueSave(): void {
 		saveState = 'unsaved';
 		if (saveTimer) window.clearTimeout(saveTimer);
@@ -591,21 +612,43 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		if (!vault || !activeNoteId) return false;
 		if (saveTimer) window.clearTimeout(saveTimer);
 		saveTimer = undefined;
-		saveState = 'saving';
-		const contents = markdown;
+		saveRequested = true;
+		if (saveRun) return saveRun;
+		const run = flushDrafts();
+		saveRun = run;
 		try {
-			await vault.saveNote({ id: activeNoteId, title: titleFromMarkdown(contents), markdown: contents });
-			lastSavedMarkdown = contents;
-			saveState = markdown === contents ? 'saved' : 'unsaved';
-			storageError = '';
-			await runSearch(searchQuery);
-			pendingBackupCount = (await vault.getPendingBackupOperations()).length;
-			return true;
-		} catch (error) {
-			storageError = error instanceof Error ? error.message : 'Autosave failed.';
-			saveState = 'error';
-			return false;
+			return await run;
+		} finally {
+			if (saveRun === run) saveRun = undefined;
 		}
+	}
+
+	async function flushDrafts(): Promise<boolean> {
+		while (saveRequested) {
+			saveRequested = false;
+			if (!vault || !activeNoteId) return false;
+			const noteId = activeNoteId;
+			const contents = markdown;
+			saveState = 'saving';
+			try {
+				await vault.saveNote({ id: noteId, title: titleFromMarkdown(contents), markdown: contents });
+				if (activeNoteId === noteId) {
+					lastSavedMarkdown = contents;
+					saveState = markdown === contents ? 'saved' : 'unsaved';
+					storageError = '';
+				}
+				await runSearch(searchQuery);
+				pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+			} catch (error) {
+				saveRequested = false;
+				if (activeNoteId === noteId) {
+					storageError = error instanceof Error ? error.message : 'Autosave failed.';
+					saveState = 'error';
+				}
+				return false;
+			}
+		}
+		return true;
 	}
 
 	function updateMarkdown(value: string): void {
@@ -864,10 +907,10 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		if (paletteOpen) return;
 		if (command && key === 's') {
 			event.preventDefault();
-			void saveDraft();
+			if (transferState !== 'working') void saveDraft();
 		} else if (command && key === 'enter') {
 			event.preventDefault();
-			void createNote();
+			if (transferState !== 'working') void createNote();
 		} else if (command && event.shiftKey && key === 'f') {
 			event.preventDefault();
 			focusSearch();
@@ -949,12 +992,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		files[(next + files.length) % files.length]?.focus();
 	}
 
-	function restoreSaved(): void {
-		markdown = lastSavedMarkdown;
-		saveState = 'saved';
-		if (saveTimer) window.clearTimeout(saveTimer);
-	}
-
 	function titleFromMarkdown(value: string): string {
 		const firstLine = value.split('\n').find((line) => line.trim())?.trim() ?? '';
 		const title = firstLine.replace(/^#{1,6}\s*/, '').replace(/[*_`~[\]]/g, '').trim();
@@ -1029,13 +1066,13 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		</div>
 		<div class="top-actions">
 			{#if !isOnline}<div class="offline-status" role="status" title="GitHub features are paused until your connection returns"><WifiOff size={14} /><span>Offline</span></div>{/if}
-			{#if saveState !== 'saved'}
+			{#if saveState === 'loading' || saveState === 'error'}
 				<div class="save-status" class:error={saveState === 'error'} aria-live="polite">
-					{#if saveState === 'loading' || saveState === 'saving'}<LoaderCircle class="spin" size={15} />{:else if saveState === 'error'}<CloudOff size={15} />{:else}<span class:unsaved={saveState === 'unsaved'}></span>{/if}
-					{saveState === 'loading' ? 'Opening…' : saveState === 'saving' ? 'Saving…' : saveState === 'unsaved' ? 'Unsaved' : 'Save failed'}
+					{#if saveState === 'loading'}<LoaderCircle class="spin" size={15} />{:else}<CloudOff size={15} />{/if}
+					{saveState === 'loading' ? 'Opening…' : 'Save failed'}
 				</div>
 			{/if}
-			<button class="save-button" onclick={() => void saveDraft()} disabled={saveState === 'saving'}><Save size={16} /><span>Save</span><kbd>⌘S</kbd></button>
+			<button class="save-button" onclick={() => void saveDraft()} disabled={saveState === 'saving' || transferState === 'working'}><Save size={16} /><span>Save</span><kbd>⌘S</kbd></button>
 			<button class="palette-trigger" aria-label="Open the command palette" title="Command palette (⌘K)" onclick={() => void openPalette()}><Search size={15} /><span>Search or run…</span><kbd>⌘K</kbd></button>
 			<button class="icon-button optional" aria-label={`Theme: ${themeLabel}. Change theme`} title={`Theme: ${themeLabel} (⌘⇧L)`} onclick={() => setTheme(nextThemePreference(theme))}>
 				{#if theme === 'system'}<Monitor size={18} />{:else if theme === 'dark'}<Moon size={18} />{:else}<Sun size={18} />{/if}
@@ -1062,12 +1099,12 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	</header>
 
 	<aside class="sidebar" aria-label="Notes">
-		<div class="notes-heading"><div class="notes-title"><button class="icon-button sidebar-toggle" aria-label="Hide notes sidebar" title="Toggle sidebar (⌘\\)" onclick={toggleSidebar}><PanelLeftClose size={19} /></button><h1>Notes</h1></div><div class="notes-actions"><button class="new-note" aria-label="New note" title="New note" onclick={() => void createNote()}><Plus size={17} /></button></div></div>
+		<div class="notes-heading"><div class="notes-title"><button class="icon-button sidebar-toggle" aria-label="Hide notes sidebar" title="Toggle sidebar (⌘\\)" onclick={toggleSidebar}><PanelLeftClose size={19} /></button><h1>Notes</h1></div><div class="notes-actions"><button class="new-note" aria-label="New note" title="New note" disabled={transferState === 'working'} onclick={() => void createNote()}><Plus size={17} /></button></div></div>
 		<label class="search-box"><Search size={15} /><input bind:this={searchInput} type="search" placeholder="Search all notes" value={searchQuery} oninput={(event) => queueSearch(event.currentTarget.value)} /><kbd>⌘⇧F</kbd></label>
 		<div class="result-count" aria-live="polite">{searchQuery ? `${results.length} ${results.length === 1 ? 'result' : 'results'}` : `${results.length} ${results.length === 1 ? 'note' : 'notes'}`}</div>
 		<nav class="note-list" bind:this={noteList}>
 			{#each results as result (result.note.id)}
-				<button class="file" class:active={result.note.id === activeNoteId} aria-current={result.note.id === activeNoteId ? 'true' : undefined} onkeydown={moveNoteFocus} onclick={() => void selectNote(result.note.id)}>
+				<button class="file" class:active={result.note.id === activeNoteId} aria-current={result.note.id === activeNoteId ? 'true' : undefined} disabled={transferState === 'working'} onkeydown={moveNoteFocus} onclick={() => void selectNote(result.note.id)}>
 					<FileText size={16} /><span><strong>{result.note.title}</strong>{#if searchQuery}<small>{result.excerpt || 'Title match'}</small>{/if}</span>{#if result.note.id === activeNoteId}<i></i>{/if}
 				</button>
 			{:else}
@@ -1101,16 +1138,16 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 					<div class="live-editor" bind:this={liveEditorContainer} aria-label="Inline preview editor">
 						{#each markdownLines as line, index}
 							{#if inlinePreviewBehavior === 'rendered'}
-								<div class="live-editable-line {liveLineKind(line, index)}" class:active={index === liveLine} contenteditable={saveState !== 'loading'} role="textbox" tabindex="0" aria-label={`Markdown line ${index + 1}`} aria-multiline="false" data-live-line={index} spellcheck="true" onfocus={() => (liveLine = index)} oninput={(event) => updateRenderedLine(index, event.currentTarget)} onkeydown={(event) => handleRenderedLineKeydown(event, index)}>{@html renderEditableLine(line, index)}</div>
+								<div class="live-editable-line {liveLineKind(line, index)}" class:active={index === liveLine} contenteditable={saveState !== 'loading' && transferState !== 'working'} role="textbox" tabindex="0" aria-label={`Markdown line ${index + 1}`} aria-multiline="false" data-live-line={index} spellcheck="true" onfocus={() => (liveLine = index)} oninput={(event) => updateRenderedLine(index, event.currentTarget)} onkeydown={(event) => handleRenderedLineKeydown(event, index)}>{@html renderEditableLine(line, index)}</div>
 							{:else if index === liveLine}
-								<textarea class="live-source-line" bind:this={liveEditor} value={line} oninput={(event) => updateLiveLine(index, event.currentTarget.value)} onkeydown={(event) => handleLiveLineKeydown(event, index)} aria-label={`Markdown line ${index + 1}`} rows="1" spellcheck="true" disabled={saveState === 'loading'}></textarea>
+								<textarea class="live-source-line" bind:this={liveEditor} value={line} oninput={(event) => updateLiveLine(index, event.currentTarget.value)} onkeydown={(event) => handleLiveLineKeydown(event, index)} aria-label={`Markdown line ${index + 1}`} rows="1" spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
 							{:else}
 								<div class="live-rendered-line" class:blank={!line} role="button" tabindex="0" aria-label={`Edit line ${index + 1}`} onclick={() => activateLiveLine(index)} onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activateLiveLine(index); } }}>{@html renderLiveLine(line, index)}</div>
 							{/if}
 						{/each}
 					</div>
 				{:else}
-					<textarea bind:this={editor} value={markdown} oninput={(event) => updateMarkdown(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading'}></textarea>
+					<textarea bind:this={editor} value={markdown} oninput={(event) => updateMarkdown(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
 				{/if}
 				<div class="editor-footer"><span>{wordCount} words&nbsp;&nbsp;&nbsp;{readingMinutes} min read</span></div>
 			</div>
@@ -1125,8 +1162,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		</section>
 	</main>
 </div>
-
-{#if saveState === 'unsaved'}<div class="unsaved-bar" aria-live="polite"><span><i></i>Changes haven’t been saved yet</span><button onclick={restoreSaved}><RotateCcw size={14} /> Revert</button><button class="bar-save" onclick={() => void saveDraft()}><Save size={14} /> Save now</button></div>{/if}
 
 {#if backupMessage}
 	<div class="backup-notice" class:error={backupState === 'error'} role="status">

@@ -9,6 +9,7 @@ import type {
   AttachmentMetadata,
   BackupOperation,
   GithubBackupState,
+  ImportNoteInput,
   Note,
   NoteMetadata,
   SaveNoteInput,
@@ -219,6 +220,115 @@ export class Vault {
       await this.#removeFailedWrite(path, error);
     }
     return metadata;
+  }
+
+  async importNotes(inputs: ImportNoteInput[]): Promise<VaultRestoreResult> {
+    if (inputs.length === 0) return { attachmentCount: 0, noteCount: 0 };
+
+    const importedAt = new Date().toISOString();
+    const [existingNotes, existingAttachments, operations] = await Promise.all([
+      this.#database.getNotes(),
+      this.#database.getAttachments(),
+      this.#database.getBackupOperations(),
+    ]);
+    const existingNoteContents = await Promise.all(
+      existingNotes.map(async (note) => ({
+        markdown:
+          (await this.#database.getNoteMarkdown(note.id)) ??
+          (await this.#filesystem.readText(note.path)),
+        note,
+      })),
+    );
+    const existingNoteFiles = existingNoteContents.map(({ markdown, note }) => ({
+      contents: new Blob([markdown], { type: "text/markdown;charset=utf-8" }),
+      path: note.path,
+    }));
+    const existingAttachmentFiles = await Promise.all(
+      existingAttachments.map(async (attachment) => ({
+        contents: (await this.#filesystem.read(attachment.path)) as Blob,
+        path: attachment.path,
+      })),
+    );
+
+    const importedNotes: NoteMetadata[] = [];
+    const importedAttachments: AttachmentMetadata[] = [];
+    const importedFiles: VaultRestoreFile[] = [];
+    const importedOperations: BackupOperation[] = [];
+    const markdownById = new Map(
+      existingNoteContents.map(({ markdown, note }) => [note.id, markdown]),
+    );
+    for (const input of inputs) {
+      const noteId = crypto.randomUUID();
+      const notePath = `notes/${noteId}.md`;
+      importedNotes.push({
+        id: noteId,
+        title: input.title.trim() || "Untitled",
+        path: notePath,
+        tags: [],
+        createdAt: importedAt,
+        updatedAt: importedAt,
+        revision: 1,
+        size: new Blob([input.markdown]).size,
+        sourcePath: input.sourcePath,
+      });
+      importedFiles.push({
+        contents: new Blob([input.markdown], { type: "text/markdown;charset=utf-8" }),
+        path: notePath,
+      });
+      markdownById.set(noteId, input.markdown);
+      importedOperations.push({
+        id: crypto.randomUUID(),
+        kind: "note:upsert",
+        entityId: noteId,
+        noteId,
+        path: notePath,
+        revision: 1,
+        createdAt: importedAt,
+      });
+
+      for (const attachment of input.attachments) {
+        const attachmentId = crypto.randomUUID();
+        const attachmentPath = `attachments/${noteId}/${attachmentId}`;
+        importedAttachments.push({
+          id: attachmentId,
+          noteId,
+          name: attachment.name,
+          path: attachmentPath,
+          type: attachment.contents.type || "application/octet-stream",
+          size: attachment.contents.size,
+          createdAt: importedAt,
+          updatedAt: importedAt,
+          sourcePath: attachment.sourcePath,
+        });
+        importedFiles.push({ contents: attachment.contents, path: attachmentPath });
+        importedOperations.push({
+          id: crypto.randomUUID(),
+          kind: "attachment:upsert",
+          entityId: attachmentId,
+          noteId,
+          path: attachmentPath,
+          revision: 1,
+          createdAt: importedAt,
+        });
+      }
+    }
+
+    const notes = [...existingNotes, ...importedNotes];
+    const attachments = [...existingAttachments, ...importedAttachments];
+    const documents = notes.map((note) => toSearchDocument(note, markdownById.get(note.id) ?? ""));
+    await this.#filesystem.replace(
+      [...existingNoteFiles, ...existingAttachmentFiles, ...importedFiles],
+      () =>
+        this.#database.replaceVault(
+          notes,
+          notes.map((note) => ({ noteId: note.id, markdown: markdownById.get(note.id) ?? "" })),
+          attachments,
+          documents,
+          documents.flatMap(createSearchPostings),
+          [...operations, ...importedOperations],
+        ),
+    );
+    return { attachmentCount: importedAttachments.length, noteCount: importedNotes.length };
   }
 
   async getAttachment(
