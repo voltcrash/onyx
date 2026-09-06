@@ -4,6 +4,7 @@ import {
   type SearchDocument,
   type SearchPosting,
 } from "./database.js";
+import { detectBrowserStorageSupport } from "../browser-storage.js";
 import { VaultFilesystem } from "./filesystem.js";
 import type {
   AttachmentMetadata,
@@ -37,15 +38,38 @@ export class Vault {
 
   static async open(options: VaultOptions = {}): Promise<Vault> {
     assertBrowser();
-    const database = await VaultDatabase.open(options.databaseName ?? DEFAULT_DATABASE_NAME);
+    const support = detectBrowserStorageSupport();
+    if (!support.indexedDb) {
+      throw new Error(
+        "IndexedDB is unavailable. Onyx cannot save or index notes in this browser. Try a current browser outside private mode.",
+      );
+    }
+    if (!support.opfs) {
+      throw new Error(
+        "Origin private file storage (OPFS) is unavailable. Onyx cannot save note files in this browser. Try a current browser outside private mode.",
+      );
+    }
+
+    let database: VaultDatabase;
+    try {
+      database = await VaultDatabase.open(options.databaseName ?? DEFAULT_DATABASE_NAME);
+    } catch (cause) {
+      throw new Error(
+        "IndexedDB could not be opened. Check this site's browser storage permissions or leave private mode, then reload.",
+        { cause },
+      );
+    }
     try {
       const filesystem = await VaultFilesystem.open(
         options.directoryName ?? DEFAULT_DIRECTORY_NAME,
       );
       return new Vault(database, filesystem);
-    } catch (error) {
+    } catch (cause) {
       database.close();
-      throw error;
+      throw new Error(
+        "Origin private file storage (OPFS) could not be opened. Check this site's browser storage permissions or leave private mode, then reload.",
+        { cause },
+      );
     }
   }
 
@@ -53,12 +77,22 @@ export class Vault {
     this.#database.close();
   }
 
-  requestPersistentStorage(): Promise<boolean> {
-    return navigator.storage.persist();
+  async requestPersistentStorage(): Promise<boolean> {
+    try {
+      const storage = navigator.storage;
+      return typeof storage?.persist === "function" ? await storage.persist() : false;
+    } catch {
+      return false;
+    }
   }
 
-  isStoragePersistent(): Promise<boolean> {
-    return navigator.storage.persisted();
+  async isStoragePersistent(): Promise<boolean> {
+    try {
+      const storage = navigator.storage;
+      return typeof storage?.persisted === "function" ? await storage.persisted() : false;
+    } catch {
+      return false;
+    }
   }
 
   async getStorageUsage(): Promise<VaultStorageUsage> {
@@ -74,6 +108,9 @@ export class Vault {
       noteBytes: notes.reduce((total, note) => total + note.size, 0),
       noteCount: notes.length,
       persistent,
+      persistentStorageAvailable:
+        typeof navigator.storage?.persist === "function" &&
+        typeof navigator.storage?.persisted === "function",
       quota: estimate.quota,
       usage: estimate.usage,
     };

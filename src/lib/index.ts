@@ -1,3 +1,4 @@
+export * from "./browser-storage.js";
 export * from "./storage/index.js";
 export * from "./markdown-transfer.js";
 export {

@@ -11,10 +11,11 @@
 	import { renderMarkdown, resolveLocalAttachmentUrl, type LocalAttachmentUrl } from '$lib/markdown';
 	import {
 		applyTheme, backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
+		browserStorageWarnings, detectBrowserStorageSupport,
 		createMarkdownExport, createMarkdownZip, importMarkdownFiles, listGithubBackupCommits, nextThemePreference,
-		readMarkdownFolder, readMarkdownZip, readThemePreference, restoreGithubSession, restoreVaultFromGithub,
+		readLocalStorage, readMarkdownFolder, readMarkdownZip, readThemePreference, restoreGithubSession, restoreVaultFromGithub,
 		validateGithubBackupRepository,
-		Vault, watchSystemTheme, writeMarkdownFolder,
+		Vault, watchSystemTheme, writeLocalStorage, writeMarkdownFolder,
 		type GithubBackupCommit, type GithubBackupState, type GithubUser, type NoteMetadata,
 		type ThemePreference, type VaultSearchResult
 	} from '$lib';
@@ -62,6 +63,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	let shortcutsOpen = $state(false);
 	let sidebarOpen = $state(false);
 	let storageError = $state('');
+	let storageNotice = $state('');
 	let isOnline = $state(true);
 	let githubUser = $state<GithubUser>();
 	let githubState = $state<'loading' | 'connected' | 'disconnected' | 'error'>('loading');
@@ -135,7 +137,9 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 	onMount(() => {
 		isOnline = navigator.onLine;
-		inlinePreviewBehavior = localStorage.getItem('onyx:inline-preview-behavior') === 'source-line' ? 'source-line' : 'rendered';
+		const storageSupport = detectBrowserStorageSupport();
+		storageNotice = browserStorageWarnings(storageSupport).join(' ');
+		inlinePreviewBehavior = readLocalStorage('onyx:inline-preview-behavior') === 'source-line' ? 'source-line' : 'rendered';
 		theme = readThemePreference();
 		applyTheme(theme);
 		const stopThemeWatch = watchSystemTheme(() => applyTheme(theme));
@@ -403,6 +407,8 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	}
 
 	async function openVault(): Promise<void> {
+		storageError = '';
+		saveState = 'loading';
 		try {
 			vault = await Vault.open();
 			let notes = await vault.listNotes();
@@ -416,11 +422,20 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			await runSearch('');
 			githubBackup = await vault.getGithubBackupState();
 			pendingBackupCount = (await vault.getPendingBackupOperations()).length;
-			void vault.requestPersistentStorage();
+			if (detectBrowserStorageSupport().persistentStorage) {
+				void vault.requestPersistentStorage().then((granted) => {
+					if (!granted) appendStorageNotice('Persistent storage was not granted, so keep a backup of important notes.');
+				});
+			}
 		} catch (error) {
 			storageError = error instanceof Error ? error.message : 'Your notes could not be opened.';
 			saveState = 'error';
 		}
+	}
+
+	function appendStorageNotice(message: string): void {
+		if (storageNotice.includes(message)) return;
+		storageNotice = storageNotice ? `${storageNotice} ${message}` : message;
 	}
 
 	async function readLegacyDraft(): Promise<string> {
@@ -677,7 +692,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 	function setInlinePreviewBehavior(behavior: InlinePreviewBehavior): void {
 		inlinePreviewBehavior = behavior;
-		localStorage.setItem('onyx:inline-preview-behavior', behavior);
+		writeLocalStorage('onyx:inline-preview-behavior', behavior);
 		if (viewMode === 'live') requestAnimationFrame(() => behavior === 'rendered' ? focusRenderedLine(liveLine) : liveEditor?.focus());
 	}
 
@@ -1120,11 +1135,17 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	</aside>
 
 	<main class="workspace">
+		{#if storageNotice}
+			<div class="storage-notice" role="status">
+				<HardDrive size={16} />
+				<span>{storageNotice}</span>
+			</div>
+		{/if}
 		{#if storageError}
 			<div class="storage-error" role="alert">
 				<CloudOff size={16} />
 				<span>{storageError} Your current text stays open, but it may be lost when this tab closes. Copy it somewhere safe if the retry keeps failing.</span>
-				<button onclick={() => void saveDraft()}>Try again</button>
+				<button onclick={() => void (vault ? saveDraft() : openVault())}>Try again</button>
 				<button onclick={() => location.reload()}>Reload</button>
 			</div>
 		{/if}

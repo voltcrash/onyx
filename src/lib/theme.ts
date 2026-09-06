@@ -1,3 +1,5 @@
+import { readLocalStorage, writeLocalStorage } from "./browser-storage.js";
+
 export type ThemePreference = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
 
@@ -10,12 +12,8 @@ const THEME_COLOR: Record<ResolvedTheme, string> = {
 };
 
 export function readThemePreference(): ThemePreference {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "light" || stored === "dark" || stored === "system") return stored;
-  } catch {
-    // Private browsing modes can reject storage access; fall back to the system theme.
-  }
+  const stored = readLocalStorage(STORAGE_KEY);
+  if (stored === "light" || stored === "dark" || stored === "system") return stored;
   return "system";
 }
 
@@ -32,11 +30,7 @@ export function applyTheme(preference: ThemePreference): ResolvedTheme {
   document
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute("content", THEME_COLOR[resolved]);
-  try {
-    localStorage.setItem(STORAGE_KEY, preference);
-  } catch {
-    // Persisting is best effort: the theme still applies for this session.
-  }
+  writeLocalStorage(STORAGE_KEY, preference);
   return resolved;
 }
 

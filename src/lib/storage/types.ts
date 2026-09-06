@@ -117,6 +117,7 @@ export interface VaultStorageUsage {
   noteBytes: number;
   noteCount: number;
   persistent: boolean;
+  persistentStorageAvailable: boolean;
   quota?: number;
   usage?: number;
 }

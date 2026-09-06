@@ -708,6 +708,22 @@ label:focus-visible,
   color: var(--danger-strong);
   font-size: 12px;
 }
+.storage-notice {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: 12px;
+}
+.storage-notice svg {
+  flex: 0 0 auto;
+}
+.storage-notice span {
+  flex: 1;
+}
 .storage-error svg {
   flex: 0 0 auto;
 }

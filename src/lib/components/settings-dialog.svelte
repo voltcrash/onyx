@@ -141,8 +141,9 @@
 		if (!vault || persistState === 'requesting') return;
 		persistState = 'requesting';
 		try {
-			await vault.requestPersistentStorage();
+			const granted = await vault.requestPersistentStorage();
 			await loadUsage();
+			if (!granted) usageMessage = 'Persistent storage was not granted. Your vault still works, but the browser may remove it when space is low.';
 		} finally {
 			persistState = 'idle';
 		}
@@ -337,13 +338,15 @@
 						<dl class="settings-facts">
 							<div><dt>Notes</dt><dd>{usage.noteCount} · {formatBytes(usage.noteBytes)}</dd></div>
 							<div><dt>Attachments</dt><dd>{usage.attachmentCount} · {formatBytes(usage.attachmentBytes)}</dd></div>
-							<div><dt>Persistent storage</dt><dd>{usage.persistent ? 'Granted' : 'Not granted'}</dd></div>
+							<div><dt>Persistent storage</dt><dd>{usage.persistent ? 'Granted' : usage.persistentStorageAvailable ? 'Not granted' : 'Unavailable in this browser'}</dd></div>
 						</dl>
-						{#if !usage.persistent}
+						{#if !usage.persistent && usage.persistentStorageAvailable}
 							<p class="settings-hint">Without persistent storage the browser may evict this vault when space runs low.</p>
+						{:else if !usage.persistent}
+							<p class="settings-hint">This browser cannot protect the vault from automatic storage cleanup. Keep a backup of important notes.</p>
 						{/if}
 						<div class="settings-actions">
-							{#if !usage.persistent}
+							{#if !usage.persistent && usage.persistentStorageAvailable}
 								<button class="settings-primary" disabled={persistState === 'requesting'} onclick={() => void requestPersistence()}><ShieldCheck size={14} /> Request persistent storage</button>
 							{/if}
 							<button disabled={usageState === 'loading'} onclick={() => void loadUsage()}><RefreshCw size={14} /> Refresh</button>

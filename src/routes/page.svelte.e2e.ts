@@ -1,5 +1,52 @@
 import { expect, test } from "@playwright/test";
 
+test("keeps startup usable when localStorage and persistent storage are unavailable", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get: () => {
+        throw new DOMException("Storage is disabled", "SecurityError");
+      },
+    });
+    Object.defineProperties(navigator.storage, {
+      persist: { configurable: true, value: undefined },
+      persisted: { configurable: true, value: undefined },
+    });
+  });
+
+  await page.goto("/");
+
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await expect(page.getByRole("status")).toContainText("Browser settings cannot be saved");
+  await expect(page.getByRole("status")).toContainText("Persistent storage is unavailable");
+});
+
+for (const unavailableFeature of ["IndexedDB", "OPFS"] as const) {
+  test(`shows a startup fallback when ${unavailableFeature} is unavailable`, async ({ page }) => {
+    await page.addInitScript((feature) => {
+      if (feature === "IndexedDB") {
+        Object.defineProperty(window, "indexedDB", { configurable: true, value: undefined });
+      } else {
+        Object.defineProperty(navigator.storage, "getDirectory", {
+          configurable: true,
+          value: undefined,
+        });
+      }
+    }, unavailableFeature);
+
+    await page.goto("/");
+
+    await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+    await expect(page.getByRole("alert")).toContainText(
+      unavailableFeature === "IndexedDB"
+        ? "IndexedDB is unavailable"
+        : "Origin private file storage (OPFS) is unavailable",
+    );
+  });
+}
+
 test("keeps the editor usable and pauses GitHub features offline", async ({ context, page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
