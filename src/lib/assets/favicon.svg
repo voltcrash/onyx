@@ -33,7 +33,6 @@
     </clipPath>
   </defs>
 
-  <rect width="512" height="512" rx="112" fill="#1c1c1a"/>
   <g id="stone">
     <path d="M276 86 372 190 392 300 356 366 Q292 302 238 306 Q260 194 276 86Z" fill="url(#face-right)"/>
     <g clip-path="url(#clip-right)" fill="none" stroke-linecap="round">
