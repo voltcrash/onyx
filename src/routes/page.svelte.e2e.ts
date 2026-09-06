@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("keeps the editor usable and pauses GitHub features offline", async ({ context, page }) => {
   await page.goto("/");
-  await expect(page.getByText("Saved to this device")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
   await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
     "href",
     "/manifest.webmanifest",
@@ -24,12 +24,12 @@ test("keeps the editor usable and pauses GitHub features offline", async ({ cont
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
   await editor.fill("# Written offline\n\nOnyx keeps working without a connection.");
   await page.getByRole("button", { name: /Save/ }).first().click();
-  await expect(page.getByText("Saved to this device")).toBeVisible();
+  await expect(page.getByText("Unsaved")).toBeHidden();
 });
 
 test("searches note titles and Markdown content", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText("Saved to this device")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
   await page.getByRole("button", { name: "New note" }).click();
   await expect(page.getByRole("button", { name: "Untitled", exact: true })).toHaveAttribute(
@@ -41,7 +41,7 @@ test("searches note titles and Markdown content", async ({ page }) => {
   await expect(editor).toHaveValue(/Project Aurora/);
   await expect(page.getByText("Unsaved")).toBeVisible();
   await page.getByRole("button", { name: /Save/ }).first().click();
-  await expect(page.getByText("Saved to this device")).toBeVisible();
+  await expect(page.getByText("Unsaved")).toBeHidden();
 
   await page.getByPlaceholder("Search all notes").fill("neut");
   await expect(page.getByText("1 result")).toBeVisible();
@@ -50,7 +50,7 @@ test("searches note titles and Markdown content", async ({ page }) => {
 
 test("formats Markdown while editing in inline preview", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText("Saved to this device")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
   await page.getByRole("button", { name: "Inline preview" }).click();
   const line = page.getByRole("textbox", { name: "Markdown line 3" });
@@ -69,7 +69,7 @@ test("formats Markdown while editing in inline preview", async ({ page }) => {
 
 test("can reveal the active Markdown source line in inline preview", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText("Saved to this device")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
   await page.getByRole("button", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Editor", exact: true }).click();
@@ -85,7 +85,7 @@ test("imports a Markdown folder and exports its structure and attachments as ZIP
   page,
 }) => {
   await page.goto("/");
-  await expect(page.getByText("Saved to this device")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
   await page.getByRole("button", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Import & export", exact: true }).click();

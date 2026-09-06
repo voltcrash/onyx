@@ -1035,10 +1035,12 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		</div>
 		<div class="top-actions">
 			{#if !isOnline}<div class="offline-status" role="status" title="GitHub features are paused until your connection returns"><WifiOff size={14} /><span>Offline</span></div>{/if}
-			<div class="save-status" class:error={saveState === 'error'} aria-live="polite">
-				{#if saveState === 'loading' || saveState === 'saving'}<LoaderCircle class="spin" size={15} />{:else if saveState === 'error'}<CloudOff size={15} />{:else}<span class:unsaved={saveState === 'unsaved'}></span>{/if}
-				{saveState === 'loading' ? 'Opening…' : saveState === 'saving' ? 'Saving…' : saveState === 'unsaved' ? 'Unsaved' : saveState === 'error' ? 'Save failed' : 'Saved to this device'}
-			</div>
+			{#if saveState !== 'saved'}
+				<div class="save-status" class:error={saveState === 'error'} aria-live="polite">
+					{#if saveState === 'loading' || saveState === 'saving'}<LoaderCircle class="spin" size={15} />{:else if saveState === 'error'}<CloudOff size={15} />{:else}<span class:unsaved={saveState === 'unsaved'}></span>{/if}
+					{saveState === 'loading' ? 'Opening…' : saveState === 'saving' ? 'Saving…' : saveState === 'unsaved' ? 'Unsaved' : 'Save failed'}
+				</div>
+			{/if}
 			<button class="save-button" onclick={() => void saveDraft()} disabled={saveState === 'saving'}><Save size={16} /><span>Save</span><kbd>⌘S</kbd></button>
 			<button class="palette-trigger" aria-label="Open the command palette" title="Command palette (⌘K)" onclick={() => void openPalette()}><Search size={15} /><span>Search or run…</span><kbd>⌘K</kbd></button>
 			<button class="icon-button optional" aria-label={`Theme: ${themeLabel}. Change theme`} title={`Theme: ${themeLabel} (⌘⇧L)`} onclick={() => setTheme(nextThemePreference(theme))}>
@@ -1066,8 +1068,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	</header>
 
 	<aside class="sidebar" aria-label="Notes">
-		<div class="sidebar-heading"><span>Workspace</span><button class="icon-button mobile-close" aria-label="Close files" onclick={() => (sidebarOpen = false)}><X size={18} /></button></div>
-		<div class="notes-heading"><h1>Notes</h1><button class="new-note" aria-label="New note" title="New note" onclick={() => void createNote()}><Plus size={17} /></button></div>
+		<div class="notes-heading"><h1>Notes</h1><div class="notes-actions"><button class="new-note" aria-label="New note" title="New note" onclick={() => void createNote()}><Plus size={17} /></button><button class="icon-button mobile-close" aria-label="Close files" onclick={() => (sidebarOpen = false)}><X size={18} /></button></div></div>
 		<label class="search-box"><Search size={15} /><input bind:this={searchInput} type="search" placeholder="Search all notes" value={searchQuery} oninput={(event) => queueSearch(event.currentTarget.value)} /><kbd>⌘⇧F</kbd></label>
 		<div class="result-count" aria-live="polite">{searchQuery ? `${results.length} ${results.length === 1 ? 'result' : 'results'}` : `${results.length} ${results.length === 1 ? 'note' : 'notes'}`}</div>
 		<nav class="note-list" bind:this={noteList}>

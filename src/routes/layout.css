@@ -504,24 +504,17 @@ label:focus-visible,
 .sidebar-collapsed .sidebar {
   display: none;
 }
-.sidebar-heading {
+.notes-heading,
+.notes-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 9px;
-}
-.sidebar-heading > span {
-  color: var(--faint);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }
 .notes-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: 8px 7px 14px 9px;
+  margin: 0 7px 14px 9px;
+}
+.notes-actions {
+  gap: 6px;
 }
 .sidebar h1 {
   margin: 0;
