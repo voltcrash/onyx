@@ -42,7 +42,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	let activeNoteId = $state('');
 	let markdown = $state(INITIAL_MARKDOWN);
 	let lastSavedMarkdown = $state(INITIAL_MARKDOWN);
-	let noteTitle = $state('Welcome to Onyx');
 	let results = $state<VaultSearchResult[]>([]);
 	let searchQuery = $state('');
 	let viewMode = $state<ViewMode>('split');
@@ -430,7 +429,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		activeNoteId = note.id;
 		markdown = note.markdown;
 		lastSavedMarkdown = note.markdown;
-		noteTitle = note.title;
 		saveState = 'saved';
 		storageError = '';
 		sidebarOpen = false;
@@ -561,9 +559,8 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		saveState = 'saving';
 		const contents = markdown;
 		try {
-			const note = await vault.saveNote({ id: activeNoteId, title: titleFromMarkdown(contents), markdown: contents });
+			await vault.saveNote({ id: activeNoteId, title: titleFromMarkdown(contents), markdown: contents });
 			lastSavedMarkdown = contents;
-			noteTitle = note.title;
 			saveState = markdown === contents ? 'saved' : 'unsaved';
 			storageError = '';
 			await runSearch(searchQuery);
@@ -578,7 +575,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 	function updateMarkdown(value: string): void {
 		markdown = value;
-		noteTitle = titleFromMarkdown(value);
 		queueSave();
 	}
 
@@ -920,7 +916,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 	function restoreSaved(): void {
 		markdown = lastSavedMarkdown;
-		noteTitle = titleFromMarkdown(markdown);
 		saveState = 'saved';
 		if (saveTimer) window.clearTimeout(saveTimer);
 	}
@@ -1093,10 +1088,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	</aside>
 
 	<main class="workspace">
-		<div class="document-bar">
-			<div class="document-info"><FileText size={17} /><span>{noteTitle}.md</span></div>
-		</div>
-
 		{#if storageError}
 			<div class="storage-error" role="alert">
 				<CloudOff size={16} />
