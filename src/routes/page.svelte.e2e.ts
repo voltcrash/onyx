@@ -111,6 +111,7 @@ test("imports a Markdown folder and exports its structure and attachments as ZIP
   });
   await expect(page.getByText("Imported 1 note and 1 attachment.")).toBeVisible();
   await expect(page.getByRole("button", { name: /Trip plans/ })).toBeVisible();
+  await expect(page.locator('.preview-pane img[alt="the map"]')).toHaveAttribute("src", /^blob:/);
 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download ZIP" }).click();
@@ -122,8 +123,46 @@ test("imports a Markdown folder and exports its structure and attachments as ZIP
 test("restores a selected GitHub commit into the local vault", async ({ page }) => {
   const commitSha = "a".repeat(40);
   const treeSha = "b".repeat(40);
-  const blobSha = "c".repeat(40);
-  const markdown = "# Restored from GitHub\n\nThis note came from a selected backup commit.";
+  const noteBlobSha = "c".repeat(40);
+  const attachmentBlobSha = "d".repeat(40);
+  const manifestBlobSha = "e".repeat(40);
+  const restoredAt = "2026-09-05T12:00:00Z";
+  const markdown =
+    "# Restored from GitHub\n\nThis note includes a ![restored image](assets/restored.png).";
+  const manifest = JSON.stringify({
+    version: 1,
+    notes: [
+      {
+        id: "restored",
+        title: "Restored from GitHub",
+        path: "notes/restored.md",
+        tags: [],
+        createdAt: restoredAt,
+        updatedAt: restoredAt,
+        revision: 1,
+        size: markdown.length,
+        sourcePath: "journal/note.md",
+      },
+    ],
+    attachments: [
+      {
+        id: "image",
+        noteId: "restored",
+        name: "restored.png",
+        path: "attachments/restored/image",
+        type: "image/png",
+        size: 18,
+        createdAt: restoredAt,
+        updatedAt: restoredAt,
+        sourcePath: "journal/assets/restored.png",
+      },
+    ],
+  });
+  const blobContents = new Map([
+    [noteBlobSha, markdown],
+    [attachmentBlobSha, "attachment fixture"],
+    [manifestBlobSha, manifest],
+  ]);
 
   await page.route("**/auth/github/session", async (route) => {
     await route.fulfill({
@@ -152,8 +191,8 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
             author: { login: "octocat" },
             commit: {
               message: "Back up Onyx vault",
-              author: { name: "Octo Cat", date: "2026-09-05T12:00:00Z" },
-              committer: { name: "Octo Cat", date: "2026-09-05T12:00:00Z" },
+              author: { name: "Octo Cat", date: restoredAt },
+              committer: { name: "Octo Cat", date: restoredAt },
             },
           },
         ]),
@@ -165,8 +204,8 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
           sha: commitSha,
           html_url: "https://github.com/octocat/onyx-vault/commit/test",
           tree: { sha: treeSha },
-          author: { name: "Octo Cat", date: "2026-09-05T12:00:00Z" },
-          committer: { name: "Octo Cat", date: "2026-09-05T12:00:00Z" },
+          author: { name: "Octo Cat", date: restoredAt },
+          committer: { name: "Octo Cat", date: restoredAt },
         }),
       });
     } else if (url.pathname.includes("/git/trees/")) {
@@ -174,7 +213,15 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
         contentType: "application/json",
         body: JSON.stringify({
           sha: treeSha,
-          tree: [{ path: "vault/notes/restored.md", type: "blob", sha: blobSha }],
+          tree: [
+            { path: "vault/notes/restored.md", type: "blob", sha: noteBlobSha },
+            {
+              path: "vault/attachments/restored/image",
+              type: "blob",
+              sha: attachmentBlobSha,
+            },
+            { path: "vault/.onyx.json", type: "blob", sha: manifestBlobSha },
+          ],
         }),
       });
     } else if (url.pathname.includes("/git/ref/heads/")) {
@@ -182,13 +229,18 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
         contentType: "application/json",
         body: JSON.stringify({ object: { sha: commitSha } }),
       });
-    } else if (url.pathname.endsWith(`/git/blobs/${blobSha}`)) {
+    } else if (url.pathname.includes("/git/blobs/")) {
+      const contents = blobContents.get(url.pathname.slice(url.pathname.lastIndexOf("/") + 1));
+      if (contents === undefined) {
+        await route.abort();
+        return;
+      }
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
-          sha: blobSha,
+          sha: url.pathname.slice(url.pathname.lastIndexOf("/") + 1),
           encoding: "base64",
-          content: btoa(markdown),
+          content: btoa(contents),
         }),
       });
     } else {
@@ -203,5 +255,9 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
   await page.getByRole("button", { name: "Restore selected" }).click();
 
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toHaveValue(markdown);
-  await expect(page.getByText("Restored 1 note and 0 attachments from GitHub.")).toBeVisible();
+  await expect(page.locator('.preview-pane img[alt="restored image"]')).toHaveAttribute(
+    "src",
+    /^blob:/,
+  );
+  await expect(page.getByText("Restored 1 note and 1 attachment from GitHub.")).toBeVisible();
 });

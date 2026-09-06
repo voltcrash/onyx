@@ -8,7 +8,7 @@
 	} from '@lucide/svelte';
 	import CommandPalette, { type PaletteItem } from '$lib/components/command-palette.svelte';
 	import SettingsDialog, { type InlinePreviewBehavior, type SettingsSection } from '$lib/components/settings-dialog.svelte';
-	import { renderMarkdown } from '$lib/markdown';
+	import { renderMarkdown, resolveLocalAttachmentUrl, type LocalAttachmentUrl } from '$lib/markdown';
 	import {
 		applyTheme, backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
 		createMarkdownExport, createMarkdownZip, importMarkdownFiles, listGithubBackupCommits, nextThemePreference,
@@ -88,10 +88,13 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	let paletteNotes = $state<NoteMetadata[]>([]);
 	let sidebarCollapsed = $state(false);
 	let noteList: HTMLElement | undefined = $state();
+	let activeNoteSourcePath: string | undefined = $state();
+	let localAttachmentUrls = $state<LocalAttachmentUrl[]>([]);
+	let noteLoadSequence = 0;
 
 	const wordCount = $derived(markdown.trim() ? markdown.trim().split(/\s+/).length : 0);
 	const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
-	const renderedMarkdown = $derived(renderMarkdown(markdown));
+	const renderedMarkdown = $derived(renderMarkdown(markdown, resolveAttachmentUrl));
 	const markdownLines = $derived(markdown.split('\n'));
 	const hasContent = $derived(markdown.trim().length > 0);
 	const themeLabel = $derived(theme === 'system' ? 'Match system' : theme === 'dark' ? 'Dark' : 'Light');
@@ -166,6 +169,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			stopThemeWatch();
 			if (saveTimer) window.clearTimeout(saveTimer);
 			if (searchTimer) window.clearTimeout(searchTimer);
+			releaseLocalAttachmentUrls();
 			vault?.close();
 		};
 	});
@@ -425,14 +429,39 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 	async function loadNote(id: string): Promise<void> {
 		if (!vault) return;
+		const sequence = ++noteLoadSequence;
 		const note = await vault.getNote(id);
 		if (!note) return;
+		const attachments = await Promise.all(
+			(await vault.listAttachments(note.id)).map((attachment) => vault?.getAttachment(attachment.id))
+		);
+		const nextUrls = attachments.flatMap((attachment): LocalAttachmentUrl[] => attachment ? [{
+			name: attachment.metadata.name,
+			sourcePath: attachment.metadata.sourcePath,
+			url: URL.createObjectURL(attachment.file)
+		}] : []);
+		if (sequence !== noteLoadSequence) {
+			for (const attachment of nextUrls) URL.revokeObjectURL(attachment.url);
+			return;
+		}
+		releaseLocalAttachmentUrls();
+		localAttachmentUrls = nextUrls;
+		activeNoteSourcePath = note.sourcePath;
 		activeNoteId = note.id;
 		markdown = note.markdown;
 		lastSavedMarkdown = note.markdown;
 		saveState = 'saved';
 		storageError = '';
 		sidebarOpen = false;
+	}
+
+	function resolveAttachmentUrl(destination: string): string | undefined {
+		return resolveLocalAttachmentUrl(destination, activeNoteSourcePath, localAttachmentUrls);
+	}
+
+	function releaseLocalAttachmentUrls(): void {
+		for (const attachment of localAttachmentUrls) URL.revokeObjectURL(attachment.url);
+		localAttachmentUrls = [];
 	}
 
 	async function selectNote(id: string): Promise<void> {
@@ -933,7 +962,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			if (markdownLines[current].startsWith('```')) inCode = !inCode;
 		}
 		if (inCode && !line.startsWith('```')) return `<pre><code>${escapeHtml(line) || ' '}</code></pre>`;
-		return renderMarkdown(line);
+		return renderMarkdown(line, resolveAttachmentUrl);
 	}
 
 	function liveLineKind(line: string, index: number): string {
