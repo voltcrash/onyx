@@ -695,6 +695,7 @@ label:focus-visible,
 }
 .workspace {
   grid-row: 2;
+  grid-column: 2;
   min-width: 0;
   min-height: 0;
   display: flex;
