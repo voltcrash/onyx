@@ -70,7 +70,9 @@ backup state.
 Once GitHub is connected, **Back up** creates a private repository on first use and uploads every
 pending note and attachment change in one Git commit. Later backups reuse that repository and
 advance its configured branch without force-pushing. Vault contents travel directly from the
-browser to GitHub.
+browser to GitHub. Onyx only offers private, writable, active repositories and verifies those
+properties again before every backup. The saved target is bound to the authenticated GitHub account,
+so switching accounts requires selecting the repository again.
 
 **Restore** loads the commit history for a configured backup (or an owner, repository, branch, and
 directory entered on a new device). Choosing a commit downloads its vault files directly into OPFS,

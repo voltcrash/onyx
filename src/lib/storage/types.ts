@@ -45,6 +45,8 @@ export interface SearchState {
 }
 
 export interface GithubBackupState {
+  githubAccountId: number;
+  githubAccountLogin: string;
   owner: string;
   repository: string;
   branch: string;

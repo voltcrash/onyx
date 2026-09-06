@@ -9,9 +9,11 @@ const API_ROOT = "https://api.github.com";
 const API_VERSION = "2026-03-10";
 
 let accessToken: string | undefined;
+let authenticatedUser: GithubUser | undefined;
 
 export interface GithubUser {
   avatarUrl: string;
+  id: number;
   login: string;
   name: string | null;
 }
@@ -24,12 +26,15 @@ interface SessionResponse {
 
 interface GithubUserResponse {
   avatar_url: string;
+  id: number;
   login: string;
   name: string | null;
 }
 
 interface GithubRepositoryResponse {
+  archived?: boolean;
   default_branch: string;
+  disabled?: boolean;
   name: string;
   owner: { login: string };
   permissions?: { push?: boolean };
@@ -117,16 +122,24 @@ export async function restoreGithubSession(): Promise<GithubUser | undefined> {
   });
   if (response.status === 401) {
     accessToken = undefined;
+    authenticatedUser = undefined;
     return undefined;
   }
   if (!response.ok) throw new Error("GitHub authentication could not be restored");
   accessToken = ((await response.json()) as SessionResponse).accessToken;
   const user = await githubRequest<GithubUserResponse>("/user");
-  return { avatarUrl: user.avatar_url, login: user.login, name: user.name };
+  authenticatedUser = {
+    avatarUrl: user.avatar_url,
+    id: user.id,
+    login: user.login,
+    name: user.name,
+  };
+  return authenticatedUser;
 }
 
 export async function disconnectGithub(): Promise<void> {
   accessToken = undefined;
+  authenticatedUser = undefined;
   const response = await fetch("/auth/github/session", {
     method: "DELETE",
     credentials: "same-origin",
@@ -135,6 +148,7 @@ export async function disconnectGithub(): Promise<void> {
 }
 
 export async function createPrivateGithubRepository(name: string): Promise<GithubBackupState> {
+  const user = requireAuthenticatedUser();
   const repositoryName = name.trim();
   if (!/^[\w.-]+$/.test(repositoryName)) {
     throw new Error(
@@ -152,6 +166,8 @@ export async function createPrivateGithubRepository(name: string): Promise<Githu
   });
   if (!repository.private) throw new Error("GitHub did not create a private repository");
   return {
+    githubAccountId: user.id,
+    githubAccountLogin: user.login,
     owner: repository.owner.login,
     repository: repository.name,
     branch: repository.default_branch || "main",
@@ -164,7 +180,13 @@ export async function listGithubRepositories(): Promise<GithubRepository[]> {
   const parameters = new URLSearchParams({ per_page: "100", sort: "pushed" });
   const repositories = await githubRequest<GithubRepositoryResponse[]>(`/user/repos?${parameters}`);
   return repositories
-    .filter((repository) => repository.permissions?.push !== false)
+    .filter(
+      (repository) =>
+        repository.private &&
+        repository.permissions?.push === true &&
+        !repository.archived &&
+        !repository.disabled,
+    )
     .map((repository) => ({
       branch: repository.default_branch || "main",
       name: repository.name,
@@ -177,6 +199,7 @@ export async function backupVaultToGithub(
   vault: Vault,
   backupState: GithubBackupState,
 ): Promise<GithubBackupResult> {
+  await validateGithubBackupRepository(backupState);
   const snapshot = await vault.createBackupSnapshot();
   const repositoryPath = repositoryApiPath(backupState);
   const branchPath = backupState.branch.split("/").map(encodeURIComponent).join("/");
@@ -283,6 +306,7 @@ export async function backupVaultToGithub(
 export async function listGithubBackupCommits(
   backupState: GithubBackupState,
 ): Promise<GithubBackupCommit[]> {
+  await validateGithubBackupRepository(backupState);
   const parameters = new URLSearchParams({
     sha: backupState.branch,
     path: normalizedDirectory(backupState.directory),
@@ -306,6 +330,7 @@ export async function restoreVaultFromGithub(
   commitSha: string,
 ): Promise<GithubRestoreResult> {
   if (!/^[0-9a-f]{40}$/i.test(commitSha)) throw new Error("Select a valid GitHub backup commit");
+  await validateGithubBackupRepository(backupState);
   const repositoryPath = repositoryApiPath(backupState);
   const selectedCommit = await githubRequest<GithubCommitResponse>(
     `${repositoryPath}/git/commits/${commitSha}`,
@@ -401,6 +426,85 @@ function blobToBase64(blob: Blob): Promise<string> {
 
 function repositoryApiPath(state: GithubBackupState): `/repos/${string}` {
   return `/repos/${encodeURIComponent(state.owner)}/${encodeURIComponent(state.repository)}`;
+}
+
+export async function validateGithubBackupRepository(state: GithubBackupState): Promise<void> {
+  const user = requireAuthenticatedUser();
+  if (!Number.isSafeInteger(state.githubAccountId) || state.githubAccountId !== user.id) {
+    const configuredAccount = state.githubAccountLogin
+      ? `@${state.githubAccountLogin}`
+      : "another GitHub account";
+    throw new Error(
+      `This backup configuration belongs to ${configuredAccount}. Re-select a private repository for @${user.login}.`,
+    );
+  }
+  validateBackupConfiguration(state);
+  const repository = await githubRequest<GithubRepositoryResponse>(repositoryApiPath(state));
+  if (
+    repository.owner.login.toLowerCase() !== state.owner.toLowerCase() ||
+    repository.name.toLowerCase() !== state.repository.toLowerCase()
+  ) {
+    throw new Error("GitHub returned a different repository than the configured backup target");
+  }
+  if (!repository.private) {
+    throw new Error("Onyx refuses to back up to a public GitHub repository");
+  }
+  if (repository.permissions?.push !== true) {
+    throw new Error("The connected GitHub account does not have write access to this repository");
+  }
+  if (repository.archived || repository.disabled) {
+    throw new Error("Choose an active GitHub repository for backups");
+  }
+}
+
+function requireAuthenticatedUser(): GithubUser {
+  if (!authenticatedUser) throw new Error("Connect GitHub before configuring a backup repository");
+  return authenticatedUser;
+}
+
+function validateBackupConfiguration(state: GithubBackupState): void {
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(state.owner)) {
+    throw new Error("The configured GitHub repository owner is invalid");
+  }
+  if (
+    !/^[\w.-]+$/.test(state.repository) ||
+    state.repository === "." ||
+    state.repository === ".."
+  ) {
+    throw new Error("The configured GitHub repository name is invalid");
+  }
+  if (
+    !state.branch ||
+    hasForbiddenCharacter(state.branch, 32, "~^:?*\\[") ||
+    state.branch.includes("..") ||
+    state.branch.includes("@{") ||
+    state.branch.includes("//") ||
+    state.branch.startsWith("/") ||
+    state.branch.endsWith("/") ||
+    state.branch.endsWith(".") ||
+    state.branch === "@"
+  ) {
+    throw new Error("The configured GitHub branch is invalid");
+  }
+  const directory = normalizedDirectory(state.directory);
+  if (
+    directory &&
+    (hasForbiddenCharacter(directory, 31, "\\") ||
+      directory.split("/").some((segment) => !segment || segment === "." || segment === ".."))
+  ) {
+    throw new Error("The configured GitHub backup directory is invalid");
+  }
+}
+
+function hasForbiddenCharacter(
+  value: string,
+  maximumCodePoint: number,
+  forbidden: string,
+): boolean {
+  for (const character of value) {
+    if (character.codePointAt(0)! <= maximumCodePoint || forbidden.includes(character)) return true;
+  }
+  return false;
 }
 
 function normalizedDirectory(directory: string): string {

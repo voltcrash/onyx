@@ -152,6 +152,8 @@
 		const repository = repositories.find((item) => `${item.owner}/${item.name}` === selectedRepository);
 		if (!repository) return;
 		onSelectRepository({
+			githubAccountId: githubUser!.id,
+			githubAccountLogin: githubUser!.login,
 			owner: repository.owner,
 			repository: repository.name,
 			branch: branch.trim() || repository.branch,
@@ -264,14 +266,14 @@
 					{#if !connected}
 						<p class="settings-hint">Connect GitHub first to choose a repository.</p>
 					{:else}
-						<p class="settings-hint">Pick an existing repository or create a new private one. Notes are written under the directory below.</p>
+						<p class="settings-hint">Only private repositories with write access can be used. Notes are written under the directory below.</p>
 						<div class="settings-field">
 							<label for="settings-repository">Repository</label>
 							<div class="settings-row">
 								<select id="settings-repository" bind:value={selectedRepository} disabled={repositoryState === 'loading' || repositories.length === 0}>
 									<option value="" disabled>Select a repository</option>
 									{#each repositories as repository (`${repository.owner}/${repository.name}`)}
-										<option value={`${repository.owner}/${repository.name}`}>{repository.owner}/{repository.name}{repository.private ? '' : ' (public)'}</option>
+										<option value={`${repository.owner}/${repository.name}`}>{repository.owner}/{repository.name}</option>
 									{/each}
 								</select>
 								<button class="settings-ghost" aria-label="Reload repositories" disabled={!isOnline || repositoryState === 'loading'} onclick={() => void loadRepositories()}>
@@ -303,6 +305,7 @@
 					{:else}
 						<dl class="settings-facts">
 							<div><dt>Repository</dt><dd>{githubBackup.owner}/{githubBackup.repository}</dd></div>
+							<div><dt>GitHub account</dt><dd>@{githubBackup.githubAccountLogin || 'Needs re-selection'}</dd></div>
 							<div><dt>Branch</dt><dd>{githubBackup.branch}</dd></div>
 							<div><dt>Directory</dt><dd>{githubBackup.directory || 'repository root'}</dd></div>
 							<div><dt>Last backup</dt><dd>{formatDate(githubBackup.lastBackedUpAt)}</dd></div>

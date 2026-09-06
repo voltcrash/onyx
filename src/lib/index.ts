@@ -10,6 +10,7 @@ export {
   listGithubRepositories,
   restoreVaultFromGithub,
   restoreGithubSession,
+  validateGithubBackupRepository,
   type GithubBackupCommit,
   type GithubBackupResult,
   type GithubRestoreResult,

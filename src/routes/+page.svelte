@@ -13,6 +13,7 @@
 		applyTheme, backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
 		createMarkdownExport, createMarkdownZip, importMarkdownFiles, listGithubBackupCommits, nextThemePreference,
 		readMarkdownFolder, readMarkdownZip, readThemePreference, restoreGithubSession, restoreVaultFromGithub,
+		validateGithubBackupRepository,
 		Vault, watchSystemTheme, writeMarkdownFolder,
 		type GithubBackupCommit, type GithubBackupState, type GithubUser, type NoteMetadata,
 		type ThemePreference, type VaultSearchResult
@@ -235,6 +236,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	async function selectBackupRepository(state: Omit<GithubBackupState, 'updatedAt'>): Promise<void> {
 		if (!vault) return;
 		try {
+			await validateGithubBackupRepository({ ...state, updatedAt: new Date().toISOString() });
 			await vault.saveGithubBackupState(state);
 			githubBackup = await vault.getGithubBackupState();
 			backupState = 'idle';
@@ -328,7 +330,10 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	}
 
 	function restoreConfiguration(): GithubBackupState {
+		if (!githubUser) throw new Error('Connect GitHub before restoring a backup');
 		return {
+			githubAccountId: githubUser.id,
+			githubAccountLogin: githubUser.login,
 			owner: restoreOwner.trim(),
 			repository: restoreRepository.trim(),
 			branch: restoreBranch.trim(),

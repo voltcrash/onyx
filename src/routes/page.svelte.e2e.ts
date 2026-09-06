@@ -81,6 +81,140 @@ test("can reveal the active Markdown source line in inline preview", async ({ pa
   await expect(page.getByRole("textbox", { name: "Markdown line 3" })).toBeVisible();
 });
 
+test("binds a backup repository to the authenticated GitHub account", async ({ page }) => {
+  let account = { id: 1, login: "octocat" };
+  let repositoryChecks = 0;
+
+  await page.route("**/auth/github/session", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ accessToken: "test-token", authenticated: true }),
+    });
+  });
+  await page.route("https://api.github.com/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/user") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          avatar_url: "https://example.com/avatar.png",
+          id: account.id,
+          login: account.login,
+          name: account.login,
+        }),
+      });
+    } else if (url.pathname === "/user/repos") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            default_branch: "main",
+            name: "onyx-vault",
+            owner: { login: "octocat" },
+            permissions: { push: true },
+            private: true,
+          },
+        ]),
+      });
+    } else if (url.pathname === "/repos/octocat/onyx-vault") {
+      repositoryChecks += 1;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          default_branch: "main",
+          name: "onyx-vault",
+          owner: { login: "octocat" },
+          permissions: { push: true },
+          private: true,
+        }),
+      });
+    } else {
+      await route.abort();
+    }
+  });
+
+  await page.goto("/");
+  await expect(page.getByText("@octocat").first()).toBeVisible();
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Repository", exact: true }).click();
+  await page.getByLabel("Repository", { exact: true }).selectOption("octocat/onyx-vault");
+  await page.getByRole("button", { name: "Use this repository" }).click();
+
+  account = { id: 2, login: "hubot" };
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(page.getByText("@hubot").first()).toBeVisible();
+  await page.getByRole("button", { name: "Back up now" }).click();
+
+  await expect(
+    page.getByRole("status").getByText(/belongs to @octocat.*re-select.*@hubot/i),
+  ).toBeVisible();
+  expect(repositoryChecks).toBe(1);
+});
+
+test("refuses to upload a backup when its repository is public", async ({ page }) => {
+  let writeRequests = 0;
+
+  await page.route("**/auth/github/session", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ accessToken: "test-token", authenticated: true }),
+    });
+  });
+  await page.route("https://api.github.com/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() !== "GET") writeRequests += 1;
+    if (url.pathname === "/user") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          avatar_url: "https://example.com/avatar.png",
+          id: 1,
+          login: "octocat",
+          name: "Octo Cat",
+        }),
+      });
+    } else if (url.pathname === "/user/repos") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            default_branch: "main",
+            name: "onyx-vault",
+            owner: { login: "octocat" },
+            permissions: { push: true },
+            private: true,
+          },
+        ]),
+      });
+    } else if (url.pathname === "/repos/octocat/onyx-vault") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          default_branch: "main",
+          name: "onyx-vault",
+          owner: { login: "octocat" },
+          permissions: { push: true },
+          private: false,
+        }),
+      });
+    } else {
+      await route.abort();
+    }
+  });
+
+  await page.goto("/");
+  await expect(page.getByText("@octocat").first()).toBeVisible();
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Repository", exact: true }).click();
+  await page.getByLabel("Repository", { exact: true }).selectOption("octocat/onyx-vault");
+  await page.getByRole("button", { name: "Use this repository" }).click();
+
+  await expect(
+    page.getByRole("status").getByText("Onyx refuses to back up to a public GitHub repository"),
+  ).toBeVisible();
+  expect(writeRequests).toBe(0);
+});
+
 test("imports a Markdown folder and exports its structure and attachments as ZIP", async ({
   page,
 }) => {
@@ -177,8 +311,20 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
         contentType: "application/json",
         body: JSON.stringify({
           avatar_url: "https://example.com/avatar.png",
+          id: 1,
           login: "octocat",
           name: "Octo Cat",
+        }),
+      });
+    } else if (url.pathname === "/repos/octocat/onyx-vault") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          default_branch: "main",
+          name: "onyx-vault",
+          owner: { login: "octocat" },
+          permissions: { push: true },
+          private: true,
         }),
       });
     } else if (url.pathname.endsWith("/commits")) {
