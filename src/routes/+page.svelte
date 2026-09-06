@@ -1126,7 +1126,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 				{:else}
 					<textarea bind:this={editor} value={markdown} oninput={(event) => updateMarkdown(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading'}></textarea>
 				{/if}
-				<div class="editor-footer"><span>{viewMode === 'live' ? 'Inline preview' : 'Markdown'}</span><span>{wordCount} words&nbsp;&nbsp;&nbsp;{readingMinutes} min read</span></div>
+				<div class="editor-footer"><span>{wordCount} words&nbsp;&nbsp;&nbsp;{readingMinutes} min read</span></div>
 			</div>
 			<div class="preview-pane">
 				<div class="preview-label"><Eye size={14} /> Preview</div>

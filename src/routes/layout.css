@@ -1108,7 +1108,7 @@ label:focus-visible,
   flex: 0 0 32px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 0 17px;
   border-top: 1px solid var(--line-soft);
   color: var(--faint);
