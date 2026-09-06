@@ -1,6 +1,6 @@
 <script lang="ts">
 	import {
-		Bold, Check, ChevronRight, CloudDownload, CloudOff, Code2, Columns2, Eye, FileArchive, FilePlus2,
+		Bold, Check, CloudDownload, CloudOff, Code2, Columns2, Eye, FileArchive, FilePlus2,
 		FileText, FolderInput, FolderOutput, Heading2, CloudUpload, Download, ExternalLink,
 		GitCommitHorizontal, HardDrive, HelpCircle, Italic, Keyboard, Link, List, LoaderCircle, LogOut,
 		Monitor, Moon, PanelLeft, PanelLeftClose, PencilLine, Plus, Quote, RotateCcw, Save, Search,
@@ -1030,7 +1030,14 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 <div class="app" class:sidebar-open={sidebarOpen} class:sidebar-collapsed={sidebarCollapsed}>
 	<header class="topbar">
 		<div class="brand"><button class="icon-button" aria-label={sidebarCollapsed ? 'Show notes sidebar' : 'Hide notes sidebar'} title="Toggle sidebar (⌘\\)" onclick={toggleSidebar}>{#if sidebarCollapsed}<PanelLeft size={19} />{:else}<PanelLeftClose size={19} />{/if}</button><div class="brand-mark">O</div><span>Onyx</span></div>
-		<div class="document-path" aria-label="Current document"><span>Notes</span><ChevronRight size={14} /><strong>{noteTitle}.md</strong></div>
+		<div class="topbar-view">
+			<div class="view-switcher" aria-label="View mode">
+				<button class:active={viewMode === 'edit'} onclick={() => (viewMode = 'edit')} aria-label="Editor only" title="Editor only"><PencilLine size={16} /><span>Edit</span></button>
+				<button class:active={viewMode === 'live'} onclick={() => openInlinePreview()} aria-label="Inline preview" title="Inline preview"><Eye size={16} /><span>Inline</span></button>
+				<button class:active={viewMode === 'split'} onclick={() => (viewMode = 'split')} aria-label="Split view" title="Split view"><Columns2 size={16} /><span>Split</span></button>
+				<button class:active={viewMode === 'preview'} onclick={() => (viewMode = 'preview')} aria-label="Preview only" title="Preview only"><Eye size={16} /><span>Preview</span></button>
+			</div>
+		</div>
 		<div class="top-actions">
 			{#if !isOnline}<div class="offline-status" role="status" title="GitHub features are paused until your connection returns"><WifiOff size={14} /><span>Offline</span></div>{/if}
 			<div class="save-status" class:error={saveState === 'error'} aria-live="polite">
@@ -1089,12 +1096,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	<main class="workspace">
 		<div class="document-bar">
 			<div class="document-info"><FileText size={17} /><span>{noteTitle}.md</span></div>
-			<div class="view-switcher" aria-label="View mode">
-				<button class:active={viewMode === 'edit'} onclick={() => (viewMode = 'edit')} aria-label="Editor only" title="Editor only"><PencilLine size={16} /><span>Edit</span></button>
-				<button class:active={viewMode === 'live'} onclick={() => openInlinePreview()} aria-label="Inline preview" title="Inline preview"><Eye size={16} /><span>Inline</span></button>
-				<button class:active={viewMode === 'split'} onclick={() => (viewMode = 'split')} aria-label="Split view" title="Split view"><Columns2 size={16} /><span>Split</span></button>
-				<button class:active={viewMode === 'preview'} onclick={() => (viewMode = 'preview')} aria-label="Preview only" title="Preview only"><Eye size={16} /><span>Preview</span></button>
-			</div>
 		</div>
 
 		{#if storageError}

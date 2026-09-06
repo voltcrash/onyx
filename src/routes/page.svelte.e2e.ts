@@ -32,7 +32,10 @@ test("searches note titles and Markdown content", async ({ page }) => {
   await expect(page.getByText("Saved to this device")).toBeVisible();
 
   await page.getByRole("button", { name: "New note" }).click();
-  await expect(page.getByLabel("Current document")).toContainText("Untitled.md");
+  await expect(page.getByRole("button", { name: "Untitled", exact: true })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
   await editor.fill("# Project Aurora\n\nThe neutrino research summary is ready.");
   await expect(editor).toHaveValue(/Project Aurora/);

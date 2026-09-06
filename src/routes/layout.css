@@ -262,21 +262,11 @@ label:focus-visible,
   font-weight: 680;
   letter-spacing: -0.025em;
 }
-.document-path {
+.topbar-view {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
   padding: 0 20px;
-  color: var(--faint);
-  font-size: 13px;
-}
-.document-path strong {
-  overflow: hidden;
-  color: var(--ink-soft);
-  font-weight: 520;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .top-actions {
   display: flex;
@@ -2301,12 +2291,10 @@ kbd {
     padding: 0 13px;
     border-right: 0;
   }
-  .brand > span,
-  .document-path > span,
-  .document-path svg {
+  .brand > span {
     display: none;
   }
-  .document-path {
+  .topbar-view {
     padding: 0 8px;
   }
   .sidebar,
