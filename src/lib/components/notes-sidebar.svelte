@@ -12,27 +12,29 @@
 		notePageCount: number;
 		saveState: SaveState;
 		transferState: TransferState;
+		paletteOpen: boolean;
 		storageError: string;
 		searchInput?: HTMLInputElement;
 		noteList?: HTMLElement;
 		onToggleSidebar: () => void;
 		onCreateNote: () => void;
 		onSearch: (value: string) => void;
+		onOpenPalette: () => void;
 		onMoveNoteFocus: (event: KeyboardEvent) => void;
 		onSelectNote: (id: string) => void;
 		onChangePage: (page: number) => void;
 	}
 
 	let {
-		activeNoteId, results, visibleResults, searchQuery, notePage, notePageCount, saveState,
+		activeNoteId, results, visibleResults, searchQuery, notePage, notePageCount, saveState, paletteOpen,
 		transferState, storageError, searchInput = $bindable(), noteList = $bindable(),
-		onToggleSidebar, onCreateNote, onSearch, onMoveNoteFocus, onSelectNote, onChangePage
+		onToggleSidebar, onCreateNote, onSearch, onOpenPalette, onMoveNoteFocus, onSelectNote, onChangePage
 	}: Props = $props();
 </script>
 
 <aside class="sidebar" aria-label="Notes">
 	<div class="notes-heading"><div class="notes-title"><button class="icon-button sidebar-toggle" aria-label="Hide notes sidebar" title="Toggle sidebar (⌘\\)" onclick={onToggleSidebar}><PanelLeftClose size={19} /></button><h1>Notes</h1></div><div class="notes-actions"><button class="new-note" aria-label="New note" title="New note" disabled={transferState === 'working'} onclick={onCreateNote}><Plus size={17} /></button></div></div>
-	<label class="search-box"><Search size={15} /><input bind:this={searchInput} type="search" placeholder="Search all notes" value={searchQuery} oninput={(event) => onSearch(event.currentTarget.value)} /><kbd>⌘⇧F</kbd></label>
+	<label class="search-box"><Search size={15} /><input bind:this={searchInput} type="search" placeholder="Search all notes" value={searchQuery} oninput={(event) => onSearch(event.currentTarget.value)} /><button type="button" aria-label="Open the command palette" aria-haspopup="dialog" aria-expanded={paletteOpen} aria-controls="command-palette" title="Run a command (⌘K)" onclick={onOpenPalette}><kbd>⌘K</kbd></button></label>
 	<div class="result-count" aria-live="polite">{searchQuery ? `${results.length} ${results.length === 1 ? 'result' : 'results'}` : `${results.length} ${results.length === 1 ? 'note' : 'notes'}`}</div>
 	<nav class="note-list" bind:this={noteList}>
 		{#each visibleResults as result (result.note.id)}

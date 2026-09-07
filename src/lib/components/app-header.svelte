@@ -1,6 +1,6 @@
 <script lang="ts">
 	import {
-		CloudDownload, CloudOff, CloudUpload, HelpCircle, LoaderCircle, LogOut, PanelLeft, Search,
+		CloudDownload, CloudOff, CloudUpload, HelpCircle, LoaderCircle, LogOut, PanelLeft,
 		Settings, WifiOff
 	} from '@lucide/svelte';
 	import type { GithubBackupState, GithubUser, Vault } from '$lib';
@@ -10,7 +10,6 @@
 		isOnline: boolean;
 		saveState: SaveState;
 		transferState: TransferState;
-		paletteOpen: boolean;
 		settingsOpen: boolean;
 		githubState: GithubState;
 		githubUser?: GithubUser;
@@ -23,7 +22,6 @@
 		shortcutsOpen: boolean;
 		vault?: Vault;
 		onToggleSidebar: () => void;
-		onOpenPalette: () => void;
 		onOpenSettings: () => void;
 		onBackup: () => void;
 		onRestore: () => void;
@@ -32,10 +30,10 @@
 	}
 
 	let {
-		isOnline, saveState, transferState, paletteOpen, settingsOpen,
+		isOnline, saveState, transferState, settingsOpen,
 		githubState, githubUser, githubMessage, githubBackup, backupState, pendingBackupCount,
 		restoreModalOpen, restoreState, shortcutsOpen, vault, onToggleSidebar,
-		onOpenPalette, onOpenSettings, onBackup, onRestore,
+		onOpenSettings, onBackup, onRestore,
 		onDisconnectGithub, onOpenShortcuts
 	}: Props = $props();
 </script>
@@ -50,7 +48,6 @@
 				{saveState === 'loading' ? 'Opening…' : 'Save failed'}
 			</div>
 		{/if}
-		<button class="palette-trigger" aria-label="Open the command palette" aria-haspopup="dialog" aria-expanded={paletteOpen} aria-controls="command-palette" title="Command palette (⌘K)" onclick={onOpenPalette}><Search size={15} /><span>Search or run…</span><kbd>⌘K</kbd></button>
 		<button class="icon-button" aria-label="Settings" aria-haspopup="dialog" aria-expanded={settingsOpen} aria-controls="settings-dialog" title="Settings" onclick={onOpenSettings}><Settings size={18} /></button>
 		{#if githubState === 'connected' && githubUser}
 			<button class="backup-button" class:success={backupState === 'success'} class:error={backupState === 'error'} onclick={onBackup} disabled={!isOnline || !vault || backupState === 'backing-up'} title={!isOnline ? 'GitHub backup is unavailable offline' : githubBackup ? `Back up to ${githubBackup.owner}/${githubBackup.repository}` : 'Create a private repository and back up the vault'}>
