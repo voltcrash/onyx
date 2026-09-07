@@ -1,6 +1,6 @@
 <script lang="ts">
 	import {
-		CloudDownload, CloudOff, CloudUpload, HelpCircle, LoaderCircle, PanelLeft, WifiOff
+		CloudDownload, CloudOff, CloudUpload, LoaderCircle, PanelLeft, WifiOff
 	} from '@lucide/svelte';
 	import type { GithubBackupState, GithubUser, Vault } from '$lib';
 	import type { BackupState, GithubState, RestoreState, SaveState } from './app-types';
@@ -15,19 +15,16 @@
 		pendingBackupCount: number;
 		restoreModalOpen: boolean;
 		restoreState: RestoreState;
-		shortcutsOpen: boolean;
 		vault?: Vault;
 		onToggleSidebar: () => void;
 		onBackup: () => void;
 		onRestore: () => void;
-		onOpenShortcuts: () => void;
 	}
 
 	let {
 		isOnline, saveState,
 		githubState, githubUser, githubBackup, backupState, pendingBackupCount,
-		restoreModalOpen, restoreState, shortcutsOpen, vault, onToggleSidebar,
-		onBackup, onRestore, onOpenShortcuts
+		restoreModalOpen, restoreState, vault, onToggleSidebar, onBackup, onRestore
 	}: Props = $props();
 </script>
 
@@ -52,6 +49,5 @@
 				<span>{restoreState === 'restoring' ? 'Restoring…' : 'Restore'}</span>
 			</button>
 		{/if}
-		<button class="icon-button optional" aria-label="Keyboard shortcuts" aria-haspopup="dialog" aria-expanded={shortcutsOpen} aria-controls="shortcuts-dialog" title="Keyboard shortcuts (?)" onclick={onOpenShortcuts}><HelpCircle size={18} /></button>
 	</div>
 </header>

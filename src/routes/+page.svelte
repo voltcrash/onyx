@@ -1117,11 +1117,10 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	<AppHeader
 		{isOnline} {saveState}
 		{githubState} {githubUser} {githubBackup} {backupState}
-		{pendingBackupCount} {restoreModalOpen} {restoreState} {shortcutsOpen} {vault}
+		{pendingBackupCount} {restoreModalOpen} {restoreState} {vault}
 		onToggleSidebar={toggleSidebar}
 		onBackup={() => void beginBackup()}
 		onRestore={() => void openRestore()}
-		onOpenShortcuts={() => (shortcutsOpen = true)}
 	/>
 	<NotesSidebar
 		{activeNoteId} {results} {visibleResults} {searchQuery} {notePage} {notePageCount}

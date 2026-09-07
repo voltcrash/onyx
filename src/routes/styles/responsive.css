@@ -54,8 +54,7 @@
   }
   .backup-button > span,
   .github-connect > span,
-  .github-account > span,
-  .top-actions > .icon-button.optional {
+  .github-account > span {
     display: none;
   }
   .backup-button,
