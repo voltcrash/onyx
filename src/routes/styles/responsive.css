@@ -3,25 +3,13 @@
   .app.sidebar-collapsed {
     grid-template-columns: minmax(0, 1fr);
   }
-  .topbar,
-  .sidebar-collapsed .topbar {
-    grid-column: 1;
-    grid-template-columns: auto 1fr auto;
-  }
-  .sidebar-open .topbar {
-    grid-template-columns: 1fr auto;
-  }
-  .topbar > .collapsed-sidebar-toggle {
+  .formatting-bar > .collapsed-sidebar-toggle {
     display: grid;
-    margin-left: 2px;
-  }
-  .sidebar-open .topbar > .collapsed-sidebar-toggle {
-    display: none;
   }
   .sidebar,
   .sidebar-collapsed .sidebar {
     position: fixed;
-    inset: 58px auto 0 0;
+    inset: 0 auto 0 0;
     z-index: 20;
     display: flex;
     width: 258px;
@@ -35,7 +23,7 @@
   .sidebar-open::after {
     content: "";
     position: fixed;
-    inset: 58px 0 0;
+    inset: 0;
     z-index: 15;
     background: var(--scrim);
   }
@@ -52,19 +40,14 @@
     width: 16px;
     height: 16px;
   }
-  .backup-button > span,
   .github-connect > span,
   .github-account > span {
     display: none;
   }
-  .backup-button,
   .github-connect {
     width: 34px;
     justify-content: center;
     padding: 0;
-  }
-  .backup-button i {
-    display: none;
   }
   .view-switcher button span {
     display: none;

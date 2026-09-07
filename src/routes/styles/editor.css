@@ -33,6 +33,18 @@
   overflow-x: auto;
   scrollbar-width: none;
 }
+.formatting-bar > .collapsed-sidebar-toggle {
+  display: none;
+}
+.sidebar-collapsed .formatting-bar > .collapsed-sidebar-toggle {
+  display: grid;
+}
+.toolbar-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
 .formatting-bar button {
   flex: 0 0 auto;
   width: 31px;

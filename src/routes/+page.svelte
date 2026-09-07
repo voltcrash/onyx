@@ -4,11 +4,9 @@
 		FolderInput, FolderOutput, HardDrive, Keyboard, Moon, PanelLeft, PencilLine, Save,
 		Search, Settings, Sun
 	} from '@lucide/svelte';
-	import AppHeader from '$lib/components/app-header.svelte';
 	import MarkdownWorkspace from '$lib/components/markdown-workspace.svelte';
 	import NotesSidebar from '$lib/components/notes-sidebar.svelte';
 	import RestoreDialog from '$lib/components/restore-dialog.svelte';
-	import ShortcutsDialog from '$lib/components/shortcuts-dialog.svelte';
 	import StatusNotices from '$lib/components/status-notices.svelte';
 	import type { BackupState, GithubState, RestoreState, SaveState, TransferState, ViewMode } from '$lib/components/app-types';
 	import CommandPalette, { type PaletteItem } from '$lib/components/command-palette.svelte';
@@ -67,7 +65,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	let liveLine = $state(0);
 	let inlinePreviewBehavior = $state<InlinePreviewBehavior>('rendered');
 	let searchInput: HTMLInputElement | undefined = $state();
-	let shortcutsOpen = $state(false);
 	let sidebarOpen = $state(false);
 	let storageError = $state('');
 	let storageNotice = $state('');
@@ -149,7 +146,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		{ id: 'export-zip', group: 'Transfer', label: 'Export a ZIP archive', icon: Download, keywords: 'save download backup', run: () => void exportZip() },
 		{ id: 'settings', group: 'Onyx', label: 'Open settings', icon: Settings, keywords: 'preferences options github storage themes', run: () => openSettings(githubState === 'connected' ? 'backup' : 'themes') },
 		{ id: 'storage', group: 'Onyx', label: 'Storage on this device', icon: HardDrive, keywords: 'space quota usage persistent', run: () => openSettings('storage') },
-		{ id: 'shortcuts', group: 'Onyx', label: 'Keyboard shortcuts', shortcut: '?', icon: Keyboard, keywords: 'help keys reference', run: () => (shortcutsOpen = true) }
+		{ id: 'shortcuts', group: 'Onyx', label: 'Keyboard shortcuts', shortcut: '?', icon: Keyboard, keywords: 'help keys reference', run: () => openSettings('shortcuts') }
 	]);
 
 	onMount(() => {
@@ -985,13 +982,12 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			event.preventDefault();
 			viewMode = viewMode === 'preview' ? 'edit' : 'preview';
 		} else if (event.key === '?' && !isTypingTarget(event.target)) {
-			shortcutsOpen = true;
+			openSettings('shortcuts');
 		} else if (event.key === '/' && !isTypingTarget(event.target)) {
 			event.preventDefault();
 			focusSearch();
 		} else if (event.key === 'Escape') {
 			if (restoreModalOpen && restoreState !== 'restoring') restoreModalOpen = false;
-			else if (shortcutsOpen) shortcutsOpen = false;
 			else if (settingsOpen) settingsOpen = false;
 			else if (sidebarOpen) sidebarOpen = false;
 			else if (searchQuery) {
@@ -1113,15 +1109,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 <svelte:head><title>onyx - a quiet place to think in markdown</title><meta name="description" content="A fast, local-first Markdown editor with full-text search that works offline." /></svelte:head>
 
-<div class="app" class:sidebar-open={sidebarOpen} class:sidebar-collapsed={sidebarCollapsed} inert={paletteOpen || settingsOpen || restoreModalOpen || shortcutsOpen}>
-	<AppHeader
-		{isOnline} {saveState}
-		{githubState} {githubUser} {githubBackup} {backupState}
-		{pendingBackupCount} {restoreModalOpen} {restoreState} {vault}
-		onToggleSidebar={toggleSidebar}
-		onBackup={() => void beginBackup()}
-		onRestore={() => void openRestore()}
-	/>
+<div class="app" class:sidebar-open={sidebarOpen} class:sidebar-collapsed={sidebarCollapsed} inert={paletteOpen || settingsOpen || restoreModalOpen}>
 	<NotesSidebar
 		{activeNoteId} {results} {visibleResults} {searchQuery} {notePage} {notePageCount}
 		{saveState} {transferState} {storageError} {paletteOpen} {settingsOpen} {isOnline}
@@ -1137,10 +1125,11 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		onChangePage={changeNotePage}
 	/>
 	<MarkdownWorkspace
-		{storageNotice} {storageError} {viewMode} {inlinePreviewBehavior} {markdown} {markdownLines}
+		{storageNotice} {storageError} {isOnline} {viewMode} {inlinePreviewBehavior} {markdown} {markdownLines}
 		{liveLine} {saveState} {transferState} {wordCount} {readingMinutes} {hasContent}
 		{renderedMarkdown} bind:editor bind:liveEditor bind:liveEditorContainer
 		onRetryStorage={() => void (vault ? saveDraft() : openVault())}
+		onToggleSidebar={toggleSidebar}
 		onReload={() => location.reload()}
 		onInsertSyntax={insertSyntax}
 		onPrefixLine={prefixLine}
@@ -1214,8 +1203,4 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		onRestore={() => void restoreSelectedCommit()}
 		{formatCommitDate}
 	/>
-{/if}
-
-{#if shortcutsOpen}
-	<ShortcutsDialog onClose={() => (shortcutsOpen = false)} />
 {/if}

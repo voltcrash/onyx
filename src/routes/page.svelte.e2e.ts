@@ -530,8 +530,9 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
   });
 
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Restore" })).toBeVisible();
-  await page.getByRole("button", { name: "Restore" }).click();
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Backup status" }).click();
+  await page.getByRole("button", { name: "Restore a commit" }).click();
   await expect(page.getByText("Back up Onyx vault")).toBeVisible();
   await page.getByRole("button", { name: "Restore selected" }).click();
 

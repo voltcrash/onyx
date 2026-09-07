@@ -2,6 +2,7 @@
 	export type SettingsSection =
 		| 'editor'
 		| 'themes'
+		| 'shortcuts'
 		| 'github'
 		| 'repository'
 		| 'backup'
@@ -14,7 +15,7 @@
 <script lang="ts">
 	import {
 		CloudDownload, CloudOff, CloudUpload, Database, Download, ExternalLink, FileArchive, FolderInput,
-		FolderOutput, Github, HardDrive, LoaderCircle, LogOut, Moon, RefreshCw, ShieldCheck, Sun, Trash2,
+		FolderOutput, HardDrive, LoaderCircle, LogOut, Moon, RefreshCw, ShieldCheck, Sun, Trash2,
 		TriangleAlert, WifiOff, X
 	} from '@lucide/svelte';
 	import {
@@ -22,6 +23,7 @@
 		type ColorTheme, type ThemePreference, type Vault, type VaultStorageUsage
 	} from '$lib';
 	import { manageModalFocus } from '$lib/modal-focus';
+	import GithubIcon from './github-icon.svelte';
 
 	interface Props {
 		vault?: Vault;
@@ -66,6 +68,7 @@
 	const sections: Array<{ id: SettingsSection; label: string }> = [
 		{ id: 'editor', label: 'Editor' },
 		{ id: 'themes', label: 'Themes' },
+		{ id: 'shortcuts', label: 'Keyboard shortcuts' },
 		{ id: 'github', label: 'GitHub account' },
 		{ id: 'repository', label: 'Repository' },
 		{ id: 'backup', label: 'Backup status' },
@@ -217,7 +220,7 @@
 			</nav>
 
 			<div class="settings-panel">
-				{#if !isOnline && section !== 'editor' && section !== 'themes' && section !== 'storage' && section !== 'transfer' && section !== 'vault'}
+				{#if !isOnline && section !== 'editor' && section !== 'themes' && section !== 'shortcuts' && section !== 'storage' && section !== 'transfer' && section !== 'vault'}
 					<div class="settings-banner"><WifiOff size={15} /><span>GitHub settings are paused until your connection returns.</span></div>
 				{/if}
 
@@ -253,6 +256,23 @@
 							</button>
 						{/each}
 					</div>
+				{:else if section === 'shortcuts'}
+					<h3>Keyboard shortcuts</h3>
+					<p class="settings-hint">Use Ctrl instead of ⌘ on Windows and Linux.</p>
+					<div class="shortcut-list">
+						<div><span>Command palette</span><kbd>⌘ K</kbd></div>
+						<div><span>Search all notes</span><kbd>⌘ ⇧ F</kbd></div>
+						<div><span>New note</span><kbd>⌘ ⏎</kbd></div>
+						<div><span>Save note</span><kbd>⌘ S</kbd></div>
+						<div><span>Bold selection</span><kbd>⌘ B</kbd></div>
+						<div><span>Italic selection</span><kbd>⌘ I</kbd></div>
+						<div><span>Toggle preview</span><kbd>⌘ ⇧ P</kbd></div>
+						<div><span>Toggle sidebar</span><kbd>⌘ \</kbd></div>
+						<div><span>Cycle theme</span><kbd>⌘ ⇧ L</kbd></div>
+						<div><span>Focus search</span><kbd>/</kbd></div>
+						<div><span>Open this section</span><kbd>?</kbd></div>
+						<div><span>Close any panel</span><kbd>Esc</kbd></div>
+					</div>
 				{:else if section === 'github'}
 					<h3>GitHub account</h3>
 					<p class="settings-hint">Onyx signs in with a GitHub App so backups go straight from this device to your repository.</p>
@@ -267,7 +287,7 @@
 							<CloudOff size={22} />
 							<span><strong>Not connected</strong><small>{githubMessage || 'Connect GitHub to back up and restore this vault.'}</small></span>
 							<a class="settings-primary" class:disabled={!isOnline} href="/auth/github/start">
-								{#if githubState === 'loading'}<LoaderCircle class="spin" size={14} />{:else}<Github size={14} />{/if} Connect GitHub
+								{#if githubState === 'loading'}<LoaderCircle class="spin" size={14} />{:else}<GithubIcon size={14} />{/if} Connect GitHub
 							</a>
 						</div>
 					{/if}

@@ -1,39 +1,11 @@
 .app {
   display: grid;
-  grid-template: 58px minmax(0, 1fr) / 238px minmax(0, 1fr);
+  grid-template-columns: 238px minmax(0, 1fr);
   height: 100dvh;
   background: var(--paper);
 }
 .app.sidebar-collapsed {
   grid-template-columns: 0 minmax(0, 1fr);
-}
-.topbar {
-  grid-row: 1;
-  grid-column: 2;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  min-width: 0;
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--paper) 94%, transparent);
-  backdrop-filter: blur(16px);
-  z-index: 10;
-}
-.sidebar-collapsed .topbar {
-  grid-template-columns: auto 1fr auto;
-}
-.topbar > .collapsed-sidebar-toggle {
-  display: none;
-}
-.sidebar-collapsed .topbar > .collapsed-sidebar-toggle {
-  display: grid;
-  margin-left: 10px;
-}
-.top-actions {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding-right: 15px;
 }
 .offline-status {
   height: 26px;
@@ -90,8 +62,7 @@
   color: var(--ink);
 }
 .github-connect,
-.github-account,
-.backup-button {
+.github-account {
   height: 34px;
   display: flex;
   align-items: center;
@@ -101,36 +72,6 @@
   background: var(--surface);
   color: var(--ink-soft);
   font-size: 12px;
-}
-.backup-button {
-  padding: 0 10px;
-  cursor: pointer;
-}
-.backup-button:hover {
-  border-color: var(--line-hover);
-  color: var(--ink);
-}
-.backup-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.65;
-}
-.backup-button.success {
-  border-color: var(--ok-border);
-  color: var(--ok-text);
-}
-.backup-button.error {
-  border-color: var(--danger-border);
-  color: var(--danger);
-}
-.backup-button i {
-  min-width: 17px;
-  height: 17px;
-  display: grid;
-  place-items: center;
-  border-radius: 9px;
-  background: var(--chip);
-  font-size: 9px;
-  font-style: normal;
 }
 .github-connect {
   padding: 0 10px;
@@ -450,7 +391,7 @@
   color: var(--ink);
 }
 .workspace {
-  grid-row: 2;
+  grid-row: 1;
   grid-column: 2;
   min-width: 0;
   min-height: 0;

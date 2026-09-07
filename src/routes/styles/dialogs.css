@@ -77,13 +77,6 @@ kbd {
   white-space: nowrap;
   box-shadow: var(--shadow-xs);
 }
-.shortcut-modal > p {
-  margin: 0;
-  padding: 13px 22px 17px;
-  border-top: 1px solid var(--line-soft);
-  color: var(--faint);
-  font-size: 11px;
-}
 .settings-modal {
   width: min(100%, 760px);
 }
@@ -125,6 +118,10 @@ kbd {
 .settings-panel {
   padding: 20px 22px 24px;
   overflow-y: auto;
+}
+.settings-panel .shortcut-list {
+  max-height: none;
+  padding: 0;
 }
 .settings-panel h3 {
   margin: 0 0 4px;
