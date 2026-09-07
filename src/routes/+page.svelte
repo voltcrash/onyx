@@ -14,7 +14,7 @@
 	import { renderMarkdown, resolveLocalAttachmentUrl, type LocalAttachmentUrl } from '$lib/markdown';
 	import {
 		applyColorTheme, applyTheme, backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
-		browserStorageWarnings, detectBrowserStorageSupport, createMarkdownExport, createMarkdownZip,
+		browserStorageWarnings, detectBrowserStorageSupport, persistenceDeniedMessage, createMarkdownExport, createMarkdownZip,
 		defaultKeyboardShortcuts, detectPrimaryModifier, formatShortcut,
 		importMarkdownFiles, listGithubBackupCommits, nextThemePreference, readColorTheme, readLocalStorage,
 		readKeyboardShortcuts, shortcutMatchesEvent,
@@ -457,14 +457,18 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 			githubBackup = await vault.getGithubBackupState();
 			pendingBackupCount = (await vault.getPendingBackupOperations()).length;
 			if (detectBrowserStorageSupport().persistentStorage) {
-				void vault.requestPersistentStorage().then((granted) => {
-					if (!granted) appendStorageNotice('Persistent storage was not granted, so keep a backup of important notes.');
-				});
+				void ensurePersistentStorage();
 			}
 		} catch (error) {
 			storageError = error instanceof Error ? error.message : 'Your notes could not be opened.';
 			saveState = 'error';
 		}
+	}
+
+	async function ensurePersistentStorage(): Promise<void> {
+		if (!vault || (await vault.isStoragePersistent())) return;
+		if (await vault.requestPersistentStorage()) return;
+		appendStorageNotice(persistenceDeniedMessage());
 	}
 
 	function appendStorageNotice(message: string): void {

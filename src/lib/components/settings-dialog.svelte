@@ -20,7 +20,7 @@
 	} from '@lucide/svelte';
 	import {
 		listGithubRepositories, type GithubBackupState, type GithubRepository, type GithubUser,
-		formatShortcut, shortcutActions, shortcutFromEvent, shortcutParts, shortcutsEqual, type ColorTheme,
+		formatShortcut, persistenceDeniedMessage, shortcutActions, shortcutFromEvent, shortcutParts, shortcutsEqual, type ColorTheme,
 		type KeyboardShortcut, type KeyboardShortcuts, type PrimaryModifier, type ShortcutAction, type ThemePreference,
 		type Vault, type VaultStorageUsage
 	} from '$lib';
@@ -156,7 +156,7 @@
 		try {
 			const granted = await vault.requestPersistentStorage();
 			await loadUsage();
-			if (!granted) usageMessage = 'Persistent storage was not granted. Your vault still works, but the browser may remove it when space is low.';
+			if (!granted) usageMessage = persistenceDeniedMessage();
 		} finally {
 			persistState = 'idle';
 		}

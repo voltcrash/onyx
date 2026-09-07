@@ -76,3 +76,45 @@ function storageMethodAvailable(method: "getDirectory" | "persist" | "persisted"
     return false;
   }
 }
+
+export interface PersistenceEnvironment {
+  platform?: string;
+  userAgent?: string;
+  standalone?: boolean;
+}
+
+// WebKit only grants persistence to sites installed on the Home Screen, so iOS
+// browsers need install guidance rather than a repeated permission request.
+export function persistenceDeniedMessage(environment?: PersistenceEnvironment): string {
+  const context = environment ?? currentPersistenceEnvironment();
+  if (isWebKitMobile(context) && !isInstalledApp(context)) {
+    return "Persistent storage needs Onyx on your Home Screen. Tap Share, then Add to Home Screen, and open Onyx from there so the browser keeps your notes.";
+  }
+  return "Persistent storage was not granted, so keep a backup of important notes.";
+}
+
+function currentPersistenceEnvironment(): PersistenceEnvironment {
+  const navigatorLike = globalThis.navigator as (Navigator & { standalone?: boolean }) | undefined;
+  return {
+    platform: navigatorLike?.platform,
+    userAgent: navigatorLike?.userAgent,
+    standalone: navigatorLike?.standalone,
+  };
+}
+
+function isWebKitMobile(environment: PersistenceEnvironment): boolean {
+  const signature = `${environment.platform ?? ""} ${environment.userAgent ?? ""}`;
+  return (
+    /iPhone|iPad|iPod/i.test(signature) ||
+    (/Mac/i.test(signature) && (globalThis.navigator?.maxTouchPoints ?? 0) > 1)
+  );
+}
+
+function isInstalledApp(environment: PersistenceEnvironment): boolean {
+  if (environment.standalone) return true;
+  try {
+    return globalThis.matchMedia?.("(display-mode: standalone)").matches === true;
+  } catch {
+    return false;
+  }
+}
