@@ -55,7 +55,7 @@ test("persists edits made while an earlier save is still in flight", async ({ pa
   });
 
   await editor.fill("# First edit");
-  await page.getByRole("button", { name: /Save/ }).first().click();
+  await page.keyboard.press("ControlOrMeta+S");
   await page.waitForFunction(() =>
     Boolean((window as typeof window & { onyxWriteBlocked?: boolean }).onyxWriteBlocked),
   );
@@ -159,7 +159,7 @@ test("keeps the editor usable and pauses GitHub features offline", async ({ cont
   await editor.fill("# Written offline\n\nOnyx keeps working without a connection.");
   await expect(page.getByText("Unsaved", { exact: true })).toBeHidden();
   await expect(page.getByText("Saving…", { exact: true })).toBeHidden();
-  await page.getByRole("button", { name: /Save/ }).first().click();
+  await page.keyboard.press("ControlOrMeta+S");
 });
 
 test("searches note titles and Markdown content", async ({ page }) => {
@@ -176,7 +176,7 @@ test("searches note titles and Markdown content", async ({ page }) => {
   await expect(editor).toHaveValue(/Project Aurora/);
   await expect(page.getByText("Unsaved", { exact: true })).toBeHidden();
   await expect(page.getByText("Saving…", { exact: true })).toBeHidden();
-  await page.getByRole("button", { name: /Save/ }).first().click();
+  await page.keyboard.press("ControlOrMeta+S");
 
   await page.getByPlaceholder("Search all notes").fill("neut");
   await expect(page.getByText("1 result")).toBeVisible();

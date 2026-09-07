@@ -1,7 +1,7 @@
 <script lang="ts">
 	import {
 		CloudDownload, CloudOff, CloudUpload, Columns2, Eye, HelpCircle, LoaderCircle, LogOut,
-		PanelLeft, PencilLine, Save, Search, Settings, WifiOff
+		PanelLeft, PencilLine, Search, Settings, WifiOff
 	} from '@lucide/svelte';
 	import type { GithubBackupState, GithubUser, Vault } from '$lib';
 	import type { BackupState, GithubState, RestoreState, SaveState, TransferState, ViewMode } from './app-types';
@@ -26,7 +26,6 @@
 		onToggleSidebar: () => void;
 		onViewModeChange: (mode: ViewMode) => void;
 		onOpenInlinePreview: () => void;
-		onSave: () => void;
 		onOpenPalette: () => void;
 		onOpenSettings: () => void;
 		onBackup: () => void;
@@ -39,7 +38,7 @@
 		viewMode, isOnline, saveState, transferState, paletteOpen, settingsOpen,
 		githubState, githubUser, githubMessage, githubBackup, backupState, pendingBackupCount,
 		restoreModalOpen, restoreState, shortcutsOpen, vault, onToggleSidebar, onViewModeChange,
-		onOpenInlinePreview, onSave, onOpenPalette, onOpenSettings, onBackup, onRestore,
+		onOpenInlinePreview, onOpenPalette, onOpenSettings, onBackup, onRestore,
 		onDisconnectGithub, onOpenShortcuts
 	}: Props = $props();
 </script>
@@ -62,7 +61,6 @@
 				{saveState === 'loading' ? 'Opening…' : 'Save failed'}
 			</div>
 		{/if}
-		<button class="save-button" onclick={onSave} disabled={saveState === 'saving' || transferState === 'working'}><Save size={16} /><span>Save</span><kbd>⌘S</kbd></button>
 		<button class="palette-trigger" aria-label="Open the command palette" aria-haspopup="dialog" aria-expanded={paletteOpen} aria-controls="command-palette" title="Command palette (⌘K)" onclick={onOpenPalette}><Search size={15} /><span>Search or run…</span><kbd>⌘K</kbd></button>
 		<button class="icon-button" aria-label="Settings" aria-haspopup="dialog" aria-expanded={settingsOpen} aria-controls="settings-dialog" title="Settings" onclick={onOpenSettings}><Settings size={18} /></button>
 		{#if githubState === 'connected' && githubUser}

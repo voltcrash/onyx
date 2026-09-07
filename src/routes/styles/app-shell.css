@@ -74,7 +74,6 @@
   }
 }
 .icon-button,
-.save-button,
 .view-switcher button,
 .formatting-bar button {
   border: 0;
@@ -119,33 +118,6 @@
   border-left: 1px solid var(--line-soft);
   color: var(--faint);
   font-size: 11px;
-}
-.save-button {
-  height: 34px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 9px;
-  border: 1px solid var(--line-strong);
-  border-radius: 7px;
-  background: var(--surface);
-  color: var(--ink-soft);
-  font-size: 12px;
-  box-shadow: var(--shadow-xs);
-}
-.save-button:hover {
-  border-color: var(--line-hover);
-  color: var(--ink);
-}
-.save-button kbd {
-  padding-left: 5px;
-  border-left: 1px solid var(--line-soft);
-  color: var(--faint);
-  font-size: 11px;
-}
-.save-button:disabled {
-  opacity: 0.6;
-  cursor: wait;
 }
 .github-connect,
 .github-account,

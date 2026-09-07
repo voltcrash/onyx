@@ -1121,7 +1121,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		onToggleSidebar={toggleSidebar}
 		onViewModeChange={(mode) => (viewMode = mode)}
 		onOpenInlinePreview={() => openInlinePreview()}
-		onSave={() => void saveDraft()}
 		onOpenPalette={() => void openPalette()}
 		onOpenSettings={() => openSettings(githubState === 'connected' ? 'backup' : 'github')}
 		onBackup={() => void beginBackup()}

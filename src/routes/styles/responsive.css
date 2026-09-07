@@ -66,15 +66,12 @@
     width: 16px;
     height: 16px;
   }
-  .save-button kbd,
-  .save-button > span,
   .backup-button > span,
   .github-connect > span,
   .github-account > span,
   .top-actions > .icon-button.optional {
     display: none;
   }
-  .save-button,
   .backup-button,
   .github-connect {
     width: 34px;
