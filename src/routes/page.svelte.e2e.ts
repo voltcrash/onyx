@@ -225,7 +225,7 @@ test("customizes and persists keyboard shortcuts", async ({ page }) => {
   await page.getByRole("button", { name: "Change Focus search shortcut" }).click();
   await page.keyboard.press("ControlOrMeta+Shift+Y");
   await expect(page.getByRole("button", { name: "Change Focus search shortcut" })).toHaveText(
-    "⌘ ⇧ Y",
+    "Ctrl ⇧ Y",
   );
   await page.getByRole("button", { name: "Close settings" }).click();
 

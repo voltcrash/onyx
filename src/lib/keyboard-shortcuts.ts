@@ -24,6 +24,8 @@ export interface KeyboardShortcut {
   alt?: boolean;
 }
 
+export type PrimaryModifier = "meta" | "control";
+
 export type KeyboardShortcuts = Record<ShortcutAction, KeyboardShortcut | null>;
 
 const STORAGE_KEY = "onyx:keyboard-shortcuts";
@@ -64,11 +66,31 @@ export function writeKeyboardShortcuts(shortcuts: KeyboardShortcuts): boolean {
   return writeLocalStorage(STORAGE_KEY, JSON.stringify(shortcuts));
 }
 
-export function shortcutFromEvent(event: KeyboardEvent): KeyboardShortcut | undefined {
+export function detectPrimaryModifier(
+  platformNavigator:
+    | (Pick<Navigator, "platform" | "userAgent"> & {
+        userAgentData?: { platform?: string };
+      })
+    | undefined = typeof navigator === "undefined" ? undefined : navigator,
+): PrimaryModifier {
+  const platform =
+    platformNavigator?.userAgentData?.platform ||
+    platformNavigator?.platform ||
+    platformNavigator?.userAgent ||
+    "";
+  return /Mac|iPhone|iPad|iPod/i.test(platform) ? "meta" : "control";
+}
+
+export function shortcutFromEvent(
+  event: KeyboardEvent,
+  primaryModifier: PrimaryModifier = detectPrimaryModifier(),
+): KeyboardShortcut | undefined {
   if (["Alt", "Control", "Meta", "Shift"].includes(event.key)) return undefined;
+  const primaryPressed = primaryModifier === "meta" ? event.metaKey : event.ctrlKey;
+  if ((event.metaKey || event.ctrlKey) && !primaryPressed) return undefined;
   return {
     key: normalizeKey(event.key),
-    primary: event.metaKey || event.ctrlKey || undefined,
+    primary: primaryPressed || undefined,
     shift: event.shiftKey || undefined,
     alt: event.altKey || undefined,
   };
@@ -77,11 +99,14 @@ export function shortcutFromEvent(event: KeyboardEvent): KeyboardShortcut | unde
 export function shortcutMatchesEvent(
   shortcut: KeyboardShortcut | null,
   event: KeyboardEvent,
+  primaryModifier: PrimaryModifier = detectPrimaryModifier(),
 ): boolean {
   if (!shortcut) return false;
+  const expectsPrimary = Boolean(shortcut.primary);
   return (
     normalizeKey(event.key) === shortcut.key &&
-    Boolean(event.metaKey || event.ctrlKey) === Boolean(shortcut.primary) &&
+    event.metaKey === (expectsPrimary && primaryModifier === "meta") &&
+    event.ctrlKey === (expectsPrimary && primaryModifier === "control") &&
     event.shiftKey === Boolean(shortcut.shift) &&
     event.altKey === Boolean(shortcut.alt)
   );
@@ -100,10 +125,13 @@ export function shortcutsEqual(
   );
 }
 
-export function formatShortcut(shortcut: KeyboardShortcut | null): string {
+export function formatShortcut(
+  shortcut: KeyboardShortcut | null,
+  primaryModifier: PrimaryModifier = "meta",
+): string {
   if (!shortcut) return "Not set";
   const parts = [
-    shortcut.primary ? "⌘" : "",
+    shortcut.primary ? (primaryModifier === "meta" ? "⌘" : "Ctrl") : "",
     shortcut.alt ? "⌥" : "",
     shortcut.shift ? "⇧" : "",
     displayKey(shortcut.key),

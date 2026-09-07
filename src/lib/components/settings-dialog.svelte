@@ -21,7 +21,7 @@
 	import {
 		listGithubRepositories, type GithubBackupState, type GithubRepository, type GithubUser,
 		formatShortcut, shortcutActions, shortcutFromEvent, shortcutsEqual, type ColorTheme,
-		type KeyboardShortcut, type KeyboardShortcuts, type ShortcutAction, type ThemePreference,
+		type KeyboardShortcut, type KeyboardShortcuts, type PrimaryModifier, type ShortcutAction, type ThemePreference,
 		type Vault, type VaultStorageUsage
 	} from '$lib';
 	import { manageModalFocus } from '$lib/modal-focus';
@@ -43,6 +43,7 @@
 		colorTheme: ColorTheme;
 		inlinePreviewBehavior: InlinePreviewBehavior;
 		shortcuts: KeyboardShortcuts;
+		primaryModifier: PrimaryModifier;
 		section?: SettingsSection;
 		onThemeChange: (preference: ThemePreference) => void;
 		onColorThemeChange: (theme: ColorTheme) => void;
@@ -65,7 +66,7 @@
 
 	let {
 		vault, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
-		backupState, backupMessage, backupCommitUrl, transferState, theme, colorTheme, inlinePreviewBehavior, shortcuts,
+		backupState, backupMessage, backupCommitUrl, transferState, theme, colorTheme, inlinePreviewBehavior, shortcuts, primaryModifier,
 		section = $bindable('github'), onThemeChange, onColorThemeChange, onInlinePreviewBehaviorChange, onShortcutChange, onResetShortcuts, onClose, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onVaultCleared
 	}: Props = $props();
@@ -219,11 +220,11 @@
 	function captureShortcut(event: KeyboardEvent, action: ShortcutAction): void {
 		event.preventDefault();
 		event.stopPropagation();
-		const shortcut = shortcutFromEvent(event);
+		const shortcut = shortcutFromEvent(event, primaryModifier);
 		if (!shortcut) return;
 		const conflict = shortcutActions.find(({ id }) => id !== action && shortcutsEqual(shortcuts[id], shortcut));
 		if (conflict) {
-			shortcutMessage = `${formatShortcut(shortcut)} is already assigned to ${conflict.label}.`;
+			shortcutMessage = `${formatShortcut(shortcut, primaryModifier)} is already assigned to ${conflict.label}.`;
 			return;
 		}
 		onShortcutChange(action, shortcut);
@@ -291,7 +292,7 @@
 					</div>
 				{:else if section === 'shortcuts'}
 					<div class="settings-section-heading">
-						<div><h3>Keyboard shortcuts</h3><p class="settings-hint">Select a shortcut, then press a new key combination. Use Ctrl instead of ⌘ on Windows and Linux.</p></div>
+						<div><h3>Keyboard shortcuts</h3><p class="settings-hint">Select a shortcut, then press a new key combination. Your primary modifier is detected automatically.</p></div>
 						<button class="settings-secondary" onclick={() => { onResetShortcuts(); recordingShortcut = undefined; shortcutMessage = ''; }}>Restore defaults</button>
 					</div>
 					{#if shortcutMessage}<p class="settings-hint error" role="alert">{shortcutMessage}</p>{/if}
@@ -307,7 +308,7 @@
 										onclick={() => beginShortcutCapture(action.id)}
 										onkeydown={(event) => recordingShortcut === action.id && captureShortcut(event, action.id)}
 										onblur={() => { if (recordingShortcut === action.id) recordingShortcut = undefined; }}
-									>{recordingShortcut === action.id ? 'Press keys…' : formatShortcut(shortcuts[action.id])}</button>
+									>{recordingShortcut === action.id ? 'Press keys…' : formatShortcut(shortcuts[action.id], primaryModifier)}</button>
 									<button class="shortcut-clear" aria-label={`Clear ${action.label} shortcut`} disabled={!shortcuts[action.id]} onclick={() => clearShortcut(action.id)}>Clear</button>
 								</div>
 							</div>

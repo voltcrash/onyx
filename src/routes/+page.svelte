@@ -15,20 +15,22 @@
 	import {
 		applyColorTheme, applyTheme, backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
 		browserStorageWarnings, detectBrowserStorageSupport, createMarkdownExport, createMarkdownZip,
-		defaultKeyboardShortcuts, formatShortcut,
+		defaultKeyboardShortcuts, detectPrimaryModifier, formatShortcut,
 		importMarkdownFiles, listGithubBackupCommits, nextThemePreference, readColorTheme, readLocalStorage,
 		readKeyboardShortcuts, shortcutMatchesEvent,
 		readMarkdownFolder, readMarkdownZip, readThemePreference, restoreGithubSession,
 		restoreVaultFromGithub, validateGithubBackupRepository, Vault,
 		writeKeyboardShortcuts, writeLocalStorage, writeMarkdownFolder, type GithubBackupCommit, type GithubBackupState,
-		type ColorTheme, type GithubUser, type KeyboardShortcut, type KeyboardShortcuts,
+		type ColorTheme, type GithubUser, type KeyboardShortcut, type KeyboardShortcuts, type PrimaryModifier,
 		type NoteMetadata, type ShortcutAction, type ThemePreference, type VaultSearchResult
 	} from '$lib';
 	import { onMount, tick } from 'svelte';
 
 	const NOTE_PAGE_SIZE = 100;
 	const PREVIEW_DELAY_MS = 120;
-	const INITIAL_MARKDOWN = `# Welcome to Onyx
+	function createInitialMarkdown(primaryModifier: PrimaryModifier): string {
+		const primaryKey = primaryModifier === 'meta' ? '⌘' : 'Ctrl';
+		return `# Welcome to Onyx
 
 Onyx is a quiet place to think in Markdown. Your work stays on this device and saves automatically as you write.
 
@@ -44,7 +46,10 @@ Create as many notes as you need. Search checks every title and every word, whil
 - [ ] Capture the next idea
 - [ ] Shape it into something useful
 
-Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\` to toggle preview. Press \`?\` for every shortcut.`;
+Press \`${primaryKey} K\` for the command palette, \`${primaryKey} S\` to save now, or \`${primaryKey} ⇧ P\` to toggle preview. Press \`?\` for every shortcut.`;
+	}
+
+	const INITIAL_MARKDOWN = createInitialMarkdown('meta');
 
 	let vault = $state<Vault>();
 	let activeNoteId = $state('');
@@ -101,6 +106,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	let paletteNotes = $state<NoteMetadata[]>([]);
 	let sidebarCollapsed = $state(false);
 	let shortcuts = $state<KeyboardShortcuts>(structuredClone(defaultKeyboardShortcuts));
+	let primaryModifier = $state<PrimaryModifier>('meta');
 	let noteList: HTMLElement | undefined = $state();
 	let activeNoteSourcePath: string | undefined = $state();
 	let localAttachmentUrls = $state<LocalAttachmentUrl[]>([]);
@@ -154,6 +160,12 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	]);
 
 	onMount(() => {
+		primaryModifier = detectPrimaryModifier();
+		if (primaryModifier === 'control' && markdown === INITIAL_MARKDOWN) {
+			markdown = createInitialMarkdown(primaryModifier);
+			previewMarkdown = markdown;
+			lastSavedMarkdown = markdown;
+		}
 		isOnline = navigator.onLine;
 		const storageSupport = detectBrowserStorageSupport();
 		storageNotice = browserStorageWarnings(storageSupport).join(' ');
@@ -293,7 +305,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		saveTimer = undefined;
 		let notes = await vault.listNotes();
 		if (notes.length === 0) {
-			notes = [await vault.saveNote({ title: titleFromMarkdown(INITIAL_MARKDOWN), markdown: INITIAL_MARKDOWN })];
+			notes = [await vault.saveNote({ title: titleFromMarkdown(markdown), markdown })];
 		}
 		searchQuery = '';
 		await loadNote(notes[0].id);
@@ -434,7 +446,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			let notes = await vault.listNotes();
 			if (notes.length === 0) {
 				const legacyDraft = await readLegacyDraft();
-				const contents = legacyDraft || INITIAL_MARKDOWN;
+				const contents = legacyDraft || createInitialMarkdown(primaryModifier);
 				const firstNote = await vault.saveNote({ title: titleFromMarkdown(contents), markdown: contents });
 				notes = [firstNote];
 			}
@@ -735,7 +747,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 	function shortcutLabel(action: ShortcutAction): string | undefined {
 		const shortcut = shortcuts[action];
-		return shortcut ? formatShortcut(shortcut) : undefined;
+		return shortcut ? formatShortcut(shortcut, primaryModifier) : undefined;
 	}
 
 	function setShortcut(action: ShortcutAction, shortcut: KeyboardShortcut | null): void {
@@ -969,7 +981,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	}
 
 	function handleShortcut(event: KeyboardEvent): void {
-		const action = (Object.keys(shortcuts) as ShortcutAction[]).find((candidate) => shortcutMatchesEvent(shortcuts[candidate], event));
+		const action = (Object.keys(shortcuts) as ShortcutAction[]).find((candidate) => shortcutMatchesEvent(shortcuts[candidate], event, primaryModifier));
 		if (!action) return;
 		const shortcut = shortcuts[action];
 		if (isTypingTarget(event.target) && action !== 'closePanel' && !shortcut?.primary && !shortcut?.alt) return;
@@ -1114,7 +1126,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	<NotesSidebar
 		{activeNoteId} {results} {visibleResults} {searchQuery} {notePage} {notePageCount}
 		{saveState} {transferState} {storageError} {paletteOpen} {settingsOpen} {isOnline}
-		{githubState} {githubUser} {githubMessage} {shortcuts} bind:searchInput bind:noteList
+		{githubState} {githubUser} {githubMessage} {shortcuts} {primaryModifier} bind:searchInput bind:noteList
 		onToggleSidebar={toggleSidebar}
 		onCreateNote={() => void createNote()}
 		onSearch={queueSearch}
@@ -1128,7 +1140,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	<MarkdownWorkspace
 		{storageNotice} {storageError} {isOnline} {viewMode} {inlinePreviewBehavior} {markdown} {markdownLines}
 		{liveLine} {saveState} {transferState} {wordCount} {readingMinutes} {hasContent}
-		{renderedMarkdown} {shortcuts} bind:editor bind:liveEditor bind:liveEditorContainer
+		{renderedMarkdown} {shortcuts} {primaryModifier} bind:editor bind:liveEditor bind:liveEditorContainer
 		onRetryStorage={() => void (vault ? saveDraft() : openVault())}
 		onToggleSidebar={toggleSidebar}
 		onReload={() => location.reload()}
@@ -1174,6 +1186,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		{colorTheme}
 		{inlinePreviewBehavior}
 		{shortcuts}
+		{primaryModifier}
 		onThemeChange={setTheme}
 		onColorThemeChange={setColorTheme}
 		onInlinePreviewBehaviorChange={setInlinePreviewBehavior}
