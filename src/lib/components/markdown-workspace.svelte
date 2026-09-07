@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Bold, CloudOff, Code2, Columns2, Eye, HardDrive, Heading2, Italic, Link, List, LoaderCircle, PanelLeft, PencilLine, Quote, WifiOff } from '@lucide/svelte';
+	import { formatShortcut, type KeyboardShortcuts } from '$lib';
 	import type { InlinePreviewBehavior } from './settings-dialog.svelte';
 	import type { SaveState, TransferState, ViewMode } from './app-types';
 
@@ -18,6 +19,7 @@
 		readingMinutes: number;
 		hasContent: boolean;
 		renderedMarkdown: string;
+		shortcuts: KeyboardShortcuts;
 		editor?: HTMLTextAreaElement;
 		liveEditor?: HTMLTextAreaElement;
 		liveEditorContainer?: HTMLDivElement;
@@ -42,7 +44,7 @@
 
 	let {
 		storageNotice, storageError, isOnline, viewMode, inlinePreviewBehavior, markdown, markdownLines, liveLine,
-		saveState, transferState, wordCount, readingMinutes, hasContent, renderedMarkdown,
+		saveState, transferState, wordCount, readingMinutes, hasContent, renderedMarkdown, shortcuts,
 		editor = $bindable(), liveEditor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onToggleSidebar,
 		onReload, onInsertSyntax, onPrefixLine, onViewModeChange, onOpenInlinePreview, onMarkdownChange, onLiveLineFocus, onRenderedLineInput,
 		onRenderedLineKeydown, onLiveLineChange, onLiveLineKeydown, onActivateLiveLine,
@@ -65,7 +67,7 @@
 
 	<section class="editor-shell" class:edit-only={viewMode === 'edit' || viewMode === 'live'} class:live-only={viewMode === 'live'} class:preview-only={viewMode === 'preview'}>
 		<div class="formatting-bar" aria-label="Formatting and view tools">
-			<button class="collapsed-sidebar-toggle" aria-label="Show notes sidebar" title="Show sidebar (⌘\\)" onclick={onToggleSidebar}><PanelLeft size={19} /></button>
+			<button class="collapsed-sidebar-toggle" aria-label="Show notes sidebar" title={`Show sidebar (${formatShortcut(shortcuts.toggleSidebar)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button>
 			<div class="view-switcher" aria-label="View mode">
 				<button class:active={viewMode === 'edit'} aria-pressed={viewMode === 'edit'} onclick={() => onViewModeChange('edit')} aria-label="Editor only" title="Editor only"><PencilLine size={16} /><span>Edit</span></button>
 				<button class:active={viewMode === 'live'} aria-pressed={viewMode === 'live'} onclick={onOpenInlinePreview} aria-label="Inline preview" title="Inline preview"><Eye size={16} /><span>Inline</span></button>
@@ -73,7 +75,7 @@
 				<button class:active={viewMode === 'preview'} aria-pressed={viewMode === 'preview'} onclick={() => onViewModeChange('preview')} aria-label="Preview only" title="Preview only"><Eye size={16} /><span>Preview</span></button>
 			</div>
 			<span></span>
-			<button onclick={() => onInsertSyntax('**', '**', 'bold text')} title="Bold (⌘B)" aria-label="Bold"><Bold size={16} /></button><button onclick={() => onInsertSyntax('_', '_', 'italic text')} title="Italic (⌘I)" aria-label="Italic"><Italic size={16} /></button><span></span><button onclick={() => onPrefixLine('## ')} title="Heading" aria-label="Heading"><Heading2 size={17} /></button><button onclick={() => onPrefixLine('- ')} title="Bulleted list" aria-label="Bulleted list"><List size={17} /></button><button onclick={() => onPrefixLine('> ')} title="Quote" aria-label="Quote"><Quote size={16} /></button><button onclick={() => onInsertSyntax('`', '`', 'code')} title="Inline code" aria-label="Inline code"><Code2 size={17} /></button><button onclick={() => onInsertSyntax('[', '](https://)', 'link text')} title="Link" aria-label="Link"><Link size={16} /></button>
+			<button onclick={() => onInsertSyntax('**', '**', 'bold text')} title={`Bold (${formatShortcut(shortcuts.bold)})`} aria-label="Bold"><Bold size={16} /></button><button onclick={() => onInsertSyntax('_', '_', 'italic text')} title={`Italic (${formatShortcut(shortcuts.italic)})`} aria-label="Italic"><Italic size={16} /></button><span></span><button onclick={() => onPrefixLine('## ')} title="Heading" aria-label="Heading"><Heading2 size={17} /></button><button onclick={() => onPrefixLine('- ')} title="Bulleted list" aria-label="Bulleted list"><List size={17} /></button><button onclick={() => onPrefixLine('> ')} title="Quote" aria-label="Quote"><Quote size={16} /></button><button onclick={() => onInsertSyntax('`', '`', 'code')} title="Inline code" aria-label="Inline code"><Code2 size={17} /></button><button onclick={() => onInsertSyntax('[', '](https://)', 'link text')} title="Link" aria-label="Link"><Link size={16} /></button>
 			<div class="toolbar-status">
 				{#if !isOnline}<div class="offline-status" role="status" title="GitHub features are paused until your connection returns"><WifiOff size={14} /><span>Offline</span></div>{/if}
 				{#if saveState === 'loading' || saveState === 'error'}

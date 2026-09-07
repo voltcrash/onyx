@@ -216,6 +216,27 @@ test("can reveal the active Markdown source line in inline preview", async ({ pa
   await expect(page.getByRole("textbox", { name: "Markdown line 3" })).toBeVisible();
 });
 
+test("customizes and persists keyboard shortcuts", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Keyboard shortcuts" }).click();
+  await page.getByRole("button", { name: "Change Focus search shortcut" }).click();
+  await page.keyboard.press("ControlOrMeta+Shift+Y");
+  await expect(page.getByRole("button", { name: "Change Focus search shortcut" })).toHaveText(
+    "⌘ ⇧ Y",
+  );
+  await page.getByRole("button", { name: "Close settings" }).click();
+
+  await page.keyboard.press("ControlOrMeta+Shift+Y");
+  await expect(page.getByPlaceholder("Search all notes")).toBeFocused();
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await page.keyboard.press("ControlOrMeta+Shift+Y");
+  await expect(page.getByPlaceholder("Search all notes")).toBeFocused();
+});
+
 test("binds a backup repository to the authenticated GitHub account", async ({ page }) => {
   let account = { id: 1, login: "octocat" };
   let repositoryChecks = 0;

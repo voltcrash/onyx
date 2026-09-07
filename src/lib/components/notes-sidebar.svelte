@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { FileText, LoaderCircle, LogOut, PanelLeftClose, Plus, Search, Settings, WifiOff, X } from '@lucide/svelte';
-	import type { GithubUser, VaultSearchResult } from '$lib';
+	import { formatShortcut, type GithubUser, type KeyboardShortcuts, type VaultSearchResult } from '$lib';
 	import GithubIcon from './github-icon.svelte';
 	import type { GithubState, SaveState, TransferState } from './app-types';
 
@@ -19,6 +19,7 @@
 		githubState: GithubState;
 		githubUser?: GithubUser;
 		githubMessage: string;
+		shortcuts: KeyboardShortcuts;
 		storageError: string;
 		searchInput?: HTMLInputElement;
 		noteList?: HTMLElement;
@@ -35,15 +36,15 @@
 
 	let {
 		activeNoteId, results, visibleResults, searchQuery, notePage, notePageCount, saveState, paletteOpen, settingsOpen,
-		isOnline, githubState, githubUser, githubMessage, transferState, storageError,
+		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts,
 		searchInput = $bindable(), noteList = $bindable(), onToggleSidebar, onCreateNote, onSearch,
 		onOpenPalette, onOpenSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage
 	}: Props = $props();
 </script>
 
 <aside class="sidebar" aria-label="Notes">
-	<div class="notes-heading"><div class="notes-title"><button class="icon-button sidebar-toggle" aria-label="Hide notes sidebar" title="Toggle sidebar (⌘\\)" onclick={onToggleSidebar}><PanelLeftClose size={19} /></button><h1>Notes</h1></div><div class="notes-actions"><button class="new-note" aria-label="New note" title="New note" disabled={transferState === 'working'} onclick={onCreateNote}><Plus size={17} /></button></div></div>
-	<label class="search-box"><Search size={15} /><input bind:this={searchInput} type="search" placeholder="Search all notes" value={searchQuery} oninput={(event) => onSearch(event.currentTarget.value)} /><button type="button" aria-label="Open the command palette" aria-haspopup="dialog" aria-expanded={paletteOpen} aria-controls="command-palette" title="Run a command (⌘K)" onclick={onOpenPalette}><kbd>⌘K</kbd></button></label>
+	<div class="notes-heading"><div class="notes-title"><button class="icon-button sidebar-toggle" aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar)})`} onclick={onToggleSidebar}><PanelLeftClose size={19} /></button><h1>Notes</h1></div><div class="notes-actions"><button class="new-note" aria-label="New note" title="New note" disabled={transferState === 'working'} onclick={onCreateNote}><Plus size={17} /></button></div></div>
+	<label class="search-box"><Search size={15} /><input bind:this={searchInput} type="search" placeholder="Search all notes" value={searchQuery} oninput={(event) => onSearch(event.currentTarget.value)} /><button type="button" aria-label="Open the command palette" aria-haspopup="dialog" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Run a command (${formatShortcut(shortcuts.commandPalette)})`} onclick={onOpenPalette}><kbd>{formatShortcut(shortcuts.commandPalette).replaceAll(' ', '')}</kbd></button></label>
 	<div class="result-count" aria-live="polite">{searchQuery ? `${results.length} ${results.length === 1 ? 'result' : 'results'}` : `${results.length} ${results.length === 1 ? 'note' : 'notes'}`}</div>
 	<nav class="note-list" bind:this={noteList}>
 		{#each visibleResults as result (result.note.id)}

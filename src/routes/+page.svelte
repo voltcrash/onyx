@@ -15,11 +15,14 @@
 	import {
 		applyColorTheme, applyTheme, backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
 		browserStorageWarnings, detectBrowserStorageSupport, createMarkdownExport, createMarkdownZip,
+		defaultKeyboardShortcuts, formatShortcut,
 		importMarkdownFiles, listGithubBackupCommits, nextThemePreference, readColorTheme, readLocalStorage,
+		readKeyboardShortcuts, shortcutMatchesEvent,
 		readMarkdownFolder, readMarkdownZip, readThemePreference, restoreGithubSession,
 		restoreVaultFromGithub, validateGithubBackupRepository, Vault,
-		writeLocalStorage, writeMarkdownFolder, type GithubBackupCommit, type GithubBackupState,
-		type ColorTheme, type GithubUser, type NoteMetadata, type ThemePreference, type VaultSearchResult
+		writeKeyboardShortcuts, writeLocalStorage, writeMarkdownFolder, type GithubBackupCommit, type GithubBackupState,
+		type ColorTheme, type GithubUser, type KeyboardShortcut, type KeyboardShortcuts,
+		type NoteMetadata, type ShortcutAction, type ThemePreference, type VaultSearchResult
 	} from '$lib';
 	import { onMount, tick } from 'svelte';
 
@@ -97,6 +100,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	let paletteOpen = $state(false);
 	let paletteNotes = $state<NoteMetadata[]>([]);
 	let sidebarCollapsed = $state(false);
+	let shortcuts = $state<KeyboardShortcuts>(structuredClone(defaultKeyboardShortcuts));
 	let noteList: HTMLElement | undefined = $state();
 	let activeNoteSourcePath: string | undefined = $state();
 	let localAttachmentUrls = $state<LocalAttachmentUrl[]>([]);
@@ -128,14 +132,14 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			keywords: 'note open jump',
 			run: () => void selectNote(note.id)
 		})),
-		{ id: 'new-note', group: 'Actions', label: 'New note', shortcut: '⌘ ⏎', icon: FilePlus2, keywords: 'create add page', disabled: transferState === 'working', run: () => void createNote() },
-		{ id: 'save', group: 'Actions', label: 'Save note', shortcut: '⌘ S', icon: Save, keywords: 'write store', disabled: saveState === 'saving' || transferState === 'working', run: () => void saveDraft() },
-		{ id: 'search', group: 'Actions', label: 'Search all notes', shortcut: '⌘ ⇧ F', icon: Search, keywords: 'find full text', run: () => focusSearch() },
-		{ id: 'view-edit', group: 'View', label: 'Editor only', shortcut: '⌘ ⇧ P', icon: PencilLine, keywords: 'write markdown pane', run: () => (viewMode = 'edit') },
+		{ id: 'new-note', group: 'Actions', label: 'New note', shortcut: shortcutLabel('newNote'), icon: FilePlus2, keywords: 'create add page', disabled: transferState === 'working', run: () => void createNote() },
+		{ id: 'save', group: 'Actions', label: 'Save note', shortcut: shortcutLabel('saveNote'), icon: Save, keywords: 'write store', disabled: saveState === 'saving' || transferState === 'working', run: () => void saveDraft() },
+		{ id: 'search', group: 'Actions', label: 'Search all notes', shortcut: shortcutLabel('searchNotes'), icon: Search, keywords: 'find full text', run: () => focusSearch() },
+		{ id: 'view-edit', group: 'View', label: 'Editor only', shortcut: shortcutLabel('togglePreview'), icon: PencilLine, keywords: 'write markdown pane', run: () => (viewMode = 'edit') },
 		{ id: 'view-live', group: 'View', label: 'Inline preview', icon: Eye, keywords: 'live inline rendered edit obsidian', run: () => openInlinePreview() },
 		{ id: 'view-split', group: 'View', label: 'Split view', icon: Columns2, keywords: 'side by side pane', run: () => (viewMode = 'split') },
 		{ id: 'view-preview', group: 'View', label: 'Preview only', icon: Eye, keywords: 'rendered read pane', run: () => (viewMode = 'preview') },
-		{ id: 'toggle-sidebar', group: 'View', label: sidebarCollapsed ? 'Show the notes sidebar' : 'Hide the notes sidebar', shortcut: '⌘ \\', icon: PanelLeft, keywords: 'panel files list', run: () => toggleSidebar() },
+		{ id: 'toggle-sidebar', group: 'View', label: sidebarCollapsed ? 'Show the notes sidebar' : 'Hide the notes sidebar', shortcut: shortcutLabel('toggleSidebar'), icon: PanelLeft, keywords: 'panel files list', run: () => toggleSidebar() },
 		{ id: 'theme-light', group: 'Themes', label: 'Use light mode', icon: Sun, keywords: 'bright day colour color theme', disabled: theme === 'light', run: () => setTheme('light') },
 		{ id: 'theme-dark', group: 'Themes', label: 'Use dark mode', icon: Moon, keywords: 'night colour color theme', disabled: theme === 'dark', run: () => setTheme('dark') },
 		{ id: 'backup', group: 'GitHub', label: 'Back up to GitHub', icon: CloudUpload, keywords: 'commit push sync', disabled: !isOnline || githubState !== 'connected', run: () => void beginBackup() },
@@ -146,7 +150,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		{ id: 'export-zip', group: 'Transfer', label: 'Export a ZIP archive', icon: Download, keywords: 'save download backup', run: () => void exportZip() },
 		{ id: 'settings', group: 'Onyx', label: 'Open settings', icon: Settings, keywords: 'preferences options github storage themes', run: () => openSettings(githubState === 'connected' ? 'backup' : 'themes') },
 		{ id: 'storage', group: 'Onyx', label: 'Storage on this device', icon: HardDrive, keywords: 'space quota usage persistent', run: () => openSettings('storage') },
-		{ id: 'shortcuts', group: 'Onyx', label: 'Keyboard shortcuts', shortcut: '?', icon: Keyboard, keywords: 'help keys reference', run: () => openSettings('shortcuts') }
+		{ id: 'shortcuts', group: 'Onyx', label: 'Keyboard shortcuts', shortcut: shortcutLabel('openShortcuts'), icon: Keyboard, keywords: 'help keys reference', run: () => openSettings('shortcuts') }
 	]);
 
 	onMount(() => {
@@ -154,6 +158,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		const storageSupport = detectBrowserStorageSupport();
 		storageNotice = browserStorageWarnings(storageSupport).join(' ');
 		inlinePreviewBehavior = readLocalStorage('onyx:inline-preview-behavior') === 'source-line' ? 'source-line' : 'rendered';
+		shortcuts = readKeyboardShortcuts();
 		theme = readThemePreference();
 		applyTheme(theme);
 		colorTheme = readColorTheme();
@@ -728,6 +733,21 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		if (viewMode === 'live') requestAnimationFrame(() => behavior === 'rendered' ? focusRenderedLine(liveLine) : liveEditor?.focus());
 	}
 
+	function shortcutLabel(action: ShortcutAction): string | undefined {
+		const shortcut = shortcuts[action];
+		return shortcut ? formatShortcut(shortcut) : undefined;
+	}
+
+	function setShortcut(action: ShortcutAction, shortcut: KeyboardShortcut | null): void {
+		shortcuts = { ...shortcuts, [action]: shortcut };
+		writeKeyboardShortcuts(shortcuts);
+	}
+
+	function resetShortcuts(): void {
+		shortcuts = structuredClone(defaultKeyboardShortcuts);
+		writeKeyboardShortcuts(shortcuts);
+	}
+
 	function updateRenderedLine(line: number, element: HTMLElement): void {
 		const position = getCaretOffset(element);
 		updateLiveLine(line, element.textContent ?? '');
@@ -949,46 +969,27 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	}
 
 	function handleShortcut(event: KeyboardEvent): void {
-		const command = event.metaKey || event.ctrlKey;
-		const key = event.key.toLowerCase();
-		if (command && key === 'k') {
-			event.preventDefault();
-			togglePalette();
-			return;
-		}
-		if (paletteOpen) return;
-		if (command && key === 's') {
-			event.preventDefault();
-			if (transferState !== 'working') void saveDraft();
-		} else if (command && key === 'enter') {
-			event.preventDefault();
-			if (transferState !== 'working') void createNote();
-		} else if (command && event.shiftKey && key === 'f') {
-			event.preventDefault();
-			focusSearch();
-		} else if (command && event.shiftKey && key === 'l') {
-			event.preventDefault();
-			setTheme(nextThemePreference(theme));
-		} else if (command && key === '\\') {
-			event.preventDefault();
-			toggleSidebar();
-		} else if (command && key === 'b') {
-			event.preventDefault();
-			insertSyntax('**', '**', 'bold text');
-		} else if (command && key === 'i') {
-			event.preventDefault();
-			insertSyntax('_', '_', 'italic text');
-		} else if (command && event.shiftKey && key === 'p') {
-			event.preventDefault();
-			viewMode = viewMode === 'preview' ? 'edit' : 'preview';
-		} else if (event.key === '?' && !isTypingTarget(event.target)) {
-			openSettings('shortcuts');
-		} else if (event.key === '/' && !isTypingTarget(event.target)) {
-			event.preventDefault();
-			focusSearch();
-		} else if (event.key === 'Escape') {
+		const action = (Object.keys(shortcuts) as ShortcutAction[]).find((candidate) => shortcutMatchesEvent(shortcuts[candidate], event));
+		if (!action) return;
+		const shortcut = shortcuts[action];
+		if (isTypingTarget(event.target) && action !== 'closePanel' && !shortcut?.primary && !shortcut?.alt) return;
+		if (paletteOpen && action !== 'commandPalette' && action !== 'closePanel') return;
+		event.preventDefault();
+
+		if (action === 'commandPalette') togglePalette();
+		else if (action === 'saveNote' && transferState !== 'working') void saveDraft();
+		else if (action === 'newNote' && transferState !== 'working') void createNote();
+		else if (action === 'searchNotes' || action === 'focusSearch') focusSearch();
+		else if (action === 'cycleTheme') setTheme(nextThemePreference(theme));
+		else if (action === 'toggleSidebar') toggleSidebar();
+		else if (action === 'bold') insertSyntax('**', '**', 'bold text');
+		else if (action === 'italic') insertSyntax('_', '_', 'italic text');
+		else if (action === 'togglePreview') viewMode = viewMode === 'preview' ? 'edit' : 'preview';
+		else if (action === 'openShortcuts') openSettings('shortcuts');
+		else if (action === 'closePanel') {
 			if (restoreModalOpen && restoreState !== 'restoring') restoreModalOpen = false;
 			else if (settingsOpen) settingsOpen = false;
+			else if (paletteOpen) paletteOpen = false;
 			else if (sidebarOpen) sidebarOpen = false;
 			else if (searchQuery) {
 				queueSearch('');
@@ -1113,7 +1114,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	<NotesSidebar
 		{activeNoteId} {results} {visibleResults} {searchQuery} {notePage} {notePageCount}
 		{saveState} {transferState} {storageError} {paletteOpen} {settingsOpen} {isOnline}
-		{githubState} {githubUser} {githubMessage} bind:searchInput bind:noteList
+		{githubState} {githubUser} {githubMessage} {shortcuts} bind:searchInput bind:noteList
 		onToggleSidebar={toggleSidebar}
 		onCreateNote={() => void createNote()}
 		onSearch={queueSearch}
@@ -1127,7 +1128,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	<MarkdownWorkspace
 		{storageNotice} {storageError} {isOnline} {viewMode} {inlinePreviewBehavior} {markdown} {markdownLines}
 		{liveLine} {saveState} {transferState} {wordCount} {readingMinutes} {hasContent}
-		{renderedMarkdown} bind:editor bind:liveEditor bind:liveEditorContainer
+		{renderedMarkdown} {shortcuts} bind:editor bind:liveEditor bind:liveEditorContainer
 		onRetryStorage={() => void (vault ? saveDraft() : openVault())}
 		onToggleSidebar={toggleSidebar}
 		onReload={() => location.reload()}
@@ -1172,9 +1173,12 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		{theme}
 		{colorTheme}
 		{inlinePreviewBehavior}
+		{shortcuts}
 		onThemeChange={setTheme}
 		onColorThemeChange={setColorTheme}
 		onInlinePreviewBehaviorChange={setInlinePreviewBehavior}
+		onShortcutChange={setShortcut}
+		onResetShortcuts={resetShortcuts}
 		bind:section={settingsSection}
 		onClose={() => (settingsOpen = false)}
 		onDisconnectGithub={() => void disconnectGitHub()}

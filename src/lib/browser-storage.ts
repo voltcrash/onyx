@@ -20,7 +20,7 @@ export function browserStorageWarnings(support: BrowserStorageSupport): string[]
   const warnings: string[] = [];
   if (!support.localStorage) {
     warnings.push(
-      "Browser settings cannot be saved, so appearance and editor preferences will reset after this tab closes.",
+      "Browser settings cannot be saved, so appearance, editor, and keyboard preferences will reset after this tab closes.",
     );
   }
   if (!support.persistentStorage) {

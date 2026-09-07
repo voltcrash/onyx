@@ -115,14 +115,9 @@
 			event.preventDefault();
 			const item = matches[activeIndex];
 			if (item) choose(item);
-		} else if (event.key === 'Escape') {
-			event.preventDefault();
-			onClose();
 		}
 	}
 </script>
-
-<svelte:window onkeydown={(event) => { if (event.key === 'Escape') onClose(); }} />
 
 <div class="palette-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
 	<div id="command-palette" class="palette" role="dialog" aria-modal="true" aria-label="Command palette" tabindex="-1" use:manageModalFocus>

@@ -20,7 +20,9 @@
 	} from '@lucide/svelte';
 	import {
 		listGithubRepositories, type GithubBackupState, type GithubRepository, type GithubUser,
-		type ColorTheme, type ThemePreference, type Vault, type VaultStorageUsage
+		formatShortcut, shortcutActions, shortcutFromEvent, shortcutsEqual, type ColorTheme,
+		type KeyboardShortcut, type KeyboardShortcuts, type ShortcutAction, type ThemePreference,
+		type Vault, type VaultStorageUsage
 	} from '$lib';
 	import { manageModalFocus } from '$lib/modal-focus';
 	import GithubIcon from './github-icon.svelte';
@@ -40,10 +42,13 @@
 		theme: ThemePreference;
 		colorTheme: ColorTheme;
 		inlinePreviewBehavior: InlinePreviewBehavior;
+		shortcuts: KeyboardShortcuts;
 		section?: SettingsSection;
 		onThemeChange: (preference: ThemePreference) => void;
 		onColorThemeChange: (theme: ColorTheme) => void;
 		onInlinePreviewBehaviorChange: (behavior: InlinePreviewBehavior) => void;
+		onShortcutChange: (action: ShortcutAction, shortcut: KeyboardShortcut | null) => void;
+		onResetShortcuts: () => void;
 		onClose: () => void;
 		onDisconnectGithub: () => void;
 		onCreateRepository: (name: string) => void;
@@ -60,8 +65,8 @@
 
 	let {
 		vault, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
-		backupState, backupMessage, backupCommitUrl, transferState, theme, colorTheme, inlinePreviewBehavior,
-		section = $bindable('github'), onThemeChange, onColorThemeChange, onInlinePreviewBehaviorChange, onClose, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
+		backupState, backupMessage, backupCommitUrl, transferState, theme, colorTheme, inlinePreviewBehavior, shortcuts,
+		section = $bindable('github'), onThemeChange, onColorThemeChange, onInlinePreviewBehaviorChange, onShortcutChange, onResetShortcuts, onClose, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onVaultCleared
 	}: Props = $props();
 
@@ -91,6 +96,8 @@
 	let persistState = $state<'idle' | 'requesting'>('idle');
 	let clearState = $state<'idle' | 'confirming' | 'clearing' | 'error'>('idle');
 	let clearMessage = $state('');
+	let recordingShortcut = $state<ShortcutAction>();
+	let shortcutMessage = $state('');
 
 	const connected = $derived(githubState === 'connected' && Boolean(githubUser));
 	const themes: Array<{ id: ColorTheme; label: string; hint: string }> = [
@@ -203,6 +210,32 @@
 		if (!value) return 'Never';
 		return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 	}
+
+	function beginShortcutCapture(action: ShortcutAction): void {
+		recordingShortcut = action;
+		shortcutMessage = '';
+	}
+
+	function captureShortcut(event: KeyboardEvent, action: ShortcutAction): void {
+		event.preventDefault();
+		event.stopPropagation();
+		const shortcut = shortcutFromEvent(event);
+		if (!shortcut) return;
+		const conflict = shortcutActions.find(({ id }) => id !== action && shortcutsEqual(shortcuts[id], shortcut));
+		if (conflict) {
+			shortcutMessage = `${formatShortcut(shortcut)} is already assigned to ${conflict.label}.`;
+			return;
+		}
+		onShortcutChange(action, shortcut);
+		recordingShortcut = undefined;
+		shortcutMessage = '';
+	}
+
+	function clearShortcut(action: ShortcutAction): void {
+		onShortcutChange(action, null);
+		recordingShortcut = undefined;
+		shortcutMessage = '';
+	}
 </script>
 
 <div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget && clearState !== 'clearing') onClose(); }}>
@@ -257,21 +290,28 @@
 						{/each}
 					</div>
 				{:else if section === 'shortcuts'}
-					<h3>Keyboard shortcuts</h3>
-					<p class="settings-hint">Use Ctrl instead of ⌘ on Windows and Linux.</p>
-					<div class="shortcut-list">
-						<div><span>Command palette</span><kbd>⌘ K</kbd></div>
-						<div><span>Search all notes</span><kbd>⌘ ⇧ F</kbd></div>
-						<div><span>New note</span><kbd>⌘ ⏎</kbd></div>
-						<div><span>Save note</span><kbd>⌘ S</kbd></div>
-						<div><span>Bold selection</span><kbd>⌘ B</kbd></div>
-						<div><span>Italic selection</span><kbd>⌘ I</kbd></div>
-						<div><span>Toggle preview</span><kbd>⌘ ⇧ P</kbd></div>
-						<div><span>Toggle sidebar</span><kbd>⌘ \</kbd></div>
-						<div><span>Cycle theme</span><kbd>⌘ ⇧ L</kbd></div>
-						<div><span>Focus search</span><kbd>/</kbd></div>
-						<div><span>Open this section</span><kbd>?</kbd></div>
-						<div><span>Close any panel</span><kbd>Esc</kbd></div>
+					<div class="settings-section-heading">
+						<div><h3>Keyboard shortcuts</h3><p class="settings-hint">Select a shortcut, then press a new key combination. Use Ctrl instead of ⌘ on Windows and Linux.</p></div>
+						<button class="settings-secondary" onclick={() => { onResetShortcuts(); recordingShortcut = undefined; shortcutMessage = ''; }}>Restore defaults</button>
+					</div>
+					{#if shortcutMessage}<p class="settings-hint error" role="alert">{shortcutMessage}</p>{/if}
+					<div class="shortcut-list editable">
+						{#each shortcutActions as action (action.id)}
+							<div>
+								<span>{action.label}</span>
+								<div class="shortcut-controls">
+									<button
+										class="shortcut-capture"
+										class:recording={recordingShortcut === action.id}
+										aria-label={`Change ${action.label} shortcut`}
+										onclick={() => beginShortcutCapture(action.id)}
+										onkeydown={(event) => recordingShortcut === action.id && captureShortcut(event, action.id)}
+										onblur={() => { if (recordingShortcut === action.id) recordingShortcut = undefined; }}
+									>{recordingShortcut === action.id ? 'Press keys…' : formatShortcut(shortcuts[action.id])}</button>
+									<button class="shortcut-clear" aria-label={`Clear ${action.label} shortcut`} disabled={!shortcuts[action.id]} onclick={() => clearShortcut(action.id)}>Clear</button>
+								</div>
+							</div>
+						{/each}
 					</div>
 				{:else if section === 'github'}
 					<h3>GitHub account</h3>

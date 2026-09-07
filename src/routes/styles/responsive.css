@@ -98,6 +98,12 @@
   .settings-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+  .settings-section-heading {
+    display: block;
+  }
+  .settings-section-heading .settings-secondary {
+    margin-bottom: 12px;
+  }
   .settings-row {
     flex-wrap: wrap;
   }
