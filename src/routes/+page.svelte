@@ -29,7 +29,9 @@
 	const NOTE_PAGE_SIZE = 100;
 	const PREVIEW_DELAY_MS = 120;
 	function createInitialMarkdown(primaryModifier: PrimaryModifier): string {
-		const primaryKey = primaryModifier === 'meta' ? '⌘' : 'Ctrl';
+		const commandPaletteShortcut = primaryModifier === 'meta' ? '⌘ K' : 'Ctrl + K';
+		const saveShortcut = primaryModifier === 'meta' ? '⌘ S' : 'Ctrl + S';
+		const previewShortcut = primaryModifier === 'meta' ? '⌘ ⇧ P' : 'Ctrl + Shift + P';
 		return `# Welcome to Onyx
 
 Onyx is a quiet place to think in Markdown. Your work stays on this device and saves automatically as you write.
@@ -46,7 +48,7 @@ Create as many notes as you need. Search checks every title and every word, whil
 - [ ] Capture the next idea
 - [ ] Shape it into something useful
 
-Press \`${primaryKey} K\` for the command palette, \`${primaryKey} S\` to save now, or \`${primaryKey} ⇧ P\` to toggle preview. Press \`?\` for every shortcut.`;
+Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\` to save now, or \`${previewShortcut}\` to toggle preview. Press \`?\` for every shortcut.`;
 	}
 
 	const INITIAL_MARKDOWN = createInitialMarkdown('meta');

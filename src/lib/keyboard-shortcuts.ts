@@ -130,13 +130,20 @@ export function formatShortcut(
   primaryModifier: PrimaryModifier = "meta",
 ): string {
   if (!shortcut) return "Not set";
+  return shortcutParts(shortcut, primaryModifier).join(primaryModifier === "meta" ? " " : " + ");
+}
+
+export function shortcutParts(
+  shortcut: KeyboardShortcut,
+  primaryModifier: PrimaryModifier = "meta",
+): string[] {
   const parts = [
     shortcut.primary ? (primaryModifier === "meta" ? "⌘" : "Ctrl") : "",
-    shortcut.alt ? "⌥" : "",
-    shortcut.shift ? "⇧" : "",
+    shortcut.alt ? (primaryModifier === "meta" ? "⌥" : "Alt") : "",
+    shortcut.shift ? (primaryModifier === "meta" ? "⇧" : "Shift") : "",
     displayKey(shortcut.key),
   ];
-  return parts.filter(Boolean).join(" ");
+  return parts.filter(Boolean);
 }
 
 function normalizeKey(key: string): string {

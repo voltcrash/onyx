@@ -20,7 +20,7 @@
 	} from '@lucide/svelte';
 	import {
 		listGithubRepositories, type GithubBackupState, type GithubRepository, type GithubUser,
-		formatShortcut, shortcutActions, shortcutFromEvent, shortcutsEqual, type ColorTheme,
+		formatShortcut, shortcutActions, shortcutFromEvent, shortcutParts, shortcutsEqual, type ColorTheme,
 		type KeyboardShortcut, type KeyboardShortcuts, type PrimaryModifier, type ShortcutAction, type ThemePreference,
 		type Vault, type VaultStorageUsage
 	} from '$lib';
@@ -298,18 +298,31 @@
 					{#if shortcutMessage}<p class="settings-hint error" role="alert">{shortcutMessage}</p>{/if}
 					<div class="shortcut-list editable">
 						{#each shortcutActions as action (action.id)}
+							{@const shortcut = shortcuts[action.id]}
 							<div>
 								<span>{action.label}</span>
 								<div class="shortcut-controls">
 									<button
 										class="shortcut-capture"
 										class:recording={recordingShortcut === action.id}
+										class:placeholder={recordingShortcut === action.id || !shortcut}
 										aria-label={`Change ${action.label} shortcut`}
 										onclick={() => beginShortcutCapture(action.id)}
 										onkeydown={(event) => recordingShortcut === action.id && captureShortcut(event, action.id)}
 										onblur={() => { if (recordingShortcut === action.id) recordingShortcut = undefined; }}
-									>{recordingShortcut === action.id ? 'Press keys…' : formatShortcut(shortcuts[action.id], primaryModifier)}</button>
-									<button class="shortcut-clear" aria-label={`Clear ${action.label} shortcut`} disabled={!shortcuts[action.id]} onclick={() => clearShortcut(action.id)}>Clear</button>
+									>
+										{#if recordingShortcut === action.id}
+											Press keys…
+										{:else if shortcut}
+											{#each shortcutParts(shortcut, primaryModifier) as part, index}
+												{#if primaryModifier === 'control' && index > 0}<span class="shortcut-separator">+</span>{/if}
+												<kbd>{part}</kbd>
+											{/each}
+										{:else}
+											Not set
+										{/if}
+									</button>
+									<button class="shortcut-clear" aria-label={`Clear ${action.label} shortcut`} disabled={!shortcut} onclick={() => clearShortcut(action.id)}>Clear</button>
 								</div>
 							</div>
 						{/each}

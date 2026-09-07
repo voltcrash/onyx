@@ -224,9 +224,9 @@ test("customizes and persists keyboard shortcuts", async ({ page }) => {
   await page.getByRole("button", { name: "Keyboard shortcuts" }).click();
   await page.getByRole("button", { name: "Change Focus search shortcut" }).click();
   await page.keyboard.press("ControlOrMeta+Shift+Y");
-  await expect(page.getByRole("button", { name: "Change Focus search shortcut" })).toHaveText(
-    "Ctrl ⇧ Y",
-  );
+  const shortcut = page.getByRole("button", { name: "Change Focus search shortcut" });
+  await expect(shortcut.locator("kbd")).toHaveText(["Ctrl", "Shift", "Y"]);
+  await expect(shortcut.locator(".shortcut-separator")).toHaveText(["+", "+"]);
   await page.getByRole("button", { name: "Close settings" }).click();
 
   await page.keyboard.press("ControlOrMeta+Shift+Y");

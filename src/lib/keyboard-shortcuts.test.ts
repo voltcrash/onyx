@@ -13,7 +13,9 @@ describe("platform keyboard shortcuts", () => {
     });
 
     expect(primaryModifier).toBe("meta");
-    expect(formatShortcut({ key: "k", primary: true }, primaryModifier)).toBe("⌘ K");
+    expect(
+      formatShortcut({ key: "k", primary: true, alt: true, shift: true }, primaryModifier),
+    ).toBe("⌘ ⌥ ⇧ K");
   });
 
   it("uses Control on Windows and Linux", () => {
@@ -28,7 +30,10 @@ describe("platform keyboard shortcuts", () => {
       } as KeyboardEvent;
 
       expect(primaryModifier).toBe("control");
-      expect(formatShortcut({ key: "k", primary: true }, primaryModifier)).toBe("Ctrl K");
+      expect(formatShortcut({ key: "k", primary: true, shift: true }, primaryModifier)).toBe(
+        "Ctrl + Shift + K",
+      );
+      expect(formatShortcut({ key: "k", alt: true }, primaryModifier)).toBe("Alt + K");
       expect(shortcutMatchesEvent({ key: "k", primary: true }, event, primaryModifier)).toBe(true);
     }
   });
