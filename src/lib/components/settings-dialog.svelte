@@ -91,7 +91,8 @@
 
 	const connected = $derived(githubState === 'connected' && Boolean(githubUser));
 	const themes: Array<{ id: ColorTheme; label: string; hint: string }> = [
-		{ id: 'ember', label: 'Ember', hint: 'Warm paper with a terracotta accent.' }
+		{ id: 'ember', label: 'Ember', hint: 'Warm paper with a terracotta accent.' },
+		{ id: 'monochrome', label: 'Monochrome', hint: 'Pure black and white, with no accent hue.' }
 	];
 	const usedFraction = $derived(
 		usage?.quota && usage.usage !== undefined ? Math.min(1, usage.usage / usage.quota) : 0
@@ -247,7 +248,7 @@
 					<div class="theme-options" role="radiogroup" aria-label="Color theme">
 						{#each themes as option (option.id)}
 							<button class:active={colorTheme === option.id} role="radio" aria-checked={colorTheme === option.id} onclick={() => onColorThemeChange(option.id)}>
-								<span class="theme-preview ember-preview" aria-hidden="true"><i></i><i></i><i></i></span>
+								<span class="theme-preview {option.id}-preview" aria-hidden="true"><i></i><i></i><i></i></span>
 								<span><strong>{option.label}</strong><small>{option.hint}</small></span>
 							</button>
 						{/each}

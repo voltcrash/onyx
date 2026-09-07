@@ -512,6 +512,19 @@ kbd {
   border-radius: 2px;
   background: #c65f2e;
 }
+.monochrome-preview {
+  border-color: #eaeaea;
+  background: #ffffff;
+}
+.monochrome-preview i:first-child {
+  background: #fafafa;
+}
+.monochrome-preview i:nth-child(2) {
+  background: #000000;
+}
+.monochrome-preview i:last-child {
+  background: #000000;
+}
 .theme-options small {
   display: block;
   color: var(--muted);
