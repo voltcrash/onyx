@@ -116,10 +116,12 @@
   }
   .settings-body {
     grid-template-columns: minmax(0, 1fr);
-    max-height: min(76vh, 600px);
+    grid-template-rows: auto minmax(0, 1fr);
+    height: min(76vh, 600px);
   }
   .settings-nav {
     flex-direction: row;
+    align-items: center;
     overflow-x: auto;
     padding: 10px;
     border-right: 0;
