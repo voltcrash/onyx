@@ -1,7 +1,7 @@
 <script lang="ts">
 	import {
 		CloudDownload, CloudUpload, Columns2, Download, Eye, FileArchive, FilePlus2, FileText,
-		FolderInput, FolderOutput, HardDrive, Keyboard, Monitor, Moon, PanelLeft, PencilLine, Save,
+		FolderInput, FolderOutput, HardDrive, Keyboard, Moon, PanelLeft, PencilLine, Save,
 		Search, Settings, Sun
 	} from '@lucide/svelte';
 	import AppHeader from '$lib/components/app-header.svelte';
@@ -15,13 +15,13 @@
 	import SettingsDialog, { type InlinePreviewBehavior, type SettingsSection } from '$lib/components/settings-dialog.svelte';
 	import { renderMarkdown, resolveLocalAttachmentUrl, type LocalAttachmentUrl } from '$lib/markdown';
 	import {
-		applyTheme, backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
+		applyColorTheme, applyTheme, backupVaultToGithub, createPrivateGithubRepository, disconnectGithub, GithubRequestError,
 		browserStorageWarnings, detectBrowserStorageSupport, createMarkdownExport, createMarkdownZip,
-		importMarkdownFiles, listGithubBackupCommits, nextThemePreference, readLocalStorage,
+		importMarkdownFiles, listGithubBackupCommits, nextThemePreference, readColorTheme, readLocalStorage,
 		readMarkdownFolder, readMarkdownZip, readThemePreference, restoreGithubSession,
-		restoreVaultFromGithub, validateGithubBackupRepository, Vault, watchSystemTheme,
+		restoreVaultFromGithub, validateGithubBackupRepository, Vault,
 		writeLocalStorage, writeMarkdownFolder, type GithubBackupCommit, type GithubBackupState,
-		type GithubUser, type NoteMetadata, type ThemePreference, type VaultSearchResult
+		type ColorTheme, type GithubUser, type NoteMetadata, type ThemePreference, type VaultSearchResult
 	} from '$lib';
 	import { onMount, tick } from 'svelte';
 
@@ -95,7 +95,8 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	let transferMessage = $state('');
 	let folderInput: HTMLInputElement | undefined = $state();
 	let zipInput: HTMLInputElement | undefined = $state();
-	let theme = $state<ThemePreference>('system');
+	let theme = $state<ThemePreference>('light');
+	let colorTheme = $state<ColorTheme>('ember');
 	let paletteOpen = $state(false);
 	let paletteNotes = $state<NoteMetadata[]>([]);
 	let sidebarCollapsed = $state(false);
@@ -120,7 +121,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	const notePageCount = $derived(Math.max(1, Math.ceil(results.length / NOTE_PAGE_SIZE)));
 	const visibleResults = $derived(results.slice(notePage * NOTE_PAGE_SIZE, (notePage + 1) * NOTE_PAGE_SIZE));
 	const hasContent = $derived(markdown.trim().length > 0);
-	const themeLabel = $derived(theme === 'system' ? 'Match system' : theme === 'dark' ? 'Dark' : 'Light');
 	const paletteItems = $derived<PaletteItem[]>([
 		...paletteNotes.map((note) => ({
 			id: `note-${note.id}`,
@@ -139,16 +139,15 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		{ id: 'view-split', group: 'View', label: 'Split view', icon: Columns2, keywords: 'side by side pane', run: () => (viewMode = 'split') },
 		{ id: 'view-preview', group: 'View', label: 'Preview only', icon: Eye, keywords: 'rendered read pane', run: () => (viewMode = 'preview') },
 		{ id: 'toggle-sidebar', group: 'View', label: sidebarCollapsed ? 'Show the notes sidebar' : 'Hide the notes sidebar', shortcut: '⌘ \\', icon: PanelLeft, keywords: 'panel files list', run: () => toggleSidebar() },
-		{ id: 'theme-light', group: 'Appearance', label: 'Theme: Light', icon: Sun, keywords: 'bright day colour color', disabled: theme === 'light', run: () => setTheme('light') },
-		{ id: 'theme-dark', group: 'Appearance', label: 'Theme: Dark', icon: Moon, keywords: 'night colour color', disabled: theme === 'dark', run: () => setTheme('dark') },
-		{ id: 'theme-system', group: 'Appearance', label: 'Theme: Match system', icon: Monitor, keywords: 'auto os colour color', disabled: theme === 'system', run: () => setTheme('system') },
+		{ id: 'theme-light', group: 'Themes', label: 'Use light mode', icon: Sun, keywords: 'bright day colour color theme', disabled: theme === 'light', run: () => setTheme('light') },
+		{ id: 'theme-dark', group: 'Themes', label: 'Use dark mode', icon: Moon, keywords: 'night colour color theme', disabled: theme === 'dark', run: () => setTheme('dark') },
 		{ id: 'backup', group: 'GitHub', label: 'Back up to GitHub', icon: CloudUpload, keywords: 'commit push sync', disabled: !isOnline || githubState !== 'connected', run: () => void beginBackup() },
 		{ id: 'restore', group: 'GitHub', label: 'Restore from a GitHub commit', icon: CloudDownload, keywords: 'download history rollback', disabled: !isOnline || githubState !== 'connected', run: () => void openRestore() },
 		{ id: 'import-folder', group: 'Transfer', label: 'Import a Markdown folder', icon: FolderInput, keywords: 'open files load', run: () => folderInput?.click() },
 		{ id: 'import-zip', group: 'Transfer', label: 'Import a ZIP archive', icon: FileArchive, keywords: 'open files load', run: () => zipInput?.click() },
 		{ id: 'export-folder', group: 'Transfer', label: 'Export to a folder', icon: FolderOutput, keywords: 'save files write', run: () => void exportFolder() },
 		{ id: 'export-zip', group: 'Transfer', label: 'Export a ZIP archive', icon: Download, keywords: 'save download backup', run: () => void exportZip() },
-		{ id: 'settings', group: 'Onyx', label: 'Open settings', icon: Settings, keywords: 'preferences options github storage', run: () => openSettings(githubState === 'connected' ? 'backup' : 'appearance') },
+		{ id: 'settings', group: 'Onyx', label: 'Open settings', icon: Settings, keywords: 'preferences options github storage themes', run: () => openSettings(githubState === 'connected' ? 'backup' : 'themes') },
 		{ id: 'storage', group: 'Onyx', label: 'Storage on this device', icon: HardDrive, keywords: 'space quota usage persistent', run: () => openSettings('storage') },
 		{ id: 'shortcuts', group: 'Onyx', label: 'Keyboard shortcuts', shortcut: '?', icon: Keyboard, keywords: 'help keys reference', run: () => (shortcutsOpen = true) }
 	]);
@@ -160,7 +159,8 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		inlinePreviewBehavior = readLocalStorage('onyx:inline-preview-behavior') === 'source-line' ? 'source-line' : 'rendered';
 		theme = readThemePreference();
 		applyTheme(theme);
-		const stopThemeWatch = watchSystemTheme(() => applyTheme(theme));
+		colorTheme = readColorTheme();
+		applyColorTheme(colorTheme);
 		void openVault().finally(() => registerServiceWorker());
 		if (isOnline) void restoreGitHub();
 		else githubState = 'disconnected';
@@ -191,7 +191,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 			window.removeEventListener('online', onOnline);
 			window.removeEventListener('offline', onOffline);
 			document.removeEventListener('visibilitychange', onVisibilityChange);
-			stopThemeWatch();
 			if (saveTimer) window.clearTimeout(saveTimer);
 			if (searchTimer) window.clearTimeout(searchTimer);
 			if (previewTimer) window.clearTimeout(previewTimer);
@@ -1025,6 +1024,11 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		applyTheme(preference);
 	}
 
+	function setColorTheme(nextTheme: ColorTheme): void {
+		colorTheme = nextTheme;
+		applyColorTheme(nextTheme);
+	}
+
 	function togglePalette(): void {
 		if (paletteOpen) {
 			paletteOpen = false;
@@ -1111,7 +1115,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 <div class="app" class:sidebar-open={sidebarOpen} class:sidebar-collapsed={sidebarCollapsed} inert={paletteOpen || settingsOpen || restoreModalOpen || shortcutsOpen}>
 	<AppHeader
-		{viewMode} {isOnline} {saveState} {transferState} {paletteOpen} {theme} {themeLabel}
+		{viewMode} {isOnline} {saveState} {transferState} {paletteOpen}
 		{settingsOpen} {githubState} {githubUser} {githubMessage} {githubBackup} {backupState}
 		{pendingBackupCount} {restoreModalOpen} {restoreState} {shortcutsOpen} {vault}
 		onToggleSidebar={toggleSidebar}
@@ -1119,7 +1123,6 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		onOpenInlinePreview={() => openInlinePreview()}
 		onSave={() => void saveDraft()}
 		onOpenPalette={() => void openPalette()}
-		onCycleTheme={() => setTheme(nextThemePreference(theme))}
 		onOpenSettings={() => openSettings(githubState === 'connected' ? 'backup' : 'github')}
 		onBackup={() => void beginBackup()}
 		onRestore={() => void openRestore()}
@@ -1179,8 +1182,10 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		{backupCommitUrl}
 		{transferState}
 		{theme}
+		{colorTheme}
 		{inlinePreviewBehavior}
 		onThemeChange={setTheme}
+		onColorThemeChange={setColorTheme}
 		onInlinePreviewBehaviorChange={setInlinePreviewBehavior}
 		bind:section={settingsSection}
 		onClose={() => (settingsOpen = false)}

@@ -1,9 +1,9 @@
 <script lang="ts">
 	import {
 		CloudDownload, CloudOff, CloudUpload, Columns2, Eye, HelpCircle, LoaderCircle, LogOut,
-		Monitor, Moon, PanelLeft, PencilLine, Save, Search, Settings, Sun, WifiOff
+		PanelLeft, PencilLine, Save, Search, Settings, WifiOff
 	} from '@lucide/svelte';
-	import type { GithubBackupState, GithubUser, ThemePreference, Vault } from '$lib';
+	import type { GithubBackupState, GithubUser, Vault } from '$lib';
 	import type { BackupState, GithubState, RestoreState, SaveState, TransferState, ViewMode } from './app-types';
 
 	interface Props {
@@ -12,8 +12,6 @@
 		saveState: SaveState;
 		transferState: TransferState;
 		paletteOpen: boolean;
-		theme: ThemePreference;
-		themeLabel: string;
 		settingsOpen: boolean;
 		githubState: GithubState;
 		githubUser?: GithubUser;
@@ -30,7 +28,6 @@
 		onOpenInlinePreview: () => void;
 		onSave: () => void;
 		onOpenPalette: () => void;
-		onCycleTheme: () => void;
 		onOpenSettings: () => void;
 		onBackup: () => void;
 		onRestore: () => void;
@@ -39,10 +36,10 @@
 	}
 
 	let {
-		viewMode, isOnline, saveState, transferState, paletteOpen, theme, themeLabel, settingsOpen,
+		viewMode, isOnline, saveState, transferState, paletteOpen, settingsOpen,
 		githubState, githubUser, githubMessage, githubBackup, backupState, pendingBackupCount,
 		restoreModalOpen, restoreState, shortcutsOpen, vault, onToggleSidebar, onViewModeChange,
-		onOpenInlinePreview, onSave, onOpenPalette, onCycleTheme, onOpenSettings, onBackup, onRestore,
+		onOpenInlinePreview, onSave, onOpenPalette, onOpenSettings, onBackup, onRestore,
 		onDisconnectGithub, onOpenShortcuts
 	}: Props = $props();
 </script>
@@ -67,9 +64,6 @@
 		{/if}
 		<button class="save-button" onclick={onSave} disabled={saveState === 'saving' || transferState === 'working'}><Save size={16} /><span>Save</span><kbd>⌘S</kbd></button>
 		<button class="palette-trigger" aria-label="Open the command palette" aria-haspopup="dialog" aria-expanded={paletteOpen} aria-controls="command-palette" title="Command palette (⌘K)" onclick={onOpenPalette}><Search size={15} /><span>Search or run…</span><kbd>⌘K</kbd></button>
-		<button class="icon-button optional" aria-label={`Theme: ${themeLabel}. Change theme`} title={`Theme: ${themeLabel} (⌘⇧L)`} onclick={onCycleTheme}>
-			{#if theme === 'system'}<Monitor size={18} />{:else if theme === 'dark'}<Moon size={18} />{:else}<Sun size={18} />{/if}
-		</button>
 		<button class="icon-button" aria-label="Settings" aria-haspopup="dialog" aria-expanded={settingsOpen} aria-controls="settings-dialog" title="Settings" onclick={onOpenSettings}><Settings size={18} /></button>
 		{#if githubState === 'connected' && githubUser}
 			<button class="backup-button" class:success={backupState === 'success'} class:error={backupState === 'error'} onclick={onBackup} disabled={!isOnline || !vault || backupState === 'backing-up'} title={!isOnline ? 'GitHub backup is unavailable offline' : githubBackup ? `Back up to ${githubBackup.owner}/${githubBackup.repository}` : 'Create a private repository and back up the vault'}>

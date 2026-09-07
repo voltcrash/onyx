@@ -1,7 +1,7 @@
 <script module lang="ts">
 	export type SettingsSection =
 		| 'editor'
-		| 'appearance'
+		| 'themes'
 		| 'github'
 		| 'repository'
 		| 'backup'
@@ -14,12 +14,12 @@
 <script lang="ts">
 	import {
 		CloudDownload, CloudOff, CloudUpload, Database, Download, ExternalLink, FileArchive, FolderInput,
-		FolderOutput, HardDrive, LoaderCircle, LogOut, Monitor, Moon, RefreshCw, ShieldCheck, Sun, Trash2,
+		FolderOutput, HardDrive, LoaderCircle, LogOut, Moon, RefreshCw, ShieldCheck, Sun, Trash2,
 		TriangleAlert, WifiOff, X
 	} from '@lucide/svelte';
 	import {
 		listGithubRepositories, type GithubBackupState, type GithubRepository, type GithubUser,
-		type ThemePreference, type Vault, type VaultStorageUsage
+		type ColorTheme, type ThemePreference, type Vault, type VaultStorageUsage
 	} from '$lib';
 	import { manageModalFocus } from '$lib/modal-focus';
 
@@ -36,9 +36,11 @@
 		backupCommitUrl: string;
 		transferState: 'idle' | 'working' | 'error';
 		theme: ThemePreference;
+		colorTheme: ColorTheme;
 		inlinePreviewBehavior: InlinePreviewBehavior;
 		section?: SettingsSection;
 		onThemeChange: (preference: ThemePreference) => void;
+		onColorThemeChange: (theme: ColorTheme) => void;
 		onInlinePreviewBehaviorChange: (behavior: InlinePreviewBehavior) => void;
 		onClose: () => void;
 		onDisconnectGithub: () => void;
@@ -56,14 +58,14 @@
 
 	let {
 		vault, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
-		backupState, backupMessage, backupCommitUrl, transferState, theme, inlinePreviewBehavior,
-		section = $bindable('github'), onThemeChange, onInlinePreviewBehaviorChange, onClose, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
+		backupState, backupMessage, backupCommitUrl, transferState, theme, colorTheme, inlinePreviewBehavior,
+		section = $bindable('github'), onThemeChange, onColorThemeChange, onInlinePreviewBehaviorChange, onClose, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onVaultCleared
 	}: Props = $props();
 
 	const sections: Array<{ id: SettingsSection; label: string }> = [
 		{ id: 'editor', label: 'Editor' },
-		{ id: 'appearance', label: 'Appearance' },
+		{ id: 'themes', label: 'Themes' },
 		{ id: 'github', label: 'GitHub account' },
 		{ id: 'repository', label: 'Repository' },
 		{ id: 'backup', label: 'Backup status' },
@@ -88,10 +90,8 @@
 	let clearMessage = $state('');
 
 	const connected = $derived(githubState === 'connected' && Boolean(githubUser));
-	const themes: Array<{ id: ThemePreference; label: string; hint: string; icon: typeof Sun }> = [
-		{ id: 'light', label: 'Light', hint: 'Warm paper, best in bright rooms.', icon: Sun },
-		{ id: 'dark', label: 'Dark', hint: 'Low-glare onyx for night writing.', icon: Moon },
-		{ id: 'system', label: 'System', hint: 'Follow the operating system setting.', icon: Monitor }
+	const themes: Array<{ id: ColorTheme; label: string; hint: string }> = [
+		{ id: 'ember', label: 'Ember', hint: 'Warm paper with a terracotta accent.' }
 	];
 	const usedFraction = $derived(
 		usage?.quota && usage.usage !== undefined ? Math.min(1, usage.usage / usage.quota) : 0
@@ -216,7 +216,7 @@
 			</nav>
 
 			<div class="settings-panel">
-				{#if !isOnline && section !== 'editor' && section !== 'appearance' && section !== 'storage' && section !== 'transfer' && section !== 'vault'}
+				{#if !isOnline && section !== 'editor' && section !== 'themes' && section !== 'storage' && section !== 'transfer' && section !== 'vault'}
 					<div class="settings-banner"><WifiOff size={15} /><span>GitHub settings are paused until your connection returns.</span></div>
 				{/if}
 
@@ -233,15 +233,22 @@
 							<small>Show the raw Markdown for the active line while the rest stays rendered.</small>
 						</button>
 					</div>
-				{:else if section === 'appearance'}
-					<h3>Appearance</h3>
-					<p class="settings-hint">The theme applies to this browser and is remembered between visits. Press <kbd>⌘ ⇧ L</kbd> to cycle it from anywhere.</p>
-					<div class="theme-options" role="radiogroup" aria-label="Theme">
+				{:else if section === 'themes'}
+					<h3>Themes</h3>
+					<p class="settings-hint">Choose how Onyx looks in this browser.</p>
+					<div class="theme-mode-row">
+						<span class="theme-mode-copy">
+							{#if theme === 'dark'}<Moon size={18} />{:else}<Sun size={18} />{/if}
+							<span><strong>Dark mode</strong><small>Use a darker palette for low-light spaces.</small></span>
+						</span>
+						<button class="theme-toggle" class:active={theme === 'dark'} role="switch" aria-checked={theme === 'dark'} aria-label="Dark mode" onclick={() => onThemeChange(theme === 'dark' ? 'light' : 'dark')}><span></span></button>
+					</div>
+					<h4 class="theme-section-title">Theme</h4>
+					<div class="theme-options" role="radiogroup" aria-label="Color theme">
 						{#each themes as option (option.id)}
-							<button class:active={theme === option.id} role="radio" aria-checked={theme === option.id} onclick={() => onThemeChange(option.id)}>
-								<option.icon size={18} />
-								{option.label}
-								<small>{option.hint}</small>
+							<button class:active={colorTheme === option.id} role="radio" aria-checked={colorTheme === option.id} onclick={() => onColorThemeChange(option.id)}>
+								<span class="theme-preview ember-preview" aria-hidden="true"><i></i><i></i><i></i></span>
+								<span><strong>{option.label}</strong><small>{option.hint}</small></span>
 							</button>
 						{/each}
 					</div>

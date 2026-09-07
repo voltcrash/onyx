@@ -19,11 +19,14 @@ export {
   type GithubUser,
 } from "./github.js";
 export {
+  applyColorTheme,
   applyTheme,
   nextThemePreference,
+  readColorTheme,
   readThemePreference,
   resolveTheme,
   watchSystemTheme,
+  type ColorTheme,
   type ResolvedTheme,
   type ThemePreference,
 } from "./theme.js";
