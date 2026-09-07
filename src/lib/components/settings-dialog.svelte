@@ -14,7 +14,7 @@
 <script lang="ts">
 	import {
 		CloudDownload, CloudOff, CloudUpload, Database, Download, ExternalLink, FileArchive, FolderInput,
-		FolderOutput, HardDrive, LoaderCircle, LogOut, Moon, RefreshCw, ShieldCheck, Sun, Trash2,
+		FolderOutput, Github, HardDrive, LoaderCircle, LogOut, Moon, RefreshCw, ShieldCheck, Sun, Trash2,
 		TriangleAlert, WifiOff, X
 	} from '@lucide/svelte';
 	import {
@@ -267,7 +267,7 @@
 							<CloudOff size={22} />
 							<span><strong>Not connected</strong><small>{githubMessage || 'Connect GitHub to back up and restore this vault.'}</small></span>
 							<a class="settings-primary" class:disabled={!isOnline} href="/auth/github/start">
-								{#if githubState === 'loading'}<LoaderCircle class="spin" size={14} />{:else}<CloudUpload size={14} />{/if} Connect GitHub
+								{#if githubState === 'loading'}<LoaderCircle class="spin" size={14} />{:else}<Github size={14} />{/if} Connect GitHub
 							</a>
 						</div>
 					{/if}

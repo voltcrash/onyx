@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { CloudUpload, FileText, LoaderCircle, LogOut, PanelLeftClose, Plus, Search, Settings, WifiOff, X } from '@lucide/svelte';
+	import { FileText, Github, LoaderCircle, LogOut, PanelLeftClose, Plus, Search, Settings, WifiOff, X } from '@lucide/svelte';
 	import type { GithubUser, VaultSearchResult } from '$lib';
 	import type { GithubState, SaveState, TransferState } from './app-types';
 
@@ -72,7 +72,7 @@
 		{:else if !isOnline}
 			<button class="github-connect offline" disabled title="GitHub features are unavailable offline" aria-label="GitHub unavailable offline"><WifiOff size={16} /><span>GitHub unavailable</span></button>
 		{:else}
-			<a class="github-connect" class:error={githubState === 'error'} href="/auth/github/start" title={githubMessage || 'Connect GitHub for direct, private backups'} aria-label="Connect GitHub">{#if githubState === 'loading'}<LoaderCircle class="spin" size={15} />{:else}<CloudUpload size={16} />{/if}<span>{githubState === 'loading' ? 'Checking…' : 'Connect GitHub'}</span></a>
+			<a class="github-connect" class:error={githubState === 'error'} href="/auth/github/start" title={githubMessage || 'Connect GitHub for direct, private backups'} aria-label="Connect GitHub">{#if githubState === 'loading'}<LoaderCircle class="spin" size={15} />{:else}<Github size={16} />{/if}<span>{githubState === 'loading' ? 'Checking…' : 'Connect GitHub'}</span></a>
 		{/if}
 		<button class="icon-button" aria-label="Settings" aria-haspopup="dialog" aria-expanded={settingsOpen} aria-controls="settings-dialog" title="Settings" onclick={onOpenSettings}><Settings size={18} /></button>
 	</div>
