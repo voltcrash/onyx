@@ -2,7 +2,7 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template: 43px minmax(0, 1fr) / minmax(0, 1fr) minmax(0, 1fr);
 }
 .editor-shell.edit-only,
 .editor-shell.preview-only {
@@ -24,7 +24,7 @@
   display: none;
 }
 .formatting-bar {
-  flex: 0 0 43px;
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -41,6 +41,11 @@
   place-items: center;
   border-radius: 6px;
   color: var(--muted);
+}
+.formatting-bar .view-switcher button {
+  width: auto;
+  display: flex;
+  padding: 0 9px;
 }
 .formatting-bar button:hover {
   background: var(--subtle-strong);

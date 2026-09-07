@@ -1115,12 +1115,10 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 <div class="app" class:sidebar-open={sidebarOpen} class:sidebar-collapsed={sidebarCollapsed} inert={paletteOpen || settingsOpen || restoreModalOpen || shortcutsOpen}>
 	<AppHeader
-		{viewMode} {isOnline} {saveState} {transferState} {paletteOpen}
+		{isOnline} {saveState} {transferState} {paletteOpen}
 		{settingsOpen} {githubState} {githubUser} {githubMessage} {githubBackup} {backupState}
 		{pendingBackupCount} {restoreModalOpen} {restoreState} {shortcutsOpen} {vault}
 		onToggleSidebar={toggleSidebar}
-		onViewModeChange={(mode) => (viewMode = mode)}
-		onOpenInlinePreview={() => openInlinePreview()}
 		onOpenPalette={() => void openPalette()}
 		onOpenSettings={() => openSettings(githubState === 'connected' ? 'backup' : 'github')}
 		onBackup={() => void beginBackup()}
@@ -1146,6 +1144,8 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 		onReload={() => location.reload()}
 		onInsertSyntax={insertSyntax}
 		onPrefixLine={prefixLine}
+		onViewModeChange={(mode) => (viewMode = mode)}
+		onOpenInlinePreview={() => openInlinePreview()}
 		onMarkdownChange={updateMarkdown}
 		onLiveLineFocus={(line) => (liveLine = line)}
 		onRenderedLineInput={updateRenderedLine}

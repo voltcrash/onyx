@@ -18,9 +18,6 @@
   .sidebar-open .topbar > .collapsed-sidebar-toggle {
     display: none;
   }
-  .topbar-view {
-    padding: 0 8px;
-  }
   .sidebar,
   .sidebar-collapsed .sidebar {
     position: fixed;

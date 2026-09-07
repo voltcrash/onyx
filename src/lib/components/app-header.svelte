@@ -1,13 +1,12 @@
 <script lang="ts">
 	import {
-		CloudDownload, CloudOff, CloudUpload, Columns2, Eye, HelpCircle, LoaderCircle, LogOut,
-		PanelLeft, PencilLine, Search, Settings, WifiOff
+		CloudDownload, CloudOff, CloudUpload, HelpCircle, LoaderCircle, LogOut, PanelLeft, Search,
+		Settings, WifiOff
 	} from '@lucide/svelte';
 	import type { GithubBackupState, GithubUser, Vault } from '$lib';
-	import type { BackupState, GithubState, RestoreState, SaveState, TransferState, ViewMode } from './app-types';
+	import type { BackupState, GithubState, RestoreState, SaveState, TransferState } from './app-types';
 
 	interface Props {
-		viewMode: ViewMode;
 		isOnline: boolean;
 		saveState: SaveState;
 		transferState: TransferState;
@@ -24,8 +23,6 @@
 		shortcutsOpen: boolean;
 		vault?: Vault;
 		onToggleSidebar: () => void;
-		onViewModeChange: (mode: ViewMode) => void;
-		onOpenInlinePreview: () => void;
 		onOpenPalette: () => void;
 		onOpenSettings: () => void;
 		onBackup: () => void;
@@ -35,24 +32,16 @@
 	}
 
 	let {
-		viewMode, isOnline, saveState, transferState, paletteOpen, settingsOpen,
+		isOnline, saveState, transferState, paletteOpen, settingsOpen,
 		githubState, githubUser, githubMessage, githubBackup, backupState, pendingBackupCount,
-		restoreModalOpen, restoreState, shortcutsOpen, vault, onToggleSidebar, onViewModeChange,
-		onOpenInlinePreview, onOpenPalette, onOpenSettings, onBackup, onRestore,
+		restoreModalOpen, restoreState, shortcutsOpen, vault, onToggleSidebar,
+		onOpenPalette, onOpenSettings, onBackup, onRestore,
 		onDisconnectGithub, onOpenShortcuts
 	}: Props = $props();
 </script>
 
 <header class="topbar">
 	<button class="icon-button collapsed-sidebar-toggle" aria-label="Show notes sidebar" title="Show sidebar (⌘\\)" onclick={onToggleSidebar}><PanelLeft size={19} /></button>
-	<div class="topbar-view">
-		<div class="view-switcher" aria-label="View mode">
-			<button class:active={viewMode === 'edit'} aria-pressed={viewMode === 'edit'} onclick={() => onViewModeChange('edit')} aria-label="Editor only" title="Editor only"><PencilLine size={16} /><span>Edit</span></button>
-			<button class:active={viewMode === 'live'} aria-pressed={viewMode === 'live'} onclick={onOpenInlinePreview} aria-label="Inline preview" title="Inline preview"><Eye size={16} /><span>Inline</span></button>
-			<button class:active={viewMode === 'split'} aria-pressed={viewMode === 'split'} onclick={() => onViewModeChange('split')} aria-label="Split view" title="Split view"><Columns2 size={16} /><span>Split</span></button>
-			<button class:active={viewMode === 'preview'} aria-pressed={viewMode === 'preview'} onclick={() => onViewModeChange('preview')} aria-label="Preview only" title="Preview only"><Eye size={16} /><span>Preview</span></button>
-		</div>
-	</div>
 	<div class="top-actions">
 		{#if !isOnline}<div class="offline-status" role="status" title="GitHub features are paused until your connection returns"><WifiOff size={14} /><span>Offline</span></div>{/if}
 		{#if saveState === 'loading' || saveState === 'error'}
