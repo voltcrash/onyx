@@ -1115,23 +1115,24 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 
 <div class="app" class:sidebar-open={sidebarOpen} class:sidebar-collapsed={sidebarCollapsed} inert={paletteOpen || settingsOpen || restoreModalOpen || shortcutsOpen}>
 	<AppHeader
-		{isOnline} {saveState} {transferState}
-		{settingsOpen} {githubState} {githubUser} {githubMessage} {githubBackup} {backupState}
+		{isOnline} {saveState}
+		{githubState} {githubUser} {githubBackup} {backupState}
 		{pendingBackupCount} {restoreModalOpen} {restoreState} {shortcutsOpen} {vault}
 		onToggleSidebar={toggleSidebar}
-		onOpenSettings={() => openSettings(githubState === 'connected' ? 'backup' : 'github')}
 		onBackup={() => void beginBackup()}
 		onRestore={() => void openRestore()}
-		onDisconnectGithub={() => void disconnectGitHub()}
 		onOpenShortcuts={() => (shortcutsOpen = true)}
 	/>
 	<NotesSidebar
 		{activeNoteId} {results} {visibleResults} {searchQuery} {notePage} {notePageCount}
-		{saveState} {transferState} {storageError} {paletteOpen} bind:searchInput bind:noteList
+		{saveState} {transferState} {storageError} {paletteOpen} {settingsOpen} {isOnline}
+		{githubState} {githubUser} {githubMessage} bind:searchInput bind:noteList
 		onToggleSidebar={toggleSidebar}
 		onCreateNote={() => void createNote()}
 		onSearch={queueSearch}
 		onOpenPalette={() => void openPalette()}
+		onOpenSettings={() => openSettings(githubState === 'connected' ? 'backup' : 'github')}
+		onDisconnectGithub={() => void disconnectGitHub()}
 		onMoveNoteFocus={moveNoteFocus}
 		onSelectNote={(id) => void selectNote(id)}
 		onChangePage={changeNotePage}

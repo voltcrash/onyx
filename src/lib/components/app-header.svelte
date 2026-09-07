@@ -1,19 +1,15 @@
 <script lang="ts">
 	import {
-		CloudDownload, CloudOff, CloudUpload, HelpCircle, LoaderCircle, LogOut, PanelLeft,
-		Settings, WifiOff
+		CloudDownload, CloudOff, CloudUpload, HelpCircle, LoaderCircle, PanelLeft, WifiOff
 	} from '@lucide/svelte';
 	import type { GithubBackupState, GithubUser, Vault } from '$lib';
-	import type { BackupState, GithubState, RestoreState, SaveState, TransferState } from './app-types';
+	import type { BackupState, GithubState, RestoreState, SaveState } from './app-types';
 
 	interface Props {
 		isOnline: boolean;
 		saveState: SaveState;
-		transferState: TransferState;
-		settingsOpen: boolean;
 		githubState: GithubState;
 		githubUser?: GithubUser;
-		githubMessage: string;
 		githubBackup?: GithubBackupState;
 		backupState: BackupState;
 		pendingBackupCount: number;
@@ -22,19 +18,16 @@
 		shortcutsOpen: boolean;
 		vault?: Vault;
 		onToggleSidebar: () => void;
-		onOpenSettings: () => void;
 		onBackup: () => void;
 		onRestore: () => void;
-		onDisconnectGithub: () => void;
 		onOpenShortcuts: () => void;
 	}
 
 	let {
-		isOnline, saveState, transferState, settingsOpen,
-		githubState, githubUser, githubMessage, githubBackup, backupState, pendingBackupCount,
+		isOnline, saveState,
+		githubState, githubUser, githubBackup, backupState, pendingBackupCount,
 		restoreModalOpen, restoreState, shortcutsOpen, vault, onToggleSidebar,
-		onOpenSettings, onBackup, onRestore,
-		onDisconnectGithub, onOpenShortcuts
+		onBackup, onRestore, onOpenShortcuts
 	}: Props = $props();
 </script>
 
@@ -48,7 +41,6 @@
 				{saveState === 'loading' ? 'Opening…' : 'Save failed'}
 			</div>
 		{/if}
-		<button class="icon-button" aria-label="Settings" aria-haspopup="dialog" aria-expanded={settingsOpen} aria-controls="settings-dialog" title="Settings" onclick={onOpenSettings}><Settings size={18} /></button>
 		{#if githubState === 'connected' && githubUser}
 			<button class="backup-button" class:success={backupState === 'success'} class:error={backupState === 'error'} onclick={onBackup} disabled={!isOnline || !vault || backupState === 'backing-up'} title={!isOnline ? 'GitHub backup is unavailable offline' : githubBackup ? `Back up to ${githubBackup.owner}/${githubBackup.repository}` : 'Create a private repository and back up the vault'}>
 				{#if backupState === 'backing-up'}<LoaderCircle class="spin" size={15} />{:else}<CloudUpload size={16} />{/if}
@@ -59,11 +51,6 @@
 				{#if restoreState === 'restoring'}<LoaderCircle class="spin" size={15} />{:else}<CloudDownload size={16} />{/if}
 				<span>{restoreState === 'restoring' ? 'Restoring…' : 'Restore'}</span>
 			</button>
-			<div class="github-account" class:offline={!isOnline} title={isOnline ? `Connected as ${githubUser.login}` : `Connected as ${githubUser.login}; GitHub is unavailable offline`}><img src={githubUser.avatarUrl} alt="" /><span>@{githubUser.login}</span><button aria-label="Disconnect GitHub" title={isOnline ? 'Disconnect GitHub' : 'Disconnect is unavailable offline'} disabled={!isOnline} onclick={onDisconnectGithub}><LogOut size={14} /></button></div>
-		{:else if !isOnline}
-			<button class="github-connect offline" disabled title="GitHub features are unavailable offline" aria-label="GitHub unavailable offline"><WifiOff size={16} /><span>GitHub unavailable</span></button>
-		{:else}
-			<a class="github-connect" class:error={githubState === 'error'} href="/auth/github/start" title={githubMessage || 'Connect GitHub for direct, private backups'} aria-label="Connect GitHub">{#if githubState === 'loading'}<LoaderCircle class="spin" size={15} />{:else}<CloudUpload size={16} />{/if}<span>{githubState === 'loading' ? 'Checking…' : 'Connect GitHub'}</span></a>
 		{/if}
 		<button class="icon-button optional" aria-label="Keyboard shortcuts" aria-haspopup="dialog" aria-expanded={shortcutsOpen} aria-controls="shortcuts-dialog" title="Keyboard shortcuts (?)" onclick={onOpenShortcuts}><HelpCircle size={18} /></button>
 	</div>

@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { FileText, LoaderCircle, PanelLeftClose, Plus, Search, X } from '@lucide/svelte';
-	import type { VaultSearchResult } from '$lib';
-	import type { SaveState, TransferState } from './app-types';
+	import { CloudUpload, FileText, LoaderCircle, LogOut, PanelLeftClose, Plus, Search, Settings, WifiOff, X } from '@lucide/svelte';
+	import type { GithubUser, VaultSearchResult } from '$lib';
+	import type { GithubState, SaveState, TransferState } from './app-types';
 
 	interface Props {
 		activeNoteId: string;
@@ -13,6 +13,11 @@
 		saveState: SaveState;
 		transferState: TransferState;
 		paletteOpen: boolean;
+		settingsOpen: boolean;
+		isOnline: boolean;
+		githubState: GithubState;
+		githubUser?: GithubUser;
+		githubMessage: string;
 		storageError: string;
 		searchInput?: HTMLInputElement;
 		noteList?: HTMLElement;
@@ -20,15 +25,18 @@
 		onCreateNote: () => void;
 		onSearch: (value: string) => void;
 		onOpenPalette: () => void;
+		onOpenSettings: () => void;
+		onDisconnectGithub: () => void;
 		onMoveNoteFocus: (event: KeyboardEvent) => void;
 		onSelectNote: (id: string) => void;
 		onChangePage: (page: number) => void;
 	}
 
 	let {
-		activeNoteId, results, visibleResults, searchQuery, notePage, notePageCount, saveState, paletteOpen,
-		transferState, storageError, searchInput = $bindable(), noteList = $bindable(),
-		onToggleSidebar, onCreateNote, onSearch, onOpenPalette, onMoveNoteFocus, onSelectNote, onChangePage
+		activeNoteId, results, visibleResults, searchQuery, notePage, notePageCount, saveState, paletteOpen, settingsOpen,
+		isOnline, githubState, githubUser, githubMessage, transferState, storageError,
+		searchInput = $bindable(), noteList = $bindable(), onToggleSidebar, onCreateNote, onSearch,
+		onOpenPalette, onOpenSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage
 	}: Props = $props();
 </script>
 
@@ -58,4 +66,14 @@
 			<button disabled={notePage === notePageCount - 1} onclick={() => onChangePage(notePage + 1)}>Next</button>
 		</div>
 	{/if}
+	<div class="sidebar-footer">
+		{#if githubState === 'connected' && githubUser}
+			<div class="github-account" class:offline={!isOnline} title={isOnline ? `Connected as ${githubUser.login}` : `Connected as ${githubUser.login}; GitHub is unavailable offline`}><img src={githubUser.avatarUrl} alt="" /><span>@{githubUser.login}</span><button aria-label="Disconnect GitHub" title={isOnline ? 'Disconnect GitHub' : 'Disconnect is unavailable offline'} disabled={!isOnline} onclick={onDisconnectGithub}><LogOut size={14} /></button></div>
+		{:else if !isOnline}
+			<button class="github-connect offline" disabled title="GitHub features are unavailable offline" aria-label="GitHub unavailable offline"><WifiOff size={16} /><span>GitHub unavailable</span></button>
+		{:else}
+			<a class="github-connect" class:error={githubState === 'error'} href="/auth/github/start" title={githubMessage || 'Connect GitHub for direct, private backups'} aria-label="Connect GitHub">{#if githubState === 'loading'}<LoaderCircle class="spin" size={15} />{:else}<CloudUpload size={16} />{/if}<span>{githubState === 'loading' ? 'Checking…' : 'Connect GitHub'}</span></a>
+		{/if}
+		<button class="icon-button" aria-label="Settings" aria-haspopup="dialog" aria-expanded={settingsOpen} aria-controls="settings-dialog" title="Settings" onclick={onOpenSettings}><Settings size={18} /></button>
+	</div>
 </aside>

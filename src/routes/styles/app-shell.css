@@ -299,6 +299,24 @@
   overflow-y: auto;
   scrollbar-width: thin;
 }
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 4px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.sidebar-footer > :first-child {
+  min-width: 0;
+  flex: 1;
+}
+.sidebar-footer .github-connect,
+.sidebar-footer .github-account {
+  overflow: hidden;
+}
+.sidebar-footer .github-account > span {
+  flex: 1;
+}
 .note-pagination {
   display: flex;
   align-items: center;
