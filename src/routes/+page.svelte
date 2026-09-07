@@ -1111,7 +1111,7 @@ Press \`⌘ K\` for the command palette, \`⌘ S\` to save now, or \`⌘ ⇧ P\`
 	}
 </script>
 
-<svelte:head><title>Onyx — Markdown notes</title><meta name="description" content="A fast, local-first Markdown editor with full-text search that works offline." /></svelte:head>
+<svelte:head><title>onyx - a quiet place to think in markdown</title><meta name="description" content="A fast, local-first Markdown editor with full-text search that works offline." /></svelte:head>
 
 <div class="app" class:sidebar-open={sidebarOpen} class:sidebar-collapsed={sidebarCollapsed} inert={paletteOpen || settingsOpen || restoreModalOpen || shortcutsOpen}>
 	<AppHeader
