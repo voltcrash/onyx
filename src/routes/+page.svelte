@@ -22,7 +22,7 @@
 		restoreVaultFromGithub, validateGithubBackupRepository, Vault,
 		writeKeyboardShortcuts, writeLocalStorage, writeMarkdownFolder, type GithubBackupCommit, type GithubBackupState,
 		type ColorTheme, type GithubUser, type KeyboardShortcut, type KeyboardShortcuts, type PrimaryModifier,
-		type NoteMetadata, type ShortcutAction, type ThemePreference, type VaultSearchResult
+		type NoteMetadata, type ShortcutAction, type ThemePreference, type VaultChangeEvent, type VaultSearchResult
 	} from '$lib';
 	import { onMount, tick } from 'svelte';
 
@@ -55,6 +55,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
 	let vault = $state<Vault>();
 	let activeNoteId = $state('');
+	let noteRevision = $state(0);
 	let markdown = $state(INITIAL_MARKDOWN);
 	let previewMarkdown = $state(INITIAL_MARKDOWN);
 	let lastSavedMarkdown = $state(INITIAL_MARKDOWN);
@@ -112,6 +113,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 	let noteList: HTMLElement | undefined = $state();
 	let activeNoteSourcePath: string | undefined = $state();
 	let localAttachmentUrls = $state<LocalAttachmentUrl[]>([]);
+	let unsubscribeVault: (() => void) | undefined;
+	let remoteSyncRun: Promise<void> | undefined;
+	let remoteSyncRequested = false;
+	const remoteChanges: VaultChangeEvent[] = [];
 	let noteLoadSequence = 0;
 	const liveRenderCache = new Map<string, string>();
 
@@ -210,6 +215,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 			if (saveTimer) window.clearTimeout(saveTimer);
 			if (searchTimer) window.clearTimeout(searchTimer);
 			if (previewTimer) window.clearTimeout(previewTimer);
+			unsubscribeVault?.();
 			releaseLocalAttachmentUrls();
 			vault?.close();
 		};
@@ -445,6 +451,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 		saveState = 'loading';
 		try {
 			vault = await Vault.open();
+			unsubscribeVault?.();
+			unsubscribeVault = vault.subscribe(queueRemoteVaultSync);
 			let notes = await vault.listNotes();
 			if (notes.length === 0) {
 				const legacyDraft = await readLegacyDraft();
@@ -509,12 +517,65 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 		liveRenderCache.clear();
 		activeNoteSourcePath = note.sourcePath;
 		activeNoteId = note.id;
+		noteRevision = note.revision;
 		markdown = note.markdown;
 		updatePreviewImmediately(note.markdown);
 		lastSavedMarkdown = note.markdown;
 		saveState = 'saved';
 		storageError = '';
 		sidebarOpen = false;
+	}
+
+	function queueRemoteVaultSync(change: VaultChangeEvent): void {
+		remoteChanges.push(change);
+		remoteSyncRequested = true;
+		if (remoteSyncRun) return;
+		const run = syncRemoteVault();
+		remoteSyncRun = run;
+		void run.finally(() => {
+			if (remoteSyncRun === run) remoteSyncRun = undefined;
+		}).catch(() => undefined);
+	}
+
+	async function syncRemoteVault(): Promise<void> {
+		while (remoteSyncRequested) {
+			remoteSyncRequested = false;
+			const changes = remoteChanges.splice(0);
+			if (!vault) continue;
+			const notes = await vault.listNotes();
+			const activeChanged = changes.some(
+				(change) => change.kind === 'vault' || change.noteId === activeNoteId,
+			);
+			const hasUnsavedDraft = markdown !== lastSavedMarkdown;
+			if (activeChanged && hasUnsavedDraft) {
+				storageError = 'This note changed in another tab. Reload it before saving.';
+				saveState = 'error';
+			} else if (activeChanged && activeNoteId) {
+				const activeNote = notes.find((note) => note.id === activeNoteId);
+				if (activeNote) await loadNote(activeNote.id);
+				else resetActiveNote();
+			} else if (!activeNoteId && notes[0]) {
+				await loadNote(notes[0].id);
+			} else if (!notes.length && !hasUnsavedDraft) {
+				resetActiveNote();
+			}
+			await runSearch(searchQuery);
+			paletteNotes = notes;
+			githubBackup = await vault.getGithubBackupState();
+			pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+		}
+	}
+
+	function resetActiveNote(): void {
+		noteLoadSequence += 1;
+		releaseLocalAttachmentUrls();
+		activeNoteSourcePath = undefined;
+		activeNoteId = '';
+		noteRevision = 0;
+		markdown = '';
+		previewMarkdown = '';
+		lastSavedMarkdown = '';
+		saveState = 'saved';
 	}
 
 	function resolveAttachmentUrl(destination: string): string | undefined {
@@ -684,10 +745,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 			if (!vault || !activeNoteId) return false;
 			const noteId = activeNoteId;
 			const contents = markdown;
+			const expectedRevision = noteRevision;
 			saveState = 'saving';
 			try {
-				await vault.saveNote({ id: noteId, title: titleFromMarkdown(contents), markdown: contents });
+				const savedNote = await vault.saveNote({ id: noteId, title: titleFromMarkdown(contents), markdown: contents, expectedRevision });
 				if (activeNoteId === noteId) {
+					noteRevision = savedNote.revision;
 					lastSavedMarkdown = contents;
 					saveState = markdown === contents ? 'saved' : 'unsaved';
 					storageError = '';

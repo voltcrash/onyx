@@ -3,6 +3,7 @@ import type {
   Vault,
   VaultBackupManifest,
   VaultRestoreFile,
+  VaultOperationContext,
 } from "./storage/index.js";
 
 const API_ROOT = "https://api.github.com";
@@ -208,12 +209,34 @@ export async function listGithubRepositories(): Promise<GithubRepository[]> {
     }));
 }
 
-export async function backupVaultToGithub(
+export function backupVaultToGithub(
   vault: Vault,
   backupState: GithubBackupState,
 ): Promise<GithubBackupResult> {
+  const runExclusive = (
+    vault as unknown as {
+      runExclusive?: (
+        task: (context: VaultOperationContext) => Promise<GithubBackupResult>,
+      ) => Promise<GithubBackupResult>;
+    }
+  ).runExclusive;
+  if (typeof runExclusive !== "function") {
+    return backupVaultToGithubUnlocked(vault, backupState);
+  }
+  return runExclusive.call(vault, (context) =>
+    backupVaultToGithubUnlocked(vault, backupState, context),
+  );
+}
+
+async function backupVaultToGithubUnlocked(
+  vault: Vault,
+  backupState: GithubBackupState,
+  context?: VaultOperationContext,
+): Promise<GithubBackupResult> {
   await validateGithubBackupRepository(backupState);
-  const snapshot = await vault.createBackupSnapshot();
+  const snapshot = context
+    ? await vault.createBackupSnapshot({ context })
+    : await vault.createBackupSnapshot();
   const repositoryPath = repositoryApiPath(backupState);
   const branchPath = backupState.branch.split("/").map(encodeURIComponent).join("/");
   let parentSha: string | undefined;
@@ -257,9 +280,18 @@ export async function backupVaultToGithub(
       return { path, mode: "100644" as const, type: "blob" as const, sha: blob.sha };
     })
   ).filter((entry) => entry !== undefined);
-  const manifest = new Blob([JSON.stringify(await vault.createBackupManifest())], {
-    type: "application/json",
-  });
+  const manifest = new Blob(
+    [
+      JSON.stringify(
+        context
+          ? await vault.createBackupManifest({ context })
+          : await vault.createBackupManifest(),
+      ),
+    ],
+    {
+      type: "application/json",
+    },
+  );
   const manifestBlob = await createGithubBlob(repositoryPath, manifest);
   const tree =
     remoteBlobs.get(manifestPath) === manifestBlob.sha
@@ -275,7 +307,8 @@ export async function backupVaultToGithub(
         ];
 
   if (tree.length === 0) {
-    await vault.acknowledgeBackupOperations(snapshot.operationIds);
+    if (context) await vault.acknowledgeBackupOperations(snapshot.operationIds, { context });
+    else await vault.acknowledgeBackupOperations(snapshot.operationIds);
     return { fileCount: 0, state: backupState };
   }
 
@@ -309,8 +342,13 @@ export async function backupVaultToGithub(
     lastBackedUpAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  await vault.saveGithubBackupState(state);
-  await vault.acknowledgeBackupOperations(snapshot.operationIds);
+  if (context) {
+    await vault.saveGithubBackupState(state, { context });
+    await vault.acknowledgeBackupOperations(snapshot.operationIds, { context });
+  } else {
+    await vault.saveGithubBackupState(state);
+    await vault.acknowledgeBackupOperations(snapshot.operationIds);
+  }
   return { commitUrl: commit.html_url, fileCount: tree.length, state };
 }
 
@@ -386,18 +424,38 @@ export async function restoreVaultFromGithub(
   }
   const restoredAt =
     selectedCommit.committer?.date ?? selectedCommit.author?.date ?? new Date().toISOString();
-  const result = await vault.restoreBackup(files, {
-    manifest,
-    pendingPaths: [...changedPaths],
-    restoredAt,
-  });
-  const state: GithubBackupState = {
-    ...backupState,
-    lastCommitSha: selectedCommit.sha,
-    updatedAt: new Date().toISOString(),
+  const applyRestore = async (context?: VaultOperationContext): Promise<GithubRestoreResult> => {
+    const result = context
+      ? await vault.restoreBackup(files, {
+          manifest,
+          pendingPaths: [...changedPaths],
+          restoredAt,
+          context,
+        })
+      : await vault.restoreBackup(files, {
+          manifest,
+          pendingPaths: [...changedPaths],
+          restoredAt,
+        });
+    const state: GithubBackupState = {
+      ...backupState,
+      lastCommitSha: selectedCommit.sha,
+      updatedAt: new Date().toISOString(),
+    };
+    if (context) await vault.saveGithubBackupState(state, { context });
+    else await vault.saveGithubBackupState(state);
+    return { ...result, state };
   };
-  await vault.saveGithubBackupState(state);
-  return { ...result, state };
+  const runExclusive = (
+    vault as unknown as {
+      runExclusive?: (
+        task: (context: VaultOperationContext) => Promise<GithubRestoreResult>,
+      ) => Promise<GithubRestoreResult>;
+    }
+  ).runExclusive;
+  return typeof runExclusive === "function"
+    ? runExclusive.call(vault, applyRestore)
+    : applyRestore();
 }
 
 export async function githubRequest<T>(path: `/${string}`, init: RequestInit = {}): Promise<T> {
