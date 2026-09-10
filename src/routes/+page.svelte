@@ -70,8 +70,6 @@
 		liveLine={page.liveLine}
 		saveState={page.saveState}
 		transferState={page.transferState}
-		wordCount={page.wordCount}
-		readingMinutes={page.readingMinutes}
 		hasContent={page.hasContent}
 		renderedMarkdown={page.renderedMarkdown}
 		shortcuts={page.shortcuts}

@@ -273,18 +273,6 @@
   text-decoration-color: var(--accent-underline);
   text-underline-offset: 3px;
 }
-.editor-footer {
-  flex: 0 0 32px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 17px;
-  border-top: 1px solid var(--line-soft);
-  color: var(--faint);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
 .preview-pane {
   overflow-y: auto;
   background: var(--surface);

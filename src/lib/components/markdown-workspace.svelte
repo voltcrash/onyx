@@ -16,8 +16,6 @@
 		liveLine: number;
 		saveState: SaveState;
 		transferState: TransferState;
-		wordCount: number;
-		readingMinutes: number;
 		hasContent: boolean;
 		renderedMarkdown: string;
 		shortcuts: KeyboardShortcuts;
@@ -43,7 +41,7 @@
 
 	let {
 		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, renderedReadOnly, inlinePreviewBehavior, markdown, markdownLines, liveLine,
-		saveState, transferState, wordCount, readingMinutes, hasContent, renderedMarkdown, shortcuts, primaryModifier,
+		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onToggleSidebar,
 		onReload, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
 		onRenderedLineKeydown, onLiveLineChange, onLiveLineKeydown, onActivateLiveLine,
@@ -52,7 +50,6 @@
 </script>
 
 <main class="workspace">
-	<button class="collapsed-sidebar-toggle" aria-label="Show notes sidebar" title={`Show sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button>
 	<button class="collapsed-sidebar-toggle" aria-label="Show notes sidebar" title={`Show sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button>
 	{#if storageNotice}
 		<div class="storage-notice" role="status"><HardDrive size={16} /><span>{storageNotice}</span></div>
@@ -69,7 +66,6 @@
 	<section class="editor-shell" class:source-hidden={!sourcePaneVisible} class:rendered-hidden={!renderedPaneVisible}>
 		<div class="editor-pane">
 			<textarea bind:this={editor} value={markdown} onfocus={onSourceFocus} oninput={(event) => onMarkdownChange(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
-			<div class="editor-footer"><span>{wordCount} words&nbsp;&nbsp;&nbsp;{readingMinutes} min read</span></div>
 		</div>
 		<div class="preview-pane">
 			{#if renderedReadOnly}
