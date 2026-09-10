@@ -21,8 +21,8 @@ function paintThemeColor(colorTheme: ColorTheme, resolved: ResolvedTheme): void 
 
 export function readThemePreference(): ThemePreference {
   const stored = readLocalStorage(STORAGE_KEY);
-  if (stored === "light" || stored === "dark") return stored;
-  return resolveTheme("system");
+  if (stored === "light" || stored === "dark" || stored === "system") return stored;
+  return "system";
 }
 
 export function readColorTheme(): ColorTheme {
@@ -55,10 +55,16 @@ export function applyColorTheme(theme: ColorTheme): void {
 export function watchSystemTheme(onChange: () => void): () => void {
   const query = globalThis.matchMedia?.(DARK_QUERY);
   if (!query) return () => undefined;
-  query.addEventListener("change", onChange);
-  return () => query.removeEventListener("change", onChange);
+  if (typeof query.addEventListener === "function") {
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }
+  query.addListener(onChange);
+  return () => query.removeListener(onChange);
 }
 
 export function nextThemePreference(preference: ThemePreference): ThemePreference {
-  return resolveTheme(preference) === "dark" ? "light" : "dark";
+  if (preference === "light") return "dark";
+  if (preference === "dark") return "system";
+  return "light";
 }
