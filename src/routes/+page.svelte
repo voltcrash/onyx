@@ -76,8 +76,11 @@
 		bind:liveEditorContainer={page.liveEditorContainer}
 		onRetryStorage={() => void (page.vault ? page.saveDraft() : page.openVault())}
 		onToggleSidebar={page.toggleSidebar}
+		splitRatio={page.splitRatio}
 		onToggleSourcePane={page.toggleSourcePane}
 		onToggleRenderedPane={page.toggleRenderedPane}
+		onResize={page.setSplitRatio}
+		onResizeEnd={page.saveSplitRatio}
 		onReload={() => location.reload()}
 		onMarkdownChange={page.updateMarkdown}
 		onSourceFocus={page.focusSourceEditor}

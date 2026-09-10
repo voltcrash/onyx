@@ -29,11 +29,25 @@
   position: relative;
   background: var(--line);
 }
-/* Widens the hover target beyond the 1px column without shifting the grid. */
-.pane-divider::before {
-  content: "";
+/* Widens the grab target beyond the 1px column without shifting the grid. */
+.pane-resize {
   position: absolute;
+  padding: 0;
+  border: 0;
+  background: transparent;
   inset: 0 -5px;
+  z-index: 5;
+  touch-action: none;
+}
+.pane-resize.enabled {
+  cursor: col-resize;
+}
+.editor-shell.resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+.editor-shell.resizing .pane-handle {
+  transition: none;
 }
 .pane-handle {
   position: absolute;

@@ -25,8 +25,11 @@
 		liveEditorContainer?: HTMLDivElement;
 		onRetryStorage: () => void;
 		onToggleSidebar: () => void;
+		splitRatio: number;
 		onToggleSourcePane: () => void;
 		onToggleRenderedPane: () => void;
+		onResize: (ratio: number) => void;
+		onResizeEnd: () => void;
 		onReload: () => void;
 		onMarkdownChange: (value: string) => void;
 		onSourceFocus: () => void;
@@ -45,10 +48,54 @@
 		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, renderedReadOnly, inlinePreviewBehavior, markdown, markdownLines, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onToggleSidebar,
-		onToggleSourcePane, onToggleRenderedPane, onReload, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
+		splitRatio, onToggleSourcePane, onToggleRenderedPane, onResize, onResizeEnd, onReload, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
 		onRenderedLineKeydown, onLiveLineChange, onLiveLineKeydown, onActivateLiveLine,
 		renderEditableLine, renderLiveLine, liveLineKind
 	}: Props = $props();
+
+	let shell = $state<HTMLElement>();
+	let resizing = $state(false);
+	let bothPanesVisible = $derived(sourcePaneVisible && renderedPaneVisible);
+
+	function resizeTo(clientX: number): void {
+		const bounds = shell?.getBoundingClientRect();
+		if (!bounds?.width) return;
+		onResize(((clientX - bounds.left) / bounds.width) * 100);
+	}
+
+	function startResize(event: PointerEvent): void {
+		if (!bothPanesVisible) return;
+		event.preventDefault();
+		resizing = true;
+		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+	}
+
+	function trackResize(event: PointerEvent): void {
+		if (resizing) resizeTo(event.clientX);
+	}
+
+	function endResize(event: PointerEvent): void {
+		if (!resizing) return;
+		resizing = false;
+		(event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+		onResizeEnd();
+	}
+
+	function nudgeResize(event: KeyboardEvent): void {
+		if (!bothPanesVisible) return;
+		if (event.key === 'ArrowLeft') onResize(splitRatio - 2);
+		else if (event.key === 'ArrowRight') onResize(splitRatio + 2);
+		else if (event.key === 'Home' || event.key === 'End') onResize(event.key === 'Home' ? 20 : 80);
+		else return;
+		event.preventDefault();
+		onResizeEnd();
+	}
+
+	function resetSplit(): void {
+		if (!bothPanesVisible) return;
+		onResize(50);
+		onResizeEnd();
+	}
 </script>
 
 <main class="workspace">
@@ -65,11 +112,12 @@
 		</div>
 	{/if}
 
-	<section class="editor-shell" class:source-hidden={!sourcePaneVisible} class:rendered-hidden={!renderedPaneVisible}>
+	<section bind:this={shell} class="editor-shell" class:source-hidden={!sourcePaneVisible} class:rendered-hidden={!renderedPaneVisible} class:resizing style={`--split: ${splitRatio}%`}>
 		<div class="editor-pane">
 			<textarea bind:this={editor} value={markdown} onfocus={onSourceFocus} oninput={(event) => onMarkdownChange(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
 		</div>
 		<div class="pane-divider">
+			<button type="button" class="pane-resize" class:enabled={bothPanesVisible} aria-label={`Resize the panes, Markdown takes ${Math.round(splitRatio)} percent`} title="Drag to resize, double-click to even out" tabindex={bothPanesVisible ? 0 : -1} onpointerdown={startResize} onpointermove={trackResize} onpointerup={endResize} onpointercancel={endResize} onkeydown={nudgeResize} ondblclick={resetSplit}></button>
 			{#if renderedPaneVisible}
 				<button class="pane-handle pane-handle-top" title={sourcePaneVisible ? 'Hide the Markdown pane' : 'Show the Markdown pane'} aria-label={sourcePaneVisible ? 'Hide the Markdown pane' : 'Show the Markdown pane'} aria-expanded={sourcePaneVisible} onclick={onToggleSourcePane}>{#if sourcePaneVisible}<ChevronLeft size={15} />{:else}<ChevronRight size={15} />{/if}</button>
 			{/if}
