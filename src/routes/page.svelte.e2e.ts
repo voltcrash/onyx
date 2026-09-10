@@ -110,6 +110,47 @@ test("keeps startup usable when localStorage and persistent storage are unavaila
   await expect(page.getByRole("status")).toContainText("Persistent storage is unavailable");
 });
 
+test("deletes all notes without restoring stale editor content", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await editor.fill("# This note must stay deleted\n\nThe editor must not bring this text back.");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Vault", exact: true }).click();
+  await page.getByRole("button", { name: "Delete all notes", exact: true }).click();
+  await page.getByRole("button", { name: "Click to confirm", exact: true }).click();
+
+  await expect(editor).toHaveValue("");
+  await expect(page.getByText("0 notes", { exact: true })).toBeVisible();
+  await expect(page.getByText("No notes yet", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /This note must stay deleted/ })).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const database = await new Promise<IDBDatabase>((resolve, reject) => {
+          const request = indexedDB.open("onyx-vault");
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        const transaction = database.transaction(["notes", "noteContents"], "readonly");
+        const counts = await Promise.all(
+          ["notes", "noteContents"].map(
+            (storeName) =>
+              new Promise<number>((resolve, reject) => {
+                const request = transaction.objectStore(storeName).count();
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+              }),
+          ),
+        );
+        database.close();
+        return counts;
+      }),
+    )
+    .toEqual([0, 0]);
+});
+
 for (const unavailableFeature of ["IndexedDB", "OPFS"] as const) {
   test(`shows a startup fallback when ${unavailableFeature} is unavailable`, async ({ page }) => {
     await page.addInitScript((feature) => {

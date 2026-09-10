@@ -61,14 +61,14 @@
 		onImportZip: () => void;
 		onExportFolder: () => void;
 		onExportZip: () => void;
-		onVaultCleared: () => void;
+		onClearVault: () => Promise<void>;
 	}
 
 	let {
 		vault, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
 		backupState, backupMessage, backupCommitUrl, transferState, theme, colorTheme, inlinePreviewBehavior, shortcuts, primaryModifier,
 		section = $bindable('github'), onThemeChange, onColorThemeChange, onInlinePreviewBehaviorChange, onShortcutChange, onResetShortcuts, onClose, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
-		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onVaultCleared
+		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onClearVault
 	}: Props = $props();
 
 	const sections: Array<{ id: SettingsSection; label: string }> = [
@@ -184,10 +184,9 @@
 		clearState = 'clearing';
 		clearMessage = '';
 		try {
-			await vault.clear();
+			await onClearVault();
 			clearState = 'idle';
 			usage = undefined;
-			onVaultCleared();
 		} catch (error) {
 			clearState = 'error';
 			clearMessage = error instanceof Error ? error.message : 'The vault could not be cleared.';
