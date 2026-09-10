@@ -78,7 +78,7 @@ const answer = 42;
     expect(html).toContain('<a href="blob:file-url#page=2">Guide</a>');
   });
 
-  it("leaves remote, absolute, and unmatched destinations unchanged", () => {
+  it("blocks remote images while preserving local and unmatched destinations", () => {
     const attachments = [{ name: "photo.png", url: "blob:photo-url" }];
     const resolve = (destination: string) =>
       resolveLocalAttachmentUrl(destination, undefined, attachments);
@@ -89,8 +89,33 @@ const answer = 42;
     );
 
     expect(html).toContain('<img src="blob:photo-url" alt="Local">');
-    expect(html).toContain('<img src="https://example.com/photo.png" alt="Remote">');
+    expect(html).toContain(
+      '<span class="remote-image-blocked" role="img" aria-label="Remote image blocked by privacy settings">Remote image blocked</span>',
+    );
     expect(html).toContain('<a href="/photo.png">Root</a>');
     expect(html).toContain('<a href="missing.pdf">Missing</a>');
+  });
+
+  it("does not resolve attachment paths that escape the note directory", () => {
+    const resolve = (destination: string) =>
+      resolveLocalAttachmentUrl(destination, "notes/day-one.md", [
+        {
+          name: "photo.png",
+          sourcePath: "photo.png",
+          url: "blob:photo-url",
+        },
+      ]);
+
+    expect(resolve("../../photo.png")).toBeUndefined();
+    expect(resolve("\\photo.png")).toBeUndefined();
+    expect(resolve("photo.png")).toBeUndefined();
+  });
+
+  it("allows remote images only when explicitly requested", () => {
+    const html = renderMarkdown("![Remote](https://example.com/photo.png)", undefined, {
+      remoteImages: "allow",
+    });
+
+    expect(html).toContain('<img src="https://example.com/photo.png" alt="Remote">');
   });
 });
