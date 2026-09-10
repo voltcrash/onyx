@@ -168,6 +168,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let activeNoteSourcePath: string | undefined = $state();
   let localAttachmentUrls = $state<LocalAttachmentUrl[]>([]);
   let noteLoadSequence = 0;
+  let clearingVault = false;
   const liveRenderCache = new Map<string, string>();
 
   const wordCount = $derived(markdown.trim() ? markdown.trim().split(/\s+/).length : 0);
@@ -524,18 +525,43 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
   }
 
-  async function reloadVault(): Promise<void> {
-    if (!vault) return;
+  async function clearVault(): Promise<void> {
+    if (!vault || clearingVault) return;
+    clearingVault = true;
     if (saveTimer) window.clearTimeout(saveTimer);
     saveTimer = undefined;
-    let notes = await vault.listNotes();
-    if (notes.length === 0) {
-      notes = [await vault.saveNote({ title: titleFromMarkdown(markdown), markdown })];
+    saveRequested = false;
+    const pendingSave = saveRun;
+    try {
+      if (pendingSave) await pendingSave;
+      await vault.clear();
+      resetEditorAfterVaultClear();
+      await runSearch("");
+      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+    } finally {
+      clearingVault = false;
     }
+  }
+
+  function resetEditorAfterVaultClear(): void {
+    if (searchTimer) window.clearTimeout(searchTimer);
+    searchTimer = undefined;
+    searchSequence += 1;
+    noteLoadSequence += 1;
     searchQuery = "";
-    await loadNote(notes[0].id);
-    await runSearch("");
-    pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+    notePage = 0;
+    results = [];
+    paletteNotes = [];
+    activeNoteId = "";
+    activeNoteSourcePath = undefined;
+    releaseLocalAttachmentUrls();
+    liveRenderCache.clear();
+    markdown = "";
+    lastSavedMarkdown = "";
+    liveLine = 0;
+    updatePreviewImmediately("");
+    saveState = "saved";
+    storageError = "";
   }
 
   async function createBackupRepository(name: string): Promise<void> {
@@ -913,13 +939,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function queueSave(): void {
+    if (clearingVault) return;
     saveState = "unsaved";
     if (saveTimer) window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => void saveDraft(), 700);
   }
 
   async function saveDraft(): Promise<boolean> {
-    if (!vault || !activeNoteId) return false;
+    if (clearingVault || !vault || !activeNoteId) return false;
     if (saveTimer) window.clearTimeout(saveTimer);
     saveTimer = undefined;
     saveRequested = true;
@@ -935,6 +962,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   async function flushDrafts(): Promise<boolean> {
     while (saveRequested) {
+      if (clearingVault) {
+        saveRequested = false;
+        return true;
+      }
       saveRequested = false;
       if (!vault || !activeNoteId) return false;
       const noteId = activeNoteId;
@@ -1748,7 +1779,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     importZip,
     exportFolder,
     exportZip,
-    reloadVault,
+    clearVault,
     loadRestoreCommits,
     restoreSelectedCommit,
     formatCommitDate,

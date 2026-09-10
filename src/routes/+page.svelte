@@ -137,7 +137,7 @@
 		onImportZip={() => page.zipInput?.click()}
 		onExportFolder={() => void page.exportFolder()}
 		onExportZip={() => void page.exportZip()}
-		onVaultCleared={() => void page.reloadVault()}
+		onClearVault={page.clearVault}
 	/>
 {/if}
 
