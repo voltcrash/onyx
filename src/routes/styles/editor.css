@@ -1,27 +1,109 @@
 .editor-shell {
+  --split: 50%;
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, var(--split)) 1px minmax(0, 1fr);
 }
-.editor-shell.source-hidden,
+.editor-shell.source-hidden {
+  grid-template-columns: 0 1px minmax(0, 1fr);
+}
 .editor-shell.rendered-hidden {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 1px 0;
 }
 .editor-pane,
 .preview-pane {
   min-width: 0;
   min-height: 0;
 }
+/* Pinned columns: a hidden pane must not shift the others along the track. */
 .editor-pane {
+  grid-column: 1;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--line);
   background: var(--editor);
 }
 .source-hidden .editor-pane,
 .rendered-hidden .preview-pane {
   display: none;
+}
+.pane-divider {
+  grid-column: 2;
+  position: relative;
+  background: var(--line);
+}
+/* Widens the grab target beyond the 1px column without shifting the grid. */
+.pane-resize {
+  position: absolute;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  inset: 0 -5px;
+  z-index: 5;
+  touch-action: none;
+}
+.pane-resize.enabled {
+  cursor: col-resize;
+}
+.editor-shell.resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+.editor-shell.resizing .pane-handle {
+  transition: none;
+}
+.pane-handle {
+  position: absolute;
+  left: 50%;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  width: 6px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--line-hover);
+  color: transparent;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+  transition:
+    width 0.16s ease,
+    height 0.16s ease,
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+}
+.pane-handle-top {
+  top: 27%;
+}
+.pane-handle-bottom {
+  top: 73%;
+}
+.source-hidden .pane-handle {
+  transform: translate(0, -50%);
+}
+.rendered-hidden .pane-handle {
+  transform: translate(-100%, -50%);
+}
+/* A collapsed pane leaves one handle at the window edge, so it reads as a tab. */
+.source-hidden .pane-handle,
+.rendered-hidden .pane-handle {
+  width: 8px;
+  height: 46px;
+}
+.pane-divider:hover .pane-handle,
+.pane-handle:hover,
+.pane-handle:focus-visible {
+  width: 24px;
+  height: 24px;
+  border-color: var(--line-strong);
+  background: var(--surface);
+  color: var(--muted);
+  box-shadow: var(--shadow-sm);
+}
+.pane-handle:hover {
+  color: var(--ink);
 }
 .workspace > .collapsed-sidebar-toggle {
   position: absolute;
@@ -273,19 +355,8 @@
   text-decoration-color: var(--accent-underline);
   text-underline-offset: 3px;
 }
-.editor-footer {
-  flex: 0 0 32px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 17px;
-  border-top: 1px solid var(--line-soft);
-  color: var(--faint);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
 .preview-pane {
+  grid-column: 3;
   overflow-y: auto;
   background: var(--surface);
 }

@@ -35,7 +35,6 @@
 		githubMessage={page.githubMessage}
 		shortcuts={page.shortcuts}
 		primaryModifier={page.primaryModifier}
-		sourcePaneVisible={page.sourcePaneVisible}
 		renderedPaneVisible={page.renderedPaneVisible}
 		renderedReadOnly={page.renderedReadOnly}
 		wordCount={page.wordCount}
@@ -53,8 +52,6 @@
 		onChangePage={page.changeNotePage}
 		onInsertSyntax={page.insertSyntax}
 		onPrefixLine={page.prefixLine}
-		onToggleSourcePane={page.toggleSourcePane}
-		onToggleRenderedPane={page.toggleRenderedPane}
 		onToggleRenderedReadOnly={page.toggleRenderedReadOnly}
 	/>
 
@@ -70,8 +67,6 @@
 		liveLine={page.liveLine}
 		saveState={page.saveState}
 		transferState={page.transferState}
-		wordCount={page.wordCount}
-		readingMinutes={page.readingMinutes}
 		hasContent={page.hasContent}
 		renderedMarkdown={page.renderedMarkdown}
 		shortcuts={page.shortcuts}
@@ -81,6 +76,11 @@
 		bind:liveEditorContainer={page.liveEditorContainer}
 		onRetryStorage={() => void (page.vault ? page.saveDraft() : page.openVault())}
 		onToggleSidebar={page.toggleSidebar}
+		splitRatio={page.splitRatio}
+		onToggleSourcePane={page.toggleSourcePane}
+		onToggleRenderedPane={page.toggleRenderedPane}
+		onResize={page.setSplitRatio}
+		onResizeEnd={page.saveSplitRatio}
 		onReload={() => location.reload()}
 		onMarkdownChange={page.updateMarkdown}
 		onSourceFocus={page.focusSourceEditor}

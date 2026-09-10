@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Bold, Code2, FileText, Heading2, Italic, Link, List, LoaderCircle, Lock, LockOpen, LogOut, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Quote, Search, Settings, WifiOff, Wrench, X } from '@lucide/svelte';
+	import { Bold, Code2, FileText, Heading2, Italic, Link, List, LoaderCircle, Lock, LockOpen, LogOut, PanelLeftClose, Plus, Quote, Search, Settings, WifiOff, Wrench, X } from '@lucide/svelte';
 	import { formatShortcut, type GithubUser, type KeyboardShortcuts, type PrimaryModifier, type VaultSearchResult } from '$lib';
 	import GithubIcon from './github-icon.svelte';
 	import type { GithubState, SaveState, TransferState } from './app-types';
@@ -23,7 +23,6 @@
 		shortcuts: KeyboardShortcuts;
 		primaryModifier: PrimaryModifier;
 		storageError: string;
-		sourcePaneVisible: boolean;
 		renderedPaneVisible: boolean;
 		renderedReadOnly: boolean;
 		wordCount: number;
@@ -41,17 +40,15 @@
 		onChangePage: (page: number) => void;
 		onInsertSyntax: (before: string, after?: string, placeholder?: string) => void;
 		onPrefixLine: (prefix: string) => void;
-		onToggleSourcePane: () => void;
-		onToggleRenderedPane: () => void;
 		onToggleRenderedReadOnly: () => void;
 	}
 
 	let {
 		activeNoteId, results, visibleResults, searchQuery, notePage, notePageCount, saveState, notesLoaded, paletteOpen, settingsOpen,
-		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, sourcePaneVisible, renderedPaneVisible, renderedReadOnly, wordCount, readingMinutes,
+		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, renderedPaneVisible, renderedReadOnly, wordCount, readingMinutes,
 		searchInput = $bindable(), noteList = $bindable(), onToggleSidebar, onCreateNote, onSearch,
 		onOpenPalette, onOpenSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage,
-		onInsertSyntax, onPrefixLine, onToggleSourcePane, onToggleRenderedPane, onToggleRenderedReadOnly
+		onInsertSyntax, onPrefixLine, onToggleRenderedReadOnly
 	}: Props = $props();
 
 	let sidebarView = $state<'files' | 'tools'>('files');
@@ -95,8 +92,6 @@
 			<section class="tool-section">
 				<h2>View</h2>
 				<div class="sidebar-view-options">
-					<button class:active={sourcePaneVisible} aria-pressed={sourcePaneVisible} onclick={onToggleSourcePane} aria-label={sourcePaneVisible ? 'Hide Markdown pane' : 'Show Markdown pane'}>{#if sourcePaneVisible}<PanelLeftClose size={16} />{:else}<PanelLeftOpen size={16} />{/if}<span>Markdown</span></button>
-					<button class:active={renderedPaneVisible} aria-pressed={renderedPaneVisible} onclick={onToggleRenderedPane} aria-label={renderedPaneVisible ? 'Hide page pane' : 'Show page pane'}>{#if renderedPaneVisible}<PanelRightClose size={16} />{:else}<PanelRightOpen size={16} />{/if}<span>Page</span></button>
 					<button class:active={renderedReadOnly} aria-pressed={renderedReadOnly} disabled={!renderedPaneVisible} onclick={onToggleRenderedReadOnly} aria-label={renderedReadOnly ? 'Enable page editing' : 'Turn on read-only'}>{#if renderedReadOnly}<Lock size={16} />{:else}<LockOpen size={16} />{/if}<span>{renderedReadOnly ? 'Read only' : 'Editing'}</span></button>
 				</div>
 			</section>

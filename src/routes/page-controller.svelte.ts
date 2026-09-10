@@ -119,6 +119,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let sourcePaneVisible = $state(true);
   let renderedPaneVisible = $state(true);
   let renderedReadOnly = $state(true);
+  let splitRatio = $state(50);
   let editingSurface: "source" | "rendered" = "source";
   let saveState = $state<SaveState>("loading");
   let notesLoaded = $state(false);
@@ -242,6 +243,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: sourcePaneVisible ? "Hide Markdown pane" : "Show Markdown pane",
       icon: PanelLeftClose,
       keywords: "write markdown left pane",
+      disabled: sourcePaneVisible && !renderedPaneVisible,
       run: () => toggleSourcePane(),
     },
     {
@@ -251,6 +253,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       shortcut: shortcutLabel("togglePreview"),
       icon: PanelRightClose,
       keywords: "page preview right pane",
+      disabled: renderedPaneVisible && !sourcePaneVisible,
       run: () => toggleRenderedPane(),
     },
     {
@@ -392,6 +395,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     sourcePaneVisible = readLocalStorage("onyx:source-pane-visible") !== "false";
     renderedPaneVisible = readLocalStorage("onyx:rendered-pane-visible") !== "false";
     renderedReadOnly = readLocalStorage("onyx:rendered-read-only") !== "false";
+    if (!sourcePaneVisible && !renderedPaneVisible) sourcePaneVisible = true;
+    const storedSplit = Number(readLocalStorage("onyx:split-ratio"));
+    if (Number.isFinite(storedSplit)) splitRatio = clampSplitRatio(storedSplit);
     shortcuts = readKeyboardShortcuts();
     theme = readThemePreference();
     resolvedTheme = applyTheme(theme);
@@ -1090,13 +1096,27 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     previewMarkdown = value;
   }
 
+  function clampSplitRatio(value: number): number {
+    return Math.min(80, Math.max(20, value));
+  }
+
+  function setSplitRatio(value: number): void {
+    splitRatio = clampSplitRatio(value);
+  }
+
+  function saveSplitRatio(): void {
+    writeLocalStorage("onyx:split-ratio", splitRatio.toFixed(1));
+  }
+
   function toggleSourcePane(): void {
+    if (sourcePaneVisible && !renderedPaneVisible) return;
     sourcePaneVisible = !sourcePaneVisible;
     writeLocalStorage("onyx:source-pane-visible", String(sourcePaneVisible));
     if (!sourcePaneVisible && renderedPaneVisible && !renderedReadOnly) editingSurface = "rendered";
   }
 
   function toggleRenderedPane(): void {
+    if (renderedPaneVisible && !sourcePaneVisible) return;
     renderedPaneVisible = !renderedPaneVisible;
     writeLocalStorage("onyx:rendered-pane-visible", String(renderedPaneVisible));
     if (!renderedPaneVisible && sourcePaneVisible) editingSurface = "source";
@@ -1768,6 +1788,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get renderedReadOnly() {
       return renderedReadOnly;
     },
+    get splitRatio() {
+      return splitRatio;
+    },
     get markdown() {
       return markdown;
     },
@@ -1871,6 +1894,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     toggleSidebar,
     insertSyntax,
     prefixLine,
+    setSplitRatio,
+    saveSplitRatio,
     toggleSourcePane,
     toggleRenderedPane,
     toggleRenderedReadOnly,
