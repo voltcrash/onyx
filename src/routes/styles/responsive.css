@@ -76,6 +76,7 @@
   .prose {
     padding: 36px 25px 80px;
   }
+  .theme-mode-options,
   .theme-options {
     grid-template-columns: minmax(0, 1fr);
   }

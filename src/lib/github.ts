@@ -172,7 +172,7 @@ export async function createPrivateGithubRepository(name: string): Promise<Githu
       name: repositoryName,
       description: "Private backup of an Onyx vault",
       private: true,
-      auto_init: false,
+      auto_init: true,
     }),
   });
   if (!repository.private) throw new Error("GitHub did not create a private repository");
