@@ -481,3 +481,17 @@
   margin: 24px auto;
   border-radius: 8px;
 }
+.prose .remote-image-blocked {
+  display: inline-flex;
+  align-items: center;
+  margin: 12px 0;
+  padding: 5px 8px;
+  border: 1px dashed var(--line-hover);
+  border-radius: 5px;
+  background: var(--subtle);
+  color: var(--muted);
+  font:
+    0.8em/1.4 "Inter Variable",
+    Inter,
+    sans-serif;
+}

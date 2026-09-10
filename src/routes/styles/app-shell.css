@@ -99,12 +99,20 @@
 .github-account {
   padding-left: 5px;
 }
-.github-account img {
+.github-account .github-avatar {
   width: 23px;
   height: 23px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
   border-radius: 5px;
+  background: var(--accent-bg-strong);
+  color: var(--accent-quiet);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
 }
-.github-account > span {
+.github-account > .github-login {
   max-width: 110px;
   overflow: hidden;
   text-overflow: ellipsis;

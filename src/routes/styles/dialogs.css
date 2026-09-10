@@ -270,10 +270,18 @@ kbd {
   border-radius: 9px;
   background: var(--surface);
 }
-.settings-account img {
+.settings-account > .github-avatar {
   width: 38px;
   height: 38px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
   border-radius: 50%;
+  background: var(--accent-bg-strong);
+  color: var(--accent-quiet);
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 .settings-account > svg {
   flex: 0 0 auto;
