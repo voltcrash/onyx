@@ -92,7 +92,11 @@ export async function readMarkdownZip(
         "ZIP contents",
       );
 
-      const contents = await entry.getData(new BlobWriter(contentType(paths[index])), {
+      const writer = createLimitedBlobWriter(
+        contentType(paths[index]),
+        resolvedLimits.maxUncompressedBytes - uncompressedBytes,
+      );
+      const contents = await entry.getData<Blob>(writer, {
         checkAmbiguity: true,
         checkCrc32: true,
       });
@@ -462,6 +466,30 @@ function formatBytes(bytes: number): string {
 
 function pathKey(path: string): string {
   return path.toLowerCase();
+}
+
+function createLimitedBlobWriter(
+  contentTypeValue: string,
+  maxBytes: number,
+): {
+  getData: () => Promise<Blob>;
+  writable: WritableStream<Uint8Array>;
+} {
+  const chunks: BlobPart[] = [];
+  let size = 0;
+  const writable = new WritableStream<Uint8Array>({
+    write(chunk) {
+      size += chunk.byteLength;
+      if (size > maxBytes) {
+        throw new Error("ZIP contents exceed the " + formatBytes(maxBytes) + " limit.");
+      }
+      chunks.push(new Uint8Array(chunk));
+    },
+  });
+  return {
+    getData: async () => new Blob(chunks, { type: contentTypeValue }),
+    writable,
+  };
 }
 
 function hasControlCharacters(value: string): boolean {
