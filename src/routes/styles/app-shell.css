@@ -40,7 +40,7 @@
   }
 }
 .icon-button,
-.view-switcher button,
+.pane-switcher button,
 .formatting-bar button {
   border: 0;
   background: transparent;
@@ -407,7 +407,7 @@
   flex-direction: column;
   background: var(--paper);
 }
-.view-switcher {
+.pane-switcher {
   display: flex;
   gap: 2px;
   padding: 3px;
@@ -415,7 +415,7 @@
   border-radius: 8px;
   background: var(--subtle);
 }
-.view-switcher button {
+.pane-switcher button {
   height: 27px;
   display: flex;
   align-items: center;
@@ -425,10 +425,10 @@
   color: var(--muted);
   font-size: 11px;
 }
-.view-switcher button:hover {
+.pane-switcher button:hover {
   color: var(--ink);
 }
-.view-switcher button.active {
+.pane-switcher button.active {
   background: var(--surface);
   color: var(--ink);
   box-shadow: var(--shadow-sm);

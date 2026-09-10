@@ -262,11 +262,11 @@ test("searches note titles and Markdown content", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Project Aurora/ })).toBeVisible();
 });
 
-test("formats Markdown while editing in inline preview", async ({ page }) => {
+test("formats Markdown while editing in the page pane", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
-  await page.getByRole("button", { name: "Inline preview" }).click();
+  await page.getByRole("button", { name: "Enable page editing" }).click();
   const line = page.getByRole("textbox", { name: "Markdown line 3" });
   await line.fill("Onyx renders **Markdown** while you keep writing.");
   await expect(line).toContainText("Onyx renders **Markdown** while you keep writing.");
@@ -281,18 +281,43 @@ test("formats Markdown while editing in inline preview", async ({ page }) => {
   await expect(line).toContainText("# Inline heading");
 });
 
-test("can reveal the active Markdown source line in inline preview", async ({ page }) => {
+test("can reveal the active Markdown line while editing the page", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
   await page.getByRole("button", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Editor", exact: true }).click();
-  await page.getByRole("radio", { name: /Reveal source line/ }).click();
+  await page.getByRole("radio", { name: /Reveal Markdown on active line/ }).click();
   await page.getByRole("button", { name: "Close settings" }).click();
-  await page.getByRole("button", { name: "Inline preview" }).click();
+  await page.getByRole("button", { name: "Enable page editing" }).click();
 
   await page.getByRole("button", { name: "Edit line 3" }).click();
   await expect(page.getByRole("textbox", { name: "Markdown line 3" })).toBeVisible();
+});
+
+test("keeps both panes synchronized and lets each pane be tucked away", async ({ page }) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+
+  await markdown.fill("# Written on the left");
+  await expect(page.locator(".preview-pane h1")).toHaveText("Written on the left");
+
+  await page.getByRole("button", { name: "Hide Markdown pane" }).click();
+  await expect(markdown).toBeHidden();
+  await page.getByRole("button", { name: "Show Markdown pane" }).click();
+  await expect(markdown).toBeVisible();
+
+  await page.getByRole("button", { name: "Enable page editing" }).click();
+  await page.getByRole("textbox", { name: "Markdown line 1" }).fill("# Written on the right");
+  await expect(markdown).toHaveValue("# Written on the right");
+
+  await page.getByRole("button", { name: "Turn on read-only" }).click();
+  await expect(page.locator(".preview-pane h1")).toHaveText("Written on the right");
+  await page.getByRole("button", { name: "Hide page pane" }).click();
+  await expect(page.locator(".preview-pane")).toBeHidden();
+  await page.getByRole("button", { name: "Show page pane" }).click();
+  await expect(page.locator(".preview-pane")).toBeVisible();
 });
 
 test("customizes and persists keyboard shortcuts", async ({ page }) => {
