@@ -305,21 +305,21 @@ test("keeps both panes synchronized and lets each pane be tucked away", async ({
   await markdown.fill("# Written on the left");
   await expect(page.locator(".preview-pane h1")).toHaveText("Written on the left");
 
-  await page.getByRole("tab", { name: "Tools" }).click();
-  await page.getByRole("button", { name: "Hide Markdown pane" }).click();
+  await page.getByRole("button", { name: "Hide the Markdown pane" }).click();
   await expect(markdown).toBeHidden();
-  await page.getByRole("button", { name: "Show Markdown pane" }).click();
+  await page.getByRole("button", { name: "Show the Markdown pane" }).click();
   await expect(markdown).toBeVisible();
 
+  await page.getByRole("tab", { name: "Tools" }).click();
   await page.getByRole("button", { name: "Enable page editing" }).click();
   await page.getByRole("textbox", { name: "Markdown line 1" }).fill("# Written on the right");
   await expect(markdown).toHaveValue("# Written on the right");
 
   await page.getByRole("button", { name: "Turn on read-only" }).click();
   await expect(page.locator(".preview-pane h1")).toHaveText("Written on the right");
-  await page.getByRole("button", { name: "Hide page pane" }).click();
+  await page.getByRole("button", { name: "Hide the page pane" }).click();
   await expect(page.locator(".preview-pane")).toBeHidden();
-  await page.getByRole("button", { name: "Show page pane" }).click();
+  await page.getByRole("button", { name: "Show the page pane" }).click();
   await expect(page.locator(".preview-pane")).toBeVisible();
 });
 
