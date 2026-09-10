@@ -1,4 +1,5 @@
 export { Vault } from "./vault.js";
+export { VaultConflictError } from "./types.js";
 export type {
   AttachmentMetadata,
   BackupOperation,
@@ -14,6 +15,10 @@ export type {
   VaultBackupChange,
   VaultBackupManifest,
   VaultBackupSnapshot,
+  VaultChangeEvent,
+  VaultChangeKind,
+  VaultOperationContext,
+  VaultOperationOptions,
   VaultRestoreFile,
   VaultRestoreResult,
   VaultSearchResult,

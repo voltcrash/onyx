@@ -47,6 +47,10 @@ ordered backup queue. Markdown files and attachment bytes are written to OPFS. K
 note text in IndexedDB also lets an edit survive when an OPFS write fails because the site has
 reached its storage quota.
 
+Open tabs coordinate vault writes and GitHub backups with the Web Locks API when it is available.
+BroadcastChannel invalidations refresh other tabs after a change, while note and vault revisions
+reject stale writes and snapshots.
+
 Browser storage is not the same as a user-selected folder. Clearing site data removes the local
 vault, and browsers may evict non-persistent storage under space pressure. Onyx reports unavailable
 storage capabilities in the workspace and exposes persistence status in Settings, so important

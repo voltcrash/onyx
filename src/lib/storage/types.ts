@@ -18,6 +18,7 @@ export interface Note extends NoteMetadata {
 
 export interface SaveNoteInput {
   id?: VaultId;
+  expectedRevision?: number;
   title: string;
   markdown: string;
   tags?: string[];
@@ -87,6 +88,23 @@ export interface VaultBackupSnapshot {
   operationIds: string[];
 }
 
+export type VaultChangeKind = "backup" | "note" | "vault";
+
+export interface VaultChangeEvent {
+  kind: VaultChangeKind;
+  noteId?: VaultId;
+  occurredAt: string;
+  sourceId: string;
+}
+
+export interface VaultOperationContext {
+  readonly id: string;
+}
+
+export interface VaultOperationOptions {
+  context?: VaultOperationContext;
+}
+
 export interface VaultBackupManifest {
   version: 1;
   notes: NoteMetadata[];
@@ -123,4 +141,19 @@ export interface VaultSearchResult {
 export interface VaultOptions {
   databaseName?: string;
   directoryName?: string;
+}
+
+export class VaultConflictError extends Error {
+  constructor(
+    readonly entityId: string,
+    readonly expectedRevision: number,
+    readonly actualRevision: number,
+  ) {
+    super(
+      entityId === "vault"
+        ? "The vault changed in another tab. Reload and try again."
+        : "This note changed in another tab. Reload it before saving.",
+    );
+    this.name = "VaultConflictError";
+  }
 }

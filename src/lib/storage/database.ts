@@ -4,8 +4,10 @@ import type {
   GithubBackupState,
   NoteMetadata,
 } from "./types.js";
+import { VaultConflictError } from "./types.js";
 
 const DATABASE_VERSION = 3;
+const VAULT_VERSION_KEY = "vaultVersion";
 
 export interface SearchDocument {
   noteId: string;
@@ -116,20 +118,43 @@ export class VaultDatabase {
     operation: BackupOperation,
   ): Promise<void> {
     const transaction = this.#database.transaction(
-      ["notes", "noteContents", "searchDocuments", "searchPostings", "backupQueue"],
+      ["notes", "noteContents", "searchDocuments", "searchPostings", "backupQueue", "settings"],
       "readwrite",
     );
-    transaction.objectStore("notes").put(note);
-    transaction.objectStore("noteContents").put({ noteId: note.id, markdown });
-    transaction.objectStore("searchDocuments").put(searchDocument);
-    const postings = transaction.objectStore("searchPostings");
-    const previousKeys = await requestResult<IDBValidKey[]>(
-      postings.index("noteId").getAllKeys(note.id),
-    );
-    for (const key of previousKeys) postings.delete(key);
-    for (const posting of searchPostings) postings.put(posting);
-    transaction.objectStore("backupQueue").put(operation);
-    await transactionDone(transaction);
+    const complete = transactionDone(transaction);
+    try {
+      const current = await requestResult<NoteMetadata | undefined>(
+        transaction.objectStore("notes").get(note.id),
+      );
+      const actualRevision = current?.revision ?? 0;
+      const expectedRevision = note.revision - 1;
+      if (actualRevision !== expectedRevision) {
+        transaction.abort();
+        await complete.catch(() => undefined);
+        throw new VaultConflictError(note.id, expectedRevision, actualRevision);
+      }
+
+      transaction.objectStore("notes").put(note);
+      transaction.objectStore("noteContents").put({ noteId: note.id, markdown });
+      transaction.objectStore("searchDocuments").put(searchDocument);
+      const postings = transaction.objectStore("searchPostings");
+      const previousKeys = await requestResult<IDBValidKey[]>(
+        postings.index("noteId").getAllKeys(note.id),
+      );
+      for (const key of previousKeys) postings.delete(key);
+      for (const posting of searchPostings) postings.put(posting);
+      transaction.objectStore("backupQueue").put(operation);
+      await advanceVaultVersion(transaction);
+      await complete;
+    } catch (error) {
+      try {
+        transaction.abort();
+      } catch {
+        // The transaction may already have completed or aborted.
+      }
+      await complete.catch(() => undefined);
+      throw error;
+    }
   }
 
   getAttachment(id: string): Promise<AttachmentMetadata | undefined> {
@@ -153,6 +178,38 @@ export class VaultDatabase {
   async getNoteMarkdown(noteId: string): Promise<string | undefined> {
     const record = await this.#get<{ markdown: string }>("noteContents", noteId);
     return record?.markdown;
+  }
+
+  async getBackupSnapshotRecords(): Promise<{
+    operations: BackupOperation[];
+    noteContents: Map<string, string>;
+    version: number;
+  }> {
+    const transaction = this.#database.transaction(
+      ["backupQueue", "noteContents", "settings"],
+      "readonly",
+    );
+    const [operations, noteContents, versionRecord] = await Promise.all([
+      requestResult<BackupOperation[]>(
+        transaction.objectStore("backupQueue").index("createdAt").getAll(),
+      ),
+      requestResult<Array<{ markdown: string; noteId: string }>>(
+        transaction.objectStore("noteContents").getAll(),
+      ),
+      requestResult<SettingRecord<number> | undefined>(
+        transaction.objectStore("settings").get(VAULT_VERSION_KEY),
+      ),
+    ]);
+    await transactionDone(transaction);
+    return {
+      operations,
+      noteContents: new Map(noteContents.map((contents) => [contents.noteId, contents.markdown])),
+      version: versionRecord?.value ?? 0,
+    };
+  }
+
+  getVaultVersion(): Promise<number> {
+    return this.#getSetting<number>(VAULT_VERSION_KEY).then((version) => version ?? 0);
   }
 
   async getSearchRecords(noteIds: string[]): Promise<{
@@ -203,9 +260,10 @@ export class VaultDatabase {
 
   async removeBackupOperations(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
-    const transaction = this.#database.transaction("backupQueue", "readwrite");
+    const transaction = this.#database.transaction(["backupQueue", "settings"], "readwrite");
     const store = transaction.objectStore("backupQueue");
     for (const id of ids) store.delete(id);
+    await advanceVaultVersion(transaction);
     await transactionDone(transaction);
   }
 
@@ -216,27 +274,58 @@ export class VaultDatabase {
     documents: SearchDocument[],
     postings: SearchPosting[],
     operations: BackupOperation[],
+    expectedVersion?: number,
   ): Promise<void> {
     const transaction = this.#database.transaction(
-      ["notes", "noteContents", "attachments", "searchDocuments", "searchPostings", "backupQueue"],
+      [
+        "notes",
+        "noteContents",
+        "attachments",
+        "searchDocuments",
+        "searchPostings",
+        "backupQueue",
+        "settings",
+      ],
       "readwrite",
     );
-    const stores = {
-      notes: transaction.objectStore("notes"),
-      noteContents: transaction.objectStore("noteContents"),
-      attachments: transaction.objectStore("attachments"),
-      documents: transaction.objectStore("searchDocuments"),
-      postings: transaction.objectStore("searchPostings"),
-      operations: transaction.objectStore("backupQueue"),
-    };
-    for (const store of Object.values(stores)) store.clear();
-    for (const note of notes) stores.notes.put(note);
-    for (const contents of noteContents) stores.noteContents.put(contents);
-    for (const attachment of attachments) stores.attachments.put(attachment);
-    for (const document of documents) stores.documents.put(document);
-    for (const posting of postings) stores.postings.put(posting);
-    for (const operation of operations) stores.operations.put(operation);
-    await transactionDone(transaction);
+    const complete = transactionDone(transaction);
+    try {
+      const versionRecord = await requestResult<SettingRecord<number> | undefined>(
+        transaction.objectStore("settings").get(VAULT_VERSION_KEY),
+      );
+      const actualVersion = versionRecord?.value ?? 0;
+      if (expectedVersion !== undefined && actualVersion !== expectedVersion) {
+        transaction.abort();
+        await complete.catch(() => undefined);
+        throw new VaultConflictError("vault", expectedVersion, actualVersion);
+      }
+
+      const stores = {
+        notes: transaction.objectStore("notes"),
+        noteContents: transaction.objectStore("noteContents"),
+        attachments: transaction.objectStore("attachments"),
+        documents: transaction.objectStore("searchDocuments"),
+        postings: transaction.objectStore("searchPostings"),
+        operations: transaction.objectStore("backupQueue"),
+      };
+      for (const store of Object.values(stores)) store.clear();
+      for (const note of notes) stores.notes.put(note);
+      for (const contents of noteContents) stores.noteContents.put(contents);
+      for (const attachment of attachments) stores.attachments.put(attachment);
+      for (const document of documents) stores.documents.put(document);
+      for (const posting of postings) stores.postings.put(posting);
+      for (const operation of operations) stores.operations.put(operation);
+      await advanceVaultVersion(transaction);
+      await complete;
+    } catch (error) {
+      try {
+        transaction.abort();
+      } catch {
+        // The transaction may already have completed or aborted.
+      }
+      await complete.catch(() => undefined);
+      throw error;
+    }
   }
 
   async #get<T>(storeName: StoreName, key: IDBValidKey): Promise<T | undefined> {
@@ -264,14 +353,24 @@ export class VaultDatabase {
   async #deleteSetting(key: string): Promise<void> {
     const transaction = this.#database.transaction("settings", "readwrite");
     transaction.objectStore("settings").delete(key);
+    if (key !== VAULT_VERSION_KEY) await advanceVaultVersion(transaction);
     await transactionDone(transaction);
   }
 
   async #putSetting<T>(key: string, value: T): Promise<void> {
     const transaction = this.#database.transaction("settings", "readwrite");
     transaction.objectStore("settings").put({ key, value } satisfies SettingRecord<T>);
+    if (key !== VAULT_VERSION_KEY) await advanceVaultVersion(transaction);
     await transactionDone(transaction);
   }
+}
+
+async function advanceVaultVersion(transaction: IDBTransaction): Promise<void> {
+  const settings = transaction.objectStore("settings");
+  const current = await requestResult<SettingRecord<number> | undefined>(
+    settings.get(VAULT_VERSION_KEY),
+  );
+  settings.put({ key: VAULT_VERSION_KEY, value: (current?.value ?? 0) + 1 });
 }
 
 export function createSearchPostings(document: SearchDocument): SearchPosting[] {
