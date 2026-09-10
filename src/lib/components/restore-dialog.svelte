@@ -9,6 +9,7 @@
 		restoreState: RestoreState;
 		restoreMessage: string;
 		restoreCommits: GithubBackupCommit[];
+		pendingBackupCount: number;
 		selectedRestoreSha: string;
 		restoreOwner: string;
 		restoreRepository: string;
@@ -21,11 +22,22 @@
 	}
 
 	let {
-		isOnline, restoreState, restoreMessage, restoreCommits,
+		isOnline, restoreState, restoreMessage, restoreCommits, pendingBackupCount,
 		selectedRestoreSha = $bindable(), restoreOwner = $bindable(), restoreRepository = $bindable(),
 		restoreBranch = $bindable(), restoreDirectory = $bindable(), onClose, onLoadCommits, onRestore,
 		formatCommitDate
 	}: Props = $props();
+
+	let confirmationSha = $state('');
+	const pendingChangesConfirmed = $derived(confirmationSha === selectedRestoreSha);
+
+	function requestRestore(): void {
+		if (pendingBackupCount > 0 && !pendingChangesConfirmed) {
+			confirmationSha = selectedRestoreSha;
+			return;
+		}
+		onRestore();
+	}
 </script>
 
 <div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget && restoreState !== 'restoring') onClose(); }}>
@@ -52,7 +64,7 @@
 				{#if restoreMessage}<div class="restore-placeholder" class:error={restoreState === 'error'}>{restoreMessage}</div>{/if}
 			{/if}
 		</div>
-		<div id="restore-warning" class="restore-warning"><strong>This replaces the local vault.</strong> Notes and attachments currently on this device will be removed and replaced by the selected commit.</div>
-		<div class="modal-actions"><button type="button" disabled={restoreState === 'restoring'} onclick={onClose}>Cancel</button><button class="primary danger" type="button" disabled={!isOnline || !selectedRestoreSha || restoreState === 'restoring'} onclick={onRestore}>{#if restoreState === 'restoring'}<LoaderCircle class="spin" size={15} />{:else}<CloudDownload size={15} />{/if} {restoreState === 'restoring' ? 'Restoring…' : 'Restore selected'}</button></div>
+		<div id="restore-warning" class="restore-warning"><strong>This replaces the local vault.</strong> Notes and attachments currently on this device will be removed and replaced by the selected commit.{#if pendingBackupCount > 0} {pendingBackupCount} pending {pendingBackupCount === 1 ? 'change has' : 'changes have'} not been backed up to GitHub.{/if}</div>
+		<div class="modal-actions"><button type="button" disabled={restoreState === 'restoring'} onclick={onClose}>Cancel</button><button class="primary danger" type="button" disabled={!isOnline || !selectedRestoreSha || restoreState === 'restoring'} onclick={requestRestore}>{#if restoreState === 'restoring'}<LoaderCircle class="spin" size={15} />{:else}<CloudDownload size={15} />{/if} {restoreState === 'restoring' ? 'Restoring…' : pendingChangesConfirmed ? 'Confirm restore' : 'Restore selected'}</button></div>
 	</div>
 </div>

@@ -301,18 +301,28 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 		}
 	}
 
-	async function reloadVault(): Promise<void> {
+	async function reloadVault(initialMarkdown = markdown): Promise<void> {
 		if (!vault) return;
 		if (saveTimer) window.clearTimeout(saveTimer);
 		saveTimer = undefined;
 		let notes = await vault.listNotes();
 		if (notes.length === 0) {
-			notes = [await vault.saveNote({ title: titleFromMarkdown(markdown), markdown })];
+			notes = [await vault.saveNote({ title: titleFromMarkdown(initialMarkdown), markdown: initialMarkdown })];
 		}
 		searchQuery = '';
 		await loadNote(notes[0].id);
 		await runSearch('');
 		pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+	}
+
+	async function prepareVaultDeletion(): Promise<boolean> {
+		return settleDraft();
+	}
+
+	async function deleteVault(): Promise<void> {
+		if (!vault) return;
+		await vault.clear();
+		await reloadVault(createInitialMarkdown(primaryModifier));
 	}
 
 	async function createBackupRepository(name: string): Promise<void> {
@@ -358,6 +368,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
 	async function openRestore(): Promise<void> {
 		if (!isOnline || !githubUser || restoreState === 'restoring') return;
+		if (!(await settleDraft())) return;
 		restoreOwner = githubBackup?.owner ?? githubUser.login;
 		restoreRepository = githubBackup?.repository ?? 'onyx-vault';
 		restoreBranch = githubBackup?.branch ?? 'main';
@@ -401,6 +412,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
 	async function restoreSelectedCommit(): Promise<void> {
 		if (!isOnline || !vault || !selectedRestoreSha || restoreState === 'restoring') return;
+		if (!(await settleDraft())) return;
 		const previousSaveState = saveState;
 		if (saveTimer) window.clearTimeout(saveTimer);
 		if (searchTimer) window.clearTimeout(searchTimer);
@@ -1210,7 +1222,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 		onImportZip={() => zipInput?.click()}
 		onExportFolder={() => void exportFolder()}
 		onExportZip={() => void exportZip()}
-		onVaultCleared={() => void reloadVault()}
+		onPrepareVaultDeletion={prepareVaultDeletion}
+		onDeleteVault={deleteVault}
 	/>
 {/if}
 
@@ -1220,6 +1233,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 {#if restoreModalOpen}
 	<RestoreDialog
 		{isOnline} {restoreState} {restoreMessage} {restoreCommits}
+		{pendingBackupCount}
 		bind:selectedRestoreSha bind:restoreOwner bind:restoreRepository bind:restoreBranch bind:restoreDirectory
 		onClose={() => (restoreModalOpen = false)}
 		onLoadCommits={() => void loadRestoreCommits()}
