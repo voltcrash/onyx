@@ -2,7 +2,7 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template: 43px minmax(0, 1fr) / minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 .editor-shell.edit-only,
 .editor-shell.preview-only {
@@ -23,52 +23,29 @@
 .edit-only .preview-pane {
   display: none;
 }
-.formatting-bar {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0 15px;
-  border-bottom: 1px solid var(--line-soft);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.formatting-bar > .collapsed-sidebar-toggle {
+.workspace > .collapsed-sidebar-toggle {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  color: var(--muted);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  backdrop-filter: blur(10px);
   display: none;
 }
-.sidebar-collapsed .formatting-bar > .collapsed-sidebar-toggle {
+.sidebar-collapsed .workspace > .collapsed-sidebar-toggle {
   display: grid;
 }
-.toolbar-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-.formatting-bar button {
-  flex: 0 0 auto;
-  width: 31px;
-  height: 31px;
-  display: grid;
-  place-items: center;
-  border-radius: 6px;
-  color: var(--muted);
-}
-.formatting-bar .view-switcher button {
-  width: auto;
-  display: flex;
-  padding: 0 9px;
-}
-.formatting-bar button:hover {
+.workspace > .collapsed-sidebar-toggle:hover {
   background: var(--subtle-strong);
   color: var(--ink);
-}
-.formatting-bar > span {
-  flex: 0 0 auto;
-  width: 1px;
-  height: 18px;
-  margin: 0 6px;
-  background: var(--line);
 }
 .editor-pane > textarea {
   flex: 1;

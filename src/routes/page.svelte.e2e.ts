@@ -266,6 +266,7 @@ test("formats Markdown while editing in inline preview", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
+  await page.getByRole("tab", { name: "Tools" }).click();
   await page.getByRole("button", { name: "Inline preview" }).click();
   const line = page.getByRole("textbox", { name: "Markdown line 3" });
   await line.fill("Onyx renders **Markdown** while you keep writing.");
@@ -289,6 +290,7 @@ test("can reveal the active Markdown source line in inline preview", async ({ pa
   await page.getByRole("button", { name: "Editor", exact: true }).click();
   await page.getByRole("radio", { name: /Reveal source line/ }).click();
   await page.getByRole("button", { name: "Close settings" }).click();
+  await page.getByRole("tab", { name: "Tools" }).click();
   await page.getByRole("button", { name: "Inline preview" }).click();
 
   await page.getByRole("button", { name: "Edit line 3" }).click();
