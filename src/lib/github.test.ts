@@ -5,6 +5,8 @@ import {
   createPrivateGithubRepository,
   GithubRequestError,
   githubRequest,
+  listGithubBackupCommits,
+  listGithubRepositories,
   restoreGithubSession,
 } from "./github.js";
 import type { Vault } from "./storage/index.js";
@@ -49,7 +51,8 @@ describe("githubRequest", () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(Response.json({ accessToken: "expired", authenticated: true }))
-      .mockResolvedValueOnce(Response.json({ message: "Bad credentials" }, { status: 401 }));
+      .mockResolvedValueOnce(Response.json({ message: "Bad credentials" }, { status: 401 }))
+      .mockResolvedValueOnce(Response.json({ authenticated: false }, { status: 401 }));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(restoreGithubSession()).rejects.toMatchObject({ status: 401 });
@@ -67,6 +70,183 @@ describe("githubRequest", () => {
     await expect(restoreGithubSession()).rejects.toThrow(
       "GitHub authentication could not be restored",
     );
+  });
+
+  it("refreshes the access token once after GitHub rejects a request", async () => {
+    const authorizationHeaders: string[] = [];
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+        "https://onyx.test",
+      );
+      if (url.pathname === "/auth/github/session") {
+        return Response.json({
+          accessToken: url.searchParams.has("refresh") ? "fresh" : "stale",
+          authenticated: true,
+        });
+      }
+      if (url.pathname === "/user") {
+        return Response.json({ avatar_url: "avatar", id: 1, login: "onyx", name: null });
+      }
+      if (url.pathname === "/resource") {
+        const authorization = new Headers(init?.headers).get("Authorization") ?? "";
+        authorizationHeaders.push(authorization);
+        return authorization === "Bearer fresh"
+          ? Response.json({ ok: true })
+          : Response.json({ message: "Bad credentials" }, { status: 401 });
+      }
+      return Response.json({ message: "Unexpected request" }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await restoreGithubSession();
+
+    await expect(githubRequest<{ ok: boolean }>("/resource")).resolves.toEqual({ ok: true });
+    expect(authorizationHeaders).toEqual(["Bearer stale", "Bearer fresh"]);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it("does not retry non-idempotent writes after a transient response", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+        "https://onyx.test",
+      );
+      if (url.pathname === "/auth/github/session") {
+        return Response.json({ accessToken: "token", authenticated: true });
+      }
+      if (url.pathname === "/user") {
+        return Response.json({ avatar_url: "avatar", id: 1, login: "onyx", name: null });
+      }
+      return Response.json({ message: "Service unavailable" }, { status: 503 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await restoreGithubSession();
+    await expect(
+      githubRequest("/write", { method: "POST", body: JSON.stringify({ value: true }) }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("aborts a request after the timeout without replaying a write", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+        "https://onyx.test",
+      );
+      if (url.pathname === "/auth/github/session") {
+        return Response.json({ accessToken: "token", authenticated: true });
+      }
+      if (url.pathname === "/user") {
+        return Response.json({ avatar_url: "avatar", id: 1, login: "onyx", name: null });
+      }
+      return new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("The request was aborted", "AbortError")),
+          { once: true },
+        );
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await restoreGithubSession();
+
+    vi.useFakeTimers();
+    try {
+      const request = githubRequest("/slow-write", { method: "POST", body: "{}" });
+      const assertion = expect(request).rejects.toThrow("GitHub request timed out");
+      await vi.advanceTimersByTimeAsync(15_000);
+      await assertion;
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("paginates repositories and backup commits", async () => {
+    const repository = (name: string) => ({
+      default_branch: "main",
+      name,
+      owner: { login: "onyx" },
+      permissions: { push: true },
+      private: true,
+    });
+    const commit = (index: number) => ({
+      author: { login: "onyx" },
+      commit: {
+        author: { date: "2026-01-01T00:00:00Z", name: "Onyx" },
+        committer: { date: "2026-01-01T00:00:00Z", name: "Onyx" },
+        message: `Backup ${index}`,
+      },
+      html_url: `https://github.com/onyx/vault/commit/${index}`,
+      sha: index.toString(16).padStart(40, "0"),
+    });
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+        "https://onyx.test",
+      );
+      if (url.pathname === "/auth/github/session") {
+        return Response.json({ accessToken: "token", authenticated: true });
+      }
+      if (url.pathname === "/user") {
+        return Response.json({ avatar_url: "avatar", id: 1, login: "onyx", name: null });
+      }
+      if (url.pathname === "/user/repos") {
+        return Response.json(
+          url.searchParams.get("page") === "2"
+            ? [repository("repo-100")]
+            : Array.from({ length: 100 }, (_, index) => repository(`repo-${index}`)),
+        );
+      }
+      if (url.pathname === "/repos/onyx/vault") return Response.json(repository("vault"));
+      if (url.pathname === "/repos/onyx/vault/commits") {
+        if (url.searchParams.get("page") === "2") return Response.json([commit(50)]);
+        const next = new URL(url);
+        next.searchParams.set("page", "2");
+        return Response.json(
+          Array.from({ length: 50 }, (_, index) => commit(index)),
+          {
+            headers: { Link: `<${next}>; rel="next"` },
+          },
+        );
+      }
+      return Response.json({ message: "Unexpected request" }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await restoreGithubSession();
+    await expect(listGithubRepositories()).resolves.toHaveLength(101);
+    await expect(
+      listGithubBackupCommits({
+        branch: "main",
+        directory: "vault",
+        githubAccountId: 1,
+        githubAccountLogin: "onyx",
+        owner: "onyx",
+        repository: "vault",
+        updatedAt: new Date().toISOString(),
+      }),
+    ).resolves.toHaveLength(51);
+
+    const requests = fetchMock.mock.calls.map(
+      ([input]) =>
+        new URL(
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+          "https://onyx.test",
+        ),
+    );
+    expect(
+      requests
+        .filter(({ pathname }) => pathname === "/user/repos")
+        .map((url) => url.searchParams.get("page")),
+    ).toEqual(["1", "2"]);
+    expect(
+      requests
+        .filter(({ pathname }) => pathname.endsWith("/commits"))
+        .map((url) => url.searchParams.get("page")),
+    ).toEqual(["1", "2"]);
   });
 
   it("backs up to a newly created repository after initializing its default branch", async () => {

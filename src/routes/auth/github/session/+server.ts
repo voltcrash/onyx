@@ -11,23 +11,31 @@ const RESPONSE_HEADERS = { "Cache-Control": "no-store", Pragma: "no-cache" };
 
 export const GET: RequestHandler = async ({ cookies, url }) => {
   const secure = url.protocol === "https:";
+  const forceRefresh = url.searchParams.get("refresh") === "1";
   let credentials = await getCredentialsCookie(cookies);
   if (!credentials) {
     clearCredentialsCookie(cookies, secure);
     return json({ authenticated: false }, { status: 401, headers: RESPONSE_HEADERS });
   }
 
-  if (credentials.accessExpiresAt && credentials.accessExpiresAt <= Date.now() + 60_000) {
+  if (
+    forceRefresh ||
+    (credentials.accessExpiresAt && credentials.accessExpiresAt <= Date.now() + 60_000)
+  ) {
     if (
       !credentials.refreshToken ||
-      !credentials.refreshExpiresAt ||
-      credentials.refreshExpiresAt <= Date.now()
+      (credentials.refreshExpiresAt && credentials.refreshExpiresAt <= Date.now())
     ) {
       clearCredentialsCookie(cookies, secure);
       return json({ authenticated: false }, { status: 401, headers: RESPONSE_HEADERS });
     }
     try {
-      credentials = await refreshCredentials(credentials.refreshToken);
+      const refreshed = await refreshCredentials(credentials.refreshToken);
+      credentials = {
+        ...refreshed,
+        refreshToken: refreshed.refreshToken ?? credentials.refreshToken,
+        refreshExpiresAt: refreshed.refreshExpiresAt ?? credentials.refreshExpiresAt,
+      };
       await setCredentialsCookie(cookies, credentials, secure);
     } catch {
       clearCredentialsCookie(cookies, secure);
