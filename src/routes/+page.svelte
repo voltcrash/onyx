@@ -35,6 +35,11 @@
 		githubMessage={page.githubMessage}
 		shortcuts={page.shortcuts}
 		primaryModifier={page.primaryModifier}
+		sourcePaneVisible={page.sourcePaneVisible}
+		renderedPaneVisible={page.renderedPaneVisible}
+		renderedReadOnly={page.renderedReadOnly}
+		wordCount={page.wordCount}
+		readingMinutes={page.readingMinutes}
 		bind:searchInput={page.searchInput}
 		bind:noteList={page.noteList}
 		onToggleSidebar={page.toggleSidebar}
@@ -46,12 +51,16 @@
 		onMoveNoteFocus={page.moveNoteFocus}
 		onSelectNote={(id) => void page.selectNote(id)}
 		onChangePage={page.changeNotePage}
+		onInsertSyntax={page.insertSyntax}
+		onPrefixLine={page.prefixLine}
+		onToggleSourcePane={page.toggleSourcePane}
+		onToggleRenderedPane={page.toggleRenderedPane}
+		onToggleRenderedReadOnly={page.toggleRenderedReadOnly}
 	/>
 
 	<MarkdownWorkspace
 		storageNotice={page.storageNotice}
 		storageError={page.storageError}
-		isOnline={page.isOnline}
 		sourcePaneVisible={page.sourcePaneVisible}
 		renderedPaneVisible={page.renderedPaneVisible}
 		renderedReadOnly={page.renderedReadOnly}
@@ -73,11 +82,6 @@
 		onRetryStorage={() => void (page.vault ? page.saveDraft() : page.openVault())}
 		onToggleSidebar={page.toggleSidebar}
 		onReload={() => location.reload()}
-		onInsertSyntax={page.insertSyntax}
-		onPrefixLine={page.prefixLine}
-		onToggleSourcePane={page.toggleSourcePane}
-		onToggleRenderedPane={page.toggleRenderedPane}
-		onToggleRenderedReadOnly={page.toggleRenderedReadOnly}
 		onMarkdownChange={page.updateMarkdown}
 		onSourceFocus={page.focusSourceEditor}
 		onLiveLineFocus={page.focusLiveLine}

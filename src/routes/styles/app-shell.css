@@ -7,30 +7,6 @@
 .app.sidebar-collapsed {
   grid-template-columns: 0 minmax(0, 1fr);
 }
-.offline-status {
-  height: 26px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: var(--chip);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-}
-.save-status {
-  min-width: 150px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 7px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.save-status.error {
-  color: var(--danger);
-}
 .spin {
   animation: spin 0.9s linear infinite;
 }
@@ -40,8 +16,10 @@
   }
 }
 .icon-button,
-.pane-switcher button,
-.formatting-bar button {
+.sidebar-switcher button,
+.sidebar-view-options button,
+.formatting-tools button,
+.collapsed-sidebar-toggle {
   border: 0;
   background: transparent;
   cursor: pointer;
@@ -157,7 +135,7 @@
 }
 .notes-heading {
   justify-content: space-between;
-  margin: 0 7px 14px 9px;
+  margin: 0 7px 12px 9px;
 }
 .notes-title {
   gap: 4px;
@@ -186,6 +164,131 @@
 .new-note:hover {
   border-color: var(--line-hover);
   color: var(--ink);
+}
+.sidebar-switcher {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  margin: 0 4px 14px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--subtle);
+}
+.sidebar-switcher button {
+  height: 33px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 550;
+}
+.sidebar-switcher button:hover {
+  color: var(--ink);
+}
+.sidebar-switcher button.active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+.sidebar-panel {
+  flex: 1;
+  min-height: 0;
+}
+.files-panel {
+  display: flex;
+  flex-direction: column;
+}
+.tools-panel {
+  overflow-y: auto;
+  padding: 1px 4px 18px;
+  scrollbar-width: thin;
+}
+.tool-section + .tool-section {
+  margin-top: 24px;
+}
+.tool-section h2 {
+  margin: 0 5px 9px;
+  color: var(--faint);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.sidebar-view-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.sidebar-view-options button,
+.formatting-tools button {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  text-align: left;
+}
+.sidebar-view-options button {
+  height: 38px;
+  padding: 0 9px;
+}
+.sidebar-view-options button:hover,
+.formatting-tools button:hover {
+  border-color: var(--line-hover);
+  color: var(--ink);
+}
+.sidebar-view-options button.active {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent-quiet);
+  box-shadow: 0 0 0 1px var(--accent-border);
+}
+.formatting-tools {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.formatting-tools button {
+  height: 38px;
+  padding: 0 10px;
+}
+.formatting-tools button:last-child {
+  grid-column: 1 / -1;
+}
+.document-details {
+  padding: 11px;
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  background: var(--surface-soft);
+}
+.document-details h2 {
+  margin-left: 0;
+  margin-right: 0;
+}
+.document-details div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.document-details div + div {
+  border-top: 1px solid var(--line-soft);
+}
+.document-details strong {
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
 }
 .search-box {
   height: 34px;
@@ -399,6 +502,7 @@
   color: var(--ink);
 }
 .workspace {
+  position: relative;
   grid-row: 1;
   grid-column: 2;
   min-width: 0;
@@ -406,32 +510,6 @@
   display: flex;
   flex-direction: column;
   background: var(--paper);
-}
-.pane-switcher {
-  display: flex;
-  gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--subtle);
-}
-.pane-switcher button {
-  height: 27px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 9px;
-  border-radius: 5px;
-  color: var(--muted);
-  font-size: 11px;
-}
-.pane-switcher button:hover {
-  color: var(--ink);
-}
-.pane-switcher button.active {
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow: var(--shadow-sm);
 }
 .storage-error {
   display: flex;

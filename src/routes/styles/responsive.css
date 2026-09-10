@@ -3,7 +3,7 @@
   .app.sidebar-collapsed {
     grid-template-columns: minmax(0, 1fr);
   }
-  .formatting-bar > .collapsed-sidebar-toggle {
+  .workspace > .collapsed-sidebar-toggle {
     display: grid;
   }
   .sidebar,
@@ -32,28 +32,12 @@
   }
 }
 @media (max-width: 700px) {
-  .save-status {
-    min-width: 0;
-    font-size: 0;
-  }
-  .save-status svg {
-    width: 16px;
-    height: 16px;
-  }
   .github-connect > span,
   .github-account > span {
     display: none;
   }
   .github-connect {
     width: 34px;
-    justify-content: center;
-    padding: 0;
-  }
-  .pane-switcher button span {
-    display: none;
-  }
-  .pane-switcher button {
-    width: 32px;
     justify-content: center;
     padding: 0;
   }

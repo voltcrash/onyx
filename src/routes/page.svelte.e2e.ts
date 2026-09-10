@@ -266,6 +266,7 @@ test("formats Markdown while editing in the page pane", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
+  await page.getByRole("tab", { name: "Tools" }).click();
   await page.getByRole("button", { name: "Enable page editing" }).click();
   const line = page.getByRole("textbox", { name: "Markdown line 3" });
   await line.fill("Onyx renders **Markdown** while you keep writing.");
@@ -289,6 +290,7 @@ test("can reveal the active Markdown line while editing the page", async ({ page
   await page.getByRole("button", { name: "Editor", exact: true }).click();
   await page.getByRole("radio", { name: /Reveal Markdown on active line/ }).click();
   await page.getByRole("button", { name: "Close settings" }).click();
+  await page.getByRole("tab", { name: "Tools" }).click();
   await page.getByRole("button", { name: "Enable page editing" }).click();
 
   await page.getByRole("button", { name: "Edit line 3" }).click();
@@ -303,6 +305,7 @@ test("keeps both panes synchronized and lets each pane be tucked away", async ({
   await markdown.fill("# Written on the left");
   await expect(page.locator(".preview-pane h1")).toHaveText("Written on the left");
 
+  await page.getByRole("tab", { name: "Tools" }).click();
   await page.getByRole("button", { name: "Hide Markdown pane" }).click();
   await expect(markdown).toBeHidden();
   await page.getByRole("button", { name: "Show Markdown pane" }).click();
