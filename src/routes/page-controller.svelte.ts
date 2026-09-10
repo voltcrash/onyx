@@ -543,6 +543,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
   }
 
+  async function prepareVaultDeletion(): Promise<boolean> {
+    return settleDraft();
+  }
+
   function resetEditorAfterVaultClear(): void {
     if (searchTimer) window.clearTimeout(searchTimer);
     searchTimer = undefined;
@@ -610,6 +614,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   async function openRestore(): Promise<void> {
     if (!isOnline || !githubUser || restoreState === "restoring") return;
+    if (!(await settleDraft())) return;
     restoreOwner = githubBackup?.owner ?? githubUser.login;
     restoreRepository = githubBackup?.repository ?? "onyx-vault";
     restoreBranch = githubBackup?.branch ?? "main";
@@ -658,6 +663,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   async function restoreSelectedCommit(): Promise<void> {
     if (!isOnline || !vault || !selectedRestoreSha || restoreState === "restoring") return;
+    if (!(await settleDraft())) return;
     const previousSaveState = saveState;
     if (saveTimer) window.clearTimeout(saveTimer);
     if (searchTimer) window.clearTimeout(searchTimer);
@@ -1779,6 +1785,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     importZip,
     exportFolder,
     exportZip,
+    prepareVaultDeletion,
     clearVault,
     loadRestoreCommits,
     restoreSelectedCommit,

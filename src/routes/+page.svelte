@@ -137,7 +137,8 @@
 		onImportZip={() => page.zipInput?.click()}
 		onExportFolder={() => void page.exportFolder()}
 		onExportZip={() => void page.exportZip()}
-		onClearVault={page.clearVault}
+		onPrepareVaultDeletion={page.prepareVaultDeletion}
+		onDeleteVault={page.clearVault}
 	/>
 {/if}
 
@@ -150,6 +151,7 @@
 		restoreState={page.restoreState}
 		restoreMessage={page.restoreMessage}
 		restoreCommits={page.restoreCommits}
+		pendingBackupCount={page.pendingBackupCount}
 		bind:selectedRestoreSha={page.selectedRestoreSha}
 		bind:restoreOwner={page.restoreOwner}
 		bind:restoreRepository={page.restoreRepository}

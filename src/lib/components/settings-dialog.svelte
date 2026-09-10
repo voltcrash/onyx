@@ -52,14 +52,15 @@
 		onImportZip: () => void;
 		onExportFolder: () => void;
 		onExportZip: () => void;
-		onClearVault: () => Promise<void>;
+		onPrepareVaultDeletion: () => Promise<boolean>;
+		onDeleteVault: () => Promise<void>;
 	}
 
 	let {
 		vault, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
 		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, inlinePreviewBehavior, shortcuts, primaryModifier,
 		section = $bindable('github'), onThemeChange, onColorThemeChange, onInlinePreviewBehaviorChange, onShortcutChange, onResetShortcuts, onClose, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
-		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onClearVault
+		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onPrepareVaultDeletion, onDeleteVault
 	}: Props = $props();
 
 	const sections: Array<{ id: SettingsSection; label: string }> = [
@@ -86,7 +87,7 @@
 	let usageState = $state<'idle' | 'loading' | 'error'>('idle');
 	let usageMessage = $state('');
 	let persistState = $state<'idle' | 'requesting'>('idle');
-	let clearState = $state<'idle' | 'confirming' | 'clearing' | 'error'>('idle');
+	let clearState = $state<'idle' | 'preparing' | 'confirming' | 'clearing' | 'error'>('idle');
 	let clearMessage = $state('');
 	let recordingShortcut = $state<ShortcutAction>();
 	let shortcutMessage = $state('');
@@ -174,13 +175,20 @@
 	async function clearVault(): Promise<void> {
 		if (!vault) return;
 		if (clearState !== 'confirming') {
+			clearState = 'preparing';
+			clearMessage = '';
+			if (!(await onPrepareVaultDeletion())) {
+				clearState = 'error';
+				clearMessage = 'Save the current note before deleting the vault.';
+				return;
+			}
 			clearState = 'confirming';
 			return;
 		}
 		clearState = 'clearing';
 		clearMessage = '';
 		try {
-			await onClearVault();
+			await onDeleteVault();
 			clearState = 'idle';
 			usage = undefined;
 		} catch (error) {
@@ -449,12 +457,12 @@
 					</div>
 					<div class="settings-danger critical">
 						<div><TriangleAlert size={18} /><span><strong>Delete every note on this device</strong><small>Notes and attachments are removed from this browser. A GitHub backup, if configured, keeps its history until the next backup.</small></span></div>
-						<button class="danger" disabled={!vault || clearState === 'clearing'} onclick={() => void clearVault()}>
-							{#if clearState === 'clearing'}<LoaderCircle class="spin" size={14} />{:else}<Trash2 size={14} />{/if}
-							{clearState === 'confirming' ? 'Click to confirm' : 'Delete all notes'}
+						<button class="danger" disabled={!vault || clearState === 'preparing' || clearState === 'clearing'} onclick={() => void clearVault()}>
+							{#if clearState === 'preparing' || clearState === 'clearing'}<LoaderCircle class="spin" size={14} />{:else}<Trash2 size={14} />{/if}
+							{clearState === 'preparing' ? 'Checking changes…' : clearState === 'confirming' ? 'Click to confirm' : 'Delete all notes'}
 						</button>
 					</div>
-					{#if clearState === 'confirming'}<p class="settings-hint">This cannot be undone. Export a ZIP first if you want a copy.</p>{/if}
+					{#if clearState === 'confirming'}<p class="settings-hint">{pendingBackupCount > 0 ? `${pendingBackupCount} pending ${pendingBackupCount === 1 ? 'change has' : 'changes have'} not been backed up to GitHub. ` : ''}This cannot be undone. Export a ZIP first if you want a copy.</p>{/if}
 					{#if clearMessage}<p class="settings-hint error">{clearMessage}</p>{/if}
 					<div class="settings-danger">
 						<div><HardDrive size={18} /><span><strong>Local-first by design</strong><small>Everything above happens on this device. Onyx never uploads notes anywhere except the repository you choose.</small></span></div>

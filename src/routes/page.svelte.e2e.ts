@@ -1,4 +1,45 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function blockNextVaultWrite(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const prototype = FileSystemFileHandle.prototype;
+    const createWritable = Reflect.get(
+      prototype,
+      "createWritable",
+    ) as FileSystemFileHandle["createWritable"];
+    const state = window as typeof window & {
+      onyxReleaseWrite?: () => void;
+      onyxWriteBlocked?: boolean;
+    };
+    prototype.createWritable = async function (...parameters) {
+      const writable = await createWritable.apply(this, parameters);
+      const write = writable.write.bind(writable);
+      Object.defineProperty(writable, "write", {
+        value: async (data: FileSystemWriteChunkType) => {
+          state.onyxWriteBlocked = true;
+          await new Promise<void>((resolve) => {
+            state.onyxReleaseWrite = resolve;
+          });
+          return write(data);
+        },
+      });
+      prototype.createWritable = createWritable;
+      return writable;
+    };
+  });
+}
+
+async function waitForBlockedVaultWrite(page: Page): Promise<void> {
+  await page.waitForFunction(() =>
+    Boolean((window as typeof window & { onyxWriteBlocked?: boolean }).onyxWriteBlocked),
+  );
+}
+
+async function releaseVaultWrite(page: Page): Promise<void> {
+  await page.evaluate(() =>
+    (window as typeof window & { onyxReleaseWrite?: () => void }).onyxReleaseWrite?.(),
+  );
+}
 
 test("traps modal focus and returns it to the opener", async ({ page }) => {
   await page.goto("/");
@@ -27,42 +68,13 @@ test("persists edits made while an earlier save is still in flight", async ({ pa
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(editor).toBeEnabled();
 
-  await page.evaluate(() => {
-    const prototype = FileSystemFileHandle.prototype;
-    const createWritable = Reflect.get(
-      prototype,
-      "createWritable",
-    ) as FileSystemFileHandle["createWritable"];
-    const state = window as typeof window & {
-      onyxReleaseWrite?: () => void;
-      onyxWriteBlocked?: boolean;
-    };
-    prototype.createWritable = async function (...parameters) {
-      const writable = await createWritable.apply(this, parameters);
-      const write = writable.write.bind(writable);
-      Object.defineProperty(writable, "write", {
-        value: async (data: FileSystemWriteChunkType) => {
-          state.onyxWriteBlocked = true;
-          await new Promise<void>((resolve) => {
-            state.onyxReleaseWrite = resolve;
-          });
-          return write(data);
-        },
-      });
-      prototype.createWritable = createWritable;
-      return writable;
-    };
-  });
+  await blockNextVaultWrite(page);
 
   await editor.fill("# First edit");
   await page.keyboard.press("ControlOrMeta+S");
-  await page.waitForFunction(() =>
-    Boolean((window as typeof window & { onyxWriteBlocked?: boolean }).onyxWriteBlocked),
-  );
+  await waitForBlockedVaultWrite(page);
   await editor.fill("# Latest concurrent edit");
-  await page.evaluate(() =>
-    (window as typeof window & { onyxReleaseWrite?: () => void }).onyxReleaseWrite?.(),
-  );
+  await releaseVaultWrite(page);
 
   await expect
     .poll(() =>
@@ -85,6 +97,32 @@ test("persists edits made while an earlier save is still in flight", async ({ pa
     .toBe(true);
   await page.reload();
   await expect(editor).toHaveValue("# Latest concurrent edit");
+});
+
+test("waits for an in-flight save before deleting the vault", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await blockNextVaultWrite(page);
+
+  await editor.fill("# Unsynced deletion draft");
+  await page.keyboard.press("ControlOrMeta+S");
+  await waitForBlockedVaultWrite(page);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Vault", exact: true }).click();
+  await page.getByRole("button", { name: "Delete all notes" }).click();
+
+  await expect(page.getByRole("button", { name: "Checking changes…" })).toBeDisabled();
+  await releaseVaultWrite(page);
+  await expect(
+    page.getByText(/pending changes? (?:has|have) not been backed up to GitHub/),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Click to confirm" }).click();
+  await page.getByRole("button", { name: "Close settings" }).click();
+
+  await expect(editor).toHaveValue("");
+  await page.reload();
+  await expect(editor).toHaveValue(/# Welcome to Onyx/);
 });
 
 test("keeps startup usable when localStorage and persistent storage are unavailable", async ({
@@ -592,13 +630,27 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
   });
 
   await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await blockNextVaultWrite(page);
+  await editor.fill("# Unsynced restore draft");
+  await page.keyboard.press("ControlOrMeta+S");
+  await waitForBlockedVaultWrite(page);
   await page.getByRole("button", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Backup status" }).click();
   await page.getByRole("button", { name: "Restore a commit" }).click();
+  await expect(page.getByRole("dialog", { name: "Choose a backup commit" })).toBeHidden({
+    timeout: 200,
+  });
+  await releaseVaultWrite(page);
   await expect(page.getByText("Back up Onyx vault")).toBeVisible();
+  await expect(
+    page.getByText(/pending changes? (?:has|have) not been backed up to GitHub/),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Restore selected" }).click();
+  await page.getByRole("button", { name: "Confirm restore" }).click();
 
-  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toHaveValue(markdown);
+  await expect(editor).toHaveValue(markdown);
   await expect(page.locator('.preview-pane img[alt="restored image"]')).toHaveAttribute(
     "src",
     /^blob:/,
