@@ -1,15 +1,5 @@
 <script module lang="ts">
-	export type SettingsSection =
-		| 'editor'
-		| 'themes'
-		| 'shortcuts'
-		| 'github'
-		| 'repository'
-		| 'backup'
-		| 'storage'
-		| 'transfer'
-		| 'vault';
-	export type InlinePreviewBehavior = 'rendered' | 'source-line';
+	export type { InlinePreviewBehavior, SettingsSection } from './settings-types';
 </script>
 
 <script lang="ts">
@@ -332,7 +322,7 @@
 					<p class="settings-hint">Onyx signs in with a GitHub App so backups go straight from this device to your repository.</p>
 					{#if connected && githubUser}
 						<div class="settings-account">
-							<img src={githubUser.avatarUrl} alt="" />
+							<span class="github-avatar" aria-hidden="true">{githubUser.login.slice(0, 1)}</span>
 							<span><strong>{githubUser.name || githubUser.login}</strong><small>@{githubUser.login}</small></span>
 							<button disabled={!isOnline} onclick={onDisconnectGithub}><LogOut size={14} /> Disconnect</button>
 						</div>
