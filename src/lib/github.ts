@@ -8,13 +8,15 @@ import type {
 
 const API_ROOT = "https://api.github.com";
 const API_VERSION = "2026-03-10";
+const GITHUB_REQUEST_TIMEOUT_MS = 15_000;
 const MAX_REQUEST_ATTEMPTS = 4;
 const MAX_RETRY_DELAY_MS = 30_000;
 const GITHUB_FILE_CONCURRENCY = 4;
-const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
+const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 
 let accessToken: string | undefined;
 let authenticatedUser: GithubUser | undefined;
+let sessionRefreshPromise: Promise<boolean> | undefined;
 
 export interface GithubUser {
   avatarUrl: string;
@@ -83,6 +85,11 @@ interface GithubBlobResponse {
   size?: number;
 }
 
+interface GithubRequestResult<T> {
+  data: T;
+  response: Response;
+}
+
 export interface GithubRepository {
   branch: string;
   name: string;
@@ -122,19 +129,12 @@ export class GithubRequestError extends Error {
 }
 
 export async function restoreGithubSession(): Promise<GithubUser | undefined> {
-  const response = await fetch("/auth/github/session", {
-    credentials: "same-origin",
-    headers: { Accept: "application/json" },
-  });
-  if (response.status === 401) {
-    accessToken = undefined;
-    authenticatedUser = undefined;
+  const token = await requestGithubSession();
+  if (!token) {
+    clearGithubAuthentication();
     return undefined;
   }
-  if (!response.ok) throw new Error("GitHub authentication could not be restored");
-  const session = (await response.json()) as Partial<SessionResponse>;
-  if (!session.accessToken) throw new Error("GitHub authentication could not be restored");
-  accessToken = session.accessToken;
+  accessToken = token;
   try {
     const user = await githubRequest<GithubUserResponse>("/user");
     authenticatedUser = {
@@ -145,16 +145,14 @@ export async function restoreGithubSession(): Promise<GithubUser | undefined> {
     };
     return authenticatedUser;
   } catch (error) {
-    accessToken = undefined;
-    authenticatedUser = undefined;
+    clearGithubAuthentication();
     throw error;
   }
 }
 
 export async function disconnectGithub(): Promise<void> {
-  accessToken = undefined;
-  authenticatedUser = undefined;
-  const response = await fetch("/auth/github/session", {
+  clearGithubAuthentication();
+  const response = await fetchWithTimeout("/auth/github/session", {
     method: "DELETE",
     credentials: "same-origin",
   });
@@ -175,7 +173,7 @@ export async function createPrivateGithubRepository(name: string): Promise<Githu
       name: repositoryName,
       description: "Private backup of an Onyx vault",
       private: true,
-      auto_init: false,
+      auto_init: true,
     }),
   });
   if (!repository.private) throw new Error("GitHub did not create a private repository");
@@ -191,8 +189,11 @@ export async function createPrivateGithubRepository(name: string): Promise<Githu
 }
 
 export async function listGithubRepositories(): Promise<GithubRepository[]> {
-  const parameters = new URLSearchParams({ per_page: "100", sort: "pushed" });
-  const repositories = await githubRequest<GithubRepositoryResponse[]>(`/user/repos?${parameters}`);
+  const repositories = await collectGithubPages<GithubRepositoryResponse>(
+    "/user/repos",
+    new URLSearchParams({ per_page: "100", sort: "pushed" }),
+    100,
+  );
   return repositories
     .filter(
       (repository) =>
@@ -356,13 +357,14 @@ export async function listGithubBackupCommits(
   backupState: GithubBackupState,
 ): Promise<GithubBackupCommit[]> {
   await validateGithubBackupRepository(backupState);
-  const parameters = new URLSearchParams({
-    sha: backupState.branch,
-    path: normalizedDirectory(backupState.directory),
-    per_page: "50",
-  });
-  const commits = await githubRequest<GithubCommitListResponse[]>(
-    `${repositoryApiPath(backupState)}/commits?${parameters}`,
+  const commits = await collectGithubPages<GithubCommitListResponse>(
+    `${repositoryApiPath(backupState)}/commits`,
+    new URLSearchParams({
+      sha: backupState.branch,
+      path: normalizedDirectory(backupState.directory),
+      per_page: "50",
+    }),
+    50,
   );
   return commits.map((commit) => ({
     author: commit.author?.login ?? commit.commit.author?.name ?? "Unknown author",
@@ -459,22 +461,44 @@ export async function restoreVaultFromGithub(
 }
 
 export async function githubRequest<T>(path: `/${string}`, init: RequestInit = {}): Promise<T> {
+  return (await requestGithub<T>(path, init)).data;
+}
+
+async function requestGithub<T>(
+  path: `/${string}`,
+  init: RequestInit = {},
+): Promise<GithubRequestResult<T>> {
   if (!accessToken) throw new Error("Connect GitHub before making an API request");
-  const headers = new Headers(init.headers);
-  headers.set("Accept", "application/vnd.github+json");
-  headers.set("Authorization", `Bearer ${accessToken}`);
-  if (init.body) headers.set("Content-Type", "application/json");
-  headers.set("X-GitHub-Api-Version", API_VERSION);
+  const baseHeaders = new Headers(init.headers);
+  baseHeaders.set("Accept", "application/vnd.github+json");
+  if (init.body) baseHeaders.set("Content-Type", "application/json");
+  baseHeaders.set("X-GitHub-Api-Version", API_VERSION);
+  let refreshed = false;
   for (let attempt = 0; attempt < MAX_REQUEST_ATTEMPTS; attempt += 1) {
+    const tokenForRequest = accessToken;
+    if (!tokenForRequest) throw new Error("Connect GitHub before making an API request");
+    const headers = new Headers(baseHeaders);
+    headers.set("Authorization", `Bearer ${tokenForRequest}`);
     let response: Response;
     try {
-      response = await fetch(`${API_ROOT}${path}`, { ...init, headers });
+      response = await fetchWithTimeout(`${API_ROOT}${path}`, { ...init, headers });
     } catch (error) {
-      if (attempt === MAX_REQUEST_ATTEMPTS - 1 || !isIdempotentRequest(init.method)) throw error;
+      if (
+        attempt === MAX_REQUEST_ATTEMPTS - 1 ||
+        !isRetryableRequest(init.method) ||
+        isAbortError(error)
+      ) {
+        throw error;
+      }
       await retryDelay(exponentialDelay(attempt));
       continue;
     }
-    if (response.ok) return (await response.json()) as T;
+    if (response.ok) return { data: (await response.json()) as T, response };
+
+    if (response.status === 401 && !refreshed && attempt < MAX_REQUEST_ATTEMPTS - 1) {
+      refreshed = true;
+      if (await refreshGithubAccessToken(tokenForRequest)) continue;
+    }
 
     const result = (await response.json().catch(() => undefined)) as
       | { message?: string }
@@ -484,6 +508,7 @@ export async function githubRequest<T>(path: `/${string}`, init: RequestInit = {
     const delay = retryAt ? Math.max(0, retryAt.getTime() - Date.now()) : exponentialDelay(attempt);
     if (
       attempt < MAX_REQUEST_ATTEMPTS - 1 &&
+      isRetryableRequest(init.method) &&
       (rateLimited || RETRYABLE_STATUSES.has(response.status)) &&
       delay <= MAX_RETRY_DELAY_MS
     ) {
@@ -500,8 +525,150 @@ export async function githubRequest<T>(path: `/${string}`, init: RequestInit = {
   throw new Error("GitHub request failed after multiple attempts");
 }
 
-function isIdempotentRequest(method = "GET"): boolean {
+function isRetryableRequest(method = "GET"): boolean {
   return ["GET", "HEAD", "OPTIONS", "PUT", "DELETE"].includes(method.toUpperCase());
+}
+
+async function requestGithubSession(forceRefresh = false): Promise<string | undefined> {
+  const path = forceRefresh ? "/auth/github/session?refresh=1" : "/auth/github/session";
+  const response = await fetchWithTimeout(path, {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+  });
+  if (response.status === 401) return undefined;
+  if (!response.ok) throw new Error("GitHub authentication could not be restored");
+  const session = (await response.json()) as Partial<SessionResponse>;
+  if (!session.accessToken) throw new Error("GitHub authentication could not be restored");
+  return session.accessToken;
+}
+
+async function refreshGithubAccessToken(rejectedToken: string): Promise<boolean> {
+  if (accessToken && accessToken !== rejectedToken) return true;
+  if (sessionRefreshPromise) return sessionRefreshPromise;
+
+  sessionRefreshPromise = (async () => {
+    let token: string | undefined;
+    try {
+      token = await requestGithubSession(true);
+    } catch {
+      return false;
+    }
+    if (!token) {
+      clearGithubAuthentication();
+      return false;
+    }
+    accessToken = token;
+    return true;
+  })().finally(() => {
+    sessionRefreshPromise = undefined;
+  });
+  return sessionRefreshPromise;
+}
+
+function clearGithubAuthentication(): void {
+  accessToken = undefined;
+  authenticatedUser = undefined;
+}
+
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const externalSignal = init.signal;
+  let timedOut = false;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let removeExternalListener: (() => void) | undefined;
+  const timeoutRequest = new Promise<Response>((_, reject) => {
+    timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      reject(new GithubRequestTimeoutError());
+    }, GITHUB_REQUEST_TIMEOUT_MS);
+  });
+  const requests = [timeoutRequest];
+  if (externalSignal) {
+    const externalAbort = new Promise<Response>((_, reject) => {
+      const abort = () => {
+        controller.abort(externalSignal.reason);
+        reject(externalSignal.reason ?? new DOMException("The request was aborted", "AbortError"));
+      };
+      if (externalSignal.aborted) abort();
+      else {
+        externalSignal.addEventListener("abort", abort, { once: true });
+        removeExternalListener = () => externalSignal.removeEventListener("abort", abort);
+      }
+    });
+    requests.push(externalAbort);
+  }
+  requests.push(Promise.resolve().then(() => fetch(input, { ...init, signal: controller.signal })));
+  try {
+    return await Promise.race(requests);
+  } catch (error) {
+    if (timedOut) throw new GithubRequestTimeoutError();
+    throw error;
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+    removeExternalListener?.();
+  }
+}
+
+class GithubRequestTimeoutError extends Error {
+  constructor() {
+    super("GitHub request timed out. Try again shortly.");
+    this.name = "GithubRequestTimeoutError";
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+async function collectGithubPages<T>(
+  path: `/${string}`,
+  parameters: URLSearchParams,
+  pageSize: number,
+): Promise<T[]> {
+  const items: T[] = [];
+  if (!parameters.has("page")) parameters.set("page", "1");
+  let page = 1;
+  let nextPath = withGithubQuery(path, parameters);
+  while (true) {
+    const result = await requestGithub<T[]>(nextPath);
+    items.push(...result.data);
+    const linkedNextPath = nextGithubPage(result.response);
+    if (
+      linkedNextPath === null ||
+      (linkedNextPath === undefined && result.data.length < pageSize)
+    ) {
+      return items;
+    }
+    if (linkedNextPath) {
+      nextPath = linkedNextPath;
+      continue;
+    }
+    page += 1;
+    parameters.set("page", String(page));
+    nextPath = withGithubQuery(path, parameters);
+  }
+}
+
+function withGithubQuery(path: `/${string}`, parameters: URLSearchParams): `/${string}` {
+  return `${path}?${parameters}` as `/${string}`;
+}
+
+function nextGithubPage(response: Response): `/${string}` | null | undefined {
+  const link = response.headers.get("Link");
+  if (!link) return undefined;
+  const next = link
+    .split(",")
+    .map((part) => part.match(/<([^>]+)>\s*;\s*rel="([^"]+)"/))
+    .find((match) => match?.[2].split(" ").includes("next"));
+  if (!next) return null;
+  try {
+    const url = new URL(next[1], API_ROOT);
+    if (url.origin !== API_ROOT) return null;
+    return `${url.pathname}${url.search}` as `/${string}`;
+  } catch {
+    return null;
+  }
 }
 
 function isRateLimited(response: Response, message?: string): boolean {

@@ -5,6 +5,7 @@ const AUTH_COOKIE = "onyx_github_auth";
 const STATE_COOKIE = "onyx_github_state";
 const VERIFIER_COOKIE = "onyx_github_verifier";
 const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
+const GITHUB_TOKEN_TIMEOUT_MS = 15_000;
 
 export interface GithubCredentials {
   accessToken: string;
@@ -128,11 +129,22 @@ export function clearCredentialsCookie(cookies: Cookies, secure: boolean): void 
 }
 
 async function requestToken(parameters: Record<string, string>): Promise<GithubCredentials> {
-  const response = await fetch(GITHUB_TOKEN_URL, {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(parameters),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GITHUB_TOKEN_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(GITHUB_TOKEN_URL, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(parameters),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("GitHub token request timed out");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
   const result = (await response.json()) as GithubTokenResponse;
   if (!response.ok || !result.access_token) {
     throw new Error(

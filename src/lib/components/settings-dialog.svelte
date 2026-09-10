@@ -1,27 +1,17 @@
 <script module lang="ts">
-	export type SettingsSection =
-		| 'editor'
-		| 'themes'
-		| 'shortcuts'
-		| 'github'
-		| 'repository'
-		| 'backup'
-		| 'storage'
-		| 'transfer'
-		| 'vault';
-	export type InlinePreviewBehavior = 'rendered' | 'source-line';
+	export type { InlinePreviewBehavior, SettingsSection } from './settings-types';
 </script>
 
 <script lang="ts">
 	import {
 		CloudDownload, CloudOff, CloudUpload, Database, Download, ExternalLink, FileArchive, FolderInput,
-		FolderOutput, HardDrive, LoaderCircle, LogOut, Moon, RefreshCw, ShieldCheck, Sun, Trash2,
+		FolderOutput, HardDrive, LoaderCircle, LogOut, Monitor, Moon, RefreshCw, ShieldCheck, Sun, Trash2,
 		TriangleAlert, WifiOff, X
 	} from '@lucide/svelte';
 	import {
 		listGithubRepositories, type GithubBackupState, type GithubRepository, type GithubUser,
 		formatShortcut, persistenceDeniedMessage, shortcutActions, shortcutFromEvent, shortcutParts, shortcutsEqual, type ColorTheme,
-		type KeyboardShortcut, type KeyboardShortcuts, type PrimaryModifier, type ShortcutAction, type ThemePreference,
+		type KeyboardShortcut, type KeyboardShortcuts, type PrimaryModifier, type ResolvedTheme, type ShortcutAction, type ThemePreference,
 		type Vault, type VaultStorageUsage
 	} from '$lib';
 	import { manageModalFocus } from '$lib/modal-focus';
@@ -40,6 +30,7 @@
 		backupCommitUrl: string;
 		transferState: 'idle' | 'working' | 'error';
 		theme: ThemePreference;
+		resolvedTheme: ResolvedTheme;
 		colorTheme: ColorTheme;
 		inlinePreviewBehavior: InlinePreviewBehavior;
 		shortcuts: KeyboardShortcuts;
@@ -61,14 +52,15 @@
 		onImportZip: () => void;
 		onExportFolder: () => void;
 		onExportZip: () => void;
-		onVaultCleared: () => void;
+		onPrepareVaultDeletion: () => Promise<boolean>;
+		onDeleteVault: () => Promise<void>;
 	}
 
 	let {
 		vault, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
-		backupState, backupMessage, backupCommitUrl, transferState, theme, colorTheme, inlinePreviewBehavior, shortcuts, primaryModifier,
+		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, inlinePreviewBehavior, shortcuts, primaryModifier,
 		section = $bindable('github'), onThemeChange, onColorThemeChange, onInlinePreviewBehaviorChange, onShortcutChange, onResetShortcuts, onClose, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
-		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onVaultCleared
+		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onPrepareVaultDeletion, onDeleteVault
 	}: Props = $props();
 
 	const sections: Array<{ id: SettingsSection; label: string }> = [
@@ -95,12 +87,17 @@
 	let usageState = $state<'idle' | 'loading' | 'error'>('idle');
 	let usageMessage = $state('');
 	let persistState = $state<'idle' | 'requesting'>('idle');
-	let clearState = $state<'idle' | 'confirming' | 'clearing' | 'error'>('idle');
+	let clearState = $state<'idle' | 'preparing' | 'confirming' | 'clearing' | 'error'>('idle');
 	let clearMessage = $state('');
 	let recordingShortcut = $state<ShortcutAction>();
 	let shortcutMessage = $state('');
 
 	const connected = $derived(githubState === 'connected' && Boolean(githubUser));
+	const modeOptions: Array<{ id: ThemePreference; label: string; hint: string }> = [
+		{ id: 'light', label: 'Light', hint: 'Warm paper for bright rooms.' },
+		{ id: 'dark', label: 'Dark', hint: 'Low-glare onyx for night writing.' },
+		{ id: 'system', label: 'System', hint: 'Follow your operating system automatically.' }
+	];
 	const themes: Array<{ id: ColorTheme; label: string; hint: string }> = [
 		{ id: 'ember', label: 'Ember', hint: 'Warm paper with a terracotta accent.' },
 		{ id: 'monochrome', label: 'Monochrome', hint: 'Pure black and white, with no accent hue.' }
@@ -178,16 +175,22 @@
 	async function clearVault(): Promise<void> {
 		if (!vault) return;
 		if (clearState !== 'confirming') {
+			clearState = 'preparing';
+			clearMessage = '';
+			if (!(await onPrepareVaultDeletion())) {
+				clearState = 'error';
+				clearMessage = 'Save the current note before deleting the vault.';
+				return;
+			}
 			clearState = 'confirming';
 			return;
 		}
 		clearState = 'clearing';
 		clearMessage = '';
 		try {
-			await vault.clear();
+			await onDeleteVault();
 			clearState = 'idle';
 			usage = undefined;
-			onVaultCleared();
 		} catch (error) {
 			clearState = 'error';
 			clearMessage = error instanceof Error ? error.message : 'The vault could not be cleared.';
@@ -274,14 +277,15 @@
 				{:else if section === 'themes'}
 					<h3>Themes</h3>
 					<p class="settings-hint">Choose how Onyx looks in this browser.</p>
-					<div class="theme-mode-row">
-						<span class="theme-mode-copy">
-							{#if theme === 'dark'}<Moon size={18} />{:else}<Sun size={18} />{/if}
-							<span><strong>Dark mode</strong><small>Use a darker palette for low-light spaces.</small></span>
-						</span>
-						<button class="theme-toggle" class:active={theme === 'dark'} role="switch" aria-checked={theme === 'dark'} aria-label="Dark mode" onclick={() => onThemeChange(theme === 'dark' ? 'light' : 'dark')}><span></span></button>
+					<div class="theme-mode-options" role="radiogroup" aria-label="Color mode">
+						{#each modeOptions as option (option.id)}
+							<button class="theme-mode-option" class:active={theme === option.id} role="radio" aria-checked={theme === option.id} aria-label={option.label} onclick={() => onThemeChange(option.id)}>
+								{#if option.id === 'light'}<Sun size={18} />{:else if option.id === 'dark'}<Moon size={18} />{:else}<Monitor size={18} />{/if}
+								<span><strong>{option.label}</strong><small>{option.id === 'system' ? `${option.hint} (currently ${resolvedTheme}).` : option.hint}</small></span>
+							</button>
+						{/each}
 					</div>
-					<h4 class="theme-section-title">Theme</h4>
+					<h4 class="theme-section-title">Color theme</h4>
 					<div class="theme-options" role="radiogroup" aria-label="Color theme">
 						{#each themes as option (option.id)}
 							<button class:active={colorTheme === option.id} role="radio" aria-checked={colorTheme === option.id} onclick={() => onColorThemeChange(option.id)}>
@@ -332,7 +336,7 @@
 					<p class="settings-hint">Onyx signs in with a GitHub App so backups go straight from this device to your repository.</p>
 					{#if connected && githubUser}
 						<div class="settings-account">
-							<img src={githubUser.avatarUrl} alt="" />
+							<span class="github-avatar" aria-hidden="true">{githubUser.login.slice(0, 1)}</span>
 							<span><strong>{githubUser.name || githubUser.login}</strong><small>@{githubUser.login}</small></span>
 							<button disabled={!isOnline} onclick={onDisconnectGithub}><LogOut size={14} /> Disconnect</button>
 						</div>
@@ -453,12 +457,12 @@
 					</div>
 					<div class="settings-danger critical">
 						<div><TriangleAlert size={18} /><span><strong>Delete every note on this device</strong><small>Notes and attachments are removed from this browser. A GitHub backup, if configured, keeps its history until the next backup.</small></span></div>
-						<button class="danger" disabled={!vault || clearState === 'clearing'} onclick={() => void clearVault()}>
-							{#if clearState === 'clearing'}<LoaderCircle class="spin" size={14} />{:else}<Trash2 size={14} />{/if}
-							{clearState === 'confirming' ? 'Click to confirm' : 'Delete all notes'}
+						<button class="danger" disabled={!vault || clearState === 'preparing' || clearState === 'clearing'} onclick={() => void clearVault()}>
+							{#if clearState === 'preparing' || clearState === 'clearing'}<LoaderCircle class="spin" size={14} />{:else}<Trash2 size={14} />{/if}
+							{clearState === 'preparing' ? 'Checking changes…' : clearState === 'confirming' ? 'Click to confirm' : 'Delete all notes'}
 						</button>
 					</div>
-					{#if clearState === 'confirming'}<p class="settings-hint">This cannot be undone. Export a ZIP first if you want a copy.</p>{/if}
+					{#if clearState === 'confirming'}<p class="settings-hint">{pendingBackupCount > 0 ? `${pendingBackupCount} pending ${pendingBackupCount === 1 ? 'change has' : 'changes have'} not been backed up to GitHub. ` : ''}This cannot be undone. Export a ZIP first if you want a copy.</p>{/if}
 					{#if clearMessage}<p class="settings-hint error">{clearMessage}</p>{/if}
 					<div class="settings-danger">
 						<div><HardDrive size={18} /><span><strong>Local-first by design</strong><small>Everything above happens on this device. Onyx never uploads notes anywhere except the repository you choose.</small></span></div>

@@ -8,7 +8,8 @@ search and several editing views, and can back up the vault to a private GitHub 
 - Create and autosave Markdown notes locally.
 - Search note titles and contents from an on-device index.
 - Write in source, rendered inline, split, or read-only preview mode.
-- Switch between light, dark, and system themes.
+- Choose a light, dark, or system theme. System follows the operating system preference, updates
+  when that preference changes, and the selected mode is saved in this browser.
 - Import Markdown folders or ZIP archives, including locally referenced attachments.
 - Export the complete vault to a folder when the browser supports the File System Access API, or
   download it as a ZIP in other browsers.
@@ -23,18 +24,18 @@ use a slide-over note list. Preferences are saved per browser when local storage
 
 ## Keyboard shortcuts
 
-| Shortcut       | Action                  |
-| -------------- | ----------------------- |
-| `⌘ K`          | Open command palette    |
-| `⌘ ⇧ F` or `/` | Search all notes        |
-| `⌘ ⏎`          | Create a note           |
-| `⌘ S`          | Save the active note    |
-| `⌘ B` / `⌘ I`  | Format selected text    |
-| `⌘ ⇧ P`        | Toggle source/preview   |
-| `⌘ \`          | Toggle the note sidebar |
-| `⌘ ⇧ L`        | Cycle the theme         |
-| `?`            | Show all shortcuts      |
-| `Esc`          | Close the active panel  |
+| Shortcut       | Action                               |
+| -------------- | ------------------------------------ |
+| `⌘ K`          | Open command palette                 |
+| `⌘ ⇧ F` or `/` | Search all notes                     |
+| `⌘ ⏎`          | Create a note                        |
+| `⌘ S`          | Save the active note                 |
+| `⌘ B` / `⌘ I`  | Format selected text                 |
+| `⌘ ⇧ P`        | Toggle source/preview                |
+| `⌘ \`          | Toggle the note sidebar              |
+| `⌘ ⇧ L`        | Cycle light, dark, and system themes |
+| `?`            | Show all shortcuts                   |
+| `Esc`          | Close the active panel               |
 
 Use `Ctrl` instead of `⌘` on Windows and Linux.
 
