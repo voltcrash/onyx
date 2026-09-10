@@ -64,7 +64,7 @@ export function resolveLocalAttachmentUrl(
   noteSourcePath: string | undefined,
   attachments: LocalAttachmentUrl[],
 ): string | undefined {
-  if (/^(?:[a-z][a-z\d+.-]*:|#|\/)/i.test(destination)) return;
+  if (/^(?:[a-z][a-z\d+.-]*:|#|[\\/])/i.test(destination)) return;
   const suffixIndex = destination.search(/[?#]/);
   const path = suffixIndex === -1 ? destination : destination.slice(0, suffixIndex);
   const suffix = suffixIndex === -1 ? "" : destination.slice(suffixIndex);
@@ -74,7 +74,8 @@ export function resolveLocalAttachmentUrl(
   } catch {
     decodedPath = path;
   }
-  const resolvedPath = normalizePath(`${dirname(noteSourcePath ?? "")}/${decodedPath}`);
+  const resolvedPath = resolveRelativePath(dirname(noteSourcePath ?? ""), decodedPath);
+  if (!resolvedPath) return;
   const attachment =
     attachments.find(
       (candidate) =>
@@ -126,14 +127,23 @@ function visit(node: HtmlNode, callback: (node: HtmlNode) => void): void {
   for (const child of node.children ?? []) visit(child, callback);
 }
 
-function normalizePath(path: string): string {
+function resolveRelativePath(directory: string, destination: string): string | undefined {
+  if (!destination || destination.includes("\\")) return;
   const parts: string[] = [];
-  for (const part of path.replaceAll("\\", "/").split("/")) {
+  for (const part of `${directory}/${destination}`.split("/")) {
     if (!part || part === ".") continue;
-    if (part === "..") parts.pop();
-    else parts.push(part);
+    if (part === "..") {
+      if (parts.length === 0) return;
+      parts.pop();
+    } else {
+      parts.push(part);
+    }
   }
-  return parts.join("/");
+  return parts.join("/") || undefined;
+}
+
+function normalizePath(path: string): string | undefined {
+  return resolveRelativePath("", path);
 }
 
 function dirname(path: string): string {

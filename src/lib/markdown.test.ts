@@ -96,6 +96,21 @@ const answer = 42;
     expect(html).toContain('<a href="missing.pdf">Missing</a>');
   });
 
+  it("does not resolve attachment paths that escape the note directory", () => {
+    const resolve = (destination: string) =>
+      resolveLocalAttachmentUrl(destination, "notes/day-one.md", [
+        {
+          name: "photo.png",
+          sourcePath: "photo.png",
+          url: "blob:photo-url",
+        },
+      ]);
+
+    expect(resolve("../../photo.png")).toBeUndefined();
+    expect(resolve("\\photo.png")).toBeUndefined();
+    expect(resolve("photo.png")).toBeUndefined();
+  });
+
   it("allows remote images only when explicitly requested", () => {
     const html = renderMarkdown("![Remote](https://example.com/photo.png)", undefined, {
       remoteImages: "allow",
