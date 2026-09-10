@@ -15,9 +15,17 @@ type HtmlNode = {
   children?: HtmlNode[];
   properties?: Record<string, unknown>;
   tagName?: string;
+  type?: string;
+  value?: string;
 };
 
 type LocalUrlResolver = (destination: string) => string | undefined;
+
+export type RemoteImagePolicy = "block" | "allow";
+
+export interface MarkdownRenderOptions {
+  remoteImages?: RemoteImagePolicy;
+}
 
 const markdownSchema: Options = {
   ...defaultSchema,
@@ -34,13 +42,20 @@ const markdownSchema: Options = {
   },
 };
 
-export function renderMarkdown(source: string, resolveLocalUrl?: LocalUrlResolver): string {
+export function renderMarkdown(
+  source: string,
+  resolveLocalUrl?: LocalUrlResolver,
+  options: MarkdownRenderOptions = {},
+): string {
+  const remoteImagePolicy = options.remoteImages ?? "block";
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkRehype)
     .use(rehypeSanitize, markdownSchema);
-  if (resolveLocalUrl) processor.use(resolveMarkdownUrls, resolveLocalUrl);
+  if (resolveLocalUrl || remoteImagePolicy === "block") {
+    processor.use(resolveMarkdownUrls, resolveLocalUrl, remoteImagePolicy);
+  }
   return String(processor.use(rehypeStringify).processSync(source));
 }
 
@@ -72,17 +87,40 @@ export function resolveLocalAttachmentUrl(
   return attachment ? `${attachment.url}${suffix}` : undefined;
 }
 
-const resolveMarkdownUrls: Plugin<[LocalUrlResolver]> = (resolve) => {
+const resolveMarkdownUrls: Plugin<[LocalUrlResolver | undefined, RemoteImagePolicy]> = (
+  resolve,
+  remoteImagePolicy,
+) => {
   return (tree) => {
     const root = tree as HtmlNode;
     visit(root, (node) => {
       const property = node.tagName === "img" ? "src" : node.tagName === "a" ? "href" : undefined;
       if (!property || typeof node.properties?.[property] !== "string") return;
-      const resolved = resolve(node.properties[property]);
+      const destination = node.properties[property];
+      const resolved = resolve?.(destination);
       if (resolved) node.properties[property] = resolved;
+      if (
+        property === "src" &&
+        remoteImagePolicy === "block" &&
+        isRemoteImageUrl(destination) &&
+        !resolved
+      ) {
+        node.tagName = "span";
+        node.type = "element";
+        node.properties = {
+          className: ["remote-image-blocked"],
+          role: "img",
+          "aria-label": "Remote image blocked by privacy settings",
+        };
+        node.children = [{ type: "text", value: "Remote image blocked" }];
+      }
     });
   };
 };
+
+function isRemoteImageUrl(destination: string): boolean {
+  return /^(?:https?:)?\/\//i.test(destination);
+}
 
 function visit(node: HtmlNode, callback: (node: HtmlNode) => void): void {
   callback(node);
