@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Bold, CloudOff, Code2, Eye, HardDrive, Heading2, Italic, Link, List, LoaderCircle, Lock, LockOpen, PanelLeft, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, PencilLine, Quote, WifiOff } from '@lucide/svelte';
+	import { Bold, CloudOff, Code2, HardDrive, Heading2, Italic, Link, List, LoaderCircle, Lock, LockOpen, PanelLeft, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, PencilLine, Quote, WifiOff } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib';
 	import type { InlinePreviewBehavior } from './settings-dialog.svelte';
 	import type { SaveState, TransferState } from './app-types';
@@ -101,10 +101,6 @@
 			<div class="editor-footer"><span>{wordCount} words&nbsp;&nbsp;&nbsp;{readingMinutes} min read</span></div>
 		</div>
 		<div class="preview-pane">
-			<div class="preview-label">
-				<span><Eye size={14} /> Page</span>
-				<span class="preview-state">{renderedReadOnly ? 'Read only' : 'Editing'}</span>
-			</div>
 			{#if renderedReadOnly}
 				{#if hasContent}
 					<article class="prose">{@html renderedMarkdown}</article>
