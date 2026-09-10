@@ -115,6 +115,7 @@
 		backupCommitUrl={page.backupCommitUrl}
 		transferState={page.transferState}
 		theme={page.theme}
+		resolvedTheme={page.resolvedTheme}
 		colorTheme={page.colorTheme}
 		inlinePreviewBehavior={page.inlinePreviewBehavior}
 		shortcuts={page.shortcuts}

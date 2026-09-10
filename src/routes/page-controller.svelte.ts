@@ -11,6 +11,7 @@ import {
   FolderOutput,
   HardDrive,
   Keyboard,
+  Monitor,
   Moon,
   PanelLeft,
   PencilLine,
@@ -58,6 +59,7 @@ import {
   shortcutMatchesEvent,
   validateGithubBackupRepository,
   Vault,
+  watchSystemTheme,
   writeKeyboardShortcuts,
   writeLocalStorage,
   writeMarkdownFolder,
@@ -69,6 +71,7 @@ import {
   type KeyboardShortcuts,
   type NoteMetadata,
   type PrimaryModifier,
+  type ResolvedTheme,
   type ShortcutAction,
   type ThemePreference,
   type VaultSearchResult,
@@ -153,7 +156,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let transferMessage = $state("");
   let folderInput: HTMLInputElement | undefined = $state();
   let zipInput: HTMLInputElement | undefined = $state();
-  let theme = $state<ThemePreference>("light");
+  let theme = $state<ThemePreference>("system");
+  let resolvedTheme = $state<ResolvedTheme>("light");
   let colorTheme = $state<ColorTheme>("ember");
   let paletteOpen = $state(false);
   let paletteNotes = $state<NoteMetadata[]>([]);
@@ -283,6 +287,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       run: () => setTheme("dark"),
     },
     {
+      id: "theme-system",
+      group: "Themes",
+      label: "Use system mode",
+      icon: Monitor,
+      keywords: "automatic os operating system colour color theme",
+      disabled: theme === "system",
+      run: () => setTheme("system"),
+    },
+    {
       id: "backup",
       group: "GitHub",
       label: "Back up to GitHub",
@@ -375,9 +388,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         : "rendered";
     shortcuts = readKeyboardShortcuts();
     theme = readThemePreference();
-    applyTheme(theme);
+    resolvedTheme = applyTheme(theme);
     colorTheme = readColorTheme();
     applyColorTheme(colorTheme);
+    const stopThemeWatch = watchSystemTheme(() => {
+      if (theme === "system") resolvedTheme = applyTheme(theme);
+    });
     void openVault().finally(() => registerServiceWorker());
     if (isOnline) void restoreGitHub();
     else githubState = "disconnected";
@@ -408,6 +424,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      stopThemeWatch();
       if (saveTimer) window.clearTimeout(saveTimer);
       if (searchTimer) window.clearTimeout(searchTimer);
       if (previewTimer) window.clearTimeout(previewTimer);
@@ -1331,7 +1348,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function setTheme(preference: ThemePreference): void {
     theme = preference;
-    applyTheme(preference);
+    resolvedTheme = applyTheme(preference);
   }
 
   function setColorTheme(nextTheme: ColorTheme): void {
@@ -1582,6 +1599,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     },
     get theme() {
       return theme;
+    },
+    get resolvedTheme() {
+      return resolvedTheme;
     },
     get colorTheme() {
       return colorTheme;
