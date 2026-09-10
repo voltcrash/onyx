@@ -1,14 +1,16 @@
 <script lang="ts">
-	import { Bold, CloudOff, Code2, Columns2, Eye, HardDrive, Heading2, Italic, Link, List, LoaderCircle, PanelLeft, PencilLine, Quote, WifiOff } from '@lucide/svelte';
+	import { Bold, CloudOff, Code2, HardDrive, Heading2, Italic, Link, List, LoaderCircle, Lock, LockOpen, PanelLeft, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, PencilLine, Quote, WifiOff } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib';
 	import type { InlinePreviewBehavior } from './settings-dialog.svelte';
-	import type { SaveState, TransferState, ViewMode } from './app-types';
+	import type { SaveState, TransferState } from './app-types';
 
 	interface Props {
 		storageNotice: string;
 		storageError: string;
 		isOnline: boolean;
-		viewMode: ViewMode;
+		sourcePaneVisible: boolean;
+		renderedPaneVisible: boolean;
+		renderedReadOnly: boolean;
 		inlinePreviewBehavior: InlinePreviewBehavior;
 		markdown: string;
 		markdownLines: string[];
@@ -29,9 +31,11 @@
 		onReload: () => void;
 		onInsertSyntax: (before: string, after?: string, placeholder?: string) => void;
 		onPrefixLine: (prefix: string) => void;
-		onViewModeChange: (mode: ViewMode) => void;
-		onOpenInlinePreview: () => void;
+		onToggleSourcePane: () => void;
+		onToggleRenderedPane: () => void;
+		onToggleRenderedReadOnly: () => void;
 		onMarkdownChange: (value: string) => void;
+		onSourceFocus: () => void;
 		onLiveLineFocus: (line: number) => void;
 		onRenderedLineInput: (line: number, element: HTMLElement) => void;
 		onRenderedLineKeydown: (event: KeyboardEvent, line: number) => void;
@@ -44,10 +48,10 @@
 	}
 
 	let {
-		storageNotice, storageError, isOnline, viewMode, inlinePreviewBehavior, markdown, markdownLines, liveLine,
+		storageNotice, storageError, isOnline, sourcePaneVisible, renderedPaneVisible, renderedReadOnly, inlinePreviewBehavior, markdown, markdownLines, liveLine,
 		saveState, transferState, wordCount, readingMinutes, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onToggleSidebar,
-		onReload, onInsertSyntax, onPrefixLine, onViewModeChange, onOpenInlinePreview, onMarkdownChange, onLiveLineFocus, onRenderedLineInput,
+		onReload, onInsertSyntax, onPrefixLine, onToggleSourcePane, onToggleRenderedPane, onToggleRenderedReadOnly, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
 		onRenderedLineKeydown, onLiveLineChange, onLiveLineKeydown, onActivateLiveLine,
 		renderEditableLine, renderLiveLine, liveLineKind
 	}: Props = $props();
@@ -66,14 +70,19 @@
 		</div>
 	{/if}
 
-	<section class="editor-shell" class:edit-only={viewMode === 'edit' || viewMode === 'live'} class:live-only={viewMode === 'live'} class:preview-only={viewMode === 'preview'}>
+	<section class="editor-shell" class:source-hidden={!sourcePaneVisible} class:rendered-hidden={!renderedPaneVisible}>
 		<div class="formatting-bar" aria-label="Formatting and view tools">
 			<button class="collapsed-sidebar-toggle" aria-label="Show notes sidebar" title={`Show sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button>
-			<div class="view-switcher" aria-label="View mode">
-				<button class:active={viewMode === 'edit'} aria-pressed={viewMode === 'edit'} onclick={() => onViewModeChange('edit')} aria-label="Editor only" title="Editor only"><PencilLine size={16} /><span>Edit</span></button>
-				<button class:active={viewMode === 'live'} aria-pressed={viewMode === 'live'} onclick={onOpenInlinePreview} aria-label="Inline preview" title="Inline preview"><Eye size={16} /><span>Inline</span></button>
-				<button class:active={viewMode === 'split'} aria-pressed={viewMode === 'split'} onclick={() => onViewModeChange('split')} aria-label="Split view" title="Split view"><Columns2 size={16} /><span>Split</span></button>
-				<button class:active={viewMode === 'preview'} aria-pressed={viewMode === 'preview'} onclick={() => onViewModeChange('preview')} aria-label="Preview only" title="Preview only"><Eye size={16} /><span>Preview</span></button>
+			<div class="pane-switcher" aria-label="Pane controls">
+				<button class:active={sourcePaneVisible} aria-pressed={sourcePaneVisible} onclick={onToggleSourcePane} aria-label={sourcePaneVisible ? 'Hide Markdown pane' : 'Show Markdown pane'} title={sourcePaneVisible ? 'Hide Markdown pane' : 'Show Markdown pane'}>
+					{#if sourcePaneVisible}<PanelLeftClose size={16} />{:else}<PanelLeftOpen size={16} />{/if}<span>Markdown</span>
+				</button>
+				<button class:active={renderedPaneVisible} aria-pressed={renderedPaneVisible} onclick={onToggleRenderedPane} aria-label={renderedPaneVisible ? 'Hide page pane' : 'Show page pane'} title={renderedPaneVisible ? 'Hide page pane' : 'Show page pane'}>
+					{#if renderedPaneVisible}<PanelRightClose size={16} />{:else}<PanelRightOpen size={16} />{/if}<span>Page</span>
+				</button>
+				<button class="read-only-toggle" class:active={renderedReadOnly} aria-pressed={renderedReadOnly} disabled={!renderedPaneVisible} onclick={onToggleRenderedReadOnly} aria-label={renderedReadOnly ? 'Enable page editing' : 'Turn on read-only'} title={renderedReadOnly ? 'Enable page editing' : 'Turn on read-only'}>
+					{#if renderedReadOnly}<Lock size={15} /><span>Read only</span>{:else}<LockOpen size={15} /><span>Editing</span>{/if}
+				</button>
 			</div>
 			<span></span>
 			<button onclick={() => onInsertSyntax('**', '**', 'bold text')} title={`Bold (${formatShortcut(shortcuts.bold, primaryModifier)})`} aria-label="Bold"><Bold size={16} /></button><button onclick={() => onInsertSyntax('_', '_', 'italic text')} title={`Italic (${formatShortcut(shortcuts.italic, primaryModifier)})`} aria-label="Italic"><Italic size={16} /></button><span></span><button onclick={() => onPrefixLine('## ')} title="Heading" aria-label="Heading"><Heading2 size={17} /></button><button onclick={() => onPrefixLine('- ')} title="Bulleted list" aria-label="Bulleted list"><List size={17} /></button><button onclick={() => onPrefixLine('> ')} title="Quote" aria-label="Quote"><Quote size={16} /></button><button onclick={() => onInsertSyntax('`', '`', 'code')} title="Inline code" aria-label="Inline code"><Code2 size={17} /></button><button onclick={() => onInsertSyntax('[', '](https://)', 'link text')} title="Link" aria-label="Link"><Link size={16} /></button>
@@ -88,8 +97,18 @@
 			</div>
 		</div>
 		<div class="editor-pane">
-			{#if viewMode === 'live'}
-				<div class="live-editor" bind:this={liveEditorContainer} aria-label="Inline preview editor">
+			<textarea bind:this={editor} value={markdown} onfocus={onSourceFocus} oninput={(event) => onMarkdownChange(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
+			<div class="editor-footer"><span>{wordCount} words&nbsp;&nbsp;&nbsp;{readingMinutes} min read</span></div>
+		</div>
+		<div class="preview-pane">
+			{#if renderedReadOnly}
+				{#if hasContent}
+					<article class="prose">{@html renderedMarkdown}</article>
+				{:else}
+					<div class="preview-empty"><PencilLine size={26} /><strong>Nothing here yet</strong><span>Start writing in the other pane, or unlock this one to begin.</span></div>
+				{/if}
+			{:else}
+				<div class="live-editor" bind:this={liveEditorContainer} aria-label="Page editor">
 					{#each markdownLines as line, index}
 						{#if inlinePreviewBehavior === 'rendered'}
 							<div class="live-editable-line {liveLineKind(line, index)}" class:active={index === liveLine} contenteditable={saveState !== 'loading' && transferState !== 'working'} role="textbox" tabindex="0" aria-label={`Markdown line ${index + 1}`} aria-multiline="false" data-live-line={index} spellcheck="true" onfocus={() => onLiveLineFocus(index)} oninput={(event) => onRenderedLineInput(index, event.currentTarget)} onkeydown={(event) => onRenderedLineKeydown(event, index)}>{@html renderEditableLine(line, index)}</div>
@@ -100,17 +119,6 @@
 						{/if}
 					{/each}
 				</div>
-			{:else}
-				<textarea bind:this={editor} value={markdown} oninput={(event) => onMarkdownChange(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
-			{/if}
-			<div class="editor-footer"><span>{wordCount} words&nbsp;&nbsp;&nbsp;{readingMinutes} min read</span></div>
-		</div>
-		<div class="preview-pane">
-			<div class="preview-label"><Eye size={14} /> Preview</div>
-			{#if hasContent}
-				<article class="prose">{@html renderedMarkdown}</article>
-			{:else}
-				<div class="preview-empty"><PencilLine size={26} /><strong>Nothing to preview yet</strong><span>Whatever you type in the editor is rendered here as you write.</span></div>
 			{/if}
 		</div>
 	</section>

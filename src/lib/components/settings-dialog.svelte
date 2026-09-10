@@ -16,6 +16,7 @@
 	} from '$lib';
 	import { manageModalFocus } from '$lib/modal-focus';
 	import GithubIcon from './github-icon.svelte';
+	import type { InlinePreviewBehavior, SettingsSection } from './settings-types';
 
 	interface Props {
 		vault?: Vault;
@@ -263,15 +264,15 @@
 
 				{#if section === 'editor'}
 					<h3>Editor</h3>
-					<p class="settings-hint">Choose how Markdown behaves while you write in inline preview. This preference is remembered in this browser.</p>
-					<div class="preview-behavior-options" role="radiogroup" aria-label="Inline preview behavior">
+					<p class="settings-hint">Choose how Markdown behaves while you write directly in the formatted page. This preference is remembered in this browser.</p>
+					<div class="preview-behavior-options" role="radiogroup" aria-label="Formatted editing behavior">
 						<button class:active={inlinePreviewBehavior === 'rendered'} role="radio" aria-checked={inlinePreviewBehavior === 'rendered'} onclick={() => onInlinePreviewBehaviorChange('rendered')}>
-							<strong>Rendered editing</strong>
+							<strong>Keep formatting</strong>
 							<small>Keep the active line formatted and hide recognized Markdown markers as you type.</small>
 						</button>
 						<button class:active={inlinePreviewBehavior === 'source-line'} role="radio" aria-checked={inlinePreviewBehavior === 'source-line'} onclick={() => onInlinePreviewBehaviorChange('source-line')}>
-							<strong>Reveal source line</strong>
-							<small>Show the raw Markdown for the active line while the rest stays rendered.</small>
+							<strong>Reveal Markdown on active line</strong>
+							<small>Show the raw Markdown for the active line while the rest stays formatted.</small>
 						</button>
 					</div>
 				{:else if section === 'themes'}

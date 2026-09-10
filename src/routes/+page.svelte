@@ -52,7 +52,9 @@
 		storageNotice={page.storageNotice}
 		storageError={page.storageError}
 		isOnline={page.isOnline}
-		viewMode={page.viewMode}
+		sourcePaneVisible={page.sourcePaneVisible}
+		renderedPaneVisible={page.renderedPaneVisible}
+		renderedReadOnly={page.renderedReadOnly}
 		inlinePreviewBehavior={page.inlinePreviewBehavior}
 		markdown={page.markdown}
 		markdownLines={page.markdownLines}
@@ -73,10 +75,12 @@
 		onReload={() => location.reload()}
 		onInsertSyntax={page.insertSyntax}
 		onPrefixLine={page.prefixLine}
-		onViewModeChange={(mode) => (page.viewMode = mode)}
-		onOpenInlinePreview={() => page.openInlinePreview()}
+		onToggleSourcePane={page.toggleSourcePane}
+		onToggleRenderedPane={page.toggleRenderedPane}
+		onToggleRenderedReadOnly={page.toggleRenderedReadOnly}
 		onMarkdownChange={page.updateMarkdown}
-		onLiveLineFocus={(line) => (page.liveLine = line)}
+		onSourceFocus={page.focusSourceEditor}
+		onLiveLineFocus={page.focusLiveLine}
 		onRenderedLineInput={page.updateRenderedLine}
 		onRenderedLineKeydown={page.handleRenderedLineKeydown}
 		onLiveLineChange={page.updateLiveLine}

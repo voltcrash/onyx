@@ -1,9 +1,7 @@
 import {
   CloudDownload,
   CloudUpload,
-  Columns2,
   Download,
-  Eye,
   FileArchive,
   FilePlus2,
   FileText,
@@ -14,7 +12,9 @@ import {
   Monitor,
   Moon,
   PanelLeft,
-  PencilLine,
+  PanelLeftClose,
+  Lock,
+  PanelRightClose,
   Save,
   Search,
   Settings,
@@ -26,7 +26,6 @@ import type {
   RestoreState,
   SaveState,
   TransferState,
-  ViewMode,
 } from "$lib/components/app-types";
 import type { InlinePreviewBehavior, SettingsSection } from "$lib/components/settings-types";
 import { renderMarkdown, resolveLocalAttachmentUrl, type LocalAttachmentUrl } from "$lib/markdown";
@@ -117,7 +116,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let results = $state<VaultSearchResult[]>([]);
   let notePage = $state(0);
   let searchQuery = $state("");
-  let viewMode = $state<ViewMode>("split");
+  let sourcePaneVisible = $state(true);
+  let renderedPaneVisible = $state(true);
+  let renderedReadOnly = $state(true);
+  let editingSurface: "source" | "rendered" = "source";
   let saveState = $state<SaveState>("loading");
   let notesLoaded = $state(false);
   let saveTimer: number | undefined = $state();
@@ -235,37 +237,30 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       run: () => focusSearch(),
     },
     {
-      id: "view-edit",
+      id: "toggle-source-pane",
       group: "View",
-      label: "Editor only",
+      label: sourcePaneVisible ? "Hide Markdown pane" : "Show Markdown pane",
+      icon: PanelLeftClose,
+      keywords: "write markdown left pane",
+      run: () => toggleSourcePane(),
+    },
+    {
+      id: "toggle-rendered-pane",
+      group: "View",
+      label: renderedPaneVisible ? "Hide page pane" : "Show page pane",
       shortcut: shortcutLabel("togglePreview"),
-      icon: PencilLine,
-      keywords: "write markdown pane",
-      run: () => (viewMode = "edit"),
+      icon: PanelRightClose,
+      keywords: "page preview right pane",
+      run: () => toggleRenderedPane(),
     },
     {
-      id: "view-live",
+      id: "toggle-read-only",
       group: "View",
-      label: "Inline preview",
-      icon: Eye,
-      keywords: "live inline rendered edit obsidian",
-      run: () => openInlinePreview(),
-    },
-    {
-      id: "view-split",
-      group: "View",
-      label: "Split view",
-      icon: Columns2,
-      keywords: "side by side pane",
-      run: () => (viewMode = "split"),
-    },
-    {
-      id: "view-preview",
-      group: "View",
-      label: "Preview only",
-      icon: Eye,
-      keywords: "rendered read pane",
-      run: () => (viewMode = "preview"),
+      label: renderedReadOnly ? "Enable page editing" : "Turn on read-only",
+      icon: Lock,
+      keywords: "lock unlock edit read only page",
+      disabled: !renderedPaneVisible,
+      run: () => toggleRenderedReadOnly(),
     },
     {
       id: "toggle-sidebar",
@@ -394,6 +389,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       readLocalStorage("onyx:inline-preview-behavior") === "source-line"
         ? "source-line"
         : "rendered";
+    sourcePaneVisible = readLocalStorage("onyx:source-pane-visible") !== "false";
+    renderedPaneVisible = readLocalStorage("onyx:rendered-pane-visible") !== "false";
+    renderedReadOnly = readLocalStorage("onyx:rendered-read-only") !== "false";
     shortcuts = readKeyboardShortcuts();
     theme = readThemePreference();
     resolvedTheme = applyTheme(theme);
@@ -1092,15 +1090,42 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     previewMarkdown = value;
   }
 
-  function openInlinePreview(line = liveLine): void {
-    viewMode = "live";
-    liveLine = Math.min(Math.max(line, 0), markdownLines.length - 1);
-    requestAnimationFrame(() =>
-      inlinePreviewBehavior === "rendered" ? focusRenderedLine(liveLine) : liveEditor?.focus(),
-    );
+  function toggleSourcePane(): void {
+    sourcePaneVisible = !sourcePaneVisible;
+    writeLocalStorage("onyx:source-pane-visible", String(sourcePaneVisible));
+    if (!sourcePaneVisible && renderedPaneVisible && !renderedReadOnly) editingSurface = "rendered";
+  }
+
+  function toggleRenderedPane(): void {
+    renderedPaneVisible = !renderedPaneVisible;
+    writeLocalStorage("onyx:rendered-pane-visible", String(renderedPaneVisible));
+    if (!renderedPaneVisible && sourcePaneVisible) editingSurface = "source";
+  }
+
+  function toggleRenderedReadOnly(): void {
+    renderedReadOnly = !renderedReadOnly;
+    writeLocalStorage("onyx:rendered-read-only", String(renderedReadOnly));
+    if (!renderedReadOnly) {
+      renderedPaneVisible = true;
+      editingSurface = "rendered";
+      writeLocalStorage("onyx:rendered-pane-visible", "true");
+      requestAnimationFrame(() =>
+        inlinePreviewBehavior === "rendered" ? focusRenderedLine(liveLine) : liveEditor?.focus(),
+      );
+    }
+  }
+
+  function focusSourceEditor(): void {
+    editingSurface = "source";
+  }
+
+  function focusLiveLine(line: number): void {
+    editingSurface = "rendered";
+    liveLine = line;
   }
 
   function activateLiveLine(line: number, position?: number): void {
+    editingSurface = "rendered";
     liveLine = line;
     if (inlinePreviewBehavior === "rendered") {
       requestAnimationFrame(() => focusRenderedLine(line, position));
@@ -1116,7 +1141,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   function setInlinePreviewBehavior(behavior: InlinePreviewBehavior): void {
     inlinePreviewBehavior = behavior;
     writeLocalStorage("onyx:inline-preview-behavior", behavior);
-    if (viewMode === "live") {
+    if (renderedPaneVisible && !renderedReadOnly && editingSurface === "rendered") {
       requestAnimationFrame(() =>
         behavior === "rendered" ? focusRenderedLine(liveLine) : liveEditor?.focus(),
       );
@@ -1312,8 +1337,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     noteList?.scrollTo({ top: 0 });
   }
 
+  function isRenderedEditingActive(): boolean {
+    return (
+      renderedPaneVisible &&
+      !renderedReadOnly &&
+      (editingSurface === "rendered" || !sourcePaneVisible)
+    );
+  }
+
   function insertSyntax(before: string, after = before, placeholder = "text"): void {
-    if (viewMode === "live" && inlinePreviewBehavior === "rendered") {
+    if (isRenderedEditingActive() && inlinePreviewBehavior === "rendered") {
       const target = liveEditorContainer?.querySelector<HTMLElement>(
         `[data-live-line="${liveLine}"]`,
       );
@@ -1343,13 +1376,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       });
       return;
     }
-    const target = viewMode === "live" ? liveEditor : editor;
+    const renderedActive = isRenderedEditingActive();
+    const target = renderedActive ? liveEditor : editor;
     if (!target) return;
     const relativeStart = target.selectionStart;
-    const lineOffset =
-      viewMode === "live"
-        ? markdownLines.slice(0, liveLine).reduce((total, line) => total + line.length + 1, 0)
-        : 0;
+    const lineOffset = renderedActive
+      ? markdownLines.slice(0, liveLine).reduce((total, line) => total + line.length + 1, 0)
+      : 0;
     const start = lineOffset + relativeStart;
     const end = lineOffset + target.selectionEnd;
     const selection = markdown.slice(start, end) || placeholder;
@@ -1364,7 +1397,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function prefixLine(prefix: string): void {
-    if (viewMode === "live" && inlinePreviewBehavior === "rendered") {
+    if (isRenderedEditingActive() && inlinePreviewBehavior === "rendered") {
       const target = liveEditorContainer?.querySelector<HTMLElement>(
         `[data-live-line="${liveLine}"]`,
       );
@@ -1377,13 +1410,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       requestAnimationFrame(() => focusRenderedLine(liveLine, selection.start + prefix.length));
       return;
     }
-    const target = viewMode === "live" ? liveEditor : editor;
+    const renderedActive = isRenderedEditingActive();
+    const target = renderedActive ? liveEditor : editor;
     if (!target) return;
     const relativeCursor = target.selectionStart;
-    const lineOffset =
-      viewMode === "live"
-        ? markdownLines.slice(0, liveLine).reduce((total, line) => total + line.length + 1, 0)
-        : 0;
+    const lineOffset = renderedActive
+      ? markdownLines.slice(0, liveLine).reduce((total, line) => total + line.length + 1, 0)
+      : 0;
     const cursor = lineOffset + relativeCursor;
     const start = markdown.lastIndexOf("\n", cursor - 1) + 1;
     updateMarkdown(`${markdown.slice(0, start)}${prefix}${markdown.slice(start)}`);
@@ -1418,7 +1451,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     else if (action === "toggleSidebar") toggleSidebar();
     else if (action === "bold") insertSyntax("**", "**", "bold text");
     else if (action === "italic") insertSyntax("_", "_", "italic text");
-    else if (action === "togglePreview") viewMode = viewMode === "preview" ? "edit" : "preview";
+    else if (action === "togglePreview") toggleRenderedPane();
     else if (action === "openShortcuts") openSettings("shortcuts");
     else if (action === "closePanel") {
       if (restoreModalOpen && restoreState !== "restoring") restoreModalOpen = false;
@@ -1726,11 +1759,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get primaryModifier() {
       return primaryModifier;
     },
-    get viewMode() {
-      return viewMode;
+    get sourcePaneVisible() {
+      return sourcePaneVisible;
     },
-    set viewMode(value: ViewMode) {
-      viewMode = value;
+    get renderedPaneVisible() {
+      return renderedPaneVisible;
+    },
+    get renderedReadOnly() {
+      return renderedReadOnly;
     },
     get markdown() {
       return markdown;
@@ -1835,7 +1871,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     toggleSidebar,
     insertSyntax,
     prefixLine,
-    openInlinePreview,
+    toggleSourcePane,
+    toggleRenderedPane,
+    toggleRenderedReadOnly,
+    focusSourceEditor,
+    focusLiveLine,
     updateMarkdown,
     updateRenderedLine,
     handleRenderedLineKeydown,
