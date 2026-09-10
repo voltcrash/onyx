@@ -1,15 +1,5 @@
 <script module lang="ts">
-	export type SettingsSection =
-		| 'editor'
-		| 'themes'
-		| 'shortcuts'
-		| 'github'
-		| 'repository'
-		| 'backup'
-		| 'storage'
-		| 'transfer'
-		| 'vault';
-	export type InlinePreviewBehavior = 'rendered' | 'source-line';
+	export type { InlinePreviewBehavior, SettingsSection } from './settings-types';
 </script>
 
 <script lang="ts">
