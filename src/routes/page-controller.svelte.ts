@@ -242,6 +242,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: sourcePaneVisible ? "Hide Markdown pane" : "Show Markdown pane",
       icon: PanelLeftClose,
       keywords: "write markdown left pane",
+      disabled: sourcePaneVisible && !renderedPaneVisible,
       run: () => toggleSourcePane(),
     },
     {
@@ -251,6 +252,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       shortcut: shortcutLabel("togglePreview"),
       icon: PanelRightClose,
       keywords: "page preview right pane",
+      disabled: renderedPaneVisible && !sourcePaneVisible,
       run: () => toggleRenderedPane(),
     },
     {
@@ -392,6 +394,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     sourcePaneVisible = readLocalStorage("onyx:source-pane-visible") !== "false";
     renderedPaneVisible = readLocalStorage("onyx:rendered-pane-visible") !== "false";
     renderedReadOnly = readLocalStorage("onyx:rendered-read-only") !== "false";
+    if (!sourcePaneVisible && !renderedPaneVisible) sourcePaneVisible = true;
     shortcuts = readKeyboardShortcuts();
     theme = readThemePreference();
     resolvedTheme = applyTheme(theme);
@@ -1091,12 +1094,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function toggleSourcePane(): void {
+    if (sourcePaneVisible && !renderedPaneVisible) return;
     sourcePaneVisible = !sourcePaneVisible;
     writeLocalStorage("onyx:source-pane-visible", String(sourcePaneVisible));
     if (!sourcePaneVisible && renderedPaneVisible && !renderedReadOnly) editingSurface = "rendered";
   }
 
   function toggleRenderedPane(): void {
+    if (renderedPaneVisible && !sourcePaneVisible) return;
     renderedPaneVisible = !renderedPaneVisible;
     writeLocalStorage("onyx:rendered-pane-visible", String(renderedPaneVisible));
     if (!renderedPaneVisible && sourcePaneVisible) editingSurface = "source";

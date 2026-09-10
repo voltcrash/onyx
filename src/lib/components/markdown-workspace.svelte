@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { CloudOff, HardDrive, PanelLeft, PencilLine } from '@lucide/svelte';
+	import { ChevronLeft, ChevronRight, CloudOff, HardDrive, PanelLeft, PencilLine } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib';
 	import type { InlinePreviewBehavior } from './settings-dialog.svelte';
 	import type { SaveState, TransferState } from './app-types';
@@ -25,6 +25,8 @@
 		liveEditorContainer?: HTMLDivElement;
 		onRetryStorage: () => void;
 		onToggleSidebar: () => void;
+		onToggleSourcePane: () => void;
+		onToggleRenderedPane: () => void;
 		onReload: () => void;
 		onMarkdownChange: (value: string) => void;
 		onSourceFocus: () => void;
@@ -43,7 +45,7 @@
 		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, renderedReadOnly, inlinePreviewBehavior, markdown, markdownLines, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onToggleSidebar,
-		onReload, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
+		onToggleSourcePane, onToggleRenderedPane, onReload, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
 		onRenderedLineKeydown, onLiveLineChange, onLiveLineKeydown, onActivateLiveLine,
 		renderEditableLine, renderLiveLine, liveLineKind
 	}: Props = $props();
@@ -66,6 +68,14 @@
 	<section class="editor-shell" class:source-hidden={!sourcePaneVisible} class:rendered-hidden={!renderedPaneVisible}>
 		<div class="editor-pane">
 			<textarea bind:this={editor} value={markdown} onfocus={onSourceFocus} oninput={(event) => onMarkdownChange(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
+		</div>
+		<div class="pane-divider">
+			{#if renderedPaneVisible}
+				<button class="pane-handle pane-handle-top" title={sourcePaneVisible ? 'Hide the Markdown pane' : 'Show the Markdown pane'} aria-label={sourcePaneVisible ? 'Hide the Markdown pane' : 'Show the Markdown pane'} aria-expanded={sourcePaneVisible} onclick={onToggleSourcePane}>{#if sourcePaneVisible}<ChevronLeft size={15} />{:else}<ChevronRight size={15} />{/if}</button>
+			{/if}
+			{#if sourcePaneVisible}
+				<button class="pane-handle pane-handle-bottom" title={renderedPaneVisible ? 'Hide the page pane' : 'Show the page pane'} aria-label={renderedPaneVisible ? 'Hide the page pane' : 'Show the page pane'} aria-expanded={renderedPaneVisible} onclick={onToggleRenderedPane}>{#if renderedPaneVisible}<ChevronRight size={15} />{:else}<ChevronLeft size={15} />{/if}</button>
+			{/if}
 		</div>
 		<div class="preview-pane">
 			{#if renderedReadOnly}
