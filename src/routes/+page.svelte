@@ -1,7 +1,7 @@
 <script lang="ts">
 	import {
 		CloudDownload, CloudUpload, Columns2, Download, Eye, FileArchive, FilePlus2, FileText,
-		FolderInput, FolderOutput, HardDrive, Keyboard, Moon, PanelLeft, PencilLine, Save,
+		FolderInput, FolderOutput, HardDrive, Keyboard, Monitor, Moon, PanelLeft, PencilLine, Save,
 		Search, Settings, Sun
 	} from '@lucide/svelte';
 	import MarkdownWorkspace from '$lib/components/markdown-workspace.svelte';
@@ -19,10 +19,10 @@
 		importMarkdownFiles, listGithubBackupCommits, nextThemePreference, readColorTheme, readLocalStorage,
 		readKeyboardShortcuts, shortcutMatchesEvent,
 		readMarkdownFolder, readMarkdownZip, readThemePreference, restoreGithubSession,
-		restoreVaultFromGithub, validateGithubBackupRepository, Vault,
+		restoreVaultFromGithub, validateGithubBackupRepository, Vault, watchSystemTheme,
 		writeKeyboardShortcuts, writeLocalStorage, writeMarkdownFolder, type GithubBackupCommit, type GithubBackupState,
 		type ColorTheme, type GithubUser, type KeyboardShortcut, type KeyboardShortcuts, type PrimaryModifier,
-		type NoteMetadata, type ShortcutAction, type ThemePreference, type VaultSearchResult
+		type NoteMetadata, type ResolvedTheme, type ShortcutAction, type ThemePreference, type VaultSearchResult
 	} from '$lib';
 	import { onMount, tick } from 'svelte';
 
@@ -102,7 +102,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 	let transferMessage = $state('');
 	let folderInput: HTMLInputElement | undefined = $state();
 	let zipInput: HTMLInputElement | undefined = $state();
-	let theme = $state<ThemePreference>('light');
+	let theme = $state<ThemePreference>('system');
+	let resolvedTheme = $state<ResolvedTheme>('light');
 	let colorTheme = $state<ColorTheme>('ember');
 	let paletteOpen = $state(false);
 	let paletteNotes = $state<NoteMetadata[]>([]);
@@ -150,6 +151,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 		{ id: 'toggle-sidebar', group: 'View', label: sidebarCollapsed ? 'Show the notes sidebar' : 'Hide the notes sidebar', shortcut: shortcutLabel('toggleSidebar'), icon: PanelLeft, keywords: 'panel files list', run: () => toggleSidebar() },
 		{ id: 'theme-light', group: 'Themes', label: 'Use light mode', icon: Sun, keywords: 'bright day colour color theme', disabled: theme === 'light', run: () => setTheme('light') },
 		{ id: 'theme-dark', group: 'Themes', label: 'Use dark mode', icon: Moon, keywords: 'night colour color theme', disabled: theme === 'dark', run: () => setTheme('dark') },
+		{ id: 'theme-system', group: 'Themes', label: 'Use system mode', icon: Monitor, keywords: 'automatic os operating system colour color theme', disabled: theme === 'system', run: () => setTheme('system') },
 		{ id: 'backup', group: 'GitHub', label: 'Back up to GitHub', icon: CloudUpload, keywords: 'commit push sync', disabled: !isOnline || githubState !== 'connected', run: () => void beginBackup() },
 		{ id: 'restore', group: 'GitHub', label: 'Restore from a GitHub commit', icon: CloudDownload, keywords: 'download history rollback', disabled: !isOnline || githubState !== 'connected', run: () => void openRestore() },
 		{ id: 'import-folder', group: 'Transfer', label: 'Import a Markdown folder', icon: FolderInput, keywords: 'open files load', run: () => folderInput?.click() },
@@ -174,9 +176,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 		inlinePreviewBehavior = readLocalStorage('onyx:inline-preview-behavior') === 'source-line' ? 'source-line' : 'rendered';
 		shortcuts = readKeyboardShortcuts();
 		theme = readThemePreference();
-		applyTheme(theme);
+		resolvedTheme = applyTheme(theme);
 		colorTheme = readColorTheme();
 		applyColorTheme(colorTheme);
+		const stopThemeWatch = watchSystemTheme(() => {
+			if (theme === 'system') resolvedTheme = applyTheme(theme);
+		});
 		void openVault().finally(() => registerServiceWorker());
 		if (isOnline) void restoreGitHub();
 		else githubState = 'disconnected';
@@ -207,6 +212,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 			window.removeEventListener('online', onOnline);
 			window.removeEventListener('offline', onOffline);
 			document.removeEventListener('visibilitychange', onVisibilityChange);
+			stopThemeWatch();
 			if (saveTimer) window.clearTimeout(saveTimer);
 			if (searchTimer) window.clearTimeout(searchTimer);
 			if (previewTimer) window.clearTimeout(previewTimer);
@@ -1036,7 +1042,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
 	function setTheme(preference: ThemePreference): void {
 		theme = preference;
-		applyTheme(preference);
+		resolvedTheme = applyTheme(preference);
 	}
 
 	function setColorTheme(nextTheme: ColorTheme): void {
@@ -1189,6 +1195,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 		{backupCommitUrl}
 		{transferState}
 		{theme}
+		{resolvedTheme}
 		{colorTheme}
 		{inlinePreviewBehavior}
 		{shortcuts}
