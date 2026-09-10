@@ -24,6 +24,7 @@
 		notePage={page.notePage}
 		notePageCount={page.notePageCount}
 		saveState={page.saveState}
+		notesLoaded={page.notesLoaded}
 		transferState={page.transferState}
 		storageError={page.storageError}
 		paletteOpen={page.paletteOpen}

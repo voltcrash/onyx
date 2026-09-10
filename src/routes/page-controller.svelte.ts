@@ -119,6 +119,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let searchQuery = $state("");
   let viewMode = $state<ViewMode>("split");
   let saveState = $state<SaveState>("loading");
+  let notesLoaded = $state(false);
   let saveTimer: number | undefined = $state();
   let saveRun: Promise<boolean> | undefined;
   let saveRequested = false;
@@ -722,6 +723,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   async function openVault(): Promise<void> {
     storageError = "";
     saveState = "loading";
+    notesLoaded = false;
     try {
       vault = await Vault.open();
       unsubscribeVault?.();
@@ -1301,6 +1303,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (sequence === searchSequence) {
       results = nextResults;
       notePage = 0;
+      notesLoaded = true;
     }
   }
 
@@ -1596,6 +1599,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     },
     get notePageCount() {
       return notePageCount;
+    },
+    get notesLoaded() {
+      return notesLoaded;
     },
     get saveState() {
       return saveState;
