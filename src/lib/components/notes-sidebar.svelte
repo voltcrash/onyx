@@ -12,6 +12,7 @@
 		notePage: number;
 		notePageCount: number;
 		saveState: SaveState;
+		notesLoaded: boolean;
 		transferState: TransferState;
 		paletteOpen: boolean;
 		settingsOpen: boolean;
@@ -36,7 +37,7 @@
 	}
 
 	let {
-		activeNoteId, results, visibleResults, searchQuery, notePage, notePageCount, saveState, paletteOpen, settingsOpen,
+		activeNoteId, results, visibleResults, searchQuery, notePage, notePageCount, saveState, notesLoaded, paletteOpen, settingsOpen,
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier,
 		searchInput = $bindable(), noteList = $bindable(), onToggleSidebar, onCreateNote, onSearch,
 		onOpenPalette, onOpenSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage
@@ -53,7 +54,7 @@
 				<FileText size={16} /><span><strong>{result.note.title}</strong>{#if searchQuery}<small>{result.excerpt || 'Title match'}</small>{/if}</span>{#if result.note.id === activeNoteId}<i></i>{/if}
 			</button>
 		{:else}
-			{#if saveState === 'loading' && !storageError}
+			{#if !notesLoaded && !storageError}
 				<div class="empty-results"><LoaderCircle class="spin" size={20} /><strong>Opening your vault…</strong><span>Notes are read from this device.</span></div>
 			{:else if searchQuery}
 				<div class="empty-results"><Search size={20} /><strong>No notes match “{searchQuery}”</strong><span>Search covers every title and every word.</span><button onclick={() => onSearch('')}><X size={13} /> Clear search</button></div>
