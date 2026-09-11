@@ -392,10 +392,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       readLocalStorage("onyx:inline-preview-behavior") === "source-line"
         ? "source-line"
         : "rendered";
-    sourcePaneVisible = readLocalStorage("onyx:source-pane-visible") !== "false";
-    renderedPaneVisible = readLocalStorage("onyx:rendered-pane-visible") !== "false";
-    renderedReadOnly = readLocalStorage("onyx:rendered-read-only") !== "false";
+    const storedSourcePane = readLocalStorage("onyx:source-pane-visible");
+    const storedRenderedPane = readLocalStorage("onyx:rendered-pane-visible");
+    const storedReadOnly = readLocalStorage("onyx:rendered-read-only");
+    // Narrow screens cannot show both panes side by side, so they start on the editable page.
+    const narrow = globalThis.matchMedia?.("(max-width: 900px)").matches === true;
+    sourcePaneVisible = storedSourcePane ? storedSourcePane !== "false" : !narrow;
+    renderedPaneVisible = storedRenderedPane !== "false";
+    renderedReadOnly = storedReadOnly ? storedReadOnly !== "false" : !narrow;
     if (!sourcePaneVisible && !renderedPaneVisible) sourcePaneVisible = true;
+    if (!sourcePaneVisible && !renderedReadOnly) editingSurface = "rendered";
     const storedSplit = Number(readLocalStorage("onyx:split-ratio"));
     if (Number.isFinite(storedSplit)) splitRatio = clampSplitRatio(storedSplit);
     shortcuts = readKeyboardShortcuts();
