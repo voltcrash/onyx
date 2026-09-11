@@ -67,7 +67,7 @@
 </script>
 
 <aside class="sidebar" aria-label="Notes">
-	<div class="notes-heading"><div class="notes-title"><button class="icon-button sidebar-toggle" aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeftClose size={19} /></button><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions"><button class="new-note" aria-label="New note" title="New note" disabled={transferState === 'working'} onclick={onCreateNote}><Plus size={17} /></button></div></div>
+	<div class="notes-heading"><div class="notes-title"><button class="new-note" aria-label="New note" title="New note" disabled={transferState === 'working'} onclick={onCreateNote}><Plus size={17} /></button><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions"><button class="icon-button sidebar-toggle" aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeftClose size={19} /></button></div></div>
 	<div class="sidebar-switcher" role="tablist" aria-label="Sidebar view">
 		<button role="tab" aria-selected={sidebarView === 'files'} class:active={sidebarView === 'files'} onclick={() => (sidebarView = 'files')}><FileText size={14} /> Files</button>
 		<button role="tab" aria-selected={sidebarView === 'tools'} class:active={sidebarView === 'tools'} onclick={() => (sidebarView = 'tools')}><Wrench size={14} /> Tools</button>

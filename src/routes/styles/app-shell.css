@@ -135,10 +135,12 @@
 }
 .notes-heading {
   justify-content: space-between;
-  margin: 0 7px 12px 9px;
+  gap: 6px;
+  margin: 0 7px 12px 7px;
 }
 .notes-title {
-  gap: 4px;
+  min-width: 0;
+  gap: 7px;
 }
 .notes-actions {
   gap: 6px;
