@@ -37,6 +37,7 @@ import {
   createMarkdownExport,
   createMarkdownZip,
   createPrivateGithubRepository,
+  createVaultDescriptor,
   defaultKeyboardShortcuts,
   detectBrowserStorageSupport,
   detectPrimaryModifier,
@@ -46,22 +47,29 @@ import {
   importMarkdownFiles,
   listGithubBackupCommits,
   nextThemePreference,
+  normalizeVaultName,
   persistenceDeniedMessage,
   readColorTheme,
   readKeyboardShortcuts,
   readLocalStorage,
   readMarkdownFolder,
+  isDefaultVault,
   readMarkdownZip,
   readThemePreference,
+  readVaultRegistry,
+  uniqueVaultName,
   restoreGithubSession,
   restoreVaultFromGithub,
   shortcutMatchesEvent,
+  suggestedRepositoryName,
   validateGithubBackupRepository,
   Vault,
+  vaultOptions,
   watchSystemTheme,
   writeKeyboardShortcuts,
   writeLocalStorage,
   writeMarkdownFolder,
+  writeVaultRegistry,
   type ColorTheme,
   type GithubBackupCommit,
   type GithubBackupState,
@@ -74,6 +82,7 @@ import {
   type ShortcutAction,
   type ThemePreference,
   type VaultChangeEvent,
+  type VaultDescriptor,
   type VaultSearchResult,
 } from "$lib";
 import { onMount, tick } from "svelte";
@@ -110,6 +119,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   const initialMarkdown = createInitialMarkdown("meta");
 
   let vault = $state<Vault>();
+  let vaults = $state<VaultDescriptor[]>([]);
+  let activeVaultId = $state("");
   let activeNoteId = $state("");
   let noteRevision = $state(0);
   let markdown = $state(initialMarkdown);
@@ -184,6 +195,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let clearingVault = false;
   const liveRenderCache = new Map<string, string>();
 
+  const activeVault = $derived(
+    vaults.find((candidate) => candidate.id === activeVaultId) ?? vaults[0],
+  );
   const wordCount = $derived(markdown.trim() ? markdown.trim().split(/\s+/).length : 0);
   const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
   const renderedMarkdown = $derived(renderMarkdown(previewMarkdown, resolveAttachmentUrl));
@@ -382,6 +396,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   ]);
 
   onMount(() => {
+    const registry = readVaultRegistry();
+    vaults = registry.vaults;
+    activeVaultId = registry.activeId;
     primaryModifier = detectPrimaryModifier();
     if (primaryModifier === "control" && markdown === initialMarkdown) {
       markdown = createInitialMarkdown(primaryModifier);
@@ -637,7 +654,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!isOnline || !githubUser || restoreState === "restoring") return;
     if (!(await settleDraft())) return;
     restoreOwner = githubBackup?.owner ?? githubUser.login;
-    restoreRepository = githubBackup?.repository ?? "onyx-vault";
+    restoreRepository = githubBackup?.repository ?? suggestedRepositoryName(activeVault);
     restoreBranch = githubBackup?.branch ?? "main";
     restoreDirectory = githubBackup?.directory ?? "vault";
     restoreCommits = [];
@@ -737,12 +754,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     saveState = "loading";
     notesLoaded = false;
     try {
-      vault = await Vault.open();
+      vault = await Vault.open(activeVault ? vaultOptions(activeVault) : {});
       unsubscribeVault?.();
       unsubscribeVault = vault.subscribe(queueRemoteVaultSync);
       let notes = await vault.listNotes();
       if (notes.length === 0) {
-        const legacyDraft = await readLegacyDraft();
+        const legacyDraft =
+          activeVault && isDefaultVault(activeVault) ? await readLegacyDraft() : "";
         const contents = legacyDraft || createInitialMarkdown(primaryModifier);
         const firstNote = await vault.saveNote({
           title: titleFromMarkdown(contents),
@@ -759,6 +777,63 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       storageError = error instanceof Error ? error.message : "Your notes could not be opened.";
       saveState = "error";
     }
+  }
+
+  function persistVaultRegistry(): void {
+    writeVaultRegistry({ activeId: activeVaultId, vaults });
+  }
+
+  async function selectVault(id: string): Promise<void> {
+    if (id === activeVaultId || transferState === "working") return;
+    if (!vaults.some((candidate) => candidate.id === id)) return;
+    if (!(await settleDraft())) return;
+    activeVaultId = id;
+    persistVaultRegistry();
+    await reopenVault();
+  }
+
+  async function createVault(name = "Notes"): Promise<void> {
+    if (transferState === "working") return;
+    if (!(await settleDraft())) return;
+    const descriptor = createVaultDescriptor(name, vaults);
+    vaults = [...vaults, descriptor];
+    activeVaultId = descriptor.id;
+    persistVaultRegistry();
+    await reopenVault();
+  }
+
+  function renameVault(id: string, name: string): void {
+    const target = vaults.find((candidate) => candidate.id === id);
+    const trimmed = normalizeVaultName(name);
+    if (!target || !trimmed || trimmed === target.name) return;
+    const unique = uniqueVaultName(
+      trimmed,
+      vaults.filter((candidate) => candidate.id !== id),
+    );
+    vaults = vaults.map((candidate) =>
+      candidate.id === id ? { ...candidate, name: unique } : candidate,
+    );
+    persistVaultRegistry();
+  }
+
+  async function reopenVault(): Promise<void> {
+    unsubscribeVault?.();
+    unsubscribeVault = undefined;
+    if (saveTimer) window.clearTimeout(saveTimer);
+    saveTimer = undefined;
+    saveRequested = false;
+    remoteChanges.length = 0;
+    remoteSyncRequested = false;
+    vault?.close();
+    vault = undefined;
+    resetEditorAfterVaultClear();
+    githubBackup = undefined;
+    pendingBackupCount = 0;
+    backupState = "idle";
+    backupMessage = "";
+    backupCommitUrl = "";
+    sidebarOpen = false;
+    await openVault();
   }
 
   async function ensurePersistentStorage(): Promise<void> {
@@ -1679,6 +1754,18 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   return {
+    get vaults() {
+      return vaults;
+    },
+    get activeVaultId() {
+      return activeVaultId;
+    },
+    get vaultName() {
+      return activeVault?.name ?? "Notes";
+    },
+    get suggestedRepositoryName() {
+      return suggestedRepositoryName(activeVault);
+    },
     get activeNoteId() {
       return activeNoteId;
     },
@@ -1925,6 +2012,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     set zipInput(value: HTMLInputElement | undefined) {
       zipInput = value;
     },
+    selectVault,
+    createVault,
+    renameVault,
     createNote,
     queueSearch,
     openPalette,

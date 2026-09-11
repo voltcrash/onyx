@@ -1,11 +1,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Bold, Code2, FileText, Heading2, Italic, Link, List, LoaderCircle, Lock, LockOpen, LogOut, PanelLeftClose, Plus, Quote, Search, Settings, WifiOff, Wrench, X } from '@lucide/svelte';
-	import { formatShortcut, type GithubUser, type KeyboardShortcuts, type PrimaryModifier, type VaultSearchResult } from '$lib';
+	import { formatShortcut, type GithubUser, type KeyboardShortcuts, type PrimaryModifier, type VaultDescriptor, type VaultSearchResult } from '$lib';
 	import GithubIcon from './github-icon.svelte';
+	import VaultSwitcher from './vault-switcher.svelte';
 	import type { GithubState, SaveState, TransferState } from './app-types';
 
 	interface Props {
+		vaults: VaultDescriptor[];
+		activeVaultId: string;
 		activeNoteId: string;
 		results: VaultSearchResult[];
 		visibleResults: VaultSearchResult[];
@@ -31,6 +34,9 @@
 		searchInput?: HTMLInputElement;
 		noteList?: HTMLElement;
 		onToggleSidebar: () => void;
+		onSelectVault: (id: string) => void;
+		onCreateVault: () => void;
+		onRenameVault: (id: string, name: string) => void;
 		onCreateNote: () => void;
 		onSearch: (value: string) => void;
 		onOpenPalette: () => void;
@@ -45,9 +51,9 @@
 	}
 
 	let {
-		activeNoteId, results, visibleResults, searchQuery, notePage, notePageCount, saveState, notesLoaded, paletteOpen, settingsOpen,
+		vaults, activeVaultId, activeNoteId, results, visibleResults, searchQuery, notePage, notePageCount, saveState, notesLoaded, paletteOpen, settingsOpen,
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, renderedPaneVisible, renderedReadOnly, wordCount, readingMinutes,
-		searchInput = $bindable(), noteList = $bindable(), onToggleSidebar, onCreateNote, onSearch,
+		searchInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onSearch,
 		onOpenPalette, onOpenSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage,
 		onInsertSyntax, onPrefixLine, onToggleRenderedReadOnly
 	}: Props = $props();
@@ -61,7 +67,7 @@
 </script>
 
 <aside class="sidebar" aria-label="Notes">
-	<div class="notes-heading"><div class="notes-title"><button class="icon-button sidebar-toggle" aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeftClose size={19} /></button><h1>Notes</h1></div><div class="notes-actions"><button class="new-note" aria-label="New note" title="New note" disabled={transferState === 'working'} onclick={onCreateNote}><Plus size={17} /></button></div></div>
+	<div class="notes-heading"><div class="notes-title"><button class="new-note" aria-label="New note" title="New note" disabled={transferState === 'working'} onclick={onCreateNote}><Plus size={17} /></button><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions"><button class="icon-button sidebar-toggle" aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeftClose size={19} /></button></div></div>
 	<div class="sidebar-switcher" role="tablist" aria-label="Sidebar view">
 		<button role="tab" aria-selected={sidebarView === 'files'} class:active={sidebarView === 'files'} onclick={() => (sidebarView = 'files')}><FileText size={14} /> Files</button>
 		<button role="tab" aria-selected={sidebarView === 'tools'} class:active={sidebarView === 'tools'} onclick={() => (sidebarView = 'tools')}><Wrench size={14} /> Tools</button>

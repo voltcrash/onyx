@@ -1,5 +1,18 @@
 export { Vault } from "./vault.js";
 export { VaultConflictError } from "./types.js";
+export {
+  createVaultDescriptor,
+  defaultVaultDescriptor,
+  isDefaultVault,
+  normalizeVaultName,
+  readVaultRegistry,
+  suggestedRepositoryName,
+  uniqueVaultName,
+  vaultOptions,
+  writeVaultRegistry,
+  type VaultDescriptor,
+  type VaultRegistry,
+} from "./registry.js";
 export type {
   AttachmentMetadata,
   BackupOperation,
