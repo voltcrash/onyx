@@ -387,7 +387,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     {
       id: "storage",
       group: "Onyx",
-      label: "Storage on this device",
+      label: "Review storage choices",
       icon: HardDrive,
       keywords: "space quota usage persistent",
       run: () => openSettings("storage"),

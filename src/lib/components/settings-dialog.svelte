@@ -75,7 +75,7 @@
 		{ id: 'github', label: 'Backup & sync' },
 		{ id: 'repository', label: 'Sync repository' },
 		{ id: 'backup', label: 'Sync status' },
-		{ id: 'storage', label: 'Storage' },
+		{ id: 'storage', label: 'Storage choices' },
 		{ id: 'transfer', label: 'Import & export' },
 		{ id: 'vault', label: 'Vault' }
 	];
@@ -450,7 +450,8 @@
 						<button disabled={!isOnline || !connected || !vault} onclick={onRestore}><CloudDownload size={14} /> Restore a commit</button>
 					</div>
 				{:else if section === 'storage'}
-					<h3>Storage on this device</h3>
+					<h3>Storage choices</h3>
+					<p class="settings-hint">Onyx always keeps a working vault on this device. Add a folder for accessible local files or GitHub for an off-device backup you can restore elsewhere.</p>
 					{#if usageState === 'loading' && !usage}
 						<p class="settings-hint"><LoaderCircle class="spin" size={14} /> Measuring vault storage…</p>
 					{:else if usage}
@@ -465,6 +466,13 @@
 							<div><dt>File storage</dt><dd>{usage.fileStorage.mode === 'native-directory' ? usage.fileStorage.nativeDirectoryName : 'Private browser storage (OPFS)'}</dd></div>
 						</dl>
 						<section class="settings-storage-option">
+							<div><Database size={18} /><span><strong>Private browser storage</strong><small>The default for every vault. It works offline and does not need an account.</small></span></div>
+							<p class="settings-hint">{usage.persistent ? 'This browser has granted protection from automatic storage cleanup.' : usage.persistentStorageAvailable ? 'The browser may remove this data when space is low unless persistent storage is granted.' : 'This browser cannot protect the vault from automatic storage cleanup.'}</p>
+							{#if !usage.persistent && usage.persistentStorageAvailable}
+								<div class="settings-actions"><button class="settings-primary" disabled={persistState === 'requesting'} onclick={() => void requestPersistence()}><ShieldCheck size={14} /> Request persistent storage</button></div>
+							{/if}
+						</section>
+						<section class="settings-storage-option">
 							<div><HardDrive size={18} /><span><strong>User-selected folder</strong><small>OPFS remains the fallback. Onyx mirrors notes and attachments into a folder you choose.</small></span></div>
 							{#if usage.fileStorage.nativeDirectoryAvailable}
 								{#if usage.fileStorage.nativeDirectoryPermission === 'granted'}
@@ -478,15 +486,12 @@
 								<p class="settings-hint">This browser does not expose a persistent user-selected folder. Use OPFS with Import & export or upload/download workflows.</p>
 							{/if}
 						</section>
-						{#if !usage.persistent && usage.persistentStorageAvailable}
-							<p class="settings-hint">Without persistent storage the browser may evict this vault when space runs low.</p>
-						{:else if !usage.persistent}
-							<p class="settings-hint">This browser cannot protect the vault from automatic storage cleanup. Keep a backup of important notes.</p>
-						{/if}
+						<section class="settings-storage-option">
+							<div><CloudUpload size={18} /><span><strong>GitHub backup and sync</strong><small>Optional off-device history for restoring this vault on another device.</small></span></div>
+							<p class="settings-hint">{connected ? githubBackup ? `Backing up to ${githubBackup.owner}/${githubBackup.repository}.` : 'Signed in. Choose a private repository to finish setup.' : 'Not enabled. Your local vault continues to work normally.'}</p>
+							<div class="settings-actions"><button onclick={() => (section = connected ? githubBackup ? 'backup' : 'repository' : 'github')}>{connected ? githubBackup ? 'View sync status' : 'Choose repository' : 'Learn about GitHub sync'}</button></div>
+						</section>
 						<div class="settings-actions">
-							{#if !usage.persistent && usage.persistentStorageAvailable}
-								<button class="settings-primary" disabled={persistState === 'requesting'} onclick={() => void requestPersistence()}><ShieldCheck size={14} /> Request persistent storage</button>
-							{/if}
 							<button disabled={usageState === 'loading'} onclick={() => void loadUsage()}><RefreshCw size={14} /> Refresh</button>
 						</div>
 					{/if}
