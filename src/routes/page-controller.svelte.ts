@@ -51,13 +51,16 @@ import {
   readKeyboardShortcuts,
   readLocalStorage,
   readMarkdownFolder,
+  isDefaultVault,
   readMarkdownZip,
   readThemePreference,
+  readVaultRegistry,
   restoreGithubSession,
   restoreVaultFromGithub,
   shortcutMatchesEvent,
   validateGithubBackupRepository,
   Vault,
+  vaultOptions,
   watchSystemTheme,
   writeKeyboardShortcuts,
   writeLocalStorage,
@@ -74,6 +77,7 @@ import {
   type ShortcutAction,
   type ThemePreference,
   type VaultChangeEvent,
+  type VaultDescriptor,
   type VaultSearchResult,
 } from "$lib";
 import { onMount, tick } from "svelte";
@@ -110,6 +114,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   const initialMarkdown = createInitialMarkdown("meta");
 
   let vault = $state<Vault>();
+  let vaults = $state<VaultDescriptor[]>([]);
+  let activeVaultId = $state("");
   let activeNoteId = $state("");
   let noteRevision = $state(0);
   let markdown = $state(initialMarkdown);
@@ -184,6 +190,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let clearingVault = false;
   const liveRenderCache = new Map<string, string>();
 
+  const activeVault = $derived(
+    vaults.find((candidate) => candidate.id === activeVaultId) ?? vaults[0],
+  );
   const wordCount = $derived(markdown.trim() ? markdown.trim().split(/\s+/).length : 0);
   const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
   const renderedMarkdown = $derived(renderMarkdown(previewMarkdown, resolveAttachmentUrl));
@@ -382,6 +391,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   ]);
 
   onMount(() => {
+    const registry = readVaultRegistry();
+    vaults = registry.vaults;
+    activeVaultId = registry.activeId;
     primaryModifier = detectPrimaryModifier();
     if (primaryModifier === "control" && markdown === initialMarkdown) {
       markdown = createInitialMarkdown(primaryModifier);
@@ -737,12 +749,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     saveState = "loading";
     notesLoaded = false;
     try {
-      vault = await Vault.open();
+      vault = await Vault.open(activeVault ? vaultOptions(activeVault) : {});
       unsubscribeVault?.();
       unsubscribeVault = vault.subscribe(queueRemoteVaultSync);
       let notes = await vault.listNotes();
       if (notes.length === 0) {
-        const legacyDraft = await readLegacyDraft();
+        const legacyDraft =
+          activeVault && isDefaultVault(activeVault) ? await readLegacyDraft() : "";
         const contents = legacyDraft || createInitialMarkdown(primaryModifier);
         const firstNote = await vault.saveNote({
           title: titleFromMarkdown(contents),
