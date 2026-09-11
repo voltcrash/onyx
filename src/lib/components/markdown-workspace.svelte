@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ChevronLeft, ChevronRight, CloudOff, HardDrive, PanelLeft, PencilLine } from '@lucide/svelte';
+	import { ChevronLeft, ChevronRight, CloudOff, HardDrive, PanelLeft, PencilLine, X } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib';
 	import type { InlinePreviewBehavior } from './settings-dialog.svelte';
 	import type { SaveState, TransferState } from './app-types';
@@ -24,6 +24,7 @@
 		liveEditor?: HTMLTextAreaElement;
 		liveEditorContainer?: HTMLDivElement;
 		onRetryStorage: () => void;
+		onDismissStorageNotice: () => void;
 		onToggleSidebar: () => void;
 		splitRatio: number;
 		onToggleSourcePane: () => void;
@@ -47,7 +48,7 @@
 	let {
 		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, renderedReadOnly, inlinePreviewBehavior, markdown, markdownLines, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
-		editor = $bindable(), liveEditor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onToggleSidebar,
+		editor = $bindable(), liveEditor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar,
 		splitRatio, onToggleSourcePane, onToggleRenderedPane, onResize, onResizeEnd, onReload, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
 		onRenderedLineKeydown, onLiveLineChange, onLiveLineKeydown, onActivateLiveLine,
 		renderEditableLine, renderLiveLine, liveLineKind
@@ -101,7 +102,7 @@
 <main class="workspace">
 	<button class="collapsed-sidebar-toggle" aria-label="Show notes sidebar" title={`Show sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button>
 	{#if storageNotice}
-		<div class="storage-notice" role="status"><HardDrive size={16} /><span>{storageNotice}</span></div>
+		<div class="storage-notice" role="status"><HardDrive size={16} /><span>{storageNotice}</span><button class="storage-dismiss" aria-label="Dismiss storage warning" title="Dismiss" onclick={onDismissStorageNotice}><X size={14} /></button></div>
 	{/if}
 	{#if storageError}
 		<div class="storage-error" role="alert">

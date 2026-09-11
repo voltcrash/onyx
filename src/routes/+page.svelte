@@ -75,6 +75,7 @@
 		bind:liveEditor={page.liveEditor}
 		bind:liveEditorContainer={page.liveEditorContainer}
 		onRetryStorage={() => void (page.vault ? page.saveDraft() : page.openVault())}
+		onDismissStorageNotice={page.dismissStorageNotice}
 		onToggleSidebar={page.toggleSidebar}
 		splitRatio={page.splitRatio}
 		onToggleSourcePane={page.toggleSourcePane}

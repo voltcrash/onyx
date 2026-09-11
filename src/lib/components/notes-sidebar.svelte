@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { Bold, Code2, FileText, Heading2, Italic, Link, List, LoaderCircle, Lock, LockOpen, LogOut, PanelLeftClose, Plus, Quote, Search, Settings, WifiOff, Wrench, X } from '@lucide/svelte';
 	import { formatShortcut, type GithubUser, type KeyboardShortcuts, type PrimaryModifier, type VaultSearchResult } from '$lib';
 	import GithubIcon from './github-icon.svelte';
@@ -52,6 +53,11 @@
 	}: Props = $props();
 
 	let sidebarView = $state<'files' | 'tools'>('files');
+
+	// The sidebar is a drawer on narrow screens, where the tools are the harder pane to reach.
+	onMount(() => {
+		if (globalThis.matchMedia?.('(max-width: 900px)').matches) sidebarView = 'tools';
+	});
 </script>
 
 <aside class="sidebar" aria-label="Notes">

@@ -125,6 +125,11 @@
 .sidebar-collapsed .workspace > .collapsed-sidebar-toggle {
   display: grid;
 }
+/* The floating sidebar toggle sits over the top-left corner of the workspace. */
+.sidebar-collapsed .workspace > .storage-notice,
+.sidebar-collapsed .workspace > .storage-error {
+  padding-left: 54px;
+}
 .workspace > .collapsed-sidebar-toggle:hover {
   background: var(--subtle-strong);
   color: var(--ink);

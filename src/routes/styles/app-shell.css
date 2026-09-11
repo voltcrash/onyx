@@ -536,6 +536,21 @@
 .storage-notice span {
   flex: 1;
 }
+.storage-dismiss {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.storage-dismiss:hover {
+  background: var(--subtle-strong);
+  color: var(--ink);
+}
 .storage-error svg {
   flex: 0 0 auto;
 }
