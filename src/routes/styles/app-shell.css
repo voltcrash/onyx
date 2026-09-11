@@ -150,6 +150,91 @@
   font-weight: 500;
   letter-spacing: -0.035em;
 }
+.vault-switcher {
+  position: relative;
+  min-width: 0;
+}
+.vault-trigger {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.vault-trigger:hover:not(:disabled) {
+  background: var(--subtle-strong);
+}
+.vault-trigger:disabled {
+  cursor: not-allowed;
+}
+.vault-trigger h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vault-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+.vault-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 21;
+  min-width: 200px;
+  max-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+.vault-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-body);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.vault-menu button span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vault-menu button:hover {
+  background: var(--subtle-strong);
+}
+.vault-menu button.active {
+  color: var(--ink);
+  font-weight: 550;
+}
+.vault-menu .vault-create {
+  color: var(--muted);
+}
+.vault-menu-divider {
+  margin: 4px 2px;
+  border-top: 1px solid var(--line-soft);
+}
 .new-note {
   width: 30px;
   height: 30px;

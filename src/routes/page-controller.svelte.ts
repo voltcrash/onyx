@@ -37,6 +37,7 @@ import {
   createMarkdownExport,
   createMarkdownZip,
   createPrivateGithubRepository,
+  createVaultDescriptor,
   defaultKeyboardShortcuts,
   detectBrowserStorageSupport,
   detectPrimaryModifier,
@@ -65,6 +66,7 @@ import {
   writeKeyboardShortcuts,
   writeLocalStorage,
   writeMarkdownFolder,
+  writeVaultRegistry,
   type ColorTheme,
   type GithubBackupCommit,
   type GithubBackupState,
@@ -772,6 +774,49 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       storageError = error instanceof Error ? error.message : "Your notes could not be opened.";
       saveState = "error";
     }
+  }
+
+  function persistVaultRegistry(): void {
+    writeVaultRegistry({ activeId: activeVaultId, vaults });
+  }
+
+  async function selectVault(id: string): Promise<void> {
+    if (id === activeVaultId || transferState === "working") return;
+    if (!vaults.some((candidate) => candidate.id === id)) return;
+    if (!(await settleDraft())) return;
+    activeVaultId = id;
+    persistVaultRegistry();
+    await reopenVault();
+  }
+
+  async function createVault(name = "Notes"): Promise<void> {
+    if (transferState === "working") return;
+    if (!(await settleDraft())) return;
+    const descriptor = createVaultDescriptor(name, vaults);
+    vaults = [...vaults, descriptor];
+    activeVaultId = descriptor.id;
+    persistVaultRegistry();
+    await reopenVault();
+  }
+
+  async function reopenVault(): Promise<void> {
+    unsubscribeVault?.();
+    unsubscribeVault = undefined;
+    if (saveTimer) window.clearTimeout(saveTimer);
+    saveTimer = undefined;
+    saveRequested = false;
+    remoteChanges.length = 0;
+    remoteSyncRequested = false;
+    vault?.close();
+    vault = undefined;
+    resetEditorAfterVaultClear();
+    githubBackup = undefined;
+    pendingBackupCount = 0;
+    backupState = "idle";
+    backupMessage = "";
+    backupCommitUrl = "";
+    sidebarOpen = false;
+    await openVault();
   }
 
   async function ensurePersistentStorage(): Promise<void> {
@@ -1692,6 +1737,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   return {
+    get vaults() {
+      return vaults;
+    },
+    get activeVaultId() {
+      return activeVaultId;
+    },
+    get vaultName() {
+      return activeVault?.name ?? "Notes";
+    },
     get activeNoteId() {
       return activeNoteId;
     },
@@ -1938,6 +1992,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     set zipInput(value: HTMLInputElement | undefined) {
       zipInput = value;
     },
+    selectVault,
+    createVault,
     createNote,
     queueSearch,
     openPalette,

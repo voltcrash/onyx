@@ -17,6 +17,8 @@
 
 <div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} inert={page.paletteOpen || page.settingsOpen || page.restoreModalOpen}>
 	<NotesSidebar
+		vaults={page.vaults}
+		activeVaultId={page.activeVaultId}
 		activeNoteId={page.activeNoteId}
 		results={page.results}
 		visibleResults={page.visibleResults}
@@ -42,6 +44,8 @@
 		bind:searchInput={page.searchInput}
 		bind:noteList={page.noteList}
 		onToggleSidebar={page.toggleSidebar}
+		onSelectVault={(id) => void page.selectVault(id)}
+		onCreateVault={() => void page.createVault()}
 		onCreateNote={() => void page.createNote()}
 		onSearch={page.queueSearch}
 		onOpenPalette={() => void page.openPalette()}
