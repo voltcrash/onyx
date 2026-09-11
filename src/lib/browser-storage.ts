@@ -1,4 +1,5 @@
 export interface BrowserStorageSupport {
+  directoryPicker: boolean;
   indexedDb: boolean;
   localStorage: boolean;
   opfs: boolean;
@@ -9,6 +10,7 @@ const STORAGE_PROBE_KEY_PREFIX = "onyx:storage-probe";
 
 export function detectBrowserStorageSupport(): BrowserStorageSupport {
   return {
+    directoryPicker: typeof globalThis.showDirectoryPicker === "function",
     indexedDb: indexedDbAvailable(),
     localStorage: canUseLocalStorage(),
     opfs: storageMethodAvailable("getDirectory"),

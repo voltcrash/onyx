@@ -91,6 +91,7 @@
 	let usageState = $state<'idle' | 'loading' | 'error'>('idle');
 	let usageMessage = $state('');
 	let persistState = $state<'idle' | 'requesting'>('idle');
+	let nativeStorageState = $state<'idle' | 'connecting' | 'disconnecting'>('idle');
 	let clearState = $state<'idle' | 'preparing' | 'confirming' | 'clearing' | 'error'>('idle');
 	let clearMessage = $state('');
 	let recordingShortcut = $state<ShortcutAction>();
@@ -160,6 +161,36 @@
 			if (!granted) usageMessage = persistenceDeniedMessage();
 		} finally {
 			persistState = 'idle';
+		}
+	}
+
+	async function connectNativeDirectory(): Promise<void> {
+		if (!vault || nativeStorageState !== 'idle') return;
+		nativeStorageState = 'connecting';
+		usageMessage = '';
+		try {
+			await vault.connectNativeDirectory();
+			await loadUsage();
+		} catch (error) {
+			if (!(error instanceof DOMException && error.name === 'AbortError')) {
+				usageMessage = error instanceof Error ? error.message : 'The folder could not be connected.';
+			}
+		} finally {
+			nativeStorageState = 'idle';
+		}
+	}
+
+	async function disconnectNativeDirectory(): Promise<void> {
+		if (!vault || nativeStorageState !== 'idle') return;
+		nativeStorageState = 'disconnecting';
+		usageMessage = '';
+		try {
+			await vault.disconnectNativeDirectory();
+			await loadUsage();
+		} catch (error) {
+			usageMessage = error instanceof Error ? error.message : 'The folder could not be disconnected.';
+		} finally {
+			nativeStorageState = 'idle';
 		}
 	}
 
@@ -430,7 +461,22 @@
 							<div><dt>Notes</dt><dd>{usage.noteCount} · {formatBytes(usage.noteBytes)}</dd></div>
 							<div><dt>Attachments</dt><dd>{usage.attachmentCount} · {formatBytes(usage.attachmentBytes)}</dd></div>
 							<div><dt>Persistent storage</dt><dd>{usage.persistent ? 'Granted' : usage.persistentStorageAvailable ? 'Not granted' : 'Unavailable in this browser'}</dd></div>
+							<div><dt>File storage</dt><dd>{usage.fileStorage.mode === 'native-directory' ? usage.fileStorage.nativeDirectoryName : 'Private browser storage (OPFS)'}</dd></div>
 						</dl>
+						<section class="settings-storage-option">
+							<div><HardDrive size={18} /><span><strong>User-selected folder</strong><small>OPFS remains the fallback. Onyx mirrors notes and attachments into a folder you choose.</small></span></div>
+							{#if usage.fileStorage.nativeDirectoryAvailable}
+								{#if usage.fileStorage.nativeDirectoryPermission === 'granted'}
+									<p class="settings-hint">Connected to <strong>{usage.fileStorage.nativeDirectoryName}</strong>. Disconnecting leaves its files in place and continues in OPFS.</p>
+									<div class="settings-actions"><button disabled={nativeStorageState !== 'idle'} onclick={() => void disconnectNativeDirectory()}>Disconnect folder</button></div>
+								{:else}
+									<p class="settings-hint">{usage.fileStorage.nativeDirectoryName ? usage.fileStorage.nativeDirectoryPermission === 'error' ? `${usage.fileStorage.nativeDirectoryName} could not be updated. Onyx continues in OPFS; reconnect the folder to try again.` : `Access to ${usage.fileStorage.nativeDirectoryName} needs permission again. Until then, Onyx continues in OPFS.` : 'Choose a dedicated folder to keep accessible copies of this vault on your device.'}</p>
+									<div class="settings-actions"><button class="settings-primary" disabled={nativeStorageState !== 'idle'} onclick={() => void connectNativeDirectory()}>{nativeStorageState === 'connecting' ? 'Connecting…' : usage.fileStorage.nativeDirectoryName ? 'Reconnect folder' : 'Choose folder'}</button></div>
+								{/if}
+							{:else}
+								<p class="settings-hint">This browser does not expose a persistent user-selected folder. Use OPFS with Import & export or upload/download workflows.</p>
+							{/if}
+						</section>
 						{#if !usage.persistent && usage.persistentStorageAvailable}
 							<p class="settings-hint">Without persistent storage the browser may evict this vault when space runs low.</p>
 						{:else if !usage.persistent}
