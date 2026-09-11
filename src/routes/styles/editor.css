@@ -453,6 +453,7 @@
   color: var(--ink-strong);
   line-height: 1.2;
   letter-spacing: -0.035em;
+  scroll-margin-top: 24px;
 }
 .prose h1 {
   margin: 0 0 25px;
@@ -469,15 +470,28 @@
   font-size: 19px;
   font-weight: 600;
 }
-.prose h4,
-.prose h5,
-.prose h6 {
+.prose h4 {
   margin: 26px 0 9px;
   font-size: 17px;
   font-weight: 700;
 }
+.prose h5 {
+  margin: 24px 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.prose h6 {
+  margin: 22px 0 8px;
+  color: var(--muted);
+  font-family: "Inter Variable", Inter, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .prose p {
   margin: 0 0 17px;
+  overflow-wrap: anywhere;
 }
 .prose .spacer {
   height: 2px;
@@ -493,10 +507,16 @@
   font-size: 19px;
   font-style: italic;
 }
+.prose blockquote > :last-child {
+  margin-bottom: 0;
+}
 .prose ul,
 .prose ol {
   margin: 12px 0 22px;
   padding-left: 24px;
+}
+.prose li > :is(ul, ol) {
+  margin: 5px 0 8px;
 }
 .prose li {
   margin: 7px 0;
@@ -534,6 +554,30 @@
   background: transparent;
   color: inherit;
 }
+.prose kbd {
+  display: inline-block;
+  min-width: 1.75em;
+  padding: 0.12em 0.42em;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font:
+    0.78em/1.45 "SFMono-Regular",
+    Consolas,
+    monospace;
+  text-align: center;
+}
+.prose del {
+  color: var(--muted);
+  text-decoration-thickness: 1px;
+}
+.prose hr {
+  margin: 36px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
 .prose a {
   color: var(--accent-link);
   text-decoration-color: var(--accent-underline);
@@ -541,10 +585,13 @@
 }
 .prose table {
   width: 100%;
+  display: block;
+  overflow-x: auto;
   margin: 24px 0;
   border-collapse: collapse;
   font-family: Inter, sans-serif;
   font-size: 0.88em;
+  scrollbar-width: thin;
 }
 .prose th,
 .prose td {
@@ -555,6 +602,9 @@
   color: var(--ink-strong);
   background: var(--subtle);
   font-weight: 650;
+}
+.prose tbody tr:nth-child(even) {
+  background: var(--surface-soft);
 }
 .prose img {
   display: block;
