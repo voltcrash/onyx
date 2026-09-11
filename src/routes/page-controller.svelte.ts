@@ -89,6 +89,7 @@ import { onMount, tick } from "svelte";
 
 const NOTE_PAGE_SIZE = 100;
 const PREVIEW_DELAY_MS = 120;
+const DEFAULT_CONTENT_WIDTH = 700;
 // Matches the single-column breakpoint in the responsive stylesheet.
 const NARROW_VIEWPORT = "(max-width: 900px)";
 
@@ -134,6 +135,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let renderedPaneVisible = $state(true);
   let renderedReadOnly = $state(true);
   let splitRatio = $state(50);
+  let contentWidth = $state(DEFAULT_CONTENT_WIDTH);
   let editingSurface: "source" | "rendered" = "source";
   let saveState = $state<SaveState>("loading");
   let notesLoaded = $state(false);
@@ -425,6 +427,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     narrowQuery?.addEventListener("change", onViewportChange);
     const storedSplit = Number(readLocalStorage("onyx:split-ratio"));
     if (Number.isFinite(storedSplit)) splitRatio = clampSplitRatio(storedSplit);
+    const storedContentWidth = Number(readLocalStorage("onyx:content-width"));
+    if (Number.isFinite(storedContentWidth)) contentWidth = clampContentWidth(storedContentWidth);
     shortcuts = readKeyboardShortcuts();
     theme = readThemePreference();
     resolvedTheme = applyTheme(theme);
@@ -1199,6 +1203,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     writeLocalStorage("onyx:split-ratio", splitRatio.toFixed(1));
   }
 
+  function clampContentWidth(value: number): number {
+    return Math.min(1_200, Math.max(480, Math.round(value / 20) * 20));
+  }
+
+  function setContentWidth(value: number): void {
+    contentWidth = clampContentWidth(value);
+    writeLocalStorage("onyx:content-width", String(contentWidth));
+  }
+
   // A single-pane viewport switches views instead of splitting, and leaves the stored split alone.
   function showOnlyPane(pane: "source" | "rendered"): void {
     sourcePaneVisible = pane === "source";
@@ -1948,6 +1961,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get splitRatio() {
       return splitRatio;
     },
+    get contentWidth() {
+      return contentWidth;
+    },
     get markdown() {
       return markdown;
     },
@@ -2057,6 +2073,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     prefixLine,
     setSplitRatio,
     saveSplitRatio,
+    setContentWidth,
     toggleSourcePane,
     toggleRenderedPane,
     toggleRenderedReadOnly,

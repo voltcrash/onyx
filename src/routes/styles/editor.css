@@ -1,5 +1,6 @@
 .editor-shell {
   --split: 50%;
+  --content-width: 700px;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -148,6 +149,8 @@
   font-size: 15px;
   line-height: 1.78;
   tab-size: 2;
+  max-width: var(--content-width);
+  margin: 0 auto;
 }
 .editor-pane > textarea::placeholder {
   color: var(--faint);
@@ -165,6 +168,8 @@
   font-family: Georgia, "Times New Roman", serif;
   font-size: 17px;
   line-height: 1.76;
+  width: min(100%, var(--content-width));
+  margin: 0 auto;
 }
 .live-source-line {
   display: block;
@@ -436,7 +441,7 @@
   line-height: 1.55;
 }
 .prose {
-  width: min(100%, 700px);
+  width: min(100%, var(--content-width));
   margin: 0 auto;
   padding: 49px clamp(30px, 6vw, 78px) 90px;
   color: var(--ink-body);

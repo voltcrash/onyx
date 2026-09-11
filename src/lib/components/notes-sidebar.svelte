@@ -31,6 +31,7 @@
 		renderedReadOnly: boolean;
 		wordCount: number;
 		readingMinutes: number;
+		contentWidth: number;
 		searchInput?: HTMLInputElement;
 		noteList?: HTMLElement;
 		onToggleSidebar: () => void;
@@ -48,14 +49,15 @@
 		onInsertSyntax: (before: string, after?: string, placeholder?: string) => void;
 		onPrefixLine: (prefix: string) => void;
 		onToggleRenderedReadOnly: () => void;
+		onContentWidthChange: (value: number) => void;
 	}
 
 	let {
 		vaults, activeVaultId, activeNoteId, results, visibleResults, searchQuery, notePage, notePageCount, saveState, notesLoaded, paletteOpen, settingsOpen,
-		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, renderedPaneVisible, renderedReadOnly, wordCount, readingMinutes,
+		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, renderedPaneVisible, renderedReadOnly, wordCount, readingMinutes, contentWidth,
 		searchInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onSearch,
 		onOpenPalette, onOpenSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage,
-		onInsertSyntax, onPrefixLine, onToggleRenderedReadOnly
+		onInsertSyntax, onPrefixLine, onToggleRenderedReadOnly, onContentWidthChange
 	}: Props = $props();
 
 	let sidebarView = $state<'files' | 'tools'>('files');
@@ -105,6 +107,10 @@
 				<h2>View</h2>
 				<div class="sidebar-view-options">
 					<button class:active={renderedReadOnly} aria-pressed={renderedReadOnly} disabled={!renderedPaneVisible} onclick={onToggleRenderedReadOnly} aria-label={renderedReadOnly ? 'Enable page editing' : 'Turn on read-only'}>{#if renderedReadOnly}<Lock size={16} />{:else}<LockOpen size={16} />{/if}<span>{renderedReadOnly ? 'Read only' : 'Editing'}</span></button>
+					<label class="content-width-control">
+						<span><strong>Content width</strong><output>{contentWidth}px</output></span>
+						<input type="range" min="480" max="1200" step="20" value={contentWidth} aria-label="Content width" oninput={(event) => onContentWidthChange(Number(event.currentTarget.value))} />
+					</label>
 				</div>
 			</section>
 			<section class="tool-section">
