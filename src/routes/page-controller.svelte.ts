@@ -115,7 +115,7 @@ Create as many notes as you need. Search checks every title and every word, whil
 - [ ] Capture the next idea
 - [ ] Shape it into something useful
 
-Onyx starts in private browser storage (OPFS). In browsers that support choosing persistent folders, you can mirror this vault to one from **Settings → Storage**. Other browsers can use Import & export or upload/download workflows.
+Onyx starts in private browser storage (OPFS) without an account. In browsers that support choosing persistent folders, you can mirror this vault to one from **Settings → Storage choices**. GitHub sign-in is optional and only enables backup and cross-device restore.
 
 Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\` to save now, or \`${previewShortcut}\` to toggle preview. Press \`?\` for every shortcut.`;
   }
@@ -688,7 +688,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function restoreConfiguration(): GithubBackupState {
-    if (!githubUser) throw new Error("Connect GitHub before restoring a backup");
+    if (!githubUser) throw new Error("Sign in with GitHub before restoring a backup");
     return {
       githubAccountId: githubUser.id,
       githubAccountLogin: githubUser.login,

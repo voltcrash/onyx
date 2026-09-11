@@ -73,7 +73,7 @@ describe("githubRequest", () => {
 
     await expect(restoreGithubSession()).rejects.toMatchObject({ status: 401 });
     await expect(githubRequest("/user")).rejects.toThrow(
-      "Connect GitHub before making an API request",
+      "Sign in with GitHub before using backup and sync",
     );
   });
 

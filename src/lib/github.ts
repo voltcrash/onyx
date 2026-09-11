@@ -469,7 +469,7 @@ async function requestGithub<T>(
   path: `/${string}`,
   init: RequestInit = {},
 ): Promise<GithubRequestResult<T>> {
-  if (!accessToken) throw new Error("Connect GitHub before making an API request");
+  if (!accessToken) throw new Error("Sign in with GitHub before using backup and sync");
   const baseHeaders = new Headers(init.headers);
   baseHeaders.set("Accept", "application/vnd.github+json");
   if (init.body) baseHeaders.set("Content-Type", "application/json");
@@ -477,7 +477,7 @@ async function requestGithub<T>(
   let refreshed = false;
   for (let attempt = 0; attempt < MAX_REQUEST_ATTEMPTS; attempt += 1) {
     const tokenForRequest = accessToken;
-    if (!tokenForRequest) throw new Error("Connect GitHub before making an API request");
+    if (!tokenForRequest) throw new Error("Sign in with GitHub before using backup and sync");
     const headers = new Headers(baseHeaders);
     headers.set("Authorization", `Bearer ${tokenForRequest}`);
     let response: Response;
@@ -777,7 +777,9 @@ export async function validateGithubBackupRepository(state: GithubBackupState): 
 }
 
 function requireAuthenticatedUser(): GithubUser {
-  if (!authenticatedUser) throw new Error("Connect GitHub before configuring a backup repository");
+  if (!authenticatedUser) {
+    throw new Error("Sign in with GitHub before configuring a backup repository");
+  }
   return authenticatedUser;
 }
 
