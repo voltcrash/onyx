@@ -46,6 +46,7 @@
 		onToggleSidebar={page.toggleSidebar}
 		onSelectVault={(id) => void page.selectVault(id)}
 		onCreateVault={() => void page.createVault()}
+		onRenameVault={page.renameVault}
 		onCreateNote={() => void page.createNote()}
 		onSearch={page.queueSearch}
 		onOpenPalette={() => void page.openPalette()}

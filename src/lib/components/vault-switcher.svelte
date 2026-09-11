@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { Check, ChevronDown, Plus } from '@lucide/svelte';
 	import type { VaultDescriptor } from '$lib';
 
@@ -8,12 +9,42 @@
 		disabled: boolean;
 		onSelectVault: (id: string) => void;
 		onCreateVault: () => void;
+		onRenameVault: (id: string, name: string) => void;
 	}
 
-	let { vaults, activeVaultId, disabled, onSelectVault, onCreateVault }: Props = $props();
+	let { vaults, activeVaultId, disabled, onSelectVault, onCreateVault, onRenameVault }: Props = $props();
 
 	let menuOpen = $state(false);
+	let renaming = $state(false);
+	let draftName = $state('');
+	let renameInput = $state<HTMLInputElement>();
 	let activeName = $derived(vaults.find((vault) => vault.id === activeVaultId)?.name ?? 'Notes');
+
+	async function startRename(): Promise<void> {
+		if (disabled) return;
+		menuOpen = false;
+		renaming = true;
+		draftName = activeName;
+		await tick();
+		renameInput?.focus();
+		renameInput?.select();
+	}
+
+	function commitRename(): void {
+		if (!renaming) return;
+		renaming = false;
+		if (draftName.trim() && draftName.trim() !== activeName) onRenameVault(activeVaultId, draftName);
+	}
+
+	function handleRenameKeydown(event: KeyboardEvent): void {
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			commitRename();
+		} else if (event.key === 'Escape') {
+			event.preventDefault();
+			renaming = false;
+		}
+	}
 
 	function select(id: string): void {
 		menuOpen = false;
@@ -27,9 +58,13 @@
 </script>
 
 <div class="vault-switcher">
-	<button class="vault-trigger" aria-haspopup="menu" aria-expanded={menuOpen} title="Switch repository" {disabled} onclick={() => (menuOpen = !menuOpen)}>
-		<h1>{activeName}</h1><ChevronDown size={16} />
-	</button>
+	{#if renaming}
+		<input class="vault-rename" bind:this={renameInput} bind:value={draftName} aria-label="Repository name" maxlength="60" spellcheck="false" onblur={commitRename} onkeydown={handleRenameKeydown} />
+	{:else}
+		<button class="vault-trigger" aria-haspopup="menu" aria-expanded={menuOpen} title="Switch repository, double-click to rename" {disabled} onclick={() => (menuOpen = !menuOpen)} ondblclick={() => void startRename()}>
+			<h1>{activeName}</h1><ChevronDown size={16} />
+		</button>
+	{/if}
 	{#if menuOpen}
 		<button class="vault-backdrop" tabindex="-1" aria-hidden="true" onclick={() => (menuOpen = false)}></button>
 		<div class="vault-menu" role="menu" aria-label="Repositories">

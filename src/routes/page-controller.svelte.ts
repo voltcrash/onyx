@@ -47,6 +47,7 @@ import {
   importMarkdownFiles,
   listGithubBackupCommits,
   nextThemePreference,
+  normalizeVaultName,
   persistenceDeniedMessage,
   readColorTheme,
   readKeyboardShortcuts,
@@ -56,6 +57,7 @@ import {
   readMarkdownZip,
   readThemePreference,
   readVaultRegistry,
+  uniqueVaultName,
   restoreGithubSession,
   restoreVaultFromGithub,
   shortcutMatchesEvent,
@@ -797,6 +799,20 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     activeVaultId = descriptor.id;
     persistVaultRegistry();
     await reopenVault();
+  }
+
+  function renameVault(id: string, name: string): void {
+    const target = vaults.find((candidate) => candidate.id === id);
+    const trimmed = normalizeVaultName(name);
+    if (!target || !trimmed || trimmed === target.name) return;
+    const unique = uniqueVaultName(
+      trimmed,
+      vaults.filter((candidate) => candidate.id !== id),
+    );
+    vaults = vaults.map((candidate) =>
+      candidate.id === id ? { ...candidate, name: unique } : candidate,
+    );
+    persistVaultRegistry();
   }
 
   async function reopenVault(): Promise<void> {
@@ -1994,6 +2010,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     },
     selectVault,
     createVault,
+    renameVault,
     createNote,
     queueSearch,
     openPalette,
