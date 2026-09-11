@@ -11,7 +11,9 @@
 	} from '@lucide/svelte';
 	import {
 		listGithubRepositories, type GithubBackupState, type GithubRepository, type GithubUser,
+		defaultFontChoices, fontOption, fontOptions, fontRoles,
 		formatShortcut, persistenceDeniedMessage, shortcutActions, shortcutFromEvent, shortcutParts, shortcutsEqual, type ColorTheme,
+		type FontChoices, type FontRole,
 		type KeyboardShortcut, type KeyboardShortcuts, type PrimaryModifier, type ResolvedTheme, type ShortcutAction, type ThemePreference,
 		type Vault, type VaultStorageUsage
 	} from '$lib';
@@ -36,12 +38,15 @@
 		theme: ThemePreference;
 		resolvedTheme: ResolvedTheme;
 		colorTheme: ColorTheme;
+		fonts: FontChoices;
 		inlinePreviewBehavior: InlinePreviewBehavior;
 		shortcuts: KeyboardShortcuts;
 		primaryModifier: PrimaryModifier;
 		section?: SettingsSection;
 		onThemeChange: (preference: ThemePreference) => void;
 		onColorThemeChange: (theme: ColorTheme) => void;
+		onFontChange: (role: FontRole, id: string) => void;
+		onResetFonts: () => void;
 		onInlinePreviewBehaviorChange: (behavior: InlinePreviewBehavior) => void;
 		onShortcutChange: (action: ShortcutAction, shortcut: KeyboardShortcut | null) => void;
 		onResetShortcuts: () => void;
@@ -63,8 +68,8 @@
 
 	let {
 		vault, vaultName, suggestedRepositoryName, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
-		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, inlinePreviewBehavior, shortcuts, primaryModifier,
-		section = $bindable('storage'), onThemeChange, onColorThemeChange, onInlinePreviewBehaviorChange, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
+		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, fonts, inlinePreviewBehavior, shortcuts, primaryModifier,
+		section = $bindable('storage'), onThemeChange, onColorThemeChange, onFontChange, onResetFonts, onInlinePreviewBehaviorChange, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onPrepareVaultDeletion, onDeleteVault
 	}: Props = $props();
 
@@ -108,6 +113,11 @@
 		{ id: 'ember', label: 'Ember', hint: 'Warm paper with a terracotta accent.' },
 		{ id: 'monochrome', label: 'Monochrome', hint: 'Pure black and white, with no accent hue.' }
 	];
+	// A monospace tile earns its space by showing the characters people compare.
+	const specimenText: Record<FontRole, string> = { heading: 'Ag', content: 'Ag', code: '0Oil' };
+	const fontsAreDefault = $derived(
+		fontRoles.every(({ id }) => fonts[id] === defaultFontChoices[id])
+	);
 	const usedFraction = $derived(
 		usage?.quota && usage.usage !== undefined ? Math.min(1, usage.usage / usage.quota) : 0
 	);
@@ -298,8 +308,44 @@
 				{/if}
 
 				{#if section === 'editor'}
-					<h3>Editor</h3>
-					<p class="settings-hint">Choose how Markdown behaves while you write directly in the formatted page. This preference is remembered in this browser.</p>
+					<div class="settings-section-heading">
+						<div><h3>Editor</h3><p class="settings-hint">Set the typefaces your notes are written in, and how Markdown behaves as you type. Both panes update as you choose.</p></div>
+						<button class="settings-secondary" disabled={fontsAreDefault} onclick={onResetFonts}>Restore default fonts</button>
+					</div>
+
+					<div class="type-specimen">
+						<h4>A quiet place to think</h4>
+						<p>Onyx keeps every note on this device and saves as you write, so a draft can stay half-finished for as long as it needs to.</p>
+						<p><code>const draft = await vault.save(note)</code></p>
+					</div>
+
+					{#each fontRoles as role (role.id)}
+						{@const selected = fontOption(role.id, fonts[role.id])}
+						<div class="font-role">
+							<div class="font-role-head">
+								<strong>{role.label}</strong>
+								<small>{selected.note}</small>
+							</div>
+							<div class="font-rail" role="radiogroup" aria-label={`${role.label} typeface`}>
+								{#each fontOptions[role.id] as option (option.id)}
+									<button
+										class="font-tile"
+										class:active={fonts[role.id] === option.id}
+										role="radio"
+										aria-checked={fonts[role.id] === option.id}
+										title={option.note}
+										style={`--tile-font: ${option.stack}`}
+										onclick={() => onFontChange(role.id, option.id)}
+									>
+										<em>{specimenText[role.id]}</em>
+										<span>{option.name}</span>
+									</button>
+								{/each}
+							</div>
+						</div>
+					{/each}
+
+					<h4 class="theme-section-title">Markdown while you write</h4>
 					<div class="preview-behavior-options" role="radiogroup" aria-label="Formatted editing behavior">
 						<button class:active={inlinePreviewBehavior === 'rendered'} role="radio" aria-checked={inlinePreviewBehavior === 'rendered'} onclick={() => onInlinePreviewBehaviorChange('rendered')}>
 							<strong>Keep formatting</strong>

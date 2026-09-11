@@ -1,4 +1,5 @@
 export * from "./browser-storage.js";
+export * from "./fonts.js";
 export * from "./keyboard-shortcuts.js";
 export * from "./storage/index.js";
 export * from "./markdown-transfer.js";
