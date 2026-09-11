@@ -41,6 +41,30 @@ async function releaseVaultWrite(page: Page): Promise<void> {
   );
 }
 
+async function mockGithubSession(page: Page): Promise<void> {
+  await page.route("**/api/auth/**", async (route) => {
+    const { pathname } = new URL(route.request().url());
+    if (pathname.endsWith("/get-session")) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          session: { id: "test-session", userId: "test-user" },
+          user: { id: "test-user", email: "octocat@example.com", name: "octocat" },
+        }),
+      });
+      return;
+    }
+    if (pathname.endsWith("/get-access-token") || pathname.endsWith("/refresh-token")) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ accessToken: "test-token" }),
+      });
+      return;
+    }
+    await route.abort();
+  });
+}
+
 test("traps modal focus and returns it to the opener", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
@@ -231,8 +255,14 @@ test("keeps the editor usable and pauses GitHub features offline", async ({ cont
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
   await page.evaluate(() => window.dispatchEvent(new Event("offline")));
-  await expect(page.getByText("Offline", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "GitHub unavailable offline" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Open local storage settings" })).toBeVisible();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Backup & sync", exact: true }).click();
+  await expect(
+    page.getByText("GitHub settings are paused until your connection returns."),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in with GitHub" })).toBeDisabled();
+  await page.getByRole("button", { name: "Close settings" }).click();
 
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
   await editor.fill("# Written offline\n\nOnyx keeps working without a connection.");
@@ -286,7 +316,7 @@ test("can reveal the active Markdown line while editing the page", async ({ page
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Editor", exact: true }).click();
   await page.getByRole("radio", { name: /Reveal Markdown on active line/ }).click();
   await page.getByRole("button", { name: "Close settings" }).click();
@@ -348,12 +378,7 @@ test("binds a backup repository to the authenticated GitHub account", async ({ p
   let account = { id: 1, login: "octocat" };
   let repositoryChecks = 0;
 
-  await page.route("**/auth/github/session", async (route) => {
-    await route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({ accessToken: "test-token", authenticated: true }),
-    });
-  });
+  await mockGithubSession(page);
   await page.route("https://api.github.com/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/user") {
@@ -398,8 +423,8 @@ test("binds a backup repository to the authenticated GitHub account", async ({ p
 
   await page.goto("/");
   await expect(page.getByText("@octocat").first()).toBeVisible();
-  await page.getByRole("button", { name: "Settings" }).click();
-  await page.getByRole("button", { name: "Repository", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Sync repository", exact: true }).click();
   await page.getByLabel("Repository", { exact: true }).selectOption("octocat/onyx-vault");
   await page.getByRole("button", { name: "Use this repository" }).click();
 
@@ -417,12 +442,7 @@ test("binds a backup repository to the authenticated GitHub account", async ({ p
 test("refuses to upload a backup when its repository is public", async ({ page }) => {
   let writeRequests = 0;
 
-  await page.route("**/auth/github/session", async (route) => {
-    await route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({ accessToken: "test-token", authenticated: true }),
-    });
-  });
+  await mockGithubSession(page);
   await page.route("https://api.github.com/**", async (route) => {
     const url = new URL(route.request().url());
     if (route.request().method() !== "GET") writeRequests += 1;
@@ -467,8 +487,8 @@ test("refuses to upload a backup when its repository is public", async ({ page }
 
   await page.goto("/");
   await expect(page.getByText("@octocat").first()).toBeVisible();
-  await page.getByRole("button", { name: "Settings" }).click();
-  await page.getByRole("button", { name: "Repository", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Sync repository", exact: true }).click();
   await page.getByLabel("Repository", { exact: true }).selectOption("octocat/onyx-vault");
   await page.getByRole("button", { name: "Use this repository" }).click();
 
@@ -484,7 +504,7 @@ test("imports a Markdown folder and exports its structure and attachments as ZIP
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Import & export", exact: true }).click();
   await page.locator('input[type="file"][webkitdirectory]').evaluate((element) => {
     const input = element as HTMLInputElement;
@@ -561,12 +581,7 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
     [manifestBlobSha, manifest],
   ]);
 
-  await page.route("**/auth/github/session", async (route) => {
-    await route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({ accessToken: "test-token", authenticated: true }),
-    });
-  });
+  await mockGithubSession(page);
   await page.route("https://api.github.com/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/user") {
@@ -664,8 +679,8 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
   await editor.fill("# Unsynced restore draft");
   await page.keyboard.press("ControlOrMeta+S");
   await waitForBlockedVaultWrite(page);
-  await page.getByRole("button", { name: "Settings" }).click();
-  await page.getByRole("button", { name: "Backup status" }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Sync status" }).click();
   await page.getByRole("button", { name: "Restore a commit" }).click();
   await expect(page.getByRole("dialog", { name: "Choose a backup commit" })).toBeHidden({
     timeout: 200,
