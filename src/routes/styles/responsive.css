@@ -6,6 +6,10 @@
   .workspace > .collapsed-sidebar-toggle {
     display: grid;
   }
+  .workspace > .storage-notice,
+  .workspace > .storage-error {
+    padding-left: 54px;
+  }
   .sidebar,
   .sidebar-collapsed .sidebar {
     position: fixed;
