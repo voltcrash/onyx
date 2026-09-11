@@ -80,6 +80,8 @@ import { onMount, tick } from "svelte";
 
 const NOTE_PAGE_SIZE = 100;
 const PREVIEW_DELAY_MS = 120;
+// Matches the single-column breakpoint in the responsive stylesheet.
+const NARROW_VIEWPORT = "(max-width: 900px)";
 
 export function createPageController() {
   function createInitialMarkdown(primaryModifier: PrimaryModifier): string {
@@ -116,6 +118,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let results = $state<VaultSearchResult[]>([]);
   let notePage = $state(0);
   let searchQuery = $state("");
+  let singlePaneMode = $state(false);
   let sourcePaneVisible = $state(true);
   let renderedPaneVisible = $state(true);
   let renderedReadOnly = $state(true);
@@ -243,7 +246,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: sourcePaneVisible ? "Hide Markdown pane" : "Show Markdown pane",
       icon: PanelLeftClose,
       keywords: "write markdown left pane",
-      disabled: sourcePaneVisible && !renderedPaneVisible,
+      disabled: !singlePaneMode && sourcePaneVisible && !renderedPaneVisible,
       run: () => toggleSourcePane(),
     },
     {
@@ -253,7 +256,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       shortcut: shortcutLabel("togglePreview"),
       icon: PanelRightClose,
       keywords: "page preview right pane",
-      disabled: renderedPaneVisible && !sourcePaneVisible,
+      disabled: !singlePaneMode && renderedPaneVisible && !sourcePaneVisible,
       run: () => toggleRenderedPane(),
     },
     {
@@ -392,16 +395,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       readLocalStorage("onyx:inline-preview-behavior") === "source-line"
         ? "source-line"
         : "rendered";
-    const storedSourcePane = readLocalStorage("onyx:source-pane-visible");
-    const storedRenderedPane = readLocalStorage("onyx:rendered-pane-visible");
-    const storedReadOnly = readLocalStorage("onyx:rendered-read-only");
-    // Narrow screens cannot show both panes side by side, so they start on the editable page.
-    const narrow = globalThis.matchMedia?.("(max-width: 900px)").matches === true;
-    sourcePaneVisible = storedSourcePane ? storedSourcePane !== "false" : !narrow;
-    renderedPaneVisible = storedRenderedPane !== "false";
-    renderedReadOnly = storedReadOnly ? storedReadOnly !== "false" : !narrow;
-    if (!sourcePaneVisible && !renderedPaneVisible) sourcePaneVisible = true;
-    if (!sourcePaneVisible && !renderedReadOnly) editingSurface = "rendered";
+    const narrowQuery = globalThis.matchMedia?.(NARROW_VIEWPORT);
+    singlePaneMode = narrowQuery?.matches === true;
+    applyPanePreferences();
+    const onViewportChange = (event: MediaQueryListEvent) => {
+      singlePaneMode = event.matches;
+      applyPanePreferences();
+    };
+    narrowQuery?.addEventListener("change", onViewportChange);
     const storedSplit = Number(readLocalStorage("onyx:split-ratio"));
     if (Number.isFinite(storedSplit)) splitRatio = clampSplitRatio(storedSplit);
     shortcuts = readKeyboardShortcuts();
@@ -442,6 +443,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      narrowQuery?.removeEventListener("change", onViewportChange);
       stopThemeWatch();
       if (saveTimer) window.clearTimeout(saveTimer);
       if (searchTimer) window.clearTimeout(searchTimer);
@@ -1119,7 +1121,33 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     writeLocalStorage("onyx:split-ratio", splitRatio.toFixed(1));
   }
 
+  // A single-pane viewport switches views instead of splitting, and leaves the stored split alone.
+  function showOnlyPane(pane: "source" | "rendered"): void {
+    sourcePaneVisible = pane === "source";
+    renderedPaneVisible = pane === "rendered";
+    editingSurface = pane === "source" || renderedReadOnly ? "source" : "rendered";
+  }
+
+  function applyPanePreferences(): void {
+    const storedSourcePane = readLocalStorage("onyx:source-pane-visible");
+    const storedRenderedPane = readLocalStorage("onyx:rendered-pane-visible");
+    const storedReadOnly = readLocalStorage("onyx:rendered-read-only");
+    renderedReadOnly = storedReadOnly ? storedReadOnly !== "false" : !singlePaneMode;
+    if (singlePaneMode) {
+      showOnlyPane(storedRenderedPane === "false" ? "source" : "rendered");
+      return;
+    }
+    sourcePaneVisible = storedSourcePane !== "false";
+    renderedPaneVisible = storedRenderedPane !== "false";
+    if (!sourcePaneVisible && !renderedPaneVisible) sourcePaneVisible = true;
+    if (!sourcePaneVisible && !renderedReadOnly) editingSurface = "rendered";
+  }
+
   function toggleSourcePane(): void {
+    if (singlePaneMode) {
+      showOnlyPane(sourcePaneVisible ? "rendered" : "source");
+      return;
+    }
     if (sourcePaneVisible && !renderedPaneVisible) return;
     sourcePaneVisible = !sourcePaneVisible;
     writeLocalStorage("onyx:source-pane-visible", String(sourcePaneVisible));
@@ -1127,6 +1155,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function toggleRenderedPane(): void {
+    if (singlePaneMode) {
+      showOnlyPane(renderedPaneVisible ? "source" : "rendered");
+      return;
+    }
     if (renderedPaneVisible && !sourcePaneVisible) return;
     renderedPaneVisible = !renderedPaneVisible;
     writeLocalStorage("onyx:rendered-pane-visible", String(renderedPaneVisible));
@@ -1137,9 +1169,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     renderedReadOnly = !renderedReadOnly;
     writeLocalStorage("onyx:rendered-read-only", String(renderedReadOnly));
     if (!renderedReadOnly) {
+      if (singlePaneMode) showOnlyPane("rendered");
       renderedPaneVisible = true;
       editingSurface = "rendered";
-      writeLocalStorage("onyx:rendered-pane-visible", "true");
+      if (!singlePaneMode) writeLocalStorage("onyx:rendered-pane-visible", "true");
       requestAnimationFrame(() =>
         inlinePreviewBehavior === "rendered" ? focusRenderedLine(liveLine) : liveEditor?.focus(),
       );
