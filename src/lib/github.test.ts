@@ -11,14 +11,31 @@ import {
 } from "./github.js";
 import type { Vault } from "./storage/index.js";
 
-afterEach(() => vi.unstubAllGlobals());
+const auth = vi.hoisted(() => ({
+  accessToken: undefined as string | undefined,
+  refreshedAccessToken: undefined as string | undefined,
+}));
+
+vi.mock("./auth-client.js", () => ({
+  authClient: {
+    getAccessToken: async () => ({ data: { accessToken: auth.accessToken }, error: null }),
+    getSession: async () => ({ data: auth.accessToken ? { session: {} } : null, error: null }),
+    refreshToken: async () => ({ data: { accessToken: auth.refreshedAccessToken }, error: null }),
+  },
+}));
+
+afterEach(() => {
+  auth.accessToken = undefined;
+  auth.refreshedAccessToken = undefined;
+  vi.unstubAllGlobals();
+});
 
 describe("githubRequest", () => {
   it("retries transient responses and reports long rate-limit windows", async () => {
     const reset = Math.ceil(Date.now() / 1_000) + 3_600;
+    auth.accessToken = "token";
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(Response.json({ accessToken: "token", authenticated: true }))
       .mockResolvedValueOnce(
         Response.json(
           { message: "Service unavailable" },
@@ -44,15 +61,14 @@ describe("githubRequest", () => {
       status: 403,
       retryAt: new Date(reset * 1_000),
     } satisfies Partial<GithubRequestError>);
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("clears partial authentication when loading the GitHub user fails", async () => {
+    auth.accessToken = "expired";
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(Response.json({ accessToken: "expired", authenticated: true }))
-      .mockResolvedValueOnce(Response.json({ message: "Bad credentials" }, { status: 401 }))
-      .mockResolvedValueOnce(Response.json({ authenticated: false }, { status: 401 }));
+      .mockResolvedValueOnce(Response.json({ message: "Bad credentials" }, { status: 401 }));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(restoreGithubSession()).rejects.toMatchObject({ status: 401 });
@@ -61,30 +77,15 @@ describe("githubRequest", () => {
     );
   });
 
-  it("rejects malformed successful session responses", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>().mockResolvedValue(Response.json({ authenticated: true })),
-    );
-
-    await expect(restoreGithubSession()).rejects.toThrow(
-      "GitHub authentication could not be restored",
-    );
-  });
-
   it("refreshes the access token once after GitHub rejects a request", async () => {
+    auth.accessToken = "stale";
+    auth.refreshedAccessToken = "fresh";
     const authorizationHeaders: string[] = [];
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
       const url = new URL(
         typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
         "https://onyx.test",
       );
-      if (url.pathname === "/auth/github/session") {
-        return Response.json({
-          accessToken: url.searchParams.has("refresh") ? "fresh" : "stale",
-          authenticated: true,
-        });
-      }
       if (url.pathname === "/user") {
         return Response.json({ avatar_url: "avatar", id: 1, login: "onyx", name: null });
       }
@@ -103,18 +104,16 @@ describe("githubRequest", () => {
 
     await expect(githubRequest<{ ok: boolean }>("/resource")).resolves.toEqual({ ok: true });
     expect(authorizationHeaders).toEqual(["Bearer stale", "Bearer fresh"]);
-    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("does not retry non-idempotent writes after a transient response", async () => {
+    auth.accessToken = "token";
     const fetchMock = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(
         typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
         "https://onyx.test",
       );
-      if (url.pathname === "/auth/github/session") {
-        return Response.json({ accessToken: "token", authenticated: true });
-      }
       if (url.pathname === "/user") {
         return Response.json({ avatar_url: "avatar", id: 1, login: "onyx", name: null });
       }
@@ -126,18 +125,16 @@ describe("githubRequest", () => {
     await expect(
       githubRequest("/write", { method: "POST", body: JSON.stringify({ value: true }) }),
     ).rejects.toMatchObject({ status: 503 });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("aborts a request after the timeout without replaying a write", async () => {
+    auth.accessToken = "token";
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
       const url = new URL(
         typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
         "https://onyx.test",
       );
-      if (url.pathname === "/auth/github/session") {
-        return Response.json({ accessToken: "token", authenticated: true });
-      }
       if (url.pathname === "/user") {
         return Response.json({ avatar_url: "avatar", id: 1, login: "onyx", name: null });
       }
@@ -158,13 +155,14 @@ describe("githubRequest", () => {
       const assertion = expect(request).rejects.toThrow("GitHub request timed out");
       await vi.advanceTimersByTimeAsync(15_000);
       await assertion;
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
     }
   });
 
   it("paginates repositories and backup commits", async () => {
+    auth.accessToken = "token";
     const repository = (name: string) => ({
       default_branch: "main",
       name,
@@ -187,9 +185,6 @@ describe("githubRequest", () => {
         typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
         "https://onyx.test",
       );
-      if (url.pathname === "/auth/github/session") {
-        return Response.json({ accessToken: "token", authenticated: true });
-      }
       if (url.pathname === "/user") {
         return Response.json({ avatar_url: "avatar", id: 1, login: "onyx", name: null });
       }
@@ -250,6 +245,7 @@ describe("githubRequest", () => {
   });
 
   it("backs up to a newly created repository after initializing its default branch", async () => {
+    auth.accessToken = "token";
     const initialCommitSha = "a".repeat(40);
     const commitSha = "b".repeat(40);
     class TestFileReader {
@@ -274,9 +270,6 @@ describe("githubRequest", () => {
       const path = new URL(url, "https://onyx.test").pathname;
       const method = init?.method ?? "GET";
       requests.push({ body: typeof init?.body === "string" ? init.body : undefined, method, path });
-      if (path === "/auth/github/session") {
-        return Response.json({ accessToken: "token", authenticated: true });
-      }
       if (path === "/user") {
         return Response.json({ avatar_url: "avatar", id: 1, login: "onyx", name: null });
       }
@@ -362,6 +355,7 @@ describe("githubRequest", () => {
   });
 
   it("retains pending operations when the remote branch changes during backup", async () => {
+    auth.accessToken = "token";
     const parentSha = "a".repeat(40);
     class TestFileReader {
       error: DOMException | null = null;
@@ -383,9 +377,6 @@ describe("githubRequest", () => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       const path = new URL(url, "https://onyx.test").pathname;
       const method = init?.method ?? "GET";
-      if (path === "/auth/github/session") {
-        return Response.json({ accessToken: "token", authenticated: true });
-      }
       if (path === "/user") {
         return Response.json({ avatar_url: "avatar", id: 1, login: "onyx", name: null });
       }

@@ -52,6 +52,7 @@
 		onSearch={page.queueSearch}
 		onOpenPalette={() => void page.openPalette()}
 		onOpenSettings={() => page.openSettings(page.githubState === 'connected' ? 'backup' : 'github')}
+		onConnectGithub={() => void page.connectGitHub()}
 		onDisconnectGithub={() => void page.disconnectGitHub()}
 		onMoveNoteFocus={page.moveNoteFocus}
 		onSelectNote={(id) => void page.selectNote(id)}
@@ -147,6 +148,7 @@
 		onResetShortcuts={page.resetShortcuts}
 		bind:section={page.settingsSection}
 		onClose={() => (page.settingsOpen = false)}
+		onConnectGithub={() => void page.connectGitHub()}
 		onDisconnectGithub={() => void page.disconnectGitHub()}
 		onCreateRepository={(name) => void page.createBackupRepository(name)}
 		onSelectRepository={(state) => void page.selectBackupRepository(state)}

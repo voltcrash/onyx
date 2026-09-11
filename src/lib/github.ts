@@ -5,6 +5,7 @@ import type {
   VaultRestoreFile,
   VaultOperationContext,
 } from "./storage/index.js";
+import { authClient } from "./auth-client.js";
 
 const API_ROOT = "https://api.github.com";
 const API_VERSION = "2026-03-10";
@@ -23,12 +24,6 @@ export interface GithubUser {
   id: number;
   login: string;
   name: string | null;
-}
-
-interface SessionResponse {
-  accessToken: string;
-  authenticated: true;
-  expiresAt?: number;
 }
 
 interface GithubUserResponse {
@@ -150,13 +145,19 @@ export async function restoreGithubSession(): Promise<GithubUser | undefined> {
   }
 }
 
+export async function connectGithub(): Promise<void> {
+  const result = await authClient.signIn.social({
+    provider: "github",
+    callbackURL: "/?github=connected",
+    errorCallbackURL: "/?github=failed",
+  });
+  if (result.error) throw new Error(result.error.message || "GitHub sign-in could not be started");
+}
+
 export async function disconnectGithub(): Promise<void> {
   clearGithubAuthentication();
-  const response = await fetchWithTimeout("/auth/github/session", {
-    method: "DELETE",
-    credentials: "same-origin",
-  });
-  if (!response.ok) throw new Error("GitHub could not be disconnected");
+  const result = await authClient.signOut();
+  if (result.error) throw new Error(result.error.message || "GitHub could not be disconnected");
 }
 
 export async function createPrivateGithubRepository(name: string): Promise<GithubBackupState> {
@@ -530,16 +531,23 @@ function isRetryableRequest(method = "GET"): boolean {
 }
 
 async function requestGithubSession(forceRefresh = false): Promise<string | undefined> {
-  const path = forceRefresh ? "/auth/github/session?refresh=1" : "/auth/github/session";
-  const response = await fetchWithTimeout(path, {
-    credentials: "same-origin",
-    headers: { Accept: "application/json" },
+  const session = await authClient.getSession({
+    query: forceRefresh ? { disableRefresh: false } : undefined,
   });
-  if (response.status === 401) return undefined;
-  if (!response.ok) throw new Error("GitHub authentication could not be restored");
-  const session = (await response.json()) as Partial<SessionResponse>;
-  if (!session.accessToken) throw new Error("GitHub authentication could not be restored");
-  return session.accessToken;
+  if (session.error) {
+    if (session.error.status === 401) return undefined;
+    throw new Error(session.error.message || "GitHub authentication could not be restored");
+  }
+  if (!session.data) return undefined;
+
+  const token = forceRefresh
+    ? await authClient.refreshToken({ useAccountCookie: true })
+    : await authClient.getAccessToken({ useAccountCookie: true });
+  if (token.error) {
+    if (token.error.status === 401) return undefined;
+    throw new Error(token.error.message || "GitHub authentication could not be restored");
+  }
+  return token.data?.accessToken;
 }
 
 async function refreshGithubAccessToken(rejectedToken: string): Promise<boolean> {

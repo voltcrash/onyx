@@ -46,6 +46,7 @@
 		onShortcutChange: (action: ShortcutAction, shortcut: KeyboardShortcut | null) => void;
 		onResetShortcuts: () => void;
 		onClose: () => void;
+		onConnectGithub: () => void;
 		onDisconnectGithub: () => void;
 		onCreateRepository: (name: string) => void;
 		onSelectRepository: (state: Omit<GithubBackupState, 'updatedAt'>) => void;
@@ -63,7 +64,7 @@
 	let {
 		vault, vaultName, suggestedRepositoryName, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
 		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, inlinePreviewBehavior, shortcuts, primaryModifier,
-		section = $bindable('github'), onThemeChange, onColorThemeChange, onInlinePreviewBehaviorChange, onShortcutChange, onResetShortcuts, onClose, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
+		section = $bindable('github'), onThemeChange, onColorThemeChange, onInlinePreviewBehaviorChange, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onPrepareVaultDeletion, onDeleteVault
 	}: Props = $props();
 
@@ -379,9 +380,9 @@
 						<div class="settings-account empty">
 							<CloudOff size={22} />
 							<span><strong>Not connected</strong><small>{githubMessage || 'Connect GitHub to back up and restore this vault.'}</small></span>
-							<a class="settings-primary" class:disabled={!isOnline} href="/auth/github/start">
+							<button class="settings-primary" disabled={!isOnline || githubState === 'loading'} onclick={onConnectGithub}>
 								{#if githubState === 'loading'}<LoaderCircle class="spin" size={14} />{:else}<GithubIcon size={14} />{/if} Connect GitHub
-							</a>
+							</button>
 						</div>
 					{/if}
 				{:else if section === 'repository'}

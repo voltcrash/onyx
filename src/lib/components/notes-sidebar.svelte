@@ -42,6 +42,7 @@
 		onSearch: (value: string) => void;
 		onOpenPalette: () => void;
 		onOpenSettings: () => void;
+		onConnectGithub: () => void;
 		onDisconnectGithub: () => void;
 		onMoveNoteFocus: (event: KeyboardEvent) => void;
 		onSelectNote: (id: string) => void;
@@ -56,7 +57,7 @@
 		vaults, activeVaultId, activeNoteId, results, visibleResults, searchQuery, notePage, notePageCount, saveState, notesLoaded, paletteOpen, settingsOpen,
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, renderedPaneVisible, renderedReadOnly, wordCount, readingMinutes, contentWidth,
 		searchInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onSearch,
-		onOpenPalette, onOpenSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage,
+		onOpenPalette, onOpenSettings, onConnectGithub, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage,
 		onInsertSyntax, onPrefixLine, onToggleRenderedReadOnly, onContentWidthChange
 	}: Props = $props();
 
@@ -147,7 +148,7 @@
 		{:else if !isOnline}
 			<button class="github-connect offline" disabled title="GitHub features are unavailable offline" aria-label="GitHub unavailable offline"><WifiOff size={16} /><span>Offline</span></button>
 		{:else}
-			<a class="github-connect" class:error={githubState === 'error'} href="/auth/github/start" title={githubMessage || 'Connect GitHub for direct, private backups'} aria-label="Connect GitHub">{#if githubState === 'loading'}<LoaderCircle class="spin" size={15} />{:else}<GithubIcon size={16} />{/if}<span>{githubState === 'loading' ? 'Checking…' : 'Connect GitHub'}</span></a>
+			<button class="github-connect" class:error={githubState === 'error'} disabled={githubState === 'loading'} title={githubMessage || 'Connect GitHub for direct, private backups'} aria-label="Connect GitHub" onclick={onConnectGithub}>{#if githubState === 'loading'}<LoaderCircle class="spin" size={15} />{:else}<GithubIcon size={16} />{/if}<span>{githubState === 'loading' ? 'Checking…' : 'Connect GitHub'}</span></button>
 		{/if}
 		<button class="icon-button" aria-label="Settings" aria-haspopup="dialog" aria-expanded={settingsOpen} aria-controls="settings-dialog" title="Settings" onclick={onOpenSettings}><Settings size={18} /></button>
 	</div>

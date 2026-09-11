@@ -42,6 +42,7 @@ import {
   detectBrowserStorageSupport,
   detectPrimaryModifier,
   disconnectGithub,
+  connectGithub,
   formatShortcut,
   GithubRequestError,
   importMarkdownFiles,
@@ -523,6 +524,19 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     } catch (error) {
       githubState = "error";
       githubMessage = error instanceof Error ? error.message : "GitHub could not be disconnected.";
+    }
+  }
+
+  async function connectGitHub(): Promise<void> {
+    if (!isOnline || githubState === "loading") return;
+    githubState = "loading";
+    githubMessage = "";
+    try {
+      await connectGithub();
+    } catch (error) {
+      githubState = "error";
+      githubMessage =
+        error instanceof Error ? error.message : "GitHub sign-in could not be started.";
     }
   }
 
@@ -2075,6 +2089,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     queueSearch,
     openPalette,
     openSettings,
+    connectGitHub,
     disconnectGitHub,
     moveNoteFocus,
     selectNote,
