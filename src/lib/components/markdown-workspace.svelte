@@ -27,6 +27,7 @@
 		onDismissStorageNotice: () => void;
 		onToggleSidebar: () => void;
 		splitRatio: number;
+		contentWidth: number;
 		onToggleSourcePane: () => void;
 		onToggleRenderedPane: () => void;
 		onResize: (ratio: number) => void;
@@ -49,7 +50,7 @@
 		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, renderedReadOnly, inlinePreviewBehavior, markdown, markdownLines, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar,
-		splitRatio, onToggleSourcePane, onToggleRenderedPane, onResize, onResizeEnd, onReload, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
+		splitRatio, contentWidth, onToggleSourcePane, onToggleRenderedPane, onResize, onResizeEnd, onReload, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
 		onRenderedLineKeydown, onLiveLineChange, onLiveLineKeydown, onActivateLiveLine,
 		renderEditableLine, renderLiveLine, liveLineKind
 	}: Props = $props();
@@ -113,7 +114,7 @@
 		</div>
 	{/if}
 
-	<section bind:this={shell} class="editor-shell" class:source-hidden={!sourcePaneVisible} class:rendered-hidden={!renderedPaneVisible} class:resizing style={`--split: ${splitRatio}%`}>
+	<section bind:this={shell} class="editor-shell" class:source-hidden={!sourcePaneVisible} class:rendered-hidden={!renderedPaneVisible} class:resizing style={`--split: ${splitRatio}%; --content-width: ${contentWidth}px`}>
 		<div class="editor-pane">
 			<textarea bind:this={editor} value={markdown} onfocus={onSourceFocus} oninput={(event) => onMarkdownChange(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
 		</div>

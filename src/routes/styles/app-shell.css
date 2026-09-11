@@ -352,6 +352,34 @@
   color: var(--accent-quiet);
   box-shadow: 0 0 0 1px var(--accent-border);
 }
+.content-width-control {
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+}
+.content-width-control > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.content-width-control strong {
+  color: var(--ink-soft);
+  font-weight: 550;
+}
+.content-width-control output {
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.content-width-control input {
+  width: 100%;
+  accent-color: var(--accent);
+}
 .formatting-tools {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -361,8 +389,10 @@
   height: 38px;
   padding: 0 10px;
 }
-.formatting-tools button:last-child {
-  grid-column: 1 / -1;
+.formatting-tools button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .document-details {
   padding: 11px;

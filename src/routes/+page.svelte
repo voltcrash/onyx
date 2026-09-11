@@ -41,6 +41,7 @@
 		renderedReadOnly={page.renderedReadOnly}
 		wordCount={page.wordCount}
 		readingMinutes={page.readingMinutes}
+		contentWidth={page.contentWidth}
 		bind:searchInput={page.searchInput}
 		bind:noteList={page.noteList}
 		onToggleSidebar={page.toggleSidebar}
@@ -58,6 +59,7 @@
 		onInsertSyntax={page.insertSyntax}
 		onPrefixLine={page.prefixLine}
 		onToggleRenderedReadOnly={page.toggleRenderedReadOnly}
+		onContentWidthChange={page.setContentWidth}
 	/>
 
 	<MarkdownWorkspace
@@ -83,6 +85,7 @@
 		onDismissStorageNotice={page.dismissStorageNotice}
 		onToggleSidebar={page.toggleSidebar}
 		splitRatio={page.splitRatio}
+		contentWidth={page.contentWidth}
 		onToggleSourcePane={page.toggleSourcePane}
 		onToggleRenderedPane={page.toggleRenderedPane}
 		onResize={page.setSplitRatio}

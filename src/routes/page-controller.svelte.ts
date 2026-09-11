@@ -89,6 +89,7 @@ import { onMount, tick } from "svelte";
 
 const NOTE_PAGE_SIZE = 100;
 const PREVIEW_DELAY_MS = 120;
+const DEFAULT_CONTENT_WIDTH = 700;
 // Matches the single-column breakpoint in the responsive stylesheet.
 const NARROW_VIEWPORT = "(max-width: 900px)";
 
@@ -134,6 +135,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let renderedPaneVisible = $state(true);
   let renderedReadOnly = $state(true);
   let splitRatio = $state(50);
+  let contentWidth = $state(DEFAULT_CONTENT_WIDTH);
   let editingSurface: "source" | "rendered" = "source";
   let saveState = $state<SaveState>("loading");
   let notesLoaded = $state(false);
@@ -203,10 +205,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   const renderedMarkdown = $derived(renderMarkdown(previewMarkdown, resolveAttachmentUrl));
   const markdownLines = $derived(markdown.split("\n"));
   const liveCodeLines = $derived.by(() => {
-    let inCode = false;
+    let fence = "";
     return markdownLines.map((line) => {
-      const codeLine = inCode || line.startsWith("```");
-      if (line.startsWith("```")) inCode = !inCode;
+      const marker = line.match(/^\s*(`{3,}|~{3,})/)?.[1] ?? "";
+      const closesFence = Boolean(fence && marker.startsWith(fence));
+      const codeLine = Boolean(fence || marker);
+      if (!fence && marker) fence = marker;
+      else if (closesFence) fence = "";
       return codeLine;
     });
   });
@@ -422,6 +427,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     narrowQuery?.addEventListener("change", onViewportChange);
     const storedSplit = Number(readLocalStorage("onyx:split-ratio"));
     if (Number.isFinite(storedSplit)) splitRatio = clampSplitRatio(storedSplit);
+    const storedContentWidth = Number(readLocalStorage("onyx:content-width"));
+    if (Number.isFinite(storedContentWidth)) contentWidth = clampContentWidth(storedContentWidth);
     shortcuts = readKeyboardShortcuts();
     theme = readThemePreference();
     resolvedTheme = applyTheme(theme);
@@ -1196,6 +1203,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     writeLocalStorage("onyx:split-ratio", splitRatio.toFixed(1));
   }
 
+  function clampContentWidth(value: number): number {
+    return Math.min(1_200, Math.max(480, Math.round(value / 20) * 20));
+  }
+
+  function setContentWidth(value: number): void {
+    contentWidth = clampContentWidth(value);
+    writeLocalStorage("onyx:content-width", String(contentWidth));
+  }
+
   // A single-pane viewport switches views instead of splitting, and leaves the stored split alone.
   function showOnlyPane(pane: "source" | "rendered"): void {
     sourcePaneVisible = pane === "source";
@@ -1689,10 +1705,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function liveLineKind(line: string, index: number): string {
     if (liveCodeLines[index]) return "code-line";
-    const heading = line.match(/^(#{1,3})\s+/);
+    const heading = line.match(/^(#{1,6})\s+/);
     if (heading) return `heading-${heading[1].length}`;
-    if (/^>\s+/.test(line)) return "quote-line";
-    if (/^[-*]\s+/.test(line)) return "list-line";
+    if (/^>\s?/.test(line)) return "quote-line";
+    if (/^\s*(?:[-+*]|\d+[.)])\s+/.test(line)) return "list-line";
+    if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) return "rule-line";
     return "";
   }
 
@@ -1700,27 +1717,29 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!line) return "<br>";
     const kind = liveLineKind(line, index);
     if (kind === "code-line") {
-      const fence = line.match(/^(```)(.*)$/);
+      const fence = line.match(/^(\s*(?:`{3,}|~{3,}))(.*)$/);
       return fence
         ? `<span class="md-syntax">${fence[1]}</span>${escapeHtml(fence[2])}`
         : escapeHtml(line);
     }
-    const heading = line.match(/^(#{1,3}\s+)(.*)$/);
+    const heading = line.match(/^(#{1,6}\s+)(.*)$/);
     if (heading) {
       return `<span class="md-syntax">${escapeHtml(heading[1])}</span>${editableInlineMarkdown(heading[2])}`;
     }
-    const task = line.match(/^([-*]\s+)(\[([ xX])\]\s+)(.*)$/);
+    const task = line.match(/^(\s*[-+*]\s+)(\[([ xX])\]\s+)(.*)$/);
     if (task) {
       return `<span class="md-syntax">${escapeHtml(task[1])}</span><span class="live-task-check ${task[3] !== " " ? "done" : ""}"></span><span class="md-syntax">${escapeHtml(task[2])}</span>${editableInlineMarkdown(task[4])}`;
     }
-    const list = line.match(/^([-*]\s+)(.*)$/);
+    const list = line.match(/^(\s*([-+*]|\d+[.)])\s+)(.*)$/);
     if (list) {
-      return `<span class="md-syntax">${escapeHtml(list[1])}</span><span class="live-list-marker"></span>${editableInlineMarkdown(list[2])}`;
+      const ordered = /^\d/.test(list[2]!.trim());
+      return `<span class="md-syntax">${escapeHtml(list[1])}</span><span class="live-list-marker${ordered ? " ordered" : ""}"${ordered ? ` data-marker="${escapeHtml(list[2]!)}"` : ""}></span>${editableInlineMarkdown(list[3])}`;
     }
-    const quote = line.match(/^(>\s+)(.*)$/);
+    const quote = line.match(/^(>\s?)(.*)$/);
     if (quote) {
       return `<span class="md-syntax">${escapeHtml(quote[1])}</span>${editableInlineMarkdown(quote[2])}`;
     }
+    if (kind === "rule-line") return `<span class="md-syntax">${escapeHtml(line)}</span>`;
     return editableInlineMarkdown(line);
   }
 
@@ -1731,15 +1750,35 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         '<span class="md-syntax">`</span><code>$1</code><span class="md-syntax">`</span>',
       )
       .replace(
-        /\*\*([^*]+)\*\*/g,
-        '<span class="md-syntax">**</span><strong>$1</strong><span class="md-syntax">**</span>',
+        /(\*\*|__)(.+?)\1/g,
+        '<span class="md-syntax">$1</span><strong>$2</strong><span class="md-syntax">$1</span>',
       )
       .replace(
-        /_([^_]+)_/g,
-        '<span class="md-syntax">_</span><em>$1</em><span class="md-syntax">_</span>',
+        /(?<!\*)\*([^*]+)\*(?!\*)|(?<!_)_([^_]+)_(?!_)/g,
+        '<span class="md-syntax">_</span><em>$1$2</em><span class="md-syntax">_</span>',
+      )
+      .replace(
+        /~~([^~]+)~~/g,
+        '<span class="md-syntax">~~</span><del>$1</del><span class="md-syntax">~~</span>',
+      )
+      .replace(
+        /==([^=]+)==/g,
+        '<span class="md-syntax">==</span><mark>$1</mark><span class="md-syntax">==</span>',
+      )
+      .replace(
+        /\[\[([^\]|]+)\|([^\]]+)\]\]/g,
+        '<span class="md-syntax">[[$1|</span><a class="wikilink">$2</a><span class="md-syntax">]]</span>',
+      )
+      .replace(
+        /\[\[([^\]]+)\]\]/g,
+        '<span class="md-syntax">[[</span><a class="wikilink">$1</a><span class="md-syntax">]]</span>',
       )
       .replace(
         /\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g,
+        '<span class="md-syntax">[</span><a>$1</a><span class="md-syntax">]($2)</span>',
+      )
+      .replace(
+        /\[([^\]]+)\]\(([^\s)]+)\)/g,
         '<span class="md-syntax">[</span><a>$1</a><span class="md-syntax">]($2)</span>',
       );
   }
@@ -1922,6 +1961,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get splitRatio() {
       return splitRatio;
     },
+    get contentWidth() {
+      return contentWidth;
+    },
     get markdown() {
       return markdown;
     },
@@ -2031,6 +2073,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     prefixLine,
     setSplitRatio,
     saveSplitRatio,
+    setContentWidth,
     toggleSourcePane,
     toggleRenderedPane,
     toggleRenderedReadOnly,

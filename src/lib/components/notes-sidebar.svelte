@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Bold, Code2, FileText, Heading2, Italic, Link, List, LoaderCircle, Lock, LockOpen, LogOut, PanelLeftClose, Plus, Quote, Search, Settings, WifiOff, Wrench, X } from '@lucide/svelte';
+	import { Bold, Braces, Code2, FileText, Heading2, Highlighter, Italic, Link, List, ListChecks, ListOrdered, LoaderCircle, Lock, LockOpen, LogOut, MessageSquareWarning, Minus, PanelLeftClose, Plus, Quote, Search, Settings, Sigma, Strikethrough, WifiOff, Wrench, X } from '@lucide/svelte';
 	import { formatShortcut, type GithubUser, type KeyboardShortcuts, type PrimaryModifier, type VaultDescriptor, type VaultSearchResult } from '$lib';
 	import GithubIcon from './github-icon.svelte';
 	import VaultSwitcher from './vault-switcher.svelte';
@@ -31,6 +31,7 @@
 		renderedReadOnly: boolean;
 		wordCount: number;
 		readingMinutes: number;
+		contentWidth: number;
 		searchInput?: HTMLInputElement;
 		noteList?: HTMLElement;
 		onToggleSidebar: () => void;
@@ -48,14 +49,15 @@
 		onInsertSyntax: (before: string, after?: string, placeholder?: string) => void;
 		onPrefixLine: (prefix: string) => void;
 		onToggleRenderedReadOnly: () => void;
+		onContentWidthChange: (value: number) => void;
 	}
 
 	let {
 		vaults, activeVaultId, activeNoteId, results, visibleResults, searchQuery, notePage, notePageCount, saveState, notesLoaded, paletteOpen, settingsOpen,
-		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, renderedPaneVisible, renderedReadOnly, wordCount, readingMinutes,
+		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, renderedPaneVisible, renderedReadOnly, wordCount, readingMinutes, contentWidth,
 		searchInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onSearch,
 		onOpenPalette, onOpenSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage,
-		onInsertSyntax, onPrefixLine, onToggleRenderedReadOnly
+		onInsertSyntax, onPrefixLine, onToggleRenderedReadOnly, onContentWidthChange
 	}: Props = $props();
 
 	let sidebarView = $state<'files' | 'tools'>('files');
@@ -105,6 +107,10 @@
 				<h2>View</h2>
 				<div class="sidebar-view-options">
 					<button class:active={renderedReadOnly} aria-pressed={renderedReadOnly} disabled={!renderedPaneVisible} onclick={onToggleRenderedReadOnly} aria-label={renderedReadOnly ? 'Enable page editing' : 'Turn on read-only'}>{#if renderedReadOnly}<Lock size={16} />{:else}<LockOpen size={16} />{/if}<span>{renderedReadOnly ? 'Read only' : 'Editing'}</span></button>
+					<label class="content-width-control">
+						<span><strong>Content width</strong><output>{contentWidth}px</output></span>
+						<input type="range" min="480" max="1200" step="20" value={contentWidth} aria-label="Content width" oninput={(event) => onContentWidthChange(Number(event.currentTarget.value))} />
+					</label>
 				</div>
 			</section>
 			<section class="tool-section">
@@ -112,11 +118,19 @@
 				<div class="formatting-tools">
 					<button onclick={() => onInsertSyntax('**', '**', 'bold text')} title={`Bold (${formatShortcut(shortcuts.bold, primaryModifier)})`} aria-label="Bold"><Bold size={17} /><span>Bold</span></button>
 					<button onclick={() => onInsertSyntax('_', '_', 'italic text')} title={`Italic (${formatShortcut(shortcuts.italic, primaryModifier)})`} aria-label="Italic"><Italic size={17} /><span>Italic</span></button>
+					<button onclick={() => onInsertSyntax('~~', '~~', 'struck text')} aria-label="Strikethrough"><Strikethrough size={17} /><span>Strike</span></button>
+					<button onclick={() => onInsertSyntax('==', '==', 'highlighted text')} aria-label="Highlight"><Highlighter size={17} /><span>Highlight</span></button>
 					<button onclick={() => onPrefixLine('## ')} aria-label="Heading"><Heading2 size={18} /><span>Heading</span></button>
 					<button onclick={() => onPrefixLine('- ')} aria-label="Bulleted list"><List size={18} /><span>List</span></button>
+					<button onclick={() => onPrefixLine('1. ')} aria-label="Numbered list"><ListOrdered size={18} /><span>Numbered</span></button>
+					<button onclick={() => onPrefixLine('- [ ] ')} aria-label="Task list"><ListChecks size={18} /><span>Tasks</span></button>
 					<button onclick={() => onPrefixLine('> ')} aria-label="Quote"><Quote size={17} /><span>Quote</span></button>
+					<button onclick={() => onPrefixLine('> [!NOTE]\n> ')} aria-label="Callout"><MessageSquareWarning size={17} /><span>Callout</span></button>
 					<button onclick={() => onInsertSyntax('`', '`', 'code')} aria-label="Inline code"><Code2 size={18} /><span>Code</span></button>
+					<button onclick={() => onInsertSyntax('```\n', '\n```', 'code block')} aria-label="Code block"><Braces size={18} /><span>Code block</span></button>
 					<button onclick={() => onInsertSyntax('[', '](https://)', 'link text')} aria-label="Link"><Link size={17} /><span>Link</span></button>
+					<button onclick={() => onPrefixLine('---\n')} aria-label="Divider"><Minus size={18} /><span>Divider</span></button>
+					<button onclick={() => onInsertSyntax('$$\n', '\n$$', 'equation')} aria-label="Display math"><Sigma size={18} /><span>Math</span></button>
 				</div>
 			</section>
 			<section class="tool-section document-details">
