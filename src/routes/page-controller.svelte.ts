@@ -765,6 +765,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     appendStorageNotice(persistenceDeniedMessage());
   }
 
+  // Not persisted, so the warning returns on the next load if storage is still not durable.
+  function dismissStorageNotice(): void {
+    storageNotice = "";
+  }
+
   function appendStorageNotice(message: string): void {
     if (storageNotice.includes(message)) return;
     storageNotice = storageNotice ? `${storageNotice} ${message}` : message;
@@ -1897,6 +1902,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     changeNotePage,
     saveDraft,
     openVault,
+    dismissStorageNotice,
     toggleSidebar,
     insertSyntax,
     prefixLine,
