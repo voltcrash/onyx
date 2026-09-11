@@ -145,7 +145,7 @@
   outline: 0;
   background: transparent;
   color: var(--ink-body);
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-code);
   font-size: 15px;
   line-height: 1.78;
   tab-size: 2;
@@ -165,7 +165,7 @@
   padding: 40px clamp(28px, 7vw, 110px) 70px;
   background: var(--surface);
   color: var(--ink-body);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-content);
   font-size: 17px;
   line-height: 1.76;
   width: min(100%, var(--content-width));
@@ -183,7 +183,7 @@
   outline: 0;
   background: var(--accent-bg);
   color: var(--ink-body);
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-code);
   font-size: 15px;
   line-height: 1.99;
   box-shadow:
@@ -211,6 +211,11 @@
   overflow: hidden;
   color: transparent;
   white-space: pre;
+}
+/* Headings carry their own face in both editing surfaces and the preview. */
+.live-editable-line:is(.heading-1, .heading-2, .heading-3, .heading-4, .heading-5, .heading-6),
+.live-rendered-line :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-heading);
 }
 .live-editable-line.heading-1 {
   color: var(--ink-strong);
@@ -281,19 +286,13 @@
   border-radius: 6px;
   background: var(--code-bg);
   color: var(--code-text);
-  font:
-    0.84em/1.65 "SFMono-Regular",
-    Consolas,
-    monospace;
+  font: 0.84em / 1.65 var(--font-code);
 }
 .live-editable-line code {
   padding: 0.12em 0.35em;
   border-radius: 4px;
   background: var(--subtle-strong);
-  font:
-    0.86em "SFMono-Regular",
-    Consolas,
-    monospace;
+  font: 0.86em var(--font-code);
 }
 .live-editable-line mark {
   padding: 0.08em 0.18em;
@@ -392,19 +391,13 @@
   border-radius: 6px;
   background: var(--code-bg);
   color: var(--code-text);
-  font:
-    0.84em/1.65 "SFMono-Regular",
-    Consolas,
-    monospace;
+  font: 0.84em / 1.65 var(--font-code);
 }
 .live-rendered-line code:not(pre code) {
   padding: 0.12em 0.35em;
   border-radius: 4px;
   background: var(--subtle-strong);
-  font:
-    0.86em "SFMono-Regular",
-    Consolas,
-    monospace;
+  font: 0.86em var(--font-code);
 }
 .live-rendered-line a {
   color: var(--accent-link);
@@ -445,7 +438,7 @@
   margin: 0 auto;
   padding: 49px clamp(30px, 6vw, 78px) 90px;
   color: var(--ink-body);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-content);
   font-size: 17px;
   line-height: 1.76;
 }
@@ -456,6 +449,7 @@
 .prose h5,
 .prose h6 {
   color: var(--ink-strong);
+  font-family: var(--font-heading);
   line-height: 1.2;
   letter-spacing: -0.035em;
   scroll-margin-top: 24px;
@@ -488,7 +482,7 @@
 .prose h6 {
   margin: 22px 0 8px;
   color: var(--muted);
-  font-family: "Inter Variable", Inter, sans-serif;
+  font-family: var(--font-content);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -543,7 +537,7 @@
   border-radius: 4px;
   background: var(--subtle-strong);
   color: var(--accent-quiet);
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: var(--font-code);
   font-size: 0.84em;
 }
 .prose pre {
@@ -568,10 +562,7 @@
   border-radius: 5px;
   background: var(--surface-soft);
   color: var(--ink-soft);
-  font:
-    0.78em/1.45 "SFMono-Regular",
-    Consolas,
-    monospace;
+  font: 0.78em / 1.45 var(--font-code);
   text-align: center;
 }
 .prose del {
@@ -594,7 +585,7 @@
   overflow-x: auto;
   margin: 24px 0;
   border-collapse: collapse;
-  font-family: Inter, sans-serif;
+  font-family: var(--font-content);
   font-size: 0.88em;
   scrollbar-width: thin;
 }
@@ -668,7 +659,7 @@
 .prose .callout-title {
   margin: 0 0 6px;
   color: var(--callout);
-  font-family: "Inter Variable", Inter, sans-serif;
+  font-family: var(--font-content);
   font-size: 0.82em;
   font-weight: 650;
   letter-spacing: 0.04em;

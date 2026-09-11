@@ -31,6 +31,7 @@ import type { InlinePreviewBehavior, SettingsSection } from "$lib/components/set
 import { renderMarkdown, resolveLocalAttachmentUrl, type LocalAttachmentUrl } from "$lib/markdown";
 import {
   applyColorTheme,
+  applyFontChoices,
   applyTheme,
   backupVaultToGithub,
   browserStorageWarnings,
@@ -38,6 +39,7 @@ import {
   createMarkdownZip,
   createPrivateGithubRepository,
   createVaultDescriptor,
+  defaultFontChoices,
   defaultKeyboardShortcuts,
   detectBrowserStorageSupport,
   detectPrimaryModifier,
@@ -51,6 +53,7 @@ import {
   normalizeVaultName,
   persistenceDeniedMessage,
   readColorTheme,
+  readFontChoices,
   readKeyboardShortcuts,
   readLocalStorage,
   readMarkdownFolder,
@@ -72,6 +75,8 @@ import {
   writeMarkdownFolder,
   writeVaultRegistry,
   type ColorTheme,
+  type FontChoices,
+  type FontRole,
   type GithubBackupCommit,
   type GithubBackupState,
   type GithubUser,
@@ -184,6 +189,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let theme = $state<ThemePreference>("system");
   let resolvedTheme = $state<ResolvedTheme>("light");
   let colorTheme = $state<ColorTheme>("ember");
+  let fonts = $state<FontChoices>({ ...defaultFontChoices });
   let paletteOpen = $state(false);
   let paletteNotes = $state<NoteMetadata[]>([]);
   let sidebarCollapsed = $state(false);
@@ -437,6 +443,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     resolvedTheme = applyTheme(theme);
     colorTheme = readColorTheme();
     applyColorTheme(colorTheme);
+    fonts = readFontChoices();
+    applyFontChoices(fonts);
     const stopThemeWatch = watchSystemTheme(() => {
       if (theme === "system") resolvedTheme = applyTheme(theme);
     });
@@ -1321,6 +1329,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     });
   }
 
+  function setFont(role: FontRole, id: string): void {
+    fonts = { ...fonts, [role]: id };
+    applyFontChoices(fonts);
+  }
+
+  function resetFonts(): void {
+    fonts = { ...defaultFontChoices };
+    applyFontChoices(fonts);
+  }
+
   function setInlinePreviewBehavior(behavior: InlinePreviewBehavior): void {
     inlinePreviewBehavior = behavior;
     writeLocalStorage("onyx:inline-preview-behavior", behavior);
@@ -1968,6 +1986,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get colorTheme() {
       return colorTheme;
     },
+    get fonts() {
+      return fonts;
+    },
     get inlinePreviewBehavior() {
       return inlinePreviewBehavior;
     },
@@ -2119,6 +2140,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     liveLineKind,
     setTheme,
     setColorTheme,
+    setFont,
+    resetFonts,
     setInlinePreviewBehavior,
     setShortcut,
     resetShortcuts,

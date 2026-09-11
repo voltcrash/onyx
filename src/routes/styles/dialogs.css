@@ -38,7 +38,7 @@
 }
 .modal-title h2 {
   margin: 5px 0 0;
-  font-family: Georgia, serif;
+  font-family: "Newsreader Variable", Georgia, serif;
   font-size: 23px;
   font-weight: 500;
   letter-spacing: -0.025em;
@@ -217,7 +217,7 @@ kbd {
 }
 .settings-panel h3 {
   margin: 0 0 4px;
-  font-family: Georgia, serif;
+  font-family: "Newsreader Variable", Georgia, serif;
   font-size: 17px;
   font-weight: 500;
   letter-spacing: -0.01em;
@@ -554,6 +554,109 @@ kbd {
   color: var(--ink-soft);
   font-size: 12px;
   font-weight: 650;
+}
+/* A worked page, not a swatch: the specimen shows the three roles together. */
+.type-specimen {
+  margin-bottom: 20px;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--paper);
+}
+.type-specimen h4 {
+  margin: 0 0 9px;
+  color: var(--ink-strong);
+  font-family: var(--font-heading);
+  font-size: 23px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+.type-specimen p {
+  margin: 0;
+  color: var(--ink-body);
+  font-family: var(--font-content);
+  font-size: 13.5px;
+  line-height: 1.68;
+}
+.type-specimen p + p {
+  margin-top: 11px;
+}
+.type-specimen code {
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: var(--code-bg);
+  color: var(--code-text);
+  font-family: var(--font-code);
+  font-size: 12px;
+}
+.font-role {
+  margin-bottom: 16px;
+}
+.font-role-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+.font-role-head strong {
+  flex: 0 0 auto;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 650;
+}
+.font-role-head small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.font-rail {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 7px;
+}
+.font-tile {
+  display: grid;
+  gap: 3px;
+  justify-items: center;
+  padding: 9px 6px 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.font-tile:hover {
+  border-color: var(--line-hover);
+}
+.font-tile.active {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.font-tile em {
+  font-family: var(--tile-font);
+  font-size: 25px;
+  font-style: normal;
+  font-weight: 500;
+  line-height: 1.15;
+}
+.font-tile span {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.font-tile.active span {
+  color: var(--accent);
+}
+.font-role + .theme-section-title {
+  margin-top: 6px;
 }
 .preview-behavior-options {
   display: grid;

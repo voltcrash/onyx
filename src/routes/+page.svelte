@@ -137,11 +137,14 @@
 		theme={page.theme}
 		resolvedTheme={page.resolvedTheme}
 		colorTheme={page.colorTheme}
+		fonts={page.fonts}
 		inlinePreviewBehavior={page.inlinePreviewBehavior}
 		shortcuts={page.shortcuts}
 		primaryModifier={page.primaryModifier}
 		onThemeChange={page.setTheme}
 		onColorThemeChange={page.setColorTheme}
+		onFontChange={page.setFont}
+		onResetFonts={page.resetFonts}
 		onInlinePreviewBehaviorChange={page.setInlinePreviewBehavior}
 		onShortcutChange={page.setShortcut}
 		onResetShortcuts={page.resetShortcuts}
