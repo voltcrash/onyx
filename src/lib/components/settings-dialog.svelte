@@ -46,6 +46,7 @@
 		onShortcutChange: (action: ShortcutAction, shortcut: KeyboardShortcut | null) => void;
 		onResetShortcuts: () => void;
 		onClose: () => void;
+		onConnectGithub: () => void;
 		onDisconnectGithub: () => void;
 		onCreateRepository: (name: string) => void;
 		onSelectRepository: (state: Omit<GithubBackupState, 'updatedAt'>) => void;
@@ -63,7 +64,7 @@
 	let {
 		vault, vaultName, suggestedRepositoryName, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
 		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, inlinePreviewBehavior, shortcuts, primaryModifier,
-		section = $bindable('github'), onThemeChange, onColorThemeChange, onInlinePreviewBehaviorChange, onShortcutChange, onResetShortcuts, onClose, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
+		section = $bindable('storage'), onThemeChange, onColorThemeChange, onInlinePreviewBehaviorChange, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onPrepareVaultDeletion, onDeleteVault
 	}: Props = $props();
 
@@ -71,10 +72,10 @@
 		{ id: 'editor', label: 'Editor' },
 		{ id: 'themes', label: 'Themes' },
 		{ id: 'shortcuts', label: 'Keyboard shortcuts' },
-		{ id: 'github', label: 'GitHub account' },
-		{ id: 'repository', label: 'Repository' },
-		{ id: 'backup', label: 'Backup status' },
-		{ id: 'storage', label: 'Storage' },
+		{ id: 'github', label: 'Backup & sync' },
+		{ id: 'repository', label: 'Sync repository' },
+		{ id: 'backup', label: 'Sync status' },
+		{ id: 'storage', label: 'Storage choices' },
 		{ id: 'transfer', label: 'Import & export' },
 		{ id: 'vault', label: 'Vault' }
 	];
@@ -367,8 +368,8 @@
 						{/each}
 					</div>
 				{:else if section === 'github'}
-					<h3>GitHub account</h3>
-					<p class="settings-hint">Onyx signs in with a GitHub App so backups go straight from this device to your repository.</p>
+					<h3>Backup and sync with GitHub</h3>
+					<p class="settings-hint">Sign-in is optional. It enables private backups that you can restore on another device; your working vault stays on this device.</p>
 					{#if connected && githubUser}
 						<div class="settings-account">
 							<span class="github-avatar" aria-hidden="true">{githubUser.login.slice(0, 1)}</span>
@@ -378,16 +379,16 @@
 					{:else}
 						<div class="settings-account empty">
 							<CloudOff size={22} />
-							<span><strong>Not connected</strong><small>{githubMessage || 'Connect GitHub to back up and restore this vault.'}</small></span>
-							<a class="settings-primary" class:disabled={!isOnline} href="/auth/github/start">
-								{#if githubState === 'loading'}<LoaderCircle class="spin" size={14} />{:else}<GithubIcon size={14} />{/if} Connect GitHub
-							</a>
+							<span><strong>Local only</strong><small>{githubMessage || 'Sign in to enable GitHub backup and cross-device sync.'}</small></span>
+							<button class="settings-primary" disabled={!isOnline || githubState === 'loading'} onclick={onConnectGithub}>
+								{#if githubState === 'loading'}<LoaderCircle class="spin" size={14} />{:else}<GithubIcon size={14} />{/if} Sign in with GitHub
+							</button>
 						</div>
 					{/if}
 				{:else if section === 'repository'}
-					<h3>Backup repository</h3>
+					<h3>Sync repository</h3>
 					{#if !connected}
-						<p class="settings-hint">Connect GitHub first to choose a repository.</p>
+						<p class="settings-hint">Sign in with GitHub to choose where this vault is backed up for cross-device restore.</p>
 					{:else}
 						<p class="settings-hint">“{vaultName}” backs up on its own. Only private repositories with write access can be used, and notes are written under the directory below.</p>
 						<div class="settings-field">
@@ -422,7 +423,7 @@
 						</div>
 					{/if}
 				{:else if section === 'backup'}
-					<h3>Backup status</h3>
+					<h3>Backup and sync status</h3>
 					{#if !githubBackup}
 						<p class="settings-hint">“{vaultName}” has no repository yet. Choose one in the Repository section to enable backups for this repository alone.</p>
 					{:else}
@@ -449,7 +450,8 @@
 						<button disabled={!isOnline || !connected || !vault} onclick={onRestore}><CloudDownload size={14} /> Restore a commit</button>
 					</div>
 				{:else if section === 'storage'}
-					<h3>Storage on this device</h3>
+					<h3>Storage choices</h3>
+					<p class="settings-hint">Onyx always keeps a working vault on this device. Add a folder for accessible local files or GitHub for an off-device backup you can restore elsewhere.</p>
 					{#if usageState === 'loading' && !usage}
 						<p class="settings-hint"><LoaderCircle class="spin" size={14} /> Measuring vault storage…</p>
 					{:else if usage}
@@ -464,6 +466,13 @@
 							<div><dt>File storage</dt><dd>{usage.fileStorage.mode === 'native-directory' ? usage.fileStorage.nativeDirectoryName : 'Private browser storage (OPFS)'}</dd></div>
 						</dl>
 						<section class="settings-storage-option">
+							<div><Database size={18} /><span><strong>Private browser storage</strong><small>The default for every vault. It works offline and does not need an account.</small></span></div>
+							<p class="settings-hint">{usage.persistent ? 'This browser has granted protection from automatic storage cleanup.' : usage.persistentStorageAvailable ? 'The browser may remove this data when space is low unless persistent storage is granted.' : 'This browser cannot protect the vault from automatic storage cleanup.'}</p>
+							{#if !usage.persistent && usage.persistentStorageAvailable}
+								<div class="settings-actions"><button class="settings-primary" disabled={persistState === 'requesting'} onclick={() => void requestPersistence()}><ShieldCheck size={14} /> Request persistent storage</button></div>
+							{/if}
+						</section>
+						<section class="settings-storage-option">
 							<div><HardDrive size={18} /><span><strong>User-selected folder</strong><small>OPFS remains the fallback. Onyx mirrors notes and attachments into a folder you choose.</small></span></div>
 							{#if usage.fileStorage.nativeDirectoryAvailable}
 								{#if usage.fileStorage.nativeDirectoryPermission === 'granted'}
@@ -477,15 +486,12 @@
 								<p class="settings-hint">This browser does not expose a persistent user-selected folder. Use OPFS with Import & export or upload/download workflows.</p>
 							{/if}
 						</section>
-						{#if !usage.persistent && usage.persistentStorageAvailable}
-							<p class="settings-hint">Without persistent storage the browser may evict this vault when space runs low.</p>
-						{:else if !usage.persistent}
-							<p class="settings-hint">This browser cannot protect the vault from automatic storage cleanup. Keep a backup of important notes.</p>
-						{/if}
+						<section class="settings-storage-option">
+							<div><CloudUpload size={18} /><span><strong>GitHub backup and sync</strong><small>Optional off-device history for restoring this vault on another device.</small></span></div>
+							<p class="settings-hint">{connected ? githubBackup ? `Backing up to ${githubBackup.owner}/${githubBackup.repository}.` : 'Signed in. Choose a private repository to finish setup.' : 'Not enabled. Your local vault continues to work normally.'}</p>
+							<div class="settings-actions"><button onclick={() => (section = connected ? githubBackup ? 'backup' : 'repository' : 'github')}>{connected ? githubBackup ? 'View sync status' : 'Choose repository' : 'Learn about GitHub sync'}</button></div>
+						</section>
 						<div class="settings-actions">
-							{#if !usage.persistent && usage.persistentStorageAvailable}
-								<button class="settings-primary" disabled={persistState === 'requesting'} onclick={() => void requestPersistence()}><ShieldCheck size={14} /> Request persistent storage</button>
-							{/if}
 							<button disabled={usageState === 'loading'} onclick={() => void loadUsage()}><RefreshCw size={14} /> Refresh</button>
 						</div>
 					{/if}

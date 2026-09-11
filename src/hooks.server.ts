@@ -1,3 +1,6 @@
+import { building } from "$app/environment";
+import { getAuth, isGithubAuthConfigured } from "$lib/server/auth.js";
+import { svelteKitHandler } from "better-auth/svelte-kit";
 import type { Handle } from "@sveltejs/kit";
 
 const SECURITY_HEADERS = {
@@ -12,7 +15,14 @@ const SECURITY_HEADERS = {
 } as const;
 
 export const handle: Handle = async ({ event, resolve }) => {
-  const response = await resolve(event);
+  const response = event.url.pathname.startsWith("/api/auth")
+    ? isGithubAuthConfigured()
+      ? await svelteKitHandler({ auth: getAuth(), building, event, resolve })
+      : new Response(JSON.stringify({ message: "GitHub authentication is not configured" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 503,
+        })
+    : await resolve(event);
   const headers = new Headers(response.headers);
 
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) headers.set(name, value);

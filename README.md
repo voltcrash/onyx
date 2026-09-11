@@ -1,7 +1,8 @@
 # Onyx
 
-Onyx is a local-first Markdown notes app. It autosaves notes in the browser, provides full-text
-search and several editing views, and can back up the vault to a private GitHub repository.
+Onyx is a local-first Markdown notes app. It works without an account, autosaves notes on the
+current device, and provides full-text search and several editing views. Optional GitHub sign-in
+adds private backup and cross-device restore.
 
 ## What is implemented
 
@@ -13,8 +14,8 @@ search and several editing views, and can back up the vault to a private GitHub 
 - Import Markdown folders or ZIP archives, including locally referenced attachments.
 - Export the complete vault to a folder when the browser supports the File System Access API, or
   download it as a ZIP in other browsers.
-- Connect a GitHub account, select or create a private repository, back up pending changes in one
-  commit, and restore the vault from a selected backup commit.
+- Optionally sign in with GitHub, select or create a private repository, back up pending changes in
+  one commit, and restore the vault on this or another device.
 - Continue editing offline after the app has been loaded; GitHub actions pause until connectivity
   returns.
 - Inspect browser storage usage, request persistent storage, connect a local folder, or clear the
@@ -48,7 +49,7 @@ ordered backup queue. Markdown files and attachment bytes are written to OPFS. O
 for every new vault and remains the universal fallback. Keeping the latest note text in IndexedDB
 also lets an edit survive when an OPFS write fails because the site has reached its storage quota.
 
-When the browser exposes the File System Access API, **Settings → Storage** can connect a
+When the browser exposes the File System Access API, **Settings → Storage choices** can connect a
 user-selected directory. Onyx detects this API directly rather than checking the browser name, then
 stores the granted directory handle in IndexedDB and mirrors the OPFS `notes/` and `attachments/`
 trees into that directory. Choose a dedicated folder because restoring a vault replaces those two
@@ -69,12 +70,15 @@ vault, and browsers may evict non-persistent storage under space pressure. Onyx 
 storage capabilities in the workspace and exposes persistence status in Settings, so important
 vaults should also be exported or backed up.
 
-## GitHub backup and restore
+## Optional GitHub backup and sync
 
-Onyx authenticates through a GitHub App using the authorization-code flow with PKCE. The server
-handles the code exchange and token refresh; credentials stay in an encrypted HTTP-only cookie and
-the active access token exists only in browser memory. Vault data is sent from the browser directly
-to `api.github.com` and does not pass through the Onyx server.
+GitHub is not required to create, edit, search, import, or export notes. Signing in only enables an
+off-device backup that can be restored on another device.
+
+Onyx authenticates through Better Auth's GitHub provider. Better Auth handles the OAuth flow and
+keeps the session and GitHub account data in signed, encrypted HTTP-only cookies; the active access
+token exists only in browser memory. Vault data is sent from the browser directly to
+`api.github.com` and does not pass through the Onyx server.
 
 Backups target private, active repositories where the connected account has write access. A backup
 coalesces pending changes by path and advances the configured branch without force-pushing. Restore
@@ -82,12 +86,10 @@ downloads the files from a chosen commit, replaces the local notes and attachmen
 IndexedDB metadata and search index. Current backups contain an Onyx manifest; older backups can be
 reconstructed from their `notes/` and `attachments/` paths.
 
-Configure the GitHub App callback URL as
-`https://your-onyx-domain.example/auth/github/callback` and set the variables listed in
-[`.env.example`](.env.example). `GITHUB_AUTH_COOKIE_SECRET` must contain at least 32 random
-characters. The app needs **Administration: write** to create a private repository and
-**Contents: write** to create and update backup commits. Install it for all repositories if newly
-created backup repositories should become available immediately.
+Create a GitHub OAuth App, configure its callback URL as
+`https://your-onyx-domain.example/api/auth/callback/github`, and set the variables listed in
+[`.env.example`](.env.example). `BETTER_AUTH_SECRET` must contain at least 32 random characters.
+Onyx requests the `repo` scope so it can create private repositories and write backup commits.
 
 ## Architecture
 
@@ -116,5 +118,5 @@ vp test
 vp build
 ```
 
-GitHub authentication requires the environment variables in `.env.example`; local note editing and
-browser storage do not.
+The variables in `.env.example` enable optional GitHub backup and sync. Onyx runs locally without
+them.

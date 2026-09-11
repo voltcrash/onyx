@@ -42,6 +42,7 @@ import {
   detectBrowserStorageSupport,
   detectPrimaryModifier,
   disconnectGithub,
+  connectGithub,
   formatShortcut,
   GithubRequestError,
   importMarkdownFiles,
@@ -114,7 +115,7 @@ Create as many notes as you need. Search checks every title and every word, whil
 - [ ] Capture the next idea
 - [ ] Shape it into something useful
 
-Onyx starts in private browser storage (OPFS). In browsers that support choosing persistent folders, you can mirror this vault to one from **Settings → Storage**. Other browsers can use Import & export or upload/download workflows.
+Onyx starts in private browser storage (OPFS) without an account. In browsers that support choosing persistent folders, you can mirror this vault to one from **Settings → Storage choices**. GitHub sign-in is optional and only enables backup and cross-device restore.
 
 Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\` to save now, or \`${previewShortcut}\` to toggle preview. Press \`?\` for every shortcut.`;
   }
@@ -158,14 +159,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let storageNotice = $state("");
   let isOnline = $state(true);
   let githubUser = $state<GithubUser>();
-  let githubState = $state<GithubState>("loading");
+  let githubState = $state<GithubState>("disconnected");
   let githubMessage = $state("");
   let githubBackup = $state<GithubBackupState>();
   let backupState = $state<BackupState>("idle");
   let backupMessage = $state("");
   let backupCommitUrl = $state("");
   let settingsOpen = $state(false);
-  let settingsSection = $state<SettingsSection>("github");
+  let settingsSection = $state<SettingsSection>("storage");
   let pendingBackupCount = $state(0);
   let restoreModalOpen = $state(false);
   let restoreState = $state<RestoreState>("idle");
@@ -327,8 +328,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     },
     {
       id: "backup",
-      group: "GitHub",
-      label: "Back up to GitHub",
+      group: "Backup & sync",
+      label: "Back up for cross-device sync",
       icon: CloudUpload,
       keywords: "commit push sync",
       disabled: !isOnline || githubState !== "connected",
@@ -336,7 +337,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     },
     {
       id: "restore",
-      group: "GitHub",
+      group: "Backup & sync",
       label: "Restore from a GitHub commit",
       icon: CloudDownload,
       keywords: "download history rollback",
@@ -381,12 +382,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: "Open settings",
       icon: Settings,
       keywords: "preferences options github storage themes",
-      run: () => openSettings(githubState === "connected" ? "backup" : "themes"),
+      run: () => openSettings("storage"),
     },
     {
       id: "storage",
       group: "Onyx",
-      label: "Storage on this device",
+      label: "Review storage choices",
       icon: HardDrive,
       keywords: "space quota usage persistent",
       run: () => openSettings("storage"),
@@ -526,6 +527,19 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
   }
 
+  async function connectGitHub(): Promise<void> {
+    if (!isOnline || githubState === "loading") return;
+    githubState = "loading";
+    githubMessage = "";
+    try {
+      await connectGithub();
+    } catch (error) {
+      githubState = "error";
+      githubMessage =
+        error instanceof Error ? error.message : "GitHub sign-in could not be started.";
+    }
+  }
+
   async function beginBackup(): Promise<void> {
     if (!isOnline || !vault || backupState === "backing-up") return;
     if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
@@ -536,7 +550,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     await runBackup(githubBackup);
   }
 
-  function openSettings(target: SettingsSection = "github"): void {
+  function openSettings(target: SettingsSection = "storage"): void {
     settingsSection = target;
     settingsOpen = true;
   }
@@ -674,7 +688,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function restoreConfiguration(): GithubBackupState {
-    if (!githubUser) throw new Error("Connect GitHub before restoring a backup");
+    if (!githubUser) throw new Error("Sign in with GitHub before restoring a backup");
     return {
       githubAccountId: githubUser.id,
       githubAccountLogin: githubUser.login,
@@ -2075,6 +2089,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     queueSearch,
     openPalette,
     openSettings,
+    connectGitHub,
     disconnectGitHub,
     moveNoteFocus,
     selectNote,
