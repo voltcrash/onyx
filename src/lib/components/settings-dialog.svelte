@@ -3,6 +3,7 @@
 </script>
 
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import {
 		CloudDownload, CloudOff, CloudUpload, Database, Download, ExternalLink, FileArchive, FolderInput,
 		FolderOutput, HardDrive, LoaderCircle, LogOut, Monitor, Moon, RefreshCw, ShieldCheck, Sun, Trash2,
@@ -20,6 +21,8 @@
 
 	interface Props {
 		vault?: Vault;
+		vaultName: string;
+		suggestedRepositoryName: string;
 		isOnline: boolean;
 		githubUser?: GithubUser;
 		githubState: 'loading' | 'connected' | 'disconnected' | 'error';
@@ -58,7 +61,7 @@
 	}
 
 	let {
-		vault, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
+		vault, vaultName, suggestedRepositoryName, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
 		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, inlinePreviewBehavior, shortcuts, primaryModifier,
 		section = $bindable('github'), onThemeChange, onColorThemeChange, onInlinePreviewBehaviorChange, onShortcutChange, onResetShortcuts, onClose, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onPrepareVaultDeletion, onDeleteVault
@@ -83,7 +86,7 @@
 	let selectedRepository = $state('');
 	let branch = $state('main');
 	let directory = $state('vault');
-	let newRepositoryName = $state('onyx-vault');
+	let newRepositoryName = $state(untrack(() => suggestedRepositoryName));
 	let usage = $state<VaultStorageUsage>();
 	let usageState = $state<'idle' | 'loading' | 'error'>('idle');
 	let usageMessage = $state('');
@@ -355,7 +358,7 @@
 					{#if !connected}
 						<p class="settings-hint">Connect GitHub first to choose a repository.</p>
 					{:else}
-						<p class="settings-hint">Only private repositories with write access can be used. Notes are written under the directory below.</p>
+						<p class="settings-hint">“{vaultName}” backs up on its own. Only private repositories with write access can be used, and notes are written under the directory below.</p>
 						<div class="settings-field">
 							<label for="settings-repository">Repository</label>
 							<div class="settings-row">
@@ -390,7 +393,7 @@
 				{:else if section === 'backup'}
 					<h3>Backup status</h3>
 					{#if !githubBackup}
-						<p class="settings-hint">No repository is configured yet. Choose one in the Repository section to enable backups.</p>
+						<p class="settings-hint">“{vaultName}” has no repository yet. Choose one in the Repository section to enable backups for this repository alone.</p>
 					{:else}
 						<dl class="settings-facts">
 							<div><dt>Repository</dt><dd>{githubBackup.owner}/{githubBackup.repository}</dd></div>

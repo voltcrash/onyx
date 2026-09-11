@@ -119,6 +119,8 @@
 {#if page.settingsOpen}
 	<SettingsDialog
 		vault={page.vault}
+		vaultName={page.vaultName}
+		suggestedRepositoryName={page.suggestedRepositoryName}
 		isOnline={page.isOnline}
 		githubUser={page.githubUser}
 		githubState={page.githubState}

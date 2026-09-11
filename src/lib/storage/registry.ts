@@ -74,6 +74,20 @@ export function uniqueVaultName(name: string, existing: VaultDescriptor[]): stri
   }
 }
 
+// Each vault backs up to its own repository, so the name is seeded from the vault name.
+// The untouched first vault keeps the name Onyx suggested before vaults could be renamed.
+export function suggestedRepositoryName(vault: VaultDescriptor | undefined): string {
+  if (!vault || (isDefaultVault(vault) && vault.name === DEFAULT_VAULT.name)) return "onyx-vault";
+  const slug = vault.name
+    .normalize("NFKD")
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+    .replace(/-+$/, "");
+  return slug ? `onyx-${slug}` : "onyx-vault";
+}
+
 export function vaultOptions(vault: VaultDescriptor): VaultOptions {
   return { databaseName: vault.databaseName, directoryName: vault.directoryName };
 }

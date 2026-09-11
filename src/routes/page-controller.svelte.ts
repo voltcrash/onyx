@@ -61,6 +61,7 @@ import {
   restoreGithubSession,
   restoreVaultFromGithub,
   shortcutMatchesEvent,
+  suggestedRepositoryName,
   validateGithubBackupRepository,
   Vault,
   vaultOptions,
@@ -653,7 +654,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!isOnline || !githubUser || restoreState === "restoring") return;
     if (!(await settleDraft())) return;
     restoreOwner = githubBackup?.owner ?? githubUser.login;
-    restoreRepository = githubBackup?.repository ?? "onyx-vault";
+    restoreRepository = githubBackup?.repository ?? suggestedRepositoryName(activeVault);
     restoreBranch = githubBackup?.branch ?? "main";
     restoreDirectory = githubBackup?.directory ?? "vault";
     restoreCommits = [];
@@ -1761,6 +1762,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     },
     get vaultName() {
       return activeVault?.name ?? "Notes";
+    },
+    get suggestedRepositoryName() {
+      return suggestedRepositoryName(activeVault);
     },
     get activeNoteId() {
       return activeNoteId;
