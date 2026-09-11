@@ -14,6 +14,11 @@ export type FontChoices = Record<FontRole, string>;
 const SANS_FALLBACK = '"Inter Variable", Inter, sans-serif';
 const SERIF_FALLBACK = 'Georgia, "Times New Roman", serif';
 const MONO_FALLBACK = 'ui-monospace, "SFMono-Regular", Consolas, monospace';
+// Apple ships these and does not license them for the web, so they can only be
+// named and left to resolve locally. Elsewhere the rest of the stack takes over.
+const SF_PRO = `"SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, ${SANS_FALLBACK}`;
+const SF_MONO = `"SF Mono", SFMono-Regular, ui-monospace, Menlo, ${MONO_FALLBACK}`;
+const NEW_YORK = `"New York", ui-serif, ${SERIF_FALLBACK}`;
 
 export const fontRoles: Array<{ id: FontRole; label: string; hint: string }> = [
   { id: "heading", label: "Headings", hint: "Every heading level, in both panes." },
@@ -48,6 +53,12 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       note: "Even and quiet, with no flourish to distract.",
     },
     {
+      id: "new-york",
+      name: "New York",
+      stack: NEW_YORK,
+      note: "Apple's screen serif, warm and compact. Needs an Apple device.",
+    },
+    {
       id: "geist",
       name: "Geist",
       stack: `"Geist Variable", ${SANS_FALLBACK}`,
@@ -64,6 +75,12 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       name: "Space Grotesk",
       stack: `"Space Grotesk Variable", ${SANS_FALLBACK}`,
       note: "Geometric sans with distinctive angled cuts.",
+    },
+    {
+      id: "sf-pro",
+      name: "SF Pro",
+      stack: SF_PRO,
+      note: "Apple's interface sans, plain and even. Needs an Apple device.",
     },
     {
       id: "system",
@@ -84,6 +101,12 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       name: "Inter",
       stack: SANS_FALLBACK,
       note: "Neutral sans tuned for screens.",
+    },
+    {
+      id: "sf-pro",
+      name: "SF Pro",
+      stack: SF_PRO,
+      note: "Apple's interface sans, plain and even. Needs an Apple device.",
     },
     {
       id: "newsreader",
@@ -108,6 +131,12 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       name: "Fraunces",
       stack: `"Fraunces Variable", ${SERIF_FALLBACK}`,
       note: "Characterful serif for notes with a voice.",
+    },
+    {
+      id: "new-york",
+      name: "New York",
+      stack: NEW_YORK,
+      note: "Apple's screen serif, warm and compact. Needs an Apple device.",
     },
     {
       id: "system",
@@ -146,6 +175,12 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       name: "Roboto Mono",
       stack: `"Roboto Mono Variable", ${MONO_FALLBACK}`,
       note: "Even monospace with a mechanical, level texture.",
+    },
+    {
+      id: "sf-mono",
+      name: "SF Mono",
+      stack: SF_MONO,
+      note: "Apple's coding monospace, narrow and calm. Needs an Apple device.",
     },
     {
       id: "system",
