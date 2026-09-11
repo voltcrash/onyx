@@ -25,7 +25,7 @@ const answer = 42;
 
 [Website](https://example.com) and ![Diagram](attachments/diagram.png)`);
 
-    expect(html).toContain("<h1>Heading</h1>");
+    expect(html).toContain('<h1 id="user-content-heading">Heading</h1>');
     expect(html).toContain("<ol>");
     expect(html.match(/<ol>/g)).toHaveLength(2);
     expect(html).toContain('<ul class="contains-task-list">');
@@ -117,5 +117,37 @@ const answer = 42;
     });
 
     expect(html).toContain('<img src="https://example.com/photo.png" alt="Remote">');
+  });
+
+  it("renders the extensions other Markdown platforms expect", () => {
+    const html = renderMarkdown(`---
+title: Hidden
+---
+
+Text with ==**a mark**==, H~2~O, x^2^, :tada:, and a [[Other Note|wiki link]].
+
+> [!WARNING] Careful
+> Mind the gap.
+
+A footnote[^1] and math $a^2$.
+
+[^1]: Footnote body.`);
+
+    expect(html).not.toContain("title: Hidden");
+    expect(html).toContain("<mark><strong>a mark</strong></mark>");
+    expect(html).toContain("H<sub>2</sub>O");
+    expect(html).toContain("x<sup>2</sup>");
+    expect(html).toContain("\u{1F389}");
+    expect(html).toContain('<a class="wikilink" data-wikilink="Other Note">wiki link</a>');
+    expect(html).toContain('<blockquote class="callout callout-warning">');
+    expect(html).toContain('<p class="callout-title">Careful</p>');
+    expect(html).toContain('href="#user-content-fn-1"');
+    expect(html).toContain("<math");
+  });
+
+  it("leaves spaced delimiters as plain text", () => {
+    const html = renderMarkdown("a ~ b ~ c and 2 ^ 3 ^ 4");
+
+    expect(html).toBe("<p>a ~ b ~ c and 2 ^ 3 ^ 4</p>");
   });
 });

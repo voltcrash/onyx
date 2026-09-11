@@ -531,3 +531,88 @@
     Inter,
     sans-serif;
 }
+.prose mark {
+  padding: 0.08em 0.18em;
+  border-radius: 3px;
+  background: var(--selection);
+  color: inherit;
+}
+.prose sub,
+.prose sup {
+  font-size: 0.72em;
+  line-height: 0;
+}
+.prose a.wikilink {
+  color: var(--accent-link);
+  text-decoration: underline dashed;
+  text-decoration-color: var(--accent-underline);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.prose .callout {
+  --callout: var(--line-hover);
+  --callout-bg: var(--subtle);
+  margin: 24px 0;
+  padding: 14px 18px;
+  border-left: 3px solid var(--callout);
+  border-radius: 0 8px 8px 0;
+  background: var(--callout-bg);
+  color: var(--ink-body);
+  font-size: 1em;
+  font-style: normal;
+}
+.prose .callout > :last-child {
+  margin-bottom: 0;
+}
+.prose .callout-title {
+  margin: 0 0 6px;
+  color: var(--callout);
+  font-family: "Inter Variable", Inter, sans-serif;
+  font-size: 0.82em;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.prose :is(.callout-note, .callout-info, .callout-todo, .callout-question) {
+  --callout: var(--accent);
+  --callout-bg: var(--accent-bg);
+}
+.prose :is(.callout-tip, .callout-success, .callout-example) {
+  --callout: var(--ok);
+  --callout-bg: var(--ok-bg);
+}
+.prose :is(.callout-warning, .callout-caution) {
+  --callout: var(--warn);
+  --callout-bg: var(--warn-bg);
+}
+.prose :is(.callout-danger, .callout-important, .callout-bug, .callout-failure) {
+  --callout: var(--danger);
+  --callout-bg: var(--danger-bg);
+}
+/* KaTeX emits MathML only, so display math needs the block box from CSS. */
+.prose .katex:has(math[display="block"]) {
+  display: block;
+  overflow-x: auto;
+  margin: 24px 0;
+  text-align: center;
+}
+.prose math {
+  font-size: 1.05em;
+}
+.prose .footnotes {
+  margin-top: 48px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.9em;
+}
+.prose .footnotes h2.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.prose .data-footnote-backref {
+  text-decoration: none;
+}
