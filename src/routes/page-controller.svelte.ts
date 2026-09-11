@@ -159,14 +159,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let storageNotice = $state("");
   let isOnline = $state(true);
   let githubUser = $state<GithubUser>();
-  let githubState = $state<GithubState>("loading");
+  let githubState = $state<GithubState>("disconnected");
   let githubMessage = $state("");
   let githubBackup = $state<GithubBackupState>();
   let backupState = $state<BackupState>("idle");
   let backupMessage = $state("");
   let backupCommitUrl = $state("");
   let settingsOpen = $state(false);
-  let settingsSection = $state<SettingsSection>("github");
+  let settingsSection = $state<SettingsSection>("storage");
   let pendingBackupCount = $state(0);
   let restoreModalOpen = $state(false);
   let restoreState = $state<RestoreState>("idle");
@@ -382,7 +382,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: "Open settings",
       icon: Settings,
       keywords: "preferences options github storage themes",
-      run: () => openSettings(githubState === "connected" ? "backup" : "themes"),
+      run: () => openSettings("storage"),
     },
     {
       id: "storage",
@@ -550,7 +550,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     await runBackup(githubBackup);
   }
 
-  function openSettings(target: SettingsSection = "github"): void {
+  function openSettings(target: SettingsSection = "storage"): void {
     settingsSection = target;
     settingsOpen = true;
   }

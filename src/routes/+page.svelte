@@ -51,8 +51,7 @@
 		onCreateNote={() => void page.createNote()}
 		onSearch={page.queueSearch}
 		onOpenPalette={() => void page.openPalette()}
-		onOpenSettings={() => page.openSettings(page.githubState === 'connected' ? 'backup' : 'github')}
-		onConnectGithub={() => void page.connectGitHub()}
+		onOpenSettings={() => page.openSettings('storage')}
 		onDisconnectGithub={() => void page.disconnectGitHub()}
 		onMoveNoteFocus={page.moveNoteFocus}
 		onSelectNote={(id) => void page.selectNote(id)}

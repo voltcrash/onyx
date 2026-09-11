@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Bold, Braces, Code2, FileText, Heading2, Highlighter, Italic, Link, List, ListChecks, ListOrdered, LoaderCircle, Lock, LockOpen, LogOut, MessageSquareWarning, Minus, PanelLeftClose, Plus, Quote, Search, Settings, Sigma, Strikethrough, WifiOff, Wrench, X } from '@lucide/svelte';
+	import { Bold, Braces, Code2, FileText, HardDrive, Heading2, Highlighter, Italic, Link, List, ListChecks, ListOrdered, LoaderCircle, Lock, LockOpen, LogOut, MessageSquareWarning, Minus, PanelLeftClose, Plus, Quote, Search, Settings, Sigma, Strikethrough, Wrench, X } from '@lucide/svelte';
 	import { formatShortcut, type GithubUser, type KeyboardShortcuts, type PrimaryModifier, type VaultDescriptor, type VaultSearchResult } from '$lib';
 	import GithubIcon from './github-icon.svelte';
 	import VaultSwitcher from './vault-switcher.svelte';
@@ -42,7 +42,6 @@
 		onSearch: (value: string) => void;
 		onOpenPalette: () => void;
 		onOpenSettings: () => void;
-		onConnectGithub: () => void;
 		onDisconnectGithub: () => void;
 		onMoveNoteFocus: (event: KeyboardEvent) => void;
 		onSelectNote: (id: string) => void;
@@ -57,7 +56,7 @@
 		vaults, activeVaultId, activeNoteId, results, visibleResults, searchQuery, notePage, notePageCount, saveState, notesLoaded, paletteOpen, settingsOpen,
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, renderedPaneVisible, renderedReadOnly, wordCount, readingMinutes, contentWidth,
 		searchInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onSearch,
-		onOpenPalette, onOpenSettings, onConnectGithub, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage,
+		onOpenPalette, onOpenSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage,
 		onInsertSyntax, onPrefixLine, onToggleRenderedReadOnly, onContentWidthChange
 	}: Props = $props();
 
@@ -145,10 +144,8 @@
 	<div class="sidebar-footer">
 		{#if githubState === 'connected' && githubUser}
 			<div class="github-account" class:offline={!isOnline} title={isOnline ? `Connected as ${githubUser.login}` : `Connected as ${githubUser.login}; GitHub is unavailable offline`}><span class="github-avatar" aria-hidden="true">{githubUser.login.slice(0, 1)}</span><span class="github-login">@{githubUser.login}</span><button aria-label="Disconnect GitHub" title={isOnline ? 'Disconnect GitHub' : 'Disconnect is unavailable offline'} disabled={!isOnline} onclick={onDisconnectGithub}><LogOut size={14} /></button></div>
-		{:else if !isOnline}
-			<button class="github-connect offline" disabled title="GitHub features are unavailable offline" aria-label="GitHub unavailable offline"><WifiOff size={16} /><span>Offline</span></button>
 		{:else}
-			<button class="github-connect" class:error={githubState === 'error'} disabled={githubState === 'loading'} title={githubMessage || 'Connect GitHub for direct, private backups'} aria-label="Connect GitHub" onclick={onConnectGithub}>{#if githubState === 'loading'}<LoaderCircle class="spin" size={15} />{:else}<GithubIcon size={16} />{/if}<span>{githubState === 'loading' ? 'Checking…' : 'Connect GitHub'}</span></button>
+			<button class="github-connect" class:error={githubState === 'error'} title={githubMessage || 'Notes are saved on this device'} aria-label="Open local storage settings" onclick={onOpenSettings}><HardDrive size={16} /><span>Saved locally</span></button>
 		{/if}
 		<button class="icon-button" aria-label="Settings" aria-haspopup="dialog" aria-expanded={settingsOpen} aria-controls="settings-dialog" title="Settings" onclick={onOpenSettings}><Settings size={18} /></button>
 	</div>

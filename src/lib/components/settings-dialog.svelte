@@ -64,7 +64,7 @@
 	let {
 		vault, vaultName, suggestedRepositoryName, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
 		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, inlinePreviewBehavior, shortcuts, primaryModifier,
-		section = $bindable('github'), onThemeChange, onColorThemeChange, onInlinePreviewBehaviorChange, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
+		section = $bindable('storage'), onThemeChange, onColorThemeChange, onInlinePreviewBehaviorChange, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onPrepareVaultDeletion, onDeleteVault
 	}: Props = $props();
 
