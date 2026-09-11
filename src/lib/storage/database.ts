@@ -8,6 +8,7 @@ import { VaultConflictError } from "./types.js";
 
 const DATABASE_VERSION = 3;
 const VAULT_VERSION_KEY = "vaultVersion";
+const NATIVE_DIRECTORY_HANDLE_KEY = "nativeDirectoryHandle";
 
 export interface SearchDocument {
   noteId: string;
@@ -252,6 +253,18 @@ export class VaultDatabase {
 
   deleteGithubBackupState(): Promise<void> {
     return this.#deleteSetting("githubBackup");
+  }
+
+  getNativeDirectoryHandle(): Promise<FileSystemDirectoryHandle | undefined> {
+    return this.#getSetting<FileSystemDirectoryHandle>(NATIVE_DIRECTORY_HANDLE_KEY);
+  }
+
+  setNativeDirectoryHandle(handle: FileSystemDirectoryHandle): Promise<void> {
+    return this.#putSetting(NATIVE_DIRECTORY_HANDLE_KEY, handle);
+  }
+
+  deleteNativeDirectoryHandle(): Promise<void> {
+    return this.#deleteSetting(NATIVE_DIRECTORY_HANDLE_KEY);
   }
 
   getBackupOperations(): Promise<BackupOperation[]> {

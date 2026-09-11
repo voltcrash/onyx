@@ -130,6 +130,20 @@ export interface VaultStorageUsage {
   persistentStorageAvailable: boolean;
   quota?: number;
   usage?: number;
+  fileStorage: VaultFileStorageStatus;
+}
+
+export interface VaultFileStorageStatus {
+  nativeDirectoryAvailable: boolean;
+  nativeDirectoryName?: string;
+  nativeDirectoryPermission:
+    | "denied"
+    | "error"
+    | "granted"
+    | "not-configured"
+    | "prompt"
+    | "unsupported";
+  mode: "native-directory" | "opfs";
 }
 
 export interface VaultSearchResult {

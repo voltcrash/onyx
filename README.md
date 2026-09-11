@@ -17,7 +17,8 @@ search and several editing views, and can back up the vault to a private GitHub 
   commit, and restore the vault from a selected backup commit.
 - Continue editing offline after the app has been loaded; GitHub actions pause until connectivity
   returns.
-- Inspect browser storage usage, request persistent storage, or clear the local vault in Settings.
+- Inspect browser storage usage, request persistent storage, connect a local folder, or clear the
+  local vault in Settings.
 
 The interface is responsive: desktop layouts have a collapsible note sidebar, while narrow layouts
 use a slide-over note list. Preferences are saved per browser when local storage is available.
@@ -43,9 +44,21 @@ Use `Ctrl` instead of `⌘` on Windows and Linux.
 
 Onyx requires IndexedDB and the origin private file system (OPFS). IndexedDB stores note and
 attachment metadata, the latest note text, the search index, GitHub backup configuration, and the
-ordered backup queue. Markdown files and attachment bytes are written to OPFS. Keeping the latest
-note text in IndexedDB also lets an edit survive when an OPFS write fails because the site has
-reached its storage quota.
+ordered backup queue. Markdown files and attachment bytes are written to OPFS. OPFS is the default
+for every new vault and remains the universal fallback. Keeping the latest note text in IndexedDB
+also lets an edit survive when an OPFS write fails because the site has reached its storage quota.
+
+When the browser exposes the File System Access API, **Settings → Storage** can connect a
+user-selected directory. Onyx detects this API directly rather than checking the browser name, then
+stores the granted directory handle in IndexedDB and mirrors the OPFS `notes/` and `attachments/`
+trees into that directory. Choose a dedicated folder because restoring a vault replaces those two
+subdirectories. Disconnecting leaves the folder contents in place and continues with OPFS.
+
+Firefox and Safari generally do not expose persistent handles to arbitrary local files or folders.
+On those browsers, use OPFS together with Import & export, upload/download, or GitHub backup
+workflows. If a previously connected directory's permission expires or is revoked, startup and
+autosave continue against OPFS. Settings shows that the folder needs to be reconnected; choosing it
+again copies the current OPFS vault into the folder before mirroring resumes.
 
 Open tabs coordinate vault writes and GitHub backups with the Web Locks API when it is available.
 BroadcastChannel invalidations refresh other tabs after a change, while note and vault revisions
@@ -83,7 +96,7 @@ created backup repositories should become available immediately.
 - `src/lib/components/` contains focused workspace, navigation, dialog, and status components.
 - `src/routes/styles/` separates base tokens, application shell, editor, dialog, command-palette,
   and responsive styles.
-- `src/lib/storage/` implements the IndexedDB and OPFS vault.
+- `src/lib/storage/` implements the IndexedDB vault and its OPFS/native-folder file abstraction.
 - `src/lib/markdown-transfer.ts` implements folder and ZIP import/export.
 - `src/lib/github.ts` implements repository validation, backup, and restore.
 - `src/service-worker.ts` caches the application shell for offline use.

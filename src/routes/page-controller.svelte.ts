@@ -114,6 +114,8 @@ Create as many notes as you need. Search checks every title and every word, whil
 - [ ] Capture the next idea
 - [ ] Shape it into something useful
 
+Onyx starts in private browser storage (OPFS). In browsers that support choosing persistent folders, you can mirror this vault to one from **Settings → Storage**. Other browsers can use Import & export or upload/download workflows.
+
 Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\` to save now, or \`${previewShortcut}\` to toggle preview. Press \`?\` for every shortcut.`;
   }
 
@@ -762,6 +764,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     notesLoaded = false;
     try {
       vault = await Vault.open(activeVault ? vaultOptions(activeVault) : {});
+      appendNativeDirectoryNotice();
       unsubscribeVault?.();
       unsubscribeVault = vault.subscribe(queueRemoteVaultSync);
       let notes = await vault.listNotes();
@@ -857,6 +860,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   function appendStorageNotice(message: string): void {
     if (storageNotice.includes(message)) return;
     storageNotice = storageNotice ? `${storageNotice} ${message}` : message;
+  }
+
+  function appendNativeDirectoryNotice(): void {
+    const status = vault?.getFileStorageStatus();
+    if (!status?.nativeDirectoryName || status.nativeDirectoryPermission === "granted") return;
+    appendStorageNotice(
+      status.nativeDirectoryPermission === "error"
+        ? `${status.nativeDirectoryName} could not be updated. Onyx is using OPFS until you reconnect the folder in Settings → Storage.`
+        : `Access to ${status.nativeDirectoryName} expired or was revoked. Onyx is using OPFS until you reconnect the folder in Settings → Storage.`,
+    );
   }
 
   async function readLegacyDraft(): Promise<string> {
@@ -1157,6 +1170,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
           saveState = markdown === contents ? "saved" : "unsaved";
           storageError = "";
         }
+        appendNativeDirectoryNotice();
         await runSearch(searchQuery);
         pendingBackupCount = (await vault.getPendingBackupOperations()).length;
       } catch (error) {

@@ -6,7 +6,7 @@ import {
 } from "./database.js";
 import { detectBrowserStorageSupport } from "../browser-storage.js";
 import { VaultCoordination } from "./coordination.js";
-import { VaultFilesystem } from "./filesystem.js";
+import { MirroredVaultFilesystem, VaultFilesystem } from "./filesystem.js";
 import type {
   AttachmentMetadata,
   BackupOperation,
@@ -22,6 +22,7 @@ import type {
   VaultRestoreResult,
   VaultSearchResult,
   VaultStorageUsage,
+  VaultFileStorageStatus,
   VaultChangeEvent,
   VaultOperationContext,
   VaultOperationOptions,
@@ -33,18 +34,23 @@ const DEFAULT_DIRECTORY_NAME = "onyx";
 
 export class Vault {
   readonly #database: VaultDatabase;
-  readonly #filesystem: VaultFilesystem;
+  readonly #filesystem: MirroredVaultFilesystem;
   readonly #coordination: VaultCoordination;
+  #nativeDirectoryName?: string;
+  #nativeDirectoryPermission: VaultFileStorageStatus["nativeDirectoryPermission"];
   #activeOperation?: VaultOperationContext;
 
   private constructor(
     database: VaultDatabase,
-    filesystem: VaultFilesystem,
+    filesystem: MirroredVaultFilesystem,
     coordination = new VaultCoordination(DEFAULT_DATABASE_NAME, DEFAULT_DIRECTORY_NAME),
   ) {
     this.#database = database;
     this.#filesystem = filesystem;
     this.#coordination = coordination;
+    this.#nativeDirectoryPermission = detectBrowserStorageSupport().directoryPicker
+      ? "not-configured"
+      : "unsupported";
   }
 
   static async open(options: VaultOptions = {}): Promise<Vault> {
@@ -71,10 +77,12 @@ export class Vault {
       );
     }
     try {
-      const filesystem = await VaultFilesystem.open(
-        options.directoryName ?? DEFAULT_DIRECTORY_NAME,
-      );
-      return new Vault(
+      const opfs = await VaultFilesystem.open(options.directoryName ?? DEFAULT_DIRECTORY_NAME);
+      let vault: Vault;
+      const filesystem = new MirroredVaultFilesystem(opfs, (reason) => {
+        vault.#nativeDirectoryPermission = reason === "permission" ? "prompt" : "error";
+      });
+      vault = new Vault(
         database,
         filesystem,
         new VaultCoordination(
@@ -82,6 +90,8 @@ export class Vault {
           options.directoryName ?? DEFAULT_DIRECTORY_NAME,
         ),
       );
+      await vault.#restoreNativeDirectory();
+      return vault;
     } catch (cause) {
       database.close();
       throw new Error(
@@ -89,6 +99,46 @@ export class Vault {
         { cause },
       );
     }
+  }
+
+  getFileStorageStatus(): VaultFileStorageStatus {
+    return {
+      nativeDirectoryAvailable: detectBrowserStorageSupport().directoryPicker,
+      nativeDirectoryName: this.#nativeDirectoryName,
+      nativeDirectoryPermission: this.#nativeDirectoryPermission,
+      mode: this.#nativeDirectoryPermission === "granted" ? "native-directory" : "opfs",
+    };
+  }
+
+  async connectNativeDirectory(): Promise<VaultFileStorageStatus> {
+    if (typeof globalThis.showDirectoryPicker !== "function") return this.getFileStorageStatus();
+    const handle = await globalThis.showDirectoryPicker({ id: "onyx-vault", mode: "readwrite" });
+    const permission = await handle.requestPermission({ mode: "readwrite" });
+    if (permission !== "granted") {
+      this.#nativeDirectoryName = handle.name;
+      this.#nativeDirectoryPermission = permission;
+      return this.getFileStorageStatus();
+    }
+    return this.#withLock(async () => {
+      const nativeFilesystem = await VaultFilesystem.fromDirectory(handle);
+      await this.#filesystem.copyTo(nativeFilesystem);
+      await this.#database.setNativeDirectoryHandle(handle);
+      this.#nativeDirectoryName = handle.name;
+      this.#nativeDirectoryPermission = "granted";
+      return this.getFileStorageStatus();
+    });
+  }
+
+  async disconnectNativeDirectory(): Promise<VaultFileStorageStatus> {
+    return this.#withLock(async () => {
+      this.#filesystem.detach();
+      await this.#database.deleteNativeDirectoryHandle();
+      this.#nativeDirectoryName = undefined;
+      this.#nativeDirectoryPermission = detectBrowserStorageSupport().directoryPicker
+        ? "not-configured"
+        : "unsupported";
+      return this.getFileStorageStatus();
+    });
   }
 
   close(): void {
@@ -141,8 +191,24 @@ export class Vault {
           typeof navigator.storage?.persisted === "function",
         quota: estimate.quota,
         usage: estimate.usage,
+        fileStorage: this.getFileStorageStatus(),
       };
     });
+  }
+
+  async #restoreNativeDirectory(): Promise<void> {
+    if (!detectBrowserStorageSupport().directoryPicker) return;
+    try {
+      const handle = await this.#database.getNativeDirectoryHandle();
+      if (!handle) return;
+      this.#nativeDirectoryName = handle.name;
+      const permission = await handle.queryPermission({ mode: "readwrite" });
+      this.#nativeDirectoryPermission = permission;
+      if (permission !== "granted") return;
+      this.#filesystem.attach(await VaultFilesystem.fromDirectory(handle));
+    } catch {
+      this.#nativeDirectoryPermission = "denied";
+    }
   }
 
   async saveNote(input: SaveNoteInput): Promise<Note> {

@@ -1,4 +1,17 @@
-export class VaultFilesystem {
+export interface VaultFileStorage {
+  listFiles(): Promise<Array<{ contents: Blob; path: string }>>;
+  read(path: string): Promise<File>;
+  readText(path: string): Promise<string>;
+  remove(path: string, options?: { recursive?: boolean; ignoreMissing?: boolean }): Promise<void>;
+  replace(
+    files: Array<{ contents: Blob; path: string }>,
+    commit: () => Promise<void>,
+  ): Promise<void>;
+  write(path: string, contents: Blob): Promise<void>;
+  writeText(path: string, contents: string): Promise<void>;
+}
+
+export class VaultFilesystem implements VaultFileStorage {
   readonly #root: FileSystemDirectoryHandle;
 
   private constructor(root: FileSystemDirectoryHandle) {
@@ -12,6 +25,12 @@ export class VaultFilesystem {
 
     const storageRoot = await navigator.storage.getDirectory();
     const root = await storageRoot.getDirectoryHandle(directoryName, { create: true });
+    await root.getDirectoryHandle("notes", { create: true });
+    await root.getDirectoryHandle("attachments", { create: true });
+    return new VaultFilesystem(root);
+  }
+
+  static async fromDirectory(root: FileSystemDirectoryHandle): Promise<VaultFilesystem> {
     await root.getDirectoryHandle("notes", { create: true });
     await root.getDirectoryHandle("attachments", { create: true });
     return new VaultFilesystem(root);
@@ -61,7 +80,7 @@ export class VaultFilesystem {
     files: Array<{ contents: Blob; path: string }>,
     commit: () => Promise<void>,
   ): Promise<void> {
-    const previousFiles = await this.#listFiles();
+    const previousFiles = await this.listFiles();
     try {
       await this.#replaceFiles(files);
       await commit();
@@ -86,7 +105,7 @@ export class VaultFilesystem {
     for (const file of files) await this.write(file.path, file.contents);
   }
 
-  async #listFiles(): Promise<Array<{ contents: Blob; path: string }>> {
+  async listFiles(): Promise<Array<{ contents: Blob; path: string }>> {
     const files: Array<{ contents: Blob; path: string }> = [];
     for (const directoryName of ["notes", "attachments"]) {
       const directory = await this.#root.getDirectoryHandle(directoryName, { create: true });
@@ -111,6 +130,94 @@ export class VaultFilesystem {
     }
     return { directory, name };
   }
+}
+
+export class MirroredVaultFilesystem implements VaultFileStorage {
+  #mirror?: VaultFilesystem;
+
+  constructor(
+    readonly fallback: VaultFilesystem,
+    private readonly onMirrorUnavailable: (reason: "error" | "permission") => void,
+  ) {}
+
+  attach(mirror: VaultFilesystem): void {
+    this.#mirror = mirror;
+  }
+
+  detach(): void {
+    this.#mirror = undefined;
+  }
+
+  async copyTo(mirror: VaultFilesystem): Promise<void> {
+    for (const file of await this.fallback.listFiles())
+      await mirror.write(file.path, file.contents);
+    this.attach(mirror);
+  }
+
+  listFiles(): Promise<Array<{ contents: Blob; path: string }>> {
+    return this.fallback.listFiles();
+  }
+
+  read(path: string): Promise<File> {
+    return this.fallback.read(path);
+  }
+
+  readText(path: string): Promise<string> {
+    return this.fallback.readText(path);
+  }
+
+  async write(path: string, contents: Blob): Promise<void> {
+    await this.fallback.write(path, contents);
+    await this.#runMirror((mirror) => mirror.write(path, contents));
+  }
+
+  async writeText(path: string, contents: string): Promise<void> {
+    await this.fallback.writeText(path, contents);
+    await this.#runMirror((mirror) => mirror.writeText(path, contents));
+  }
+
+  async remove(
+    path: string,
+    options?: { recursive?: boolean; ignoreMissing?: boolean },
+  ): Promise<void> {
+    await this.fallback.remove(path, options);
+    await this.#runMirror((mirror) => mirror.remove(path, options));
+  }
+
+  async replace(
+    files: Array<{ contents: Blob; path: string }>,
+    commit: () => Promise<void>,
+  ): Promise<void> {
+    await this.fallback.replace(files, async () => {
+      const mirror = this.#mirror;
+      if (!mirror) return commit();
+      try {
+        await mirror.replace(files, commit);
+      } catch (error) {
+        this.detach();
+        this.onMirrorUnavailable(isPermissionError(error) ? "permission" : "error");
+        await commit();
+      }
+    });
+  }
+
+  async #runMirror(operation: (mirror: VaultFilesystem) => Promise<void>): Promise<void> {
+    const mirror = this.#mirror;
+    if (!mirror) return;
+    try {
+      await operation(mirror);
+    } catch (error) {
+      this.detach();
+      this.onMirrorUnavailable(isPermissionError(error) ? "permission" : "error");
+    }
+  }
+}
+
+function isPermissionError(error: unknown): boolean {
+  return (
+    error instanceof DOMException &&
+    (error.name === "NotAllowedError" || error.name === "SecurityError")
+  );
 }
 
 async function collectFiles(
