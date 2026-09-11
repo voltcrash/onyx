@@ -229,6 +229,12 @@
   font-weight: 700;
   line-height: 1.5;
 }
+.live-editable-line:is(.heading-4, .heading-5, .heading-6) {
+  margin-top: 0.25em;
+  color: var(--ink-strong);
+  font-weight: 700;
+  line-height: 1.55;
+}
 .live-editable-line.quote-line {
   padding-left: 1em;
   border-left: 3px solid var(--accent-border);
@@ -247,6 +253,9 @@
 }
 .live-list-marker::before {
   content: "•";
+}
+.live-list-marker.ordered::before {
+  content: attr(data-marker);
 }
 .live-task-check {
   height: 1.1em;
@@ -280,6 +289,29 @@
     0.86em "SFMono-Regular",
     Consolas,
     monospace;
+}
+.live-editable-line mark {
+  padding: 0.08em 0.18em;
+  border-radius: 3px;
+  background: var(--selection);
+  color: inherit;
+}
+.live-editable-line sub,
+.live-editable-line sup {
+  font-size: 0.72em;
+  line-height: 0;
+}
+.live-editable-line.rule-line {
+  position: relative;
+  min-height: 1.76em;
+}
+.live-editable-line.rule-line::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  border-top: 1px solid var(--line);
 }
 .live-editable-line a {
   color: var(--accent-link);
@@ -326,14 +358,28 @@
   font-size: 1.18em;
   line-height: 1.5;
 }
+.live-rendered-line h4,
+.live-rendered-line h5,
+.live-rendered-line h6 {
+  margin-top: 0.25em;
+  color: var(--ink-strong);
+  font-size: 1em;
+  line-height: 1.55;
+}
 .live-rendered-line blockquote {
   padding-left: 1em;
   border-left: 3px solid var(--accent-border);
   color: var(--ink-soft);
   font-style: italic;
 }
-.live-rendered-line ul {
+.live-rendered-line ul,
+.live-rendered-line ol {
   padding-left: 1.4em;
+}
+.live-rendered-line hr {
+  margin: 0.85em 0;
+  border: 0;
+  border-top: 1px solid var(--line);
 }
 .live-rendered-line pre {
   overflow-x: auto;
