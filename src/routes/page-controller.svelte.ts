@@ -328,8 +328,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     },
     {
       id: "backup",
-      group: "GitHub",
-      label: "Back up to GitHub",
+      group: "Backup & sync",
+      label: "Back up for cross-device sync",
       icon: CloudUpload,
       keywords: "commit push sync",
       disabled: !isOnline || githubState !== "connected",
@@ -337,7 +337,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     },
     {
       id: "restore",
-      group: "GitHub",
+      group: "Backup & sync",
       label: "Restore from a GitHub commit",
       icon: CloudDownload,
       keywords: "download history rollback",

@@ -72,9 +72,9 @@
 		{ id: 'editor', label: 'Editor' },
 		{ id: 'themes', label: 'Themes' },
 		{ id: 'shortcuts', label: 'Keyboard shortcuts' },
-		{ id: 'github', label: 'GitHub account' },
-		{ id: 'repository', label: 'Repository' },
-		{ id: 'backup', label: 'Backup status' },
+		{ id: 'github', label: 'Backup & sync' },
+		{ id: 'repository', label: 'Sync repository' },
+		{ id: 'backup', label: 'Sync status' },
 		{ id: 'storage', label: 'Storage' },
 		{ id: 'transfer', label: 'Import & export' },
 		{ id: 'vault', label: 'Vault' }
@@ -368,8 +368,8 @@
 						{/each}
 					</div>
 				{:else if section === 'github'}
-					<h3>GitHub account</h3>
-					<p class="settings-hint">Onyx signs in with a GitHub App so backups go straight from this device to your repository.</p>
+					<h3>Backup and sync with GitHub</h3>
+					<p class="settings-hint">Sign-in is optional. It enables private backups that you can restore on another device; your working vault stays on this device.</p>
 					{#if connected && githubUser}
 						<div class="settings-account">
 							<span class="github-avatar" aria-hidden="true">{githubUser.login.slice(0, 1)}</span>
@@ -379,16 +379,16 @@
 					{:else}
 						<div class="settings-account empty">
 							<CloudOff size={22} />
-							<span><strong>Not connected</strong><small>{githubMessage || 'Connect GitHub to back up and restore this vault.'}</small></span>
+							<span><strong>Local only</strong><small>{githubMessage || 'Sign in to enable GitHub backup and cross-device sync.'}</small></span>
 							<button class="settings-primary" disabled={!isOnline || githubState === 'loading'} onclick={onConnectGithub}>
-								{#if githubState === 'loading'}<LoaderCircle class="spin" size={14} />{:else}<GithubIcon size={14} />{/if} Connect GitHub
+								{#if githubState === 'loading'}<LoaderCircle class="spin" size={14} />{:else}<GithubIcon size={14} />{/if} Sign in with GitHub
 							</button>
 						</div>
 					{/if}
 				{:else if section === 'repository'}
-					<h3>Backup repository</h3>
+					<h3>Sync repository</h3>
 					{#if !connected}
-						<p class="settings-hint">Connect GitHub first to choose a repository.</p>
+						<p class="settings-hint">Sign in with GitHub to choose where this vault is backed up for cross-device restore.</p>
 					{:else}
 						<p class="settings-hint">“{vaultName}” backs up on its own. Only private repositories with write access can be used, and notes are written under the directory below.</p>
 						<div class="settings-field">
@@ -423,7 +423,7 @@
 						</div>
 					{/if}
 				{:else if section === 'backup'}
-					<h3>Backup status</h3>
+					<h3>Backup and sync status</h3>
 					{#if !githubBackup}
 						<p class="settings-hint">“{vaultName}” has no repository yet. Choose one in the Repository section to enable backups for this repository alone.</p>
 					{:else}

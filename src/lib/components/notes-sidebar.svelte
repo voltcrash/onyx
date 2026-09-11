@@ -143,7 +143,7 @@
 	{/if}
 	<div class="sidebar-footer">
 		{#if githubState === 'connected' && githubUser}
-			<div class="github-account" class:offline={!isOnline} title={isOnline ? `Connected as ${githubUser.login}` : `Connected as ${githubUser.login}; GitHub is unavailable offline`}><span class="github-avatar" aria-hidden="true">{githubUser.login.slice(0, 1)}</span><span class="github-login">@{githubUser.login}</span><button aria-label="Disconnect GitHub" title={isOnline ? 'Disconnect GitHub' : 'Disconnect is unavailable offline'} disabled={!isOnline} onclick={onDisconnectGithub}><LogOut size={14} /></button></div>
+			<div class="github-account" class:offline={!isOnline} title={isOnline ? `GitHub sync enabled as ${githubUser.login}` : `Signed in as ${githubUser.login}; sync is paused offline`}><span class="github-avatar" aria-hidden="true">{githubUser.login.slice(0, 1)}</span><span class="github-login">@{githubUser.login}</span><button aria-label="Turn off GitHub sync" title={isOnline ? 'Turn off GitHub sync' : 'GitHub sync is unavailable offline'} disabled={!isOnline} onclick={onDisconnectGithub}><LogOut size={14} /></button></div>
 		{:else}
 			<button class="github-connect" class:error={githubState === 'error'} title={githubMessage || 'Notes are saved on this device'} aria-label="Open local storage settings" onclick={onOpenSettings}><HardDrive size={16} /><span>Saved locally</span></button>
 		{/if}
