@@ -313,9 +313,9 @@
 
 					<div class="type-specimen" aria-label="Typography preview">
 						<div class="type-specimen-label">Preview</div>
-						<h4>TypeScript 7 goes native</h4>
-						<p>TypeScript 7 moves the compiler to Go, bringing native speed and shared-memory parallelism to full builds.</p>
-						<p><code>tsc --build --watch</code></p>
+						<h4>Errors should travel</h4>
+						<p>The question mark passes a recoverable error to the caller, keeping failure explicit and the happy path clear.</p>
+						<p><code>let mut username_file = File::open("hello.txt")?;</code></p>
 					</div>
 
 					{#each fontRoles as role (role.id)}
