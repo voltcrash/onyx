@@ -8,7 +8,7 @@
   /* Writing typefaces. Overridden per role on the root element from settings. */
   --font-heading: "Newsreader Variable", Georgia, "Times New Roman", serif;
   --font-content: "Geist Variable", "Inter Variable", Inter, sans-serif;
-  --font-code: "Geist Mono Variable", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --font-code: "Fira Code Variable", ui-monospace, "SFMono-Regular", Consolas, monospace;
 
   --ink: #262623;
   --ink-strong: #22211f;

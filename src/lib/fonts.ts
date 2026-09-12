@@ -194,7 +194,7 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
 export const defaultFontChoices: FontChoices = {
   heading: "newsreader",
   content: "geist",
-  code: "geist-mono",
+  code: "fira-code",
 };
 
 const STORAGE_KEY: Record<FontRole, string> = {
