@@ -313,9 +313,9 @@
 
 					<div class="type-specimen" aria-label="Typography preview">
 						<div class="type-specimen-label">Preview</div>
-						<h4>A rewrite worth shipping</h4>
-						<p>Onyx is being rewritten from TypeScript to Go, keeping the same ideas while moving to a smaller, faster runtime.</p>
-						<p><code>go test ./... &amp;&amp; go build ./...</code></p>
+						<h4>TypeScript 7 goes native</h4>
+						<p>TypeScript 7 moves the compiler to Go, bringing native speed and shared-memory parallelism to full builds.</p>
+						<p><code>tsc --build --watch</code></p>
 					</div>
 
 					{#each fontRoles as role (role.id)}
