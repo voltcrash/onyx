@@ -1,5 +1,7 @@
 import {
+  ArrowLeftRight,
   CloudDownload,
+  Columns2,
   CloudUpload,
   Download,
   FileArchive,
@@ -15,6 +17,7 @@ import {
   PanelLeftClose,
   Lock,
   PanelRightClose,
+  Rows2,
   Save,
   Search,
   Settings,
@@ -23,6 +26,8 @@ import {
 import type {
   BackupState,
   GithubState,
+  PaneLayout,
+  PaneOrder,
   RestoreState,
   SaveState,
   TransferState,
@@ -142,6 +147,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let sourcePaneVisible = $state(true);
   let renderedPaneVisible = $state(true);
   let renderedReadOnly = $state(true);
+  let paneLayout = $state<PaneLayout>("columns");
+  let paneOrder = $state<PaneOrder>("source-first");
   let splitRatio = $state(50);
   let contentWidth = $state(DEFAULT_CONTENT_WIDTH);
   let editingSurface: "source" | "rendered" = "source";
@@ -229,6 +236,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     results.slice(notePage * NOTE_PAGE_SIZE, (notePage + 1) * NOTE_PAGE_SIZE),
   );
   const hasContent = $derived(markdown.trim().length > 0);
+  // Narrow viewports show one pane at a time, where neither arrangement is visible.
+  const effectivePaneLayout = $derived<PaneLayout>(singlePaneMode ? "columns" : paneLayout);
+
   const paletteItems = $derived([
     ...paletteNotes.map((note) => ({
       id: `note-${note.id}`,
@@ -286,6 +296,24 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       keywords: "page preview right pane",
       disabled: !singlePaneMode && renderedPaneVisible && !sourcePaneVisible,
       run: () => toggleRenderedPane(),
+    },
+    {
+      id: "swap-panes",
+      group: "View",
+      label: "Swap the pane positions",
+      icon: ArrowLeftRight,
+      keywords: "move switch sides order panes",
+      disabled: singlePaneMode,
+      run: () => swapPanes(),
+    },
+    {
+      id: "toggle-pane-layout",
+      group: "View",
+      label: effectivePaneLayout === "rows" ? "Place the panes side by side" : "Stack the panes",
+      icon: effectivePaneLayout === "rows" ? Columns2 : Rows2,
+      keywords: "split horizontal vertical stack columns rows layout",
+      disabled: singlePaneMode,
+      run: () => togglePaneLayout(),
     },
     {
       id: "toggle-read-only",
@@ -1255,7 +1283,25 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     editingSurface = pane === "source" || renderedReadOnly ? "source" : "rendered";
   }
 
+  function swapPanes(): void {
+    if (singlePaneMode) return;
+    paneOrder = paneOrder === "source-first" ? "rendered-first" : "source-first";
+    // The panes trade places, so the stored split has to follow them to keep their sizes.
+    splitRatio = clampSplitRatio(100 - splitRatio);
+    writeLocalStorage("onyx:pane-order", paneOrder);
+    saveSplitRatio();
+  }
+
+  function togglePaneLayout(): void {
+    if (singlePaneMode) return;
+    paneLayout = paneLayout === "columns" ? "rows" : "columns";
+    writeLocalStorage("onyx:pane-layout", paneLayout);
+  }
+
   function applyPanePreferences(): void {
+    paneLayout = readLocalStorage("onyx:pane-layout") === "rows" ? "rows" : "columns";
+    paneOrder =
+      readLocalStorage("onyx:pane-order") === "rendered-first" ? "rendered-first" : "source-first";
     const storedSourcePane = readLocalStorage("onyx:source-pane-visible");
     const storedRenderedPane = readLocalStorage("onyx:rendered-pane-visible");
     const storedReadOnly = readLocalStorage("onyx:rendered-read-only");
@@ -2007,6 +2053,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get renderedReadOnly() {
       return renderedReadOnly;
     },
+    get paneLayout() {
+      return effectivePaneLayout;
+    },
+    get paneOrder() {
+      return paneOrder;
+    },
+    get singlePaneMode() {
+      return singlePaneMode;
+    },
     get splitRatio() {
       return splitRatio;
     },
@@ -2126,6 +2181,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     setContentWidth,
     toggleSourcePane,
     toggleRenderedPane,
+    swapPanes,
+    togglePaneLayout,
     toggleRenderedReadOnly,
     focusSourceEditor,
     focusLiveLine,

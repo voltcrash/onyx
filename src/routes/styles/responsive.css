@@ -40,8 +40,8 @@
   }
   /* Touch has no hover, so the pane handles stay open and sit inside the edge gesture zone. */
   .pane-handle,
-  .source-hidden .pane-handle,
-  .rendered-hidden .pane-handle {
+  .first-hidden .pane-handle,
+  .second-hidden .pane-handle {
     width: 30px;
     height: 30px;
     border-color: var(--line-strong);
@@ -49,16 +49,16 @@
     color: var(--muted);
     box-shadow: var(--shadow-sm);
   }
-  .pane-handle-top {
+  .pane-handle-start {
     top: calc(50% - 19px);
   }
-  .pane-handle-bottom {
+  .pane-handle-end {
     top: calc(50% + 19px);
   }
-  .source-hidden .pane-handle {
+  .first-hidden .pane-handle {
     transform: translate(14px, -50%);
   }
-  .rendered-hidden .pane-handle {
+  .second-hidden .pane-handle {
     transform: translate(calc(-100% - 14px), -50%);
   }
 }

@@ -39,6 +39,8 @@
 		primaryModifier={page.primaryModifier}
 		renderedPaneVisible={page.renderedPaneVisible}
 		renderedReadOnly={page.renderedReadOnly}
+		paneLayout={page.paneLayout}
+		singlePaneMode={page.singlePaneMode}
 		wordCount={page.wordCount}
 		readingMinutes={page.readingMinutes}
 		contentWidth={page.contentWidth}
@@ -59,6 +61,8 @@
 		onInsertSyntax={page.insertSyntax}
 		onPrefixLine={page.prefixLine}
 		onToggleRenderedReadOnly={page.toggleRenderedReadOnly}
+		onSwapPanes={page.swapPanes}
+		onTogglePaneLayout={page.togglePaneLayout}
 		onContentWidthChange={page.setContentWidth}
 	/>
 
@@ -67,6 +71,8 @@
 		storageError={page.storageError}
 		sourcePaneVisible={page.sourcePaneVisible}
 		renderedPaneVisible={page.renderedPaneVisible}
+		paneLayout={page.paneLayout}
+		paneOrder={page.paneOrder}
 		renderedReadOnly={page.renderedReadOnly}
 		inlinePreviewBehavior={page.inlinePreviewBehavior}
 		markdown={page.markdown}

@@ -1,14 +1,16 @@
 <script lang="ts">
-	import { ChevronLeft, ChevronRight, CloudOff, HardDrive, PanelLeft, PencilLine, X } from '@lucide/svelte';
+	import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, PanelLeft, PencilLine, X } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib';
 	import type { InlinePreviewBehavior } from './settings-dialog.svelte';
-	import type { SaveState, TransferState } from './app-types';
+	import type { PaneLayout, PaneOrder, SaveState, TransferState } from './app-types';
 
 	interface Props {
 		storageNotice: string;
 		storageError: string;
 		sourcePaneVisible: boolean;
 		renderedPaneVisible: boolean;
+		paneLayout: PaneLayout;
+		paneOrder: PaneOrder;
 		renderedReadOnly: boolean;
 		inlinePreviewBehavior: InlinePreviewBehavior;
 		markdown: string;
@@ -47,7 +49,7 @@
 	}
 
 	let {
-		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, renderedReadOnly, inlinePreviewBehavior, markdown, markdownLines, liveLine,
+		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedReadOnly, inlinePreviewBehavior, markdown, markdownLines, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar,
 		splitRatio, contentWidth, onToggleSourcePane, onToggleRenderedPane, onResize, onResizeEnd, onReload, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
@@ -58,11 +60,25 @@
 	let shell = $state<HTMLElement>();
 	let resizing = $state(false);
 	let bothPanesVisible = $derived(sourcePaneVisible && renderedPaneVisible);
+	let stacked = $derived(paneLayout === 'rows');
+	let swapped = $derived(paneOrder === 'rendered-first');
+	// The divider handles follow the visual arrangement rather than a fixed pane.
+	let firstPane = $derived(swapped ? 'page' : 'Markdown');
+	let secondPane = $derived(swapped ? 'Markdown' : 'page');
+	let firstPaneVisible = $derived(swapped ? renderedPaneVisible : sourcePaneVisible);
+	let secondPaneVisible = $derived(swapped ? sourcePaneVisible : renderedPaneVisible);
+	let toggleFirstPane = $derived(swapped ? onToggleRenderedPane : onToggleSourcePane);
+	let toggleSecondPane = $derived(swapped ? onToggleSourcePane : onToggleRenderedPane);
+	let towardsStart = $derived(stacked ? ChevronUp : ChevronLeft);
+	let towardsEnd = $derived(stacked ? ChevronDown : ChevronRight);
 
-	function resizeTo(clientX: number): void {
+	function resizeTo(event: PointerEvent): void {
 		const bounds = shell?.getBoundingClientRect();
-		if (!bounds?.width) return;
-		onResize(((clientX - bounds.left) / bounds.width) * 100);
+		if (!bounds) return;
+		const span = stacked ? bounds.height : bounds.width;
+		if (!span) return;
+		const offset = stacked ? event.clientY - bounds.top : event.clientX - bounds.left;
+		onResize((offset / span) * 100);
 	}
 
 	function startResize(event: PointerEvent): void {
@@ -73,7 +89,7 @@
 	}
 
 	function trackResize(event: PointerEvent): void {
-		if (resizing) resizeTo(event.clientX);
+		if (resizing) resizeTo(event);
 	}
 
 	function endResize(event: PointerEvent): void {
@@ -85,8 +101,8 @@
 
 	function nudgeResize(event: KeyboardEvent): void {
 		if (!bothPanesVisible) return;
-		if (event.key === 'ArrowLeft') onResize(splitRatio - 2);
-		else if (event.key === 'ArrowRight') onResize(splitRatio + 2);
+		if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') onResize(splitRatio - 2);
+		else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') onResize(splitRatio + 2);
 		else if (event.key === 'Home' || event.key === 'End') onResize(event.key === 'Home' ? 20 : 80);
 		else return;
 		event.preventDefault();
@@ -114,17 +130,21 @@
 		</div>
 	{/if}
 
-	<section bind:this={shell} class="editor-shell" class:source-hidden={!sourcePaneVisible} class:rendered-hidden={!renderedPaneVisible} class:resizing style={`--split: ${splitRatio}%; --content-width: ${contentWidth}px`}>
+	<section bind:this={shell} class="editor-shell" class:source-hidden={!sourcePaneVisible} class:rendered-hidden={!renderedPaneVisible} class:panes-stacked={stacked} class:panes-swapped={swapped} class:first-hidden={!firstPaneVisible} class:second-hidden={!secondPaneVisible} class:resizing style={`--split: ${splitRatio}%; --content-width: ${contentWidth}px`}>
 		<div class="editor-pane">
 			<textarea bind:this={editor} value={markdown} onfocus={onSourceFocus} oninput={(event) => onMarkdownChange(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
 		</div>
 		<div class="pane-divider">
-			<button type="button" class="pane-resize" class:enabled={bothPanesVisible} aria-label={`Resize the panes, Markdown takes ${Math.round(splitRatio)} percent`} title="Drag to resize, double-click to even out" tabindex={bothPanesVisible ? 0 : -1} onpointerdown={startResize} onpointermove={trackResize} onpointerup={endResize} onpointercancel={endResize} onkeydown={nudgeResize} ondblclick={resetSplit}></button>
-			{#if renderedPaneVisible}
-				<button class="pane-handle pane-handle-top" title={sourcePaneVisible ? 'Hide the Markdown pane' : 'Show the Markdown pane'} aria-label={sourcePaneVisible ? 'Hide the Markdown pane' : 'Show the Markdown pane'} aria-expanded={sourcePaneVisible} onclick={onToggleSourcePane}>{#if sourcePaneVisible}<ChevronLeft size={15} />{:else}<ChevronRight size={15} />{/if}</button>
+			<button type="button" class="pane-resize" class:enabled={bothPanesVisible} aria-label={`Resize the panes, the ${firstPane} pane takes ${Math.round(splitRatio)} percent`} title="Drag to resize, double-click to even out" tabindex={bothPanesVisible ? 0 : -1} onpointerdown={startResize} onpointermove={trackResize} onpointerup={endResize} onpointercancel={endResize} onkeydown={nudgeResize} ondblclick={resetSplit}></button>
+			{#if secondPaneVisible}
+				{@const label = `${firstPaneVisible ? 'Hide' : 'Show'} the ${firstPane} pane`}
+				{@const Icon = firstPaneVisible ? towardsStart : towardsEnd}
+				<button class="pane-handle pane-handle-start" title={label} aria-label={label} aria-expanded={firstPaneVisible} onclick={toggleFirstPane}><Icon size={15} /></button>
 			{/if}
-			{#if sourcePaneVisible}
-				<button class="pane-handle pane-handle-bottom" title={renderedPaneVisible ? 'Hide the page pane' : 'Show the page pane'} aria-label={renderedPaneVisible ? 'Hide the page pane' : 'Show the page pane'} aria-expanded={renderedPaneVisible} onclick={onToggleRenderedPane}>{#if renderedPaneVisible}<ChevronRight size={15} />{:else}<ChevronLeft size={15} />{/if}</button>
+			{#if firstPaneVisible}
+				{@const label = `${secondPaneVisible ? 'Hide' : 'Show'} the ${secondPane} pane`}
+				{@const Icon = secondPaneVisible ? towardsEnd : towardsStart}
+				<button class="pane-handle pane-handle-end" title={label} aria-label={label} aria-expanded={secondPaneVisible} onclick={toggleSecondPane}><Icon size={15} /></button>
 			{/if}
 		</div>
 		<div class="preview-pane">
