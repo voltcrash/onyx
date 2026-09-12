@@ -563,6 +563,15 @@ kbd {
   border-radius: 10px;
   background: var(--paper);
 }
+.type-specimen-label {
+  display: inline-flex;
+  margin-bottom: 9px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
 .type-specimen h4 {
   margin: 0 0 9px;
   color: var(--ink-strong);
@@ -591,69 +600,35 @@ kbd {
   font-size: 12px;
 }
 .font-role {
-  margin-bottom: 16px;
-}
-.font-role-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
   align-items: baseline;
   gap: 8px;
-  margin-bottom: 7px;
+  margin-bottom: 11px;
 }
-.font-role-head strong {
-  flex: 0 0 auto;
+.font-role label {
   color: var(--ink-soft);
   font-size: 12px;
   font-weight: 650;
 }
-.font-role-head small {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.font-rail {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-  gap: 7px;
-}
-.font-tile {
-  display: grid;
-  gap: 3px;
-  justify-items: center;
-  padding: 9px 6px 7px;
-  border: 1px solid var(--line-soft);
-  border-radius: 9px;
+.font-role select {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
   background: var(--surface);
   color: var(--ink);
   cursor: pointer;
+  font-size: 13px;
 }
-.font-tile:hover {
+.font-role select:hover {
   border-color: var(--line-hover);
 }
-.font-tile.active {
-  border-color: var(--accent-border);
-  background: var(--accent-bg);
-  color: var(--accent);
-}
-.font-tile em {
-  font-family: var(--tile-font);
-  font-size: 25px;
-  font-style: normal;
-  font-weight: 500;
-  line-height: 1.15;
-}
-.font-tile span {
-  max-width: 100%;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 10.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.font-tile.active span {
-  color: var(--accent);
+.font-role select:focus-visible {
+  border-color: var(--focus-border);
+  box-shadow: 0 0 0 2px var(--focus-ring);
+  outline: none;
 }
 .font-role + .theme-section-title {
   margin-top: 6px;
