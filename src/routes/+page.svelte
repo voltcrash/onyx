@@ -69,10 +69,11 @@
 	<MarkdownWorkspace
 		storageNotice={page.storageNotice}
 		storageError={page.storageError}
-		sourcePaneVisible={page.sourcePaneVisible}
+		outputPaneVisible={page.outputPaneVisible}
 		renderedPaneVisible={page.renderedPaneVisible}
 		paneLayout={page.paneLayout}
 		paneOrder={page.paneOrder}
+		outputView={page.outputView}
 		renderedReadOnly={page.renderedReadOnly}
 		inlinePreviewBehavior={page.inlinePreviewBehavior}
 		markdown={page.markdown}
@@ -92,7 +93,8 @@
 		onToggleSidebar={page.toggleSidebar}
 		splitRatio={page.splitRatio}
 		contentWidth={page.contentWidth}
-		onToggleSourcePane={page.toggleSourcePane}
+		onToggleOutputPane={page.toggleOutputPane}
+		onOutputViewChange={page.setOutputView}
 		onToggleRenderedPane={page.toggleRenderedPane}
 		onResize={page.setSplitRatio}
 		onResizeEnd={page.saveSplitRatio}

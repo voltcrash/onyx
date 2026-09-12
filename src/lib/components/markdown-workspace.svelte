@@ -3,14 +3,16 @@
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib';
 	import type { InlinePreviewBehavior } from './settings-dialog.svelte';
 	import type { PaneLayout, PaneOrder, SaveState, TransferState } from './app-types';
+	import { outputViews, type OutputView } from './output-views';
 
 	interface Props {
 		storageNotice: string;
 		storageError: string;
-		sourcePaneVisible: boolean;
+		outputPaneVisible: boolean;
 		renderedPaneVisible: boolean;
 		paneLayout: PaneLayout;
 		paneOrder: PaneOrder;
+		outputView: OutputView;
 		renderedReadOnly: boolean;
 		inlinePreviewBehavior: InlinePreviewBehavior;
 		markdown: string;
@@ -30,7 +32,8 @@
 		onToggleSidebar: () => void;
 		splitRatio: number;
 		contentWidth: number;
-		onToggleSourcePane: () => void;
+		onToggleOutputPane: () => void;
+		onOutputViewChange: (view: OutputView) => void;
 		onToggleRenderedPane: () => void;
 		onResize: (ratio: number) => void;
 		onResizeEnd: () => void;
@@ -49,26 +52,26 @@
 	}
 
 	let {
-		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedReadOnly, inlinePreviewBehavior, markdown, markdownLines, liveLine,
+		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, outputView, renderedReadOnly, inlinePreviewBehavior, markdown, markdownLines, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar,
-		splitRatio, contentWidth, onToggleSourcePane, onToggleRenderedPane, onResize, onResizeEnd, onReload, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
+		splitRatio, contentWidth, onToggleOutputPane, onOutputViewChange, onToggleRenderedPane, onResize, onResizeEnd, onReload, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
 		onRenderedLineKeydown, onLiveLineChange, onLiveLineKeydown, onActivateLiveLine,
 		renderEditableLine, renderLiveLine, liveLineKind
 	}: Props = $props();
 
 	let shell = $state<HTMLElement>();
 	let resizing = $state(false);
-	let bothPanesVisible = $derived(sourcePaneVisible && renderedPaneVisible);
+	let bothPanesVisible = $derived(outputPaneVisible && renderedPaneVisible);
 	let stacked = $derived(paneLayout === 'rows');
 	let swapped = $derived(paneOrder === 'rendered-first');
 	// The divider handles follow the visual arrangement rather than a fixed pane.
-	let firstPane = $derived(swapped ? 'page' : 'Markdown');
-	let secondPane = $derived(swapped ? 'Markdown' : 'page');
-	let firstPaneVisible = $derived(swapped ? renderedPaneVisible : sourcePaneVisible);
-	let secondPaneVisible = $derived(swapped ? sourcePaneVisible : renderedPaneVisible);
-	let toggleFirstPane = $derived(swapped ? onToggleRenderedPane : onToggleSourcePane);
-	let toggleSecondPane = $derived(swapped ? onToggleSourcePane : onToggleRenderedPane);
+	let firstPane = $derived(swapped ? 'page' : 'output');
+	let secondPane = $derived(swapped ? 'output' : 'page');
+	let firstPaneVisible = $derived(swapped ? renderedPaneVisible : outputPaneVisible);
+	let secondPaneVisible = $derived(swapped ? outputPaneVisible : renderedPaneVisible);
+	let toggleFirstPane = $derived(swapped ? onToggleRenderedPane : onToggleOutputPane);
+	let toggleSecondPane = $derived(swapped ? onToggleOutputPane : onToggleRenderedPane);
 	let towardsStart = $derived(stacked ? ChevronUp : ChevronLeft);
 	let towardsEnd = $derived(stacked ? ChevronDown : ChevronRight);
 
@@ -130,9 +133,18 @@
 		</div>
 	{/if}
 
-	<section bind:this={shell} class="editor-shell" class:source-hidden={!sourcePaneVisible} class:rendered-hidden={!renderedPaneVisible} class:panes-stacked={stacked} class:panes-swapped={swapped} class:first-hidden={!firstPaneVisible} class:second-hidden={!secondPaneVisible} class:resizing style={`--split: ${splitRatio}%; --content-width: ${contentWidth}px`}>
-		<div class="editor-pane">
-			<textarea bind:this={editor} value={markdown} onfocus={onSourceFocus} oninput={(event) => onMarkdownChange(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
+	<section bind:this={shell} class="editor-shell" class:output-hidden={!outputPaneVisible} class:rendered-hidden={!renderedPaneVisible} class:panes-stacked={stacked} class:panes-swapped={swapped} class:first-hidden={!firstPaneVisible} class:second-hidden={!secondPaneVisible} class:resizing style={`--split: ${splitRatio}%; --content-width: ${contentWidth}px`}>
+		<div class="output-pane">
+			<div class="output-toolbar">
+				<div class="output-views" role="tablist" aria-label="Output view">
+					{#each outputViews as view (view.id)}
+						<button role="tab" class:active={outputView === view.id} aria-selected={outputView === view.id} title={view.description} onclick={() => onOutputViewChange(view.id)}><view.icon size={14} /><span>{view.label}</span></button>
+					{/each}
+				</div>
+			</div>
+			<div class="output-body">
+				<textarea bind:this={editor} value={markdown} onfocus={onSourceFocus} oninput={(event) => onMarkdownChange(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
+			</div>
 		</div>
 		<div class="pane-divider">
 			<button type="button" class="pane-resize" class:enabled={bothPanesVisible} aria-label={`Resize the panes, the ${firstPane} pane takes ${Math.round(splitRatio)} percent`} title="Drag to resize, double-click to even out" tabindex={bothPanesVisible ? 0 : -1} onpointerdown={startResize} onpointermove={trackResize} onpointerup={endResize} onpointercancel={endResize} onkeydown={nudgeResize} ondblclick={resetSplit}></button>

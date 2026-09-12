@@ -23,30 +23,30 @@
 .editor-shell.panes-stacked.second-hidden {
   grid-template-rows: minmax(0, 1fr) 1px 0;
 }
-.editor-pane,
+.output-pane,
 .preview-pane {
   min-width: 0;
   min-height: 0;
 }
 /* Pinned tracks: a hidden pane must not shift the others along the grid. */
-.editor-pane {
+.output-pane {
   grid-row: 1;
   grid-column: 1;
   display: flex;
   flex-direction: column;
   background: var(--editor);
 }
-.panes-swapped .editor-pane {
+.panes-swapped .output-pane {
   grid-column: 3;
 }
-.panes-stacked .editor-pane {
+.panes-stacked .output-pane {
   grid-column: 1;
   grid-row: 1;
 }
-.panes-stacked.panes-swapped .editor-pane {
+.panes-stacked.panes-swapped .output-pane {
   grid-row: 3;
 }
-.source-hidden .editor-pane,
+.output-hidden .output-pane,
 .rendered-hidden .preview-pane {
   display: none;
 }
@@ -193,7 +193,53 @@
   background: var(--subtle-strong);
   color: var(--ink);
 }
-.editor-pane > textarea {
+.output-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface-raised);
+}
+.output-views {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.output-views button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 27px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.output-views button:hover {
+  background: var(--subtle-strong);
+  color: var(--ink);
+}
+.output-views button.active {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--ink);
+}
+.output-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.output-body > textarea {
   flex: 1;
   width: 100%;
   min-height: 0;
@@ -210,10 +256,10 @@
   max-width: var(--content-width);
   margin: 0 auto;
 }
-.editor-pane > textarea::placeholder {
+.output-body > textarea::placeholder {
   color: var(--faint);
 }
-.editor-pane > textarea::selection {
+.output-body > textarea::selection {
   background: var(--selection);
 }
 .live-editor {

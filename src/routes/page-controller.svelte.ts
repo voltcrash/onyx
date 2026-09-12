@@ -32,6 +32,7 @@ import type {
   SaveState,
   TransferState,
 } from "$lib/components/app-types";
+import { isOutputView, type OutputView } from "$lib/components/output-views";
 import type { InlinePreviewBehavior, SettingsSection } from "$lib/components/settings-types";
 import { renderMarkdown, resolveLocalAttachmentUrl, type LocalAttachmentUrl } from "$lib/markdown";
 import {
@@ -144,9 +145,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let notePage = $state(0);
   let searchQuery = $state("");
   let singlePaneMode = $state(false);
-  let sourcePaneVisible = $state(true);
+  let outputPaneVisible = $state(true);
   let renderedPaneVisible = $state(true);
   let renderedReadOnly = $state(true);
+  let outputView = $state<OutputView>("markdown");
   let paneLayout = $state<PaneLayout>("columns");
   let paneOrder = $state<PaneOrder>("source-first");
   let splitRatio = $state(50);
@@ -279,13 +281,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       run: () => focusSearch(),
     },
     {
-      id: "toggle-source-pane",
+      id: "toggle-output-pane",
       group: "View",
-      label: sourcePaneVisible ? "Hide Markdown pane" : "Show Markdown pane",
+      label: outputPaneVisible ? "Hide output pane" : "Show output pane",
       icon: PanelLeftClose,
-      keywords: "write markdown left pane",
-      disabled: !singlePaneMode && sourcePaneVisible && !renderedPaneVisible,
-      run: () => toggleSourcePane(),
+      keywords: "write markdown source output left pane",
+      disabled: !singlePaneMode && outputPaneVisible && !renderedPaneVisible,
+      run: () => toggleOutputPane(),
     },
     {
       id: "toggle-rendered-pane",
@@ -294,7 +296,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       shortcut: shortcutLabel("togglePreview"),
       icon: PanelRightClose,
       keywords: "page preview right pane",
-      disabled: !singlePaneMode && renderedPaneVisible && !sourcePaneVisible,
+      disabled: !singlePaneMode && renderedPaneVisible && !outputPaneVisible,
       run: () => toggleRenderedPane(),
     },
     {
@@ -1278,7 +1280,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   // A single-pane viewport switches views instead of splitting, and leaves the stored split alone.
   function showOnlyPane(pane: "source" | "rendered"): void {
-    sourcePaneVisible = pane === "source";
+    outputPaneVisible = pane === "source";
     renderedPaneVisible = pane === "rendered";
     editingSurface = pane === "source" || renderedReadOnly ? "source" : "rendered";
   }
@@ -1292,6 +1294,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     saveSplitRatio();
   }
 
+  function setOutputView(view: OutputView): void {
+    outputView = view;
+    writeLocalStorage("onyx:output-view", view);
+  }
+
   function togglePaneLayout(): void {
     if (singlePaneMode) return;
     paneLayout = paneLayout === "columns" ? "rows" : "columns";
@@ -1299,10 +1306,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function applyPanePreferences(): void {
+    const storedOutputView = readLocalStorage("onyx:output-view");
+    outputView = isOutputView(storedOutputView) ? storedOutputView : "markdown";
     paneLayout = readLocalStorage("onyx:pane-layout") === "rows" ? "rows" : "columns";
     paneOrder =
       readLocalStorage("onyx:pane-order") === "rendered-first" ? "rendered-first" : "source-first";
-    const storedSourcePane = readLocalStorage("onyx:source-pane-visible");
+    const storedOutputPane = readLocalStorage("onyx:output-pane-visible");
     const storedRenderedPane = readLocalStorage("onyx:rendered-pane-visible");
     const storedReadOnly = readLocalStorage("onyx:rendered-read-only");
     renderedReadOnly = storedReadOnly ? storedReadOnly !== "false" : !singlePaneMode;
@@ -1310,21 +1319,21 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       showOnlyPane(storedRenderedPane === "false" ? "source" : "rendered");
       return;
     }
-    sourcePaneVisible = storedSourcePane !== "false";
+    outputPaneVisible = storedOutputPane !== "false";
     renderedPaneVisible = storedRenderedPane !== "false";
-    if (!sourcePaneVisible && !renderedPaneVisible) sourcePaneVisible = true;
-    if (!sourcePaneVisible && !renderedReadOnly) editingSurface = "rendered";
+    if (!outputPaneVisible && !renderedPaneVisible) outputPaneVisible = true;
+    if (!outputPaneVisible && !renderedReadOnly) editingSurface = "rendered";
   }
 
-  function toggleSourcePane(): void {
+  function toggleOutputPane(): void {
     if (singlePaneMode) {
-      showOnlyPane(sourcePaneVisible ? "rendered" : "source");
+      showOnlyPane(outputPaneVisible ? "rendered" : "source");
       return;
     }
-    if (sourcePaneVisible && !renderedPaneVisible) return;
-    sourcePaneVisible = !sourcePaneVisible;
-    writeLocalStorage("onyx:source-pane-visible", String(sourcePaneVisible));
-    if (!sourcePaneVisible && renderedPaneVisible && !renderedReadOnly) editingSurface = "rendered";
+    if (outputPaneVisible && !renderedPaneVisible) return;
+    outputPaneVisible = !outputPaneVisible;
+    writeLocalStorage("onyx:output-pane-visible", String(outputPaneVisible));
+    if (!outputPaneVisible && renderedPaneVisible && !renderedReadOnly) editingSurface = "rendered";
   }
 
   function toggleRenderedPane(): void {
@@ -1332,10 +1341,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       showOnlyPane(renderedPaneVisible ? "source" : "rendered");
       return;
     }
-    if (renderedPaneVisible && !sourcePaneVisible) return;
+    if (renderedPaneVisible && !outputPaneVisible) return;
     renderedPaneVisible = !renderedPaneVisible;
     writeLocalStorage("onyx:rendered-pane-visible", String(renderedPaneVisible));
-    if (!renderedPaneVisible && sourcePaneVisible) editingSurface = "source";
+    if (!renderedPaneVisible && outputPaneVisible) editingSurface = "source";
   }
 
   function toggleRenderedReadOnly(): void {
@@ -1588,7 +1597,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     return (
       renderedPaneVisible &&
       !renderedReadOnly &&
-      (editingSurface === "rendered" || !sourcePaneVisible)
+      (editingSurface === "rendered" || !outputPaneVisible)
     );
   }
 
@@ -2044,14 +2053,17 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get primaryModifier() {
       return primaryModifier;
     },
-    get sourcePaneVisible() {
-      return sourcePaneVisible;
+    get outputPaneVisible() {
+      return outputPaneVisible;
     },
     get renderedPaneVisible() {
       return renderedPaneVisible;
     },
     get renderedReadOnly() {
       return renderedReadOnly;
+    },
+    get outputView() {
+      return outputView;
     },
     get paneLayout() {
       return effectivePaneLayout;
@@ -2179,10 +2191,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     setSplitRatio,
     saveSplitRatio,
     setContentWidth,
-    toggleSourcePane,
+    toggleOutputPane,
     toggleRenderedPane,
     swapPanes,
     togglePaneLayout,
+    setOutputView,
     toggleRenderedReadOnly,
     focusSourceEditor,
     focusLiveLine,

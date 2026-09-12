@@ -335,9 +335,9 @@ test("keeps both panes synchronized and lets each pane be tucked away", async ({
   await markdown.fill("# Written on the left");
   await expect(page.locator(".preview-pane h1")).toHaveText("Written on the left");
 
-  await page.getByRole("button", { name: "Hide the Markdown pane" }).click();
+  await page.getByRole("button", { name: "Hide the output pane" }).click();
   await expect(markdown).toBeHidden();
-  await page.getByRole("button", { name: "Show the Markdown pane" }).click();
+  await page.getByRole("button", { name: "Show the output pane" }).click();
   await expect(markdown).toBeVisible();
 
   await page.getByRole("tab", { name: "Tools" }).click();
