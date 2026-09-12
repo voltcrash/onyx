@@ -11,7 +11,7 @@
 	} from '@lucide/svelte';
 	import {
 		listGithubRepositories, type GithubBackupState, type GithubRepository, type GithubUser,
-		defaultFontChoices, fontOption, fontOptions, fontRoles,
+		defaultFontChoices, fontOptions, fontRoles,
 		formatShortcut, persistenceDeniedMessage, shortcutActions, shortcutFromEvent, shortcutParts, shortcutsEqual, type ColorTheme,
 		type FontChoices, type FontRole,
 		type KeyboardShortcut, type KeyboardShortcuts, type PrimaryModifier, type ResolvedTheme, type ShortcutAction, type ThemePreference,
@@ -113,8 +113,6 @@
 		{ id: 'ember', label: 'Ember', hint: 'Warm paper with a terracotta accent.' },
 		{ id: 'monochrome', label: 'Monochrome', hint: 'Pure black and white, with no accent hue.' }
 	];
-	// A monospace tile earns its space by showing the characters people compare.
-	const specimenText: Record<FontRole, string> = { heading: 'Ag', content: 'Ag', code: '0Oil' };
 	const fontsAreDefault = $derived(
 		fontRoles.every(({ id }) => fonts[id] === defaultFontChoices[id])
 	);
@@ -309,39 +307,25 @@
 
 				{#if section === 'editor'}
 					<div class="settings-section-heading">
-						<div><h3>Editor</h3><p class="settings-hint">Set the typefaces your notes are written in, and how Markdown behaves as you type. Both panes update as you choose.</p></div>
+						<div><h3>Editor</h3><p class="settings-hint">Set the typefaces your notes are written in</p></div>
 						<button class="settings-secondary" disabled={fontsAreDefault} onclick={onResetFonts}>Restore default fonts</button>
 					</div>
 
-					<div class="type-specimen">
-						<h4>A quiet place to think</h4>
-						<p>Onyx keeps every note on this device and saves as you write, so a draft can stay half-finished for as long as it needs to.</p>
-						<p><code>const draft = await vault.save(note)</code></p>
+					<div class="type-specimen" aria-label="Typography preview">
+						<div class="type-specimen-label">Preview</div>
+						<h4>A rewrite worth shipping</h4>
+						<p>Onyx is being rewritten from TypeScript to Go, keeping the same ideas while moving to a smaller, faster runtime.</p>
+						<p><code>go test ./... &amp;&amp; go build ./...</code></p>
 					</div>
 
 					{#each fontRoles as role (role.id)}
-						{@const selected = fontOption(role.id, fonts[role.id])}
 						<div class="font-role">
-							<div class="font-role-head">
-								<strong>{role.label}</strong>
-								<small>{selected.note}</small>
-							</div>
-							<div class="font-rail" role="radiogroup" aria-label={`${role.label} typeface`}>
+							<label for={`font-${role.id}`}>{role.label}</label>
+							<select id={`font-${role.id}`} aria-label={`${role.label} typeface`} value={fonts[role.id]} onchange={(event) => onFontChange(role.id, event.currentTarget.value)}>
 								{#each fontOptions[role.id] as option (option.id)}
-									<button
-										class="font-tile"
-										class:active={fonts[role.id] === option.id}
-										role="radio"
-										aria-checked={fonts[role.id] === option.id}
-										title={option.note}
-										style={`--tile-font: ${option.stack}`}
-										onclick={() => onFontChange(role.id, option.id)}
-									>
-										<em>{specimenText[role.id]}</em>
-										<span>{option.name}</span>
-									</button>
+									<option value={option.id}>{option.name}</option>
 								{/each}
-							</div>
+							</select>
 						</div>
 					{/each}
 
