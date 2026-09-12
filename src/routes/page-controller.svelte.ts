@@ -18,6 +18,7 @@ import {
   PanelLeftClose,
   Lock,
   PanelRightClose,
+  Printer,
   Rows2,
   Save,
   Search,
@@ -418,6 +419,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       keywords: "export html web page save",
       disabled: !hasContent,
       run: () => downloadHtml(),
+    },
+    {
+      id: "save-pdf",
+      group: "Transfer",
+      label: "Save this note as a PDF",
+      icon: Printer,
+      keywords: "print export pdf paper",
+      disabled: !hasContent,
+      run: () => savePdf(),
     },
     {
       id: "export-zip",
@@ -1127,6 +1137,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     link.download = name;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  // Browsers save PDFs through their own print dialog, which the print stylesheet feeds.
+  function savePdf(): void {
+    window.print();
   }
 
   function downloadHtml(): void {
@@ -2236,6 +2251,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     togglePaneLayout,
     setOutputView,
     downloadHtml,
+    savePdf,
     toggleRenderedReadOnly,
     focusSourceEditor,
     focusLiveLine,

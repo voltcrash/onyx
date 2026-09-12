@@ -97,6 +97,7 @@
 		onToggleOutputPane={page.toggleOutputPane}
 		onOutputViewChange={page.setOutputView}
 		onDownloadHtml={page.downloadHtml}
+		onSavePdf={page.savePdf}
 		onToggleRenderedPane={page.toggleRenderedPane}
 		onResize={page.setSplitRatio}
 		onResizeEnd={page.saveSplitRatio}
@@ -114,6 +115,8 @@
 		liveLineKind={page.liveLineKind}
 	/>
 </div>
+
+<div class="print-document paper-surface" aria-hidden="true"><article class="prose">{@html page.renderedMarkdown}</article></div>
 
 <StatusNotices
 	backupMessage={page.backupMessage}

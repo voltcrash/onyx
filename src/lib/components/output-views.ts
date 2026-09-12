@@ -1,7 +1,7 @@
-import { Code2, FileText } from "@lucide/svelte";
+import { Code2, FileText, Printer } from "@lucide/svelte";
 import type { Component } from "svelte";
 
-export type OutputView = "markdown" | "html";
+export type OutputView = "markdown" | "html" | "pdf";
 
 export interface OutputViewOption {
   id: OutputView;
@@ -22,6 +22,12 @@ export const outputViews: OutputViewOption[] = [
     label: "HTML",
     description: "Read the generated HTML and download it",
     icon: Code2,
+  },
+  {
+    id: "pdf",
+    label: "PDF",
+    description: "Preview the printed page and save it as a PDF",
+    icon: Printer,
   },
 ];
 

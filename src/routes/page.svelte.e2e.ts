@@ -372,6 +372,30 @@ test("shows the generated HTML in the output pane and downloads it", async ({ pa
   await expect(markdown).toHaveValue(/Release notes/);
 });
 
+test("previews the printed page and prints it from the output pane", async ({ page }) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+  await markdown.fill("# Field report\n\nEverything is in order.");
+  await page.evaluate(() => {
+    const state = window as typeof window & { onyxPrinted?: boolean };
+    window.print = () => {
+      state.onyxPrinted = true;
+    };
+  });
+
+  await page.getByRole("tab", { name: "PDF" }).click();
+  const sheet = page.locator(".pdf-sheet");
+  await expect(sheet.locator("h1")).toHaveText("Field report");
+
+  await page.getByRole("button", { name: "Save as PDF" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as typeof window & { onyxPrinted?: boolean }).onyxPrinted),
+    )
+    .toBe(true);
+});
+
 test("customizes and persists keyboard shortcuts", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();

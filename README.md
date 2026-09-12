@@ -9,6 +9,10 @@ adds private backup and cross-device restore.
 - Create and autosave Markdown notes locally.
 - Search note titles and contents from an on-device index.
 - Write in source, rendered inline, split, or read-only preview mode.
+- Swap the two panes, stack them horizontally, and drag the divider along either axis.
+- Switch the output pane between the Markdown source, the generated HTML, and a printed-page
+  preview. HTML downloads as a standalone file, and the PDF view prints through the browser's
+  print dialog, where it can be saved as a PDF.
 - Choose a light, dark, or system theme. System follows the operating system preference, updates
   when that preference changes, and the selected mode is saved in this browser.
 - Import Markdown folders or ZIP archives, including locally referenced attachments.
@@ -97,9 +101,10 @@ Onyx requests the `repo` scope so it can create private repositories and write b
   GitHub workflows.
 - `src/lib/components/` contains focused workspace, navigation, dialog, and status components.
 - `src/routes/styles/` separates base tokens, application shell, editor, dialog, command-palette,
-  and responsive styles.
+  responsive, and print styles.
 - `src/lib/storage/` implements the IndexedDB vault and its OPFS/native-folder file abstraction.
 - `src/lib/markdown-transfer.ts` implements folder and ZIP import/export.
+- `src/lib/markdown-output.ts` formats the generated HTML and builds standalone HTML exports.
 - `src/lib/github.ts` implements repository validation, backup, and restore.
 - `src/service-worker.ts` caches the application shell for offline use.
 
