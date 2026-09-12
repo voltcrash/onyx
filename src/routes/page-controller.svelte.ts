@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   CloudDownload,
+  Code2,
   Columns2,
   CloudUpload,
   Download,
@@ -42,6 +43,7 @@ import {
   backupVaultToGithub,
   browserStorageWarnings,
   createMarkdownExport,
+  createHtmlDocument,
   createMarkdownZip,
   createPrivateGithubRepository,
   createVaultDescriptor,
@@ -55,8 +57,10 @@ import {
   GithubRequestError,
   importMarkdownFiles,
   listGithubBackupCommits,
+  formatHtmlSource,
   nextThemePreference,
   normalizeVaultName,
+  outputFileName,
   persistenceDeniedMessage,
   readColorTheme,
   readFontChoices,
@@ -221,6 +225,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   const wordCount = $derived(markdown.trim() ? markdown.trim().split(/\s+/).length : 0);
   const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
   const renderedMarkdown = $derived(renderMarkdown(previewMarkdown, resolveAttachmentUrl));
+  const htmlSource = $derived(formatHtmlSource(renderedMarkdown));
+  const noteTitle = $derived(titleFromMarkdown(markdown));
   const markdownLines = $derived(markdown.split("\n"));
   const liveCodeLines = $derived.by(() => {
     let fence = "";
@@ -403,6 +409,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       icon: FolderOutput,
       keywords: "save files write",
       run: () => void exportFolder(),
+    },
+    {
+      id: "download-html",
+      group: "Transfer",
+      label: "Download this note as HTML",
+      icon: Code2,
+      keywords: "export html web page save",
+      disabled: !hasContent,
+      run: () => downloadHtml(),
     },
     {
       id: "export-zip",
@@ -1105,6 +1120,22 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
   }
 
+  function downloadBlob(blob: Blob, name: string): void {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  function downloadHtml(): void {
+    // Exports keep the note's own attachment paths, because in-app blob URLs die with the tab.
+    const body = formatHtmlSource(renderMarkdown(markdown, undefined, { remoteImages: "allow" }));
+    const html = createHtmlDocument({ title: noteTitle, body });
+    downloadBlob(new Blob([html], { type: "text/html" }), outputFileName(noteTitle, "html"));
+  }
+
   async function exportZip(): Promise<void> {
     if (!vault || transferState === "working") return;
     transferState = "working";
@@ -1117,12 +1148,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     try {
       const files = await createMarkdownExport(vault);
       const archive = await createMarkdownZip(files);
-      const url = URL.createObjectURL(archive);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `onyx-markdown-${new Date().toISOString().slice(0, 10)}.zip`;
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 0);
+      downloadBlob(archive, `onyx-markdown-${new Date().toISOString().slice(0, 10)}.zip`);
       transferState = "idle";
       transferMessage = `Exported ${files.length} ${files.length === 1 ? "file" : "files"} to ZIP.`;
     } catch (error) {
@@ -1601,7 +1627,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     );
   }
 
-  function insertSyntax(before: string, after = before, placeholder = "text"): void {
+  // Formatting edits the Markdown source, so another output view is switched back first.
+  async function ensureMarkdownView(): Promise<boolean> {
+    if (editor || isRenderedEditingActive()) return true;
+    setOutputView("markdown");
+    await tick();
+    return Boolean(editor);
+  }
+
+  async function insertSyntax(before: string, after = before, placeholder = "text"): Promise<void> {
+    if (!(await ensureMarkdownView())) return;
     if (isRenderedEditingActive() && inlinePreviewBehavior === "rendered") {
       const target = liveEditorContainer?.querySelector<HTMLElement>(
         `[data-live-line="${liveLine}"]`,
@@ -1652,7 +1687,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     });
   }
 
-  function prefixLine(prefix: string): void {
+  async function prefixLine(prefix: string): Promise<void> {
+    if (!(await ensureMarkdownView())) return;
     if (isRenderedEditingActive() && inlinePreviewBehavior === "rendered") {
       const target = liveEditorContainer?.querySelector<HTMLElement>(
         `[data-live-line="${liveLine}"]`,
@@ -1705,8 +1741,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     else if (action === "searchNotes" || action === "focusSearch") focusSearch();
     else if (action === "cycleTheme") setTheme(nextThemePreference(theme));
     else if (action === "toggleSidebar") toggleSidebar();
-    else if (action === "bold") insertSyntax("**", "**", "bold text");
-    else if (action === "italic") insertSyntax("_", "_", "italic text");
+    else if (action === "bold") void insertSyntax("**", "**", "bold text");
+    else if (action === "italic") void insertSyntax("_", "_", "italic text");
     else if (action === "togglePreview") toggleRenderedPane();
     else if (action === "openShortcuts") openSettings("shortcuts");
     else if (action === "closePanel") {
@@ -2104,6 +2140,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get renderedMarkdown() {
       return renderedMarkdown;
     },
+    get htmlSource() {
+      return htmlSource;
+    },
     get paletteItems() {
       return paletteItems;
     },
@@ -2196,6 +2235,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     swapPanes,
     togglePaneLayout,
     setOutputView,
+    downloadHtml,
     toggleRenderedReadOnly,
     focusSourceEditor,
     focusLiveLine,

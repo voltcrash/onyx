@@ -58,8 +58,8 @@
 		onMoveNoteFocus={page.moveNoteFocus}
 		onSelectNote={(id) => void page.selectNote(id)}
 		onChangePage={page.changeNotePage}
-		onInsertSyntax={page.insertSyntax}
-		onPrefixLine={page.prefixLine}
+		onInsertSyntax={(before, after, placeholder) => void page.insertSyntax(before, after, placeholder)}
+		onPrefixLine={(prefix) => void page.prefixLine(prefix)}
 		onToggleRenderedReadOnly={page.toggleRenderedReadOnly}
 		onSwapPanes={page.swapPanes}
 		onTogglePaneLayout={page.togglePaneLayout}
@@ -74,6 +74,7 @@
 		paneLayout={page.paneLayout}
 		paneOrder={page.paneOrder}
 		outputView={page.outputView}
+		htmlSource={page.htmlSource}
 		renderedReadOnly={page.renderedReadOnly}
 		inlinePreviewBehavior={page.inlinePreviewBehavior}
 		markdown={page.markdown}
@@ -95,6 +96,7 @@
 		contentWidth={page.contentWidth}
 		onToggleOutputPane={page.toggleOutputPane}
 		onOutputViewChange={page.setOutputView}
+		onDownloadHtml={page.downloadHtml}
 		onToggleRenderedPane={page.toggleRenderedPane}
 		onResize={page.setSplitRatio}
 		onResizeEnd={page.saveSplitRatio}

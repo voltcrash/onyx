@@ -353,6 +353,25 @@ test("keeps both panes synchronized and lets each pane be tucked away", async ({
   await expect(page.locator(".preview-pane")).toBeVisible();
 });
 
+test("shows the generated HTML in the output pane and downloads it", async ({ page }) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+  await markdown.fill("# Release notes\n\nShipped **today**.");
+
+  await page.getByRole("tab", { name: "HTML" }).click();
+  const html = page.locator(".output-code");
+  await expect(html).toContainText('<h1 id="user-content-release-notes">');
+  await expect(html).toContainText("<strong>");
+
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download" }).click();
+  expect((await download).suggestedFilename()).toBe("release-notes.html");
+
+  await page.getByRole("tab", { name: "Markdown" }).click();
+  await expect(markdown).toHaveValue(/Release notes/);
+});
+
 test("customizes and persists keyboard shortcuts", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();

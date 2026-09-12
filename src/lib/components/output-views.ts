@@ -1,7 +1,7 @@
-import { FileText } from "@lucide/svelte";
+import { Code2, FileText } from "@lucide/svelte";
 import type { Component } from "svelte";
 
-export type OutputView = "markdown";
+export type OutputView = "markdown" | "html";
 
 export interface OutputViewOption {
   id: OutputView;
@@ -16,6 +16,12 @@ export const outputViews: OutputViewOption[] = [
     label: "Markdown",
     description: "Write and edit the Markdown source",
     icon: FileText,
+  },
+  {
+    id: "html",
+    label: "HTML",
+    description: "Read the generated HTML and download it",
+    icon: Code2,
   },
 ];
 
