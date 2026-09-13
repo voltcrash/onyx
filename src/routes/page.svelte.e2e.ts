@@ -353,6 +353,35 @@ test("keeps both panes synchronized and lets each pane be tucked away", async ({
   await expect(page.locator(".preview-pane")).toBeVisible();
 });
 
+test("shows the note as plain text in the output pane, copies and downloads it", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+  await markdown.fill("# Grocery list\n\n- **Fresh** bread\n- [Oats](https://example.com/oats)");
+  await page.evaluate(() => {
+    const state = window as typeof window & { onyxCopied?: string };
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: async (text: string) => void (state.onyxCopied = text) },
+    });
+  });
+
+  await page.getByRole("tab", { name: "Text" }).click();
+  const expected = "Grocery list\n\n- Fresh bread\n- Oats (https://example.com/oats)";
+  await expect(page.getByLabel("Plain text")).toHaveText(expected);
+
+  await page.getByRole("button", { name: "Copy" }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as typeof window & { onyxCopied?: string }).onyxCopied))
+    .toBe(expected);
+  await expect(page.getByText("Copied this note as plain text.")).toBeVisible();
+
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download" }).click();
+  expect((await download).suggestedFilename()).toBe("grocery-list.txt");
+});
+
 test("shows the generated HTML in the output pane and downloads it", async ({ page }) => {
   await page.goto("/");
   const markdown = page.getByRole("textbox", { name: "Markdown editor" });

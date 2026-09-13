@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Download, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, PanelLeft, PencilLine, X } from '@lucide/svelte';
+	import { Copy, Download, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, PanelLeft, PencilLine, X } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib';
 	import type { InlinePreviewBehavior } from './settings-dialog.svelte';
 	import type { PaneLayout, PaneOrder, SaveState, TransferState } from './app-types';
@@ -13,6 +13,7 @@
 		paneLayout: PaneLayout;
 		paneOrder: PaneOrder;
 		outputView: OutputView;
+		plainText: string;
 		htmlSource: string;
 		renderedReadOnly: boolean;
 		inlinePreviewBehavior: InlinePreviewBehavior;
@@ -35,6 +36,8 @@
 		contentWidth: number;
 		onToggleOutputPane: () => void;
 		onOutputViewChange: (view: OutputView) => void;
+		onCopyText: () => void;
+		onDownloadText: () => void;
 		onDownloadHtml: () => void;
 		onSavePdf: () => void;
 		onToggleRenderedPane: () => void;
@@ -55,10 +58,10 @@
 	}
 
 	let {
-		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, outputView, htmlSource, renderedReadOnly, inlinePreviewBehavior, markdown, markdownLines, liveLine,
+		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, outputView, plainText, htmlSource, renderedReadOnly, inlinePreviewBehavior, markdown, markdownLines, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar,
-		splitRatio, contentWidth, onToggleOutputPane, onOutputViewChange, onDownloadHtml, onSavePdf, onToggleRenderedPane, onResize, onResizeEnd, onReload, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
+		splitRatio, contentWidth, onToggleOutputPane, onOutputViewChange, onCopyText, onDownloadText, onDownloadHtml, onSavePdf, onToggleRenderedPane, onResize, onResizeEnd, onReload, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
 		onRenderedLineKeydown, onLiveLineChange, onLiveLineKeydown, onActivateLiveLine,
 		renderEditableLine, renderLiveLine, liveLineKind
 	}: Props = $props();
@@ -144,14 +147,21 @@
 						<button role="tab" class:active={outputView === view.id} aria-selected={outputView === view.id} title={view.description} onclick={() => onOutputViewChange(view.id)}><view.icon size={14} /><span>{view.label}</span></button>
 					{/each}
 				</div>
-				{#if outputView === 'html'}
+				{#if outputView === 'text'}
+					<div class="output-actions">
+						<button class="output-action" onclick={onCopyText} disabled={!hasContent} title="Copy this note as plain text"><Copy size={14} /><span>Copy</span></button>
+						<button class="output-action" onclick={onDownloadText} disabled={!hasContent} title="Download this note as a text file"><Download size={14} /><span>Download</span></button>
+					</div>
+				{:else if outputView === 'html'}
 					<button class="output-action" onclick={onDownloadHtml} disabled={!hasContent} title="Download this note as an HTML file"><Download size={14} /><span>Download</span></button>
 				{:else if outputView === 'pdf'}
 					<button class="output-action" onclick={onSavePdf} disabled={!hasContent} title="Print this note, or save it as a PDF from the print dialog"><Download size={14} /><span>Save as PDF</span></button>
 				{/if}
 			</div>
 			<div class="output-body">
-				{#if outputView === 'html'}
+				{#if outputView === 'text'}
+					<pre class="output-code output-text" aria-label="Plain text">{plainText}</pre>
+				{:else if outputView === 'html'}
 					<pre class="output-code" aria-label="Generated HTML">{htmlSource}</pre>
 				{:else if outputView === 'pdf'}
 					<div class="pdf-preview">

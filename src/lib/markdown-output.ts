@@ -1,3 +1,5 @@
+import { renderMarkdownTree, type MarkdownTreeNode } from "./markdown.js";
+
 const INLINE_TAGS = new Set([
   "a",
   "abbr",
@@ -158,4 +160,186 @@ function escapeHtml(value: string): string {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+const BLOCK_TAGS = new Set([
+  "blockquote",
+  "dd",
+  "details",
+  "div",
+  "dl",
+  "dt",
+  "figure",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "hr",
+  "li",
+  "ol",
+  "p",
+  "pre",
+  "section",
+  "summary",
+  "table",
+  "ul",
+]);
+
+/** Reads a note as plain text: the words, list markers, and table cells, without any markup. */
+export function markdownToPlainText(source: string): string {
+  return plainBlocks(renderMarkdownTree(source).children ?? []).join("\n\n");
+}
+
+function isBlock(node: MarkdownTreeNode): boolean {
+  return node.type === "element" && BLOCK_TAGS.has(node.tagName ?? "");
+}
+
+/** Splits children into block elements and runs of inline content, dropping blank runs. */
+function groupBlocks(children: MarkdownTreeNode[]): MarkdownTreeNode[][] {
+  const groups: MarkdownTreeNode[][] = [];
+  let run: MarkdownTreeNode[] = [];
+  const flush = (): void => {
+    if (run.some((node) => node.type !== "text" || node.value?.trim())) groups.push(run);
+    run = [];
+  };
+  for (const child of children) {
+    if (isBlock(child)) {
+      flush();
+      groups.push([child]);
+    } else {
+      run.push(child);
+    }
+  }
+  flush();
+  return groups;
+}
+
+function plainBlocks(children: MarkdownTreeNode[]): string[] {
+  return groupBlocks(children)
+    .map((group) =>
+      group.length === 1 && isBlock(group[0]!)
+        ? plainBlock(group[0]!)
+        : group.map(plainInline).join("").trim(),
+    )
+    .filter(Boolean);
+}
+
+function plainBlock(node: MarkdownTreeNode): string {
+  const children = node.children ?? [];
+  switch (node.tagName) {
+    case "hr":
+      return "* * *";
+    case "pre":
+      return textContent(node).replace(/\n$/, "");
+    case "ul":
+    case "ol": {
+      const start = Number(node.properties?.start ?? 1);
+      return children
+        .filter((child) => child.tagName === "li")
+        .map((item, index) => {
+          const marker = node.tagName === "ol" ? `${start + index}. ` : "- ";
+          const body = plainBlocks(item.children ?? []).join("\n");
+          if (!body) return marker.trimEnd();
+          return indentLines(body, " ".repeat(marker.length)).replace(/^ */, marker);
+        })
+        .join("\n");
+    }
+    case "blockquote":
+      return plainBlocks(children)
+        .join("\n\n")
+        .split("\n")
+        .map((line) => (line ? `> ${line}` : ">"))
+        .join("\n");
+    case "table":
+      return plainTable(node);
+    default:
+      return children.some(isBlock)
+        ? plainBlocks(children).join("\n\n")
+        : children.map(plainInline).join("").trim();
+  }
+}
+
+function plainInline(node: MarkdownTreeNode): string {
+  if (node.type === "text") return node.value ?? "";
+  const properties = node.properties ?? {};
+  switch (node.tagName) {
+    case "br":
+      return "\n";
+    case "img":
+      return typeof properties.alt === "string" ? properties.alt : "";
+    case "input":
+      return properties.checked ? "[x]" : "[ ]";
+    case "a": {
+      if (properties.dataFootnoteBackref !== undefined) return "";
+      const text = (node.children ?? []).map(plainInline).join("");
+      if (properties.dataFootnoteRef !== undefined) return `[${text}]`;
+      const href = linkTarget(node);
+      return href && href !== text && `mailto:${text}` !== href ? `${text} (${href})` : text;
+    }
+    default:
+      return (node.children ?? []).map(plainInline).join("");
+  }
+}
+
+function plainTable(table: MarkdownTreeNode): string {
+  const rows = tableRows(table).map((row) =>
+    row.cells.map((cell) => (cell.children ?? []).map(plainInline).join("").trim()),
+  );
+  const widths = rows.reduce<number[]>(
+    (sizes, row) => row.map((cell, index) => Math.max(sizes[index] ?? 0, cell.length)),
+    [],
+  );
+  const lines = rows.map((row) =>
+    row
+      .map((cell, index) => cell.padEnd(widths[index] ?? 0))
+      .join("  ")
+      .trimEnd(),
+  );
+  if (tableRows(table)[0]?.header) {
+    lines.splice(1, 0, widths.map((width) => "-".repeat(width)).join("  "));
+  }
+  return lines.join("\n");
+}
+
+interface TableRow {
+  header: boolean;
+  cells: MarkdownTreeNode[];
+}
+
+function tableRows(table: MarkdownTreeNode): TableRow[] {
+  const rows: TableRow[] = [];
+  const collect = (node: MarkdownTreeNode): void => {
+    for (const child of node.children ?? []) {
+      if (child.tagName === "tr") {
+        const cells = (child.children ?? []).filter(
+          (cell) => cell.tagName === "th" || cell.tagName === "td",
+        );
+        rows.push({ header: cells.every((cell) => cell.tagName === "th"), cells });
+      } else if (child.type === "element") {
+        collect(child);
+      }
+    }
+  };
+  collect(table);
+  return rows;
+}
+
+/** The destination of a link that leads outside the note, which is worth spelling out. */
+function linkTarget(node: MarkdownTreeNode): string | undefined {
+  const href = node.properties?.href;
+  return typeof href === "string" && /^(?:https?:|mailto:)/i.test(href) ? href : undefined;
+}
+
+function textContent(node: MarkdownTreeNode): string {
+  if (node.type === "text") return node.value ?? "";
+  return (node.children ?? []).map(textContent).join("");
+}
+
+function indentLines(value: string, indent: string): string {
+  return value
+    .split("\n")
+    .map((line) => (line ? `${indent}${line}` : line))
+    .join("\n");
 }

@@ -74,6 +74,7 @@
 		paneLayout={page.paneLayout}
 		paneOrder={page.paneOrder}
 		outputView={page.outputView}
+		plainText={page.plainText}
 		htmlSource={page.htmlSource}
 		renderedReadOnly={page.renderedReadOnly}
 		inlinePreviewBehavior={page.inlinePreviewBehavior}
@@ -96,6 +97,8 @@
 		contentWidth={page.contentWidth}
 		onToggleOutputPane={page.toggleOutputPane}
 		onOutputViewChange={page.setOutputView}
+		onCopyText={() => void page.copyText()}
+		onDownloadText={page.downloadText}
 		onDownloadHtml={page.downloadHtml}
 		onSavePdf={page.savePdf}
 		onToggleRenderedPane={page.toggleRenderedPane}

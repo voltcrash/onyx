@@ -201,6 +201,19 @@
   padding: 7px 10px;
   border-bottom: 1px solid var(--line-soft);
   background: var(--surface-raised);
+  container-type: inline-size;
+}
+/* Narrow panes keep only the icons, while the labels stay readable to assistive technology. */
+@container (max-width: 520px) {
+  .output-views button span,
+  .output-action span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 .output-views {
   display: flex;
@@ -232,6 +245,11 @@
   border-color: var(--line);
   background: var(--surface);
   color: var(--ink);
+}
+.output-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .output-action {
   display: flex;
@@ -270,6 +288,9 @@
   tab-size: 2;
   white-space: pre-wrap;
   word-break: break-word;
+}
+.output-text {
+  font-size: 13.5px;
 }
 .pdf-preview {
   flex: 1;

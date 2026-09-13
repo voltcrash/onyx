@@ -3,6 +3,7 @@ import {
   CloudDownload,
   Code2,
   Columns2,
+  Copy,
   CloudUpload,
   Download,
   FileArchive,
@@ -24,6 +25,7 @@ import {
   Search,
   Settings,
   Sun,
+  Type,
 } from "@lucide/svelte";
 import type {
   BackupState,
@@ -59,6 +61,7 @@ import {
   importMarkdownFiles,
   listGithubBackupCommits,
   formatHtmlSource,
+  markdownToPlainText,
   nextThemePreference,
   normalizeVaultName,
   outputFileName,
@@ -226,6 +229,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   const wordCount = $derived(markdown.trim() ? markdown.trim().split(/\s+/).length : 0);
   const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
   const renderedMarkdown = $derived(renderMarkdown(previewMarkdown, resolveAttachmentUrl));
+  const plainText = $derived(markdownToPlainText(markdown));
   const htmlSource = $derived(formatHtmlSource(renderedMarkdown));
   const noteTitle = $derived(titleFromMarkdown(markdown));
   const markdownLines = $derived(markdown.split("\n"));
@@ -410,6 +414,24 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       icon: FolderOutput,
       keywords: "save files write",
       run: () => void exportFolder(),
+    },
+    {
+      id: "copy-text",
+      group: "Transfer",
+      label: "Copy this note as plain text",
+      icon: Copy,
+      keywords: "clipboard plain text txt",
+      disabled: !hasContent,
+      run: () => void copyText(),
+    },
+    {
+      id: "download-text",
+      group: "Transfer",
+      label: "Download this note as plain text",
+      icon: Type,
+      keywords: "export plain text txt save",
+      disabled: !hasContent,
+      run: () => downloadText(),
     },
     {
       id: "download-html",
@@ -1142,6 +1164,29 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   // Browsers save PDFs through their own print dialog, which the print stylesheet feeds.
   function savePdf(): void {
     window.print();
+  }
+
+  async function copyText(): Promise<void> {
+    await copyToClipboard(() => navigator.clipboard.writeText(plainText), "plain text");
+  }
+
+  function downloadText(): void {
+    downloadBlob(
+      new Blob([`${plainText}\n`], { type: "text/plain" }),
+      outputFileName(noteTitle, "txt"),
+    );
+  }
+
+  async function copyToClipboard(write: () => Promise<void>, format: string): Promise<void> {
+    if (transferState === "working") return;
+    try {
+      await write();
+      transferState = "idle";
+      transferMessage = `Copied this note as ${format}.`;
+    } catch {
+      transferState = "error";
+      transferMessage = "The browser did not allow copying to the clipboard.";
+    }
   }
 
   function downloadHtml(): void {
@@ -2155,6 +2200,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get renderedMarkdown() {
       return renderedMarkdown;
     },
+    get plainText() {
+      return plainText;
+    },
     get htmlSource() {
       return htmlSource;
     },
@@ -2250,6 +2298,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     swapPanes,
     togglePaneLayout,
     setOutputView,
+    copyText,
+    downloadText,
     downloadHtml,
     savePdf,
     toggleRenderedReadOnly,
