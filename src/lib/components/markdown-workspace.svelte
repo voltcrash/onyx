@@ -1,14 +1,20 @@
 <script lang="ts">
-	import { ChevronLeft, ChevronRight, CloudOff, HardDrive, PanelLeft, PencilLine, X } from '@lucide/svelte';
+	import { Copy, Download, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, PanelLeft, PencilLine, X } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib';
 	import type { InlinePreviewBehavior } from './settings-dialog.svelte';
-	import type { SaveState, TransferState } from './app-types';
+	import type { PaneLayout, PaneOrder, SaveState, TransferState } from './app-types';
+	import { outputViews, type OutputView } from './output-views';
 
 	interface Props {
 		storageNotice: string;
 		storageError: string;
-		sourcePaneVisible: boolean;
+		outputPaneVisible: boolean;
 		renderedPaneVisible: boolean;
+		paneLayout: PaneLayout;
+		paneOrder: PaneOrder;
+		outputView: OutputView;
+		plainText: string;
+		htmlSource: string;
 		renderedReadOnly: boolean;
 		inlinePreviewBehavior: InlinePreviewBehavior;
 		markdown: string;
@@ -28,7 +34,14 @@
 		onToggleSidebar: () => void;
 		splitRatio: number;
 		contentWidth: number;
-		onToggleSourcePane: () => void;
+		onToggleOutputPane: () => void;
+		onOutputViewChange: (view: OutputView) => void;
+		onCopyText: () => void;
+		onDownloadText: () => void;
+		onCopyRichText: () => void;
+		onDownloadRtf: () => void;
+		onDownloadHtml: () => void;
+		onSavePdf: () => void;
 		onToggleRenderedPane: () => void;
 		onResize: (ratio: number) => void;
 		onResizeEnd: () => void;
@@ -47,22 +60,36 @@
 	}
 
 	let {
-		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, renderedReadOnly, inlinePreviewBehavior, markdown, markdownLines, liveLine,
+		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, outputView, plainText, htmlSource, renderedReadOnly, inlinePreviewBehavior, markdown, markdownLines, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar,
-		splitRatio, contentWidth, onToggleSourcePane, onToggleRenderedPane, onResize, onResizeEnd, onReload, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
+		splitRatio, contentWidth, onToggleOutputPane, onOutputViewChange, onCopyText, onDownloadText, onCopyRichText, onDownloadRtf, onDownloadHtml, onSavePdf, onToggleRenderedPane, onResize, onResizeEnd, onReload, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
 		onRenderedLineKeydown, onLiveLineChange, onLiveLineKeydown, onActivateLiveLine,
 		renderEditableLine, renderLiveLine, liveLineKind
 	}: Props = $props();
 
 	let shell = $state<HTMLElement>();
 	let resizing = $state(false);
-	let bothPanesVisible = $derived(sourcePaneVisible && renderedPaneVisible);
+	let bothPanesVisible = $derived(outputPaneVisible && renderedPaneVisible);
+	let stacked = $derived(paneLayout === 'rows');
+	let swapped = $derived(paneOrder === 'rendered-first');
+	// The divider handles follow the visual arrangement rather than a fixed pane.
+	let firstPane = $derived(swapped ? 'page' : 'output');
+	let secondPane = $derived(swapped ? 'output' : 'page');
+	let firstPaneVisible = $derived(swapped ? renderedPaneVisible : outputPaneVisible);
+	let secondPaneVisible = $derived(swapped ? outputPaneVisible : renderedPaneVisible);
+	let toggleFirstPane = $derived(swapped ? onToggleRenderedPane : onToggleOutputPane);
+	let toggleSecondPane = $derived(swapped ? onToggleOutputPane : onToggleRenderedPane);
+	let towardsStart = $derived(stacked ? ChevronUp : ChevronLeft);
+	let towardsEnd = $derived(stacked ? ChevronDown : ChevronRight);
 
-	function resizeTo(clientX: number): void {
+	function resizeTo(event: PointerEvent): void {
 		const bounds = shell?.getBoundingClientRect();
-		if (!bounds?.width) return;
-		onResize(((clientX - bounds.left) / bounds.width) * 100);
+		if (!bounds) return;
+		const span = stacked ? bounds.height : bounds.width;
+		if (!span) return;
+		const offset = stacked ? event.clientY - bounds.top : event.clientX - bounds.left;
+		onResize((offset / span) * 100);
 	}
 
 	function startResize(event: PointerEvent): void {
@@ -73,7 +100,7 @@
 	}
 
 	function trackResize(event: PointerEvent): void {
-		if (resizing) resizeTo(event.clientX);
+		if (resizing) resizeTo(event);
 	}
 
 	function endResize(event: PointerEvent): void {
@@ -85,8 +112,8 @@
 
 	function nudgeResize(event: KeyboardEvent): void {
 		if (!bothPanesVisible) return;
-		if (event.key === 'ArrowLeft') onResize(splitRatio - 2);
-		else if (event.key === 'ArrowRight') onResize(splitRatio + 2);
+		if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') onResize(splitRatio - 2);
+		else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') onResize(splitRatio + 2);
 		else if (event.key === 'Home' || event.key === 'End') onResize(event.key === 'Home' ? 20 : 80);
 		else return;
 		event.preventDefault();
@@ -114,17 +141,69 @@
 		</div>
 	{/if}
 
-	<section bind:this={shell} class="editor-shell" class:source-hidden={!sourcePaneVisible} class:rendered-hidden={!renderedPaneVisible} class:resizing style={`--split: ${splitRatio}%; --content-width: ${contentWidth}px`}>
-		<div class="editor-pane">
-			<textarea bind:this={editor} value={markdown} onfocus={onSourceFocus} oninput={(event) => onMarkdownChange(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
+	<section bind:this={shell} class="editor-shell" class:output-hidden={!outputPaneVisible} class:rendered-hidden={!renderedPaneVisible} class:panes-stacked={stacked} class:panes-swapped={swapped} class:first-hidden={!firstPaneVisible} class:second-hidden={!secondPaneVisible} class:resizing style={`--split: ${splitRatio}%; --content-width: ${contentWidth}px`}>
+		<div class="output-pane">
+			<div class="output-toolbar">
+				<div class="output-views" role="tablist" aria-label="Output view">
+					{#each outputViews as view (view.id)}
+						<button role="tab" class:active={outputView === view.id} aria-selected={outputView === view.id} title={view.description} onclick={() => onOutputViewChange(view.id)}><view.icon size={14} /><span>{view.label}</span></button>
+					{/each}
+				</div>
+				{#if outputView === 'text'}
+					<div class="output-actions">
+						<button class="output-action" onclick={onCopyText} disabled={!hasContent} title="Copy this note as plain text"><Copy size={14} /><span>Copy</span></button>
+						<button class="output-action" onclick={onDownloadText} disabled={!hasContent} title="Download this note as a text file"><Download size={14} /><span>Download</span></button>
+					</div>
+				{:else if outputView === 'rich-text'}
+					<div class="output-actions">
+						<button class="output-action" onclick={onCopyRichText} disabled={!hasContent} title="Copy this note with its formatting, to paste into a document or email"><Copy size={14} /><span>Copy</span></button>
+						<button class="output-action" onclick={onDownloadRtf} disabled={!hasContent} title="Download this note as an RTF document"><Download size={14} /><span>Download</span></button>
+					</div>
+				{:else if outputView === 'html'}
+					<button class="output-action" onclick={onDownloadHtml} disabled={!hasContent} title="Download this note as an HTML file"><Download size={14} /><span>Download</span></button>
+				{:else if outputView === 'pdf'}
+					<button class="output-action" onclick={onSavePdf} disabled={!hasContent} title="Print this note, or save it as a PDF from the print dialog"><Download size={14} /><span>Save as PDF</span></button>
+				{/if}
+			</div>
+			<div class="output-body">
+				{#if outputView === 'text'}
+					<pre class="output-code output-text" aria-label="Plain text">{plainText}</pre>
+				{:else if outputView === 'rich-text'}
+					<div class="rich-text-preview" aria-label="Rich text">
+						{#if hasContent}
+							<article class="prose">{@html renderedMarkdown}</article>
+						{:else}
+							<div class="preview-empty"><PencilLine size={26} /><strong>Nothing to copy yet</strong><span>Write something and it shows up here formatted.</span></div>
+						{/if}
+					</div>
+				{:else if outputView === 'html'}
+					<pre class="output-code" aria-label="Generated HTML">{htmlSource}</pre>
+				{:else if outputView === 'pdf'}
+					<div class="pdf-preview">
+						<div class="pdf-sheet paper-surface" aria-label="PDF preview">
+							{#if hasContent}
+								<article class="prose">{@html renderedMarkdown}</article>
+							{:else}
+								<div class="preview-empty"><PencilLine size={26} /><strong>Nothing to print yet</strong><span>Write something and this page fills up.</span></div>
+							{/if}
+						</div>
+					</div>
+				{:else}
+					<textarea bind:this={editor} value={markdown} onfocus={onSourceFocus} oninput={(event) => onMarkdownChange(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
+				{/if}
+			</div>
 		</div>
 		<div class="pane-divider">
-			<button type="button" class="pane-resize" class:enabled={bothPanesVisible} aria-label={`Resize the panes, Markdown takes ${Math.round(splitRatio)} percent`} title="Drag to resize, double-click to even out" tabindex={bothPanesVisible ? 0 : -1} onpointerdown={startResize} onpointermove={trackResize} onpointerup={endResize} onpointercancel={endResize} onkeydown={nudgeResize} ondblclick={resetSplit}></button>
-			{#if renderedPaneVisible}
-				<button class="pane-handle pane-handle-top" title={sourcePaneVisible ? 'Hide the Markdown pane' : 'Show the Markdown pane'} aria-label={sourcePaneVisible ? 'Hide the Markdown pane' : 'Show the Markdown pane'} aria-expanded={sourcePaneVisible} onclick={onToggleSourcePane}>{#if sourcePaneVisible}<ChevronLeft size={15} />{:else}<ChevronRight size={15} />{/if}</button>
+			<button type="button" class="pane-resize" class:enabled={bothPanesVisible} aria-label={`Resize the panes, the ${firstPane} pane takes ${Math.round(splitRatio)} percent`} title="Drag to resize, double-click to even out" tabindex={bothPanesVisible ? 0 : -1} onpointerdown={startResize} onpointermove={trackResize} onpointerup={endResize} onpointercancel={endResize} onkeydown={nudgeResize} ondblclick={resetSplit}></button>
+			{#if secondPaneVisible}
+				{@const label = `${firstPaneVisible ? 'Hide' : 'Show'} the ${firstPane} pane`}
+				{@const Icon = firstPaneVisible ? towardsStart : towardsEnd}
+				<button class="pane-handle pane-handle-start" title={label} aria-label={label} aria-expanded={firstPaneVisible} onclick={toggleFirstPane}><Icon size={15} /></button>
 			{/if}
-			{#if sourcePaneVisible}
-				<button class="pane-handle pane-handle-bottom" title={renderedPaneVisible ? 'Hide the page pane' : 'Show the page pane'} aria-label={renderedPaneVisible ? 'Hide the page pane' : 'Show the page pane'} aria-expanded={renderedPaneVisible} onclick={onToggleRenderedPane}>{#if renderedPaneVisible}<ChevronRight size={15} />{:else}<ChevronLeft size={15} />{/if}</button>
+			{#if firstPaneVisible}
+				{@const label = `${secondPaneVisible ? 'Hide' : 'Show'} the ${secondPane} pane`}
+				{@const Icon = secondPaneVisible ? towardsEnd : towardsStart}
+				<button class="pane-handle pane-handle-end" title={label} aria-label={label} aria-expanded={secondPaneVisible} onclick={toggleSecondPane}><Icon size={15} /></button>
 			{/if}
 		</div>
 		<div class="preview-pane">

@@ -6,34 +6,61 @@
   display: grid;
   grid-template-columns: minmax(0, var(--split)) 1px minmax(0, 1fr);
 }
-.editor-shell.source-hidden {
+/* The split always sizes the leading pane, whichever pane currently leads. */
+.editor-shell.first-hidden {
   grid-template-columns: 0 1px minmax(0, 1fr);
 }
-.editor-shell.rendered-hidden {
+.editor-shell.second-hidden {
   grid-template-columns: minmax(0, 1fr) 1px 0;
 }
-.editor-pane,
+.editor-shell.panes-stacked {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, var(--split)) 1px minmax(0, 1fr);
+}
+.editor-shell.panes-stacked.first-hidden {
+  grid-template-rows: 0 1px minmax(0, 1fr);
+}
+.editor-shell.panes-stacked.second-hidden {
+  grid-template-rows: minmax(0, 1fr) 1px 0;
+}
+.output-pane,
 .preview-pane {
   min-width: 0;
   min-height: 0;
 }
-/* Pinned columns: a hidden pane must not shift the others along the track. */
-.editor-pane {
+/* Pinned tracks: a hidden pane must not shift the others along the grid. */
+.output-pane {
+  grid-row: 1;
   grid-column: 1;
   display: flex;
   flex-direction: column;
   background: var(--editor);
 }
-.source-hidden .editor-pane,
+.panes-swapped .output-pane {
+  grid-column: 3;
+}
+.panes-stacked .output-pane {
+  grid-column: 1;
+  grid-row: 1;
+}
+.panes-stacked.panes-swapped .output-pane {
+  grid-row: 3;
+}
+.output-hidden .output-pane,
 .rendered-hidden .preview-pane {
   display: none;
 }
 .pane-divider {
+  grid-row: 1;
   grid-column: 2;
   position: relative;
   background: var(--line);
 }
-/* Widens the grab target beyond the 1px column without shifting the grid. */
+.panes-stacked .pane-divider {
+  grid-row: 2;
+  grid-column: 1;
+}
+/* Widens the grab target beyond the 1px track without shifting the grid. */
 .pane-resize {
   position: absolute;
   padding: 0;
@@ -43,12 +70,21 @@
   z-index: 5;
   touch-action: none;
 }
+.panes-stacked .pane-resize {
+  inset: -5px 0;
+}
 .pane-resize.enabled {
   cursor: col-resize;
+}
+.panes-stacked .pane-resize.enabled {
+  cursor: row-resize;
 }
 .editor-shell.resizing {
   cursor: col-resize;
   user-select: none;
+}
+.editor-shell.panes-stacked.resizing {
+  cursor: row-resize;
 }
 .editor-shell.resizing .pane-handle {
   transition: none;
@@ -75,23 +111,45 @@
     border-color 0.16s ease,
     color 0.16s ease;
 }
-.pane-handle-top {
+.pane-handle-start {
   top: 27%;
 }
-.pane-handle-bottom {
+.pane-handle-end {
   top: 73%;
 }
-.source-hidden .pane-handle {
+.panes-stacked .pane-handle {
+  top: 50%;
+  width: 30px;
+  height: 6px;
+}
+.panes-stacked .pane-handle-start {
+  left: 27%;
+}
+.panes-stacked .pane-handle-end {
+  left: 73%;
+}
+.first-hidden .pane-handle {
   transform: translate(0, -50%);
 }
-.rendered-hidden .pane-handle {
+.second-hidden .pane-handle {
   transform: translate(-100%, -50%);
 }
+.panes-stacked.first-hidden .pane-handle {
+  transform: translate(-50%, 0);
+}
+.panes-stacked.second-hidden .pane-handle {
+  transform: translate(-50%, -100%);
+}
 /* A collapsed pane leaves one handle at the window edge, so it reads as a tab. */
-.source-hidden .pane-handle,
-.rendered-hidden .pane-handle {
+.first-hidden .pane-handle,
+.second-hidden .pane-handle {
   width: 8px;
   height: 46px;
+}
+.panes-stacked.first-hidden .pane-handle,
+.panes-stacked.second-hidden .pane-handle {
+  width: 46px;
+  height: 8px;
 }
 .pane-divider:hover .pane-handle,
 .pane-handle:hover,
@@ -135,7 +193,140 @@
   background: var(--subtle-strong);
   color: var(--ink);
 }
-.editor-pane > textarea {
+.output-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface-raised);
+  container-type: inline-size;
+}
+/* Narrow panes keep only the icons, while the labels stay readable to assistive technology. */
+@container (max-width: 640px) {
+  .output-views button span,
+  .output-action span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+.output-views {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.output-views button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 27px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.output-views button:hover {
+  background: var(--subtle-strong);
+  color: var(--ink);
+}
+.output-views button.active {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--ink);
+}
+.output-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.output-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 27px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.output-action:hover:not(:disabled) {
+  border-color: var(--line-hover);
+  color: var(--ink);
+}
+.output-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.output-code {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  padding: 28px clamp(22px, 4vw, 48px) 60px;
+  color: var(--ink-body);
+  font-family: var(--font-code);
+  font-size: 12.5px;
+  line-height: 1.7;
+  tab-size: 2;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.output-text {
+  font-size: 13.5px;
+}
+.rich-text-preview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--surface);
+}
+.pdf-preview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px clamp(14px, 3vw, 40px) 50px;
+  background: var(--canvas);
+}
+/* A4 at 96dpi, so the preview matches what the print dialog lays out. */
+.pdf-sheet {
+  width: min(100%, 794px);
+  min-height: 1123px;
+  margin: 0 auto;
+  padding: 46px clamp(24px, 5%, 58px) 64px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.pdf-sheet .prose {
+  width: 100%;
+  padding: 0;
+  font-size: 15px;
+}
+.output-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.output-body > textarea {
   flex: 1;
   width: 100%;
   min-height: 0;
@@ -152,10 +343,10 @@
   max-width: var(--content-width);
   margin: 0 auto;
 }
-.editor-pane > textarea::placeholder {
+.output-body > textarea::placeholder {
   color: var(--faint);
 }
-.editor-pane > textarea::selection {
+.output-body > textarea::selection {
   background: var(--selection);
 }
 .live-editor {
@@ -405,9 +596,20 @@
   text-underline-offset: 3px;
 }
 .preview-pane {
+  grid-row: 1;
   grid-column: 3;
   overflow-y: auto;
   background: var(--surface);
+}
+.panes-swapped .preview-pane {
+  grid-column: 1;
+}
+.panes-stacked .preview-pane {
+  grid-column: 1;
+  grid-row: 3;
+}
+.panes-stacked.panes-swapped .preview-pane {
+  grid-row: 1;
 }
 .preview-empty {
   display: flex;

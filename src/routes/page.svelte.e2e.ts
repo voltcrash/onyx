@@ -296,8 +296,6 @@ test("formats Markdown while editing in the page pane", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
-  await page.getByRole("tab", { name: "Tools" }).click();
-  await page.getByRole("button", { name: "Enable page editing" }).click();
   const line = page.getByRole("textbox", { name: "Markdown line 3" });
   await line.fill("Onyx renders **Markdown** while you keep writing.");
   await expect(line).toContainText("Onyx renders **Markdown** while you keep writing.");
@@ -320,8 +318,6 @@ test("can reveal the active Markdown line while editing the page", async ({ page
   await page.getByRole("button", { name: "Editor", exact: true }).click();
   await page.getByRole("radio", { name: /Reveal Markdown on active line/ }).click();
   await page.getByRole("button", { name: "Close settings" }).click();
-  await page.getByRole("tab", { name: "Tools" }).click();
-  await page.getByRole("button", { name: "Enable page editing" }).click();
 
   await page.getByRole("button", { name: "Edit line 3" }).click();
   await expect(page.getByRole("textbox", { name: "Markdown line 3" })).toBeVisible();
@@ -332,25 +328,142 @@ test("keeps both panes synchronized and lets each pane be tucked away", async ({
   const markdown = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(markdown).toBeEnabled();
 
-  await markdown.fill("# Written on the left");
-  await expect(page.locator(".preview-pane h1")).toHaveText("Written on the left");
+  await markdown.fill("# Written on the right");
+  await expect(page.getByRole("textbox", { name: "Markdown line 1" })).toContainText(
+    "Written on the right",
+  );
 
-  await page.getByRole("button", { name: "Hide the Markdown pane" }).click();
+  await page.getByRole("button", { name: "Hide the output pane" }).click();
   await expect(markdown).toBeHidden();
-  await page.getByRole("button", { name: "Show the Markdown pane" }).click();
+  await page.getByRole("button", { name: "Show the output pane" }).click();
   await expect(markdown).toBeVisible();
 
   await page.getByRole("tab", { name: "Tools" }).click();
-  await page.getByRole("button", { name: "Enable page editing" }).click();
-  await page.getByRole("textbox", { name: "Markdown line 1" }).fill("# Written on the right");
-  await expect(markdown).toHaveValue("# Written on the right");
+  await page.getByRole("textbox", { name: "Markdown line 1" }).fill("# Written on the left");
+  await expect(markdown).toHaveValue("# Written on the left");
 
   await page.getByRole("button", { name: "Turn on read-only" }).click();
-  await expect(page.locator(".preview-pane h1")).toHaveText("Written on the right");
+  await expect(page.locator(".preview-pane h1")).toHaveText("Written on the left");
   await page.getByRole("button", { name: "Hide the page pane" }).click();
   await expect(page.locator(".preview-pane")).toBeHidden();
   await page.getByRole("button", { name: "Show the page pane" }).click();
   await expect(page.locator(".preview-pane")).toBeVisible();
+});
+
+test("shows the note as plain text in the output pane, copies and downloads it", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+  await markdown.fill("# Grocery list\n\n- **Fresh** bread\n- [Oats](https://example.com/oats)");
+  await page.evaluate(() => {
+    const state = window as typeof window & { onyxCopied?: string };
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: async (text: string) => void (state.onyxCopied = text) },
+    });
+  });
+
+  await page.getByRole("tab", { name: "Plain text" }).click();
+  const expected = "Grocery list\n\n- Fresh bread\n- Oats (https://example.com/oats)";
+  await expect(page.getByLabel("Plain text")).toHaveText(expected);
+
+  await page.getByRole("button", { name: "Copy" }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as typeof window & { onyxCopied?: string }).onyxCopied))
+    .toBe(expected);
+  await expect(page.getByText("Copied this note as plain text.")).toBeVisible();
+
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download" }).click();
+  expect((await download).suggestedFilename()).toBe("grocery-list.txt");
+});
+
+test("shows the formatted note in the output pane, copies it as rich text and downloads RTF", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+  await markdown.fill("# Meeting notes\n\nDecided on **Friday**.");
+  await page.evaluate(() => {
+    const state = window as typeof window & { onyxCopied?: Record<string, string> };
+    Object.defineProperty(navigator, "clipboard", {
+      value: {
+        write: async (items: ClipboardItem[]) => {
+          const copied: Record<string, string> = {};
+          for (const type of items[0]!.types) {
+            copied[type] = await (await items[0]!.getType(type)).text();
+          }
+          state.onyxCopied = copied;
+        },
+      },
+    });
+  });
+
+  await page.getByRole("tab", { name: "Rich text" }).click();
+  const preview = page.getByLabel("Rich text");
+  await expect(preview.locator("h1")).toHaveText("Meeting notes");
+  await expect(preview.locator("strong")).toHaveText("Friday");
+
+  await page.getByRole("button", { name: "Copy" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as typeof window & { onyxCopied?: Record<string, string> }).onyxCopied,
+      ),
+    )
+    .toEqual({
+      "text/html": expect.stringContaining("<strong>Friday</strong>"),
+      "text/plain": "Meeting notes\n\nDecided on Friday.",
+    });
+
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download" }).click();
+  expect((await download).suggestedFilename()).toBe("meeting-notes.rtf");
+});
+
+test("shows the generated HTML in the output pane and downloads it", async ({ page }) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+  await markdown.fill("# Release notes\n\nShipped **today**.");
+
+  await page.getByRole("tab", { name: "HTML" }).click();
+  const html = page.locator(".output-code");
+  await expect(html).toContainText('<h1 id="user-content-release-notes">');
+  await expect(html).toContainText("<strong>");
+
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download" }).click();
+  expect((await download).suggestedFilename()).toBe("release-notes.html");
+
+  await page.getByRole("tab", { name: "Markdown" }).click();
+  await expect(markdown).toHaveValue(/Release notes/);
+});
+
+test("previews the printed page and prints it from the output pane", async ({ page }) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+  await markdown.fill("# Field report\n\nEverything is in order.");
+  await page.evaluate(() => {
+    const state = window as typeof window & { onyxPrinted?: boolean };
+    window.print = () => {
+      state.onyxPrinted = true;
+    };
+  });
+
+  await page.getByRole("tab", { name: "PDF" }).click();
+  const sheet = page.locator(".pdf-sheet");
+  await expect(sheet.locator("h1")).toHaveText("Field report");
+
+  await page.getByRole("button", { name: "Save as PDF" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as typeof window & { onyxPrinted?: boolean }).onyxPrinted),
+    )
+    .toBe(true);
 });
 
 test("customizes and persists keyboard shortcuts", async ({ page }) => {
@@ -503,6 +616,9 @@ test("imports a Markdown folder and exports its structure and attachments as ZIP
 }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await page.getByRole("tab", { name: "Tools" }).click();
+  await page.getByRole("button", { name: "Turn on read-only" }).click();
+  await page.getByRole("tab", { name: "Files" }).click();
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Import & export", exact: true }).click();
@@ -675,6 +791,8 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(editor).toBeEnabled();
+  await page.getByRole("tab", { name: "Tools" }).click();
+  await page.getByRole("button", { name: "Turn on read-only" }).click();
   await blockNextVaultWrite(page);
   await editor.fill("# Unsynced restore draft");
   await page.keyboard.press("ControlOrMeta+S");

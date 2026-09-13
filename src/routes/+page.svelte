@@ -39,6 +39,8 @@
 		primaryModifier={page.primaryModifier}
 		renderedPaneVisible={page.renderedPaneVisible}
 		renderedReadOnly={page.renderedReadOnly}
+		paneLayout={page.paneLayout}
+		singlePaneMode={page.singlePaneMode}
 		wordCount={page.wordCount}
 		readingMinutes={page.readingMinutes}
 		contentWidth={page.contentWidth}
@@ -56,17 +58,24 @@
 		onMoveNoteFocus={page.moveNoteFocus}
 		onSelectNote={(id) => void page.selectNote(id)}
 		onChangePage={page.changeNotePage}
-		onInsertSyntax={page.insertSyntax}
-		onPrefixLine={page.prefixLine}
+		onInsertSyntax={(before, after, placeholder) => void page.insertSyntax(before, after, placeholder)}
+		onPrefixLine={(prefix) => void page.prefixLine(prefix)}
 		onToggleRenderedReadOnly={page.toggleRenderedReadOnly}
+		onSwapPanes={page.swapPanes}
+		onTogglePaneLayout={page.togglePaneLayout}
 		onContentWidthChange={page.setContentWidth}
 	/>
 
 	<MarkdownWorkspace
 		storageNotice={page.storageNotice}
 		storageError={page.storageError}
-		sourcePaneVisible={page.sourcePaneVisible}
+		outputPaneVisible={page.outputPaneVisible}
 		renderedPaneVisible={page.renderedPaneVisible}
+		paneLayout={page.paneLayout}
+		paneOrder={page.paneOrder}
+		outputView={page.outputView}
+		plainText={page.plainText}
+		htmlSource={page.htmlSource}
 		renderedReadOnly={page.renderedReadOnly}
 		inlinePreviewBehavior={page.inlinePreviewBehavior}
 		markdown={page.markdown}
@@ -86,7 +95,14 @@
 		onToggleSidebar={page.toggleSidebar}
 		splitRatio={page.splitRatio}
 		contentWidth={page.contentWidth}
-		onToggleSourcePane={page.toggleSourcePane}
+		onToggleOutputPane={page.toggleOutputPane}
+		onOutputViewChange={page.setOutputView}
+		onCopyText={() => void page.copyText()}
+		onDownloadText={page.downloadText}
+		onCopyRichText={() => void page.copyRichText()}
+		onDownloadRtf={page.downloadRtf}
+		onDownloadHtml={page.downloadHtml}
+		onSavePdf={page.savePdf}
 		onToggleRenderedPane={page.toggleRenderedPane}
 		onResize={page.setSplitRatio}
 		onResizeEnd={page.saveSplitRatio}
@@ -104,6 +120,8 @@
 		liveLineKind={page.liveLineKind}
 	/>
 </div>
+
+<div class="print-document paper-surface" aria-hidden="true"><article class="prose">{@html page.renderedMarkdown}</article></div>
 
 <StatusNotices
 	backupMessage={page.backupMessage}
