@@ -160,7 +160,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let renderedReadOnly = $state(true);
   let outputView = $state<OutputView>("markdown");
   let paneLayout = $state<PaneLayout>("columns");
-  let paneOrder = $state<PaneOrder>("source-first");
+  let paneOrder = $state<PaneOrder>("rendered-first");
   let splitRatio = $state(50);
   let contentWidth = $state(DEFAULT_CONTENT_WIDTH);
   let editingSurface: "source" | "rendered" = "source";
@@ -1440,7 +1440,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     outputView = isOutputView(storedOutputView) ? storedOutputView : "markdown";
     paneLayout = readLocalStorage("onyx:pane-layout") === "rows" ? "rows" : "columns";
     paneOrder =
-      readLocalStorage("onyx:pane-order") === "rendered-first" ? "rendered-first" : "source-first";
+      readLocalStorage("onyx:pane-order") === "source-first" ? "source-first" : "rendered-first";
     const storedOutputPane = readLocalStorage("onyx:output-pane-visible");
     const storedRenderedPane = readLocalStorage("onyx:rendered-pane-visible");
     const storedReadOnly = readLocalStorage("onyx:rendered-read-only");
