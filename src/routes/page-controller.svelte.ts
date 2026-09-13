@@ -157,7 +157,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let singlePaneMode = $state(false);
   let outputPaneVisible = $state(true);
   let renderedPaneVisible = $state(true);
-  let renderedReadOnly = $state(true);
+  let renderedReadOnly = $state(false);
   let outputView = $state<OutputView>("markdown");
   let paneLayout = $state<PaneLayout>("columns");
   let paneOrder = $state<PaneOrder>("rendered-first");
@@ -1444,7 +1444,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const storedOutputPane = readLocalStorage("onyx:output-pane-visible");
     const storedRenderedPane = readLocalStorage("onyx:rendered-pane-visible");
     const storedReadOnly = readLocalStorage("onyx:rendered-read-only");
-    renderedReadOnly = storedReadOnly ? storedReadOnly !== "false" : !singlePaneMode;
+    renderedReadOnly = storedReadOnly === "true";
     if (singlePaneMode) {
       showOnlyPane(storedRenderedPane === "false" ? "source" : "rendered");
       return;

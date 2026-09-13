@@ -296,8 +296,6 @@ test("formats Markdown while editing in the page pane", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
-  await page.getByRole("tab", { name: "Tools" }).click();
-  await page.getByRole("button", { name: "Enable page editing" }).click();
   const line = page.getByRole("textbox", { name: "Markdown line 3" });
   await line.fill("Onyx renders **Markdown** while you keep writing.");
   await expect(line).toContainText("Onyx renders **Markdown** while you keep writing.");
@@ -320,8 +318,6 @@ test("can reveal the active Markdown line while editing the page", async ({ page
   await page.getByRole("button", { name: "Editor", exact: true }).click();
   await page.getByRole("radio", { name: /Reveal Markdown on active line/ }).click();
   await page.getByRole("button", { name: "Close settings" }).click();
-  await page.getByRole("tab", { name: "Tools" }).click();
-  await page.getByRole("button", { name: "Enable page editing" }).click();
 
   await page.getByRole("button", { name: "Edit line 3" }).click();
   await expect(page.getByRole("textbox", { name: "Markdown line 3" })).toBeVisible();
@@ -333,7 +329,9 @@ test("keeps both panes synchronized and lets each pane be tucked away", async ({
   await expect(markdown).toBeEnabled();
 
   await markdown.fill("# Written on the right");
-  await expect(page.locator(".preview-pane h1")).toHaveText("Written on the right");
+  await expect(page.getByRole("textbox", { name: "Markdown line 1" })).toContainText(
+    "Written on the right",
+  );
 
   await page.getByRole("button", { name: "Hide the output pane" }).click();
   await expect(markdown).toBeHidden();
@@ -341,7 +339,6 @@ test("keeps both panes synchronized and lets each pane be tucked away", async ({
   await expect(markdown).toBeVisible();
 
   await page.getByRole("tab", { name: "Tools" }).click();
-  await page.getByRole("button", { name: "Enable page editing" }).click();
   await page.getByRole("textbox", { name: "Markdown line 1" }).fill("# Written on the left");
   await expect(markdown).toHaveValue("# Written on the left");
 
@@ -619,6 +616,9 @@ test("imports a Markdown folder and exports its structure and attachments as ZIP
 }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await page.getByRole("tab", { name: "Tools" }).click();
+  await page.getByRole("button", { name: "Turn on read-only" }).click();
+  await page.getByRole("tab", { name: "Files" }).click();
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Import & export", exact: true }).click();
@@ -791,6 +791,8 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(editor).toBeEnabled();
+  await page.getByRole("tab", { name: "Tools" }).click();
+  await page.getByRole("button", { name: "Turn on read-only" }).click();
   await blockNextVaultWrite(page);
   await editor.fill("# Unsynced restore draft");
   await page.keyboard.press("ControlOrMeta+S");
