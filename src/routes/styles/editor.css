@@ -204,7 +204,7 @@
   container-type: inline-size;
 }
 /* Narrow panes keep only the icons, while the labels stay readable to assistive technology. */
-@container (max-width: 520px) {
+@container (max-width: 640px) {
   .output-views button span,
   .output-action span {
     position: absolute;
@@ -291,6 +291,12 @@
 }
 .output-text {
   font-size: 13.5px;
+}
+.rich-text-preview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--surface);
 }
 .pdf-preview {
   flex: 1;

@@ -1,7 +1,7 @@
-import { Code2, FileText, Printer, Type } from "@lucide/svelte";
+import { Code2, FileText, Pilcrow, Printer, Type } from "@lucide/svelte";
 import type { Component } from "svelte";
 
-export type OutputView = "markdown" | "text" | "html" | "pdf";
+export type OutputView = "markdown" | "text" | "rich-text" | "html" | "pdf";
 
 export interface OutputViewOption {
   id: OutputView;
@@ -19,9 +19,15 @@ export const outputViews: OutputViewOption[] = [
   },
   {
     id: "text",
-    label: "Text",
+    label: "Plain text",
     description: "Read the note as plain text, then copy or download it",
     icon: Type,
+  },
+  {
+    id: "rich-text",
+    label: "Rich text",
+    description: "Copy the formatted note into a document, or download it as RTF",
+    icon: Pilcrow,
   },
   {
     id: "html",

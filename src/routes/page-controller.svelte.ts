@@ -15,6 +15,7 @@ import {
   Keyboard,
   Monitor,
   Moon,
+  Pilcrow,
   PanelLeft,
   PanelLeftClose,
   Lock,
@@ -62,6 +63,7 @@ import {
   listGithubBackupCommits,
   formatHtmlSource,
   markdownToPlainText,
+  markdownToRtf,
   nextThemePreference,
   normalizeVaultName,
   outputFileName,
@@ -432,6 +434,24 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       keywords: "export plain text txt save",
       disabled: !hasContent,
       run: () => downloadText(),
+    },
+    {
+      id: "copy-rich-text",
+      group: "Transfer",
+      label: "Copy this note as rich text",
+      icon: Copy,
+      keywords: "clipboard formatted rich text document email paste",
+      disabled: !hasContent,
+      run: () => void copyRichText(),
+    },
+    {
+      id: "download-rtf",
+      group: "Transfer",
+      label: "Download this note as rich text",
+      icon: Pilcrow,
+      keywords: "export rtf rich text word document save",
+      disabled: !hasContent,
+      run: () => downloadRtf(),
     },
     {
       id: "download-html",
@@ -1177,6 +1197,31 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     );
   }
 
+  async function copyRichText(): Promise<void> {
+    await copyToClipboard(
+      () =>
+        navigator.clipboard.write([
+          new ClipboardItem({
+            "text/html": new Blob([exportedHtml()], { type: "text/html" }),
+            "text/plain": new Blob([plainText], { type: "text/plain" }),
+          }),
+        ]),
+      "rich text",
+    );
+  }
+
+  function downloadRtf(): void {
+    downloadBlob(
+      new Blob([markdownToRtf(markdown)], { type: "application/rtf" }),
+      outputFileName(noteTitle, "rtf"),
+    );
+  }
+
+  // Exports keep the note's own attachment paths, because in-app blob URLs die with the tab.
+  function exportedHtml(): string {
+    return renderMarkdown(markdown, undefined, { remoteImages: "allow" });
+  }
+
   async function copyToClipboard(write: () => Promise<void>, format: string): Promise<void> {
     if (transferState === "working") return;
     try {
@@ -1190,8 +1235,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function downloadHtml(): void {
-    // Exports keep the note's own attachment paths, because in-app blob URLs die with the tab.
-    const body = formatHtmlSource(renderMarkdown(markdown, undefined, { remoteImages: "allow" }));
+    const body = formatHtmlSource(exportedHtml());
     const html = createHtmlDocument({ title: noteTitle, body });
     downloadBlob(new Blob([html], { type: "text/html" }), outputFileName(noteTitle, "html"));
   }
@@ -2300,6 +2344,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     setOutputView,
     copyText,
     downloadText,
+    copyRichText,
+    downloadRtf,
     downloadHtml,
     savePdf,
     toggleRenderedReadOnly,

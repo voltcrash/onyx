@@ -4,6 +4,7 @@ import {
   createHtmlDocument,
   formatHtmlSource,
   markdownToPlainText,
+  markdownToRtf,
   outputFileName,
 } from "./markdown-output.js";
 
@@ -119,6 +120,45 @@ const a = 1;
     expect(markdownToPlainText("Claim[^1].\n\n[^1]: Source.")).toBe(
       "Claim[1].\n\nFootnotes\n\n1. Source.",
     );
+  });
+});
+
+describe("markdownToRtf", () => {
+  it("writes formatting, lists, links, and tables as RTF", () => {
+    const rtf = markdownToRtf(`# Plan
+
+**Bold**, _italic_, ~~gone~~, \`code\`, and [a link](https://example.com/?q="x").
+
+- One
+- [x] Done
+
+1. First
+
+> Quoted
+
+| Name | State |
+| --- | ---: |
+| Onyx | Ready |`);
+
+    expect(rtf.startsWith("{\\rtf1\\ansi")).toBe(true);
+    expect(rtf.trimEnd().endsWith("}")).toBe(true);
+    expect(rtf).toContain("\\outlinelevel0\\b\\fs40 Plan\\par");
+    expect(rtf).toContain("{\\b Bold}, {\\i italic}, {\\strike gone}, {\\f1\\fs20 code}");
+    expect(rtf).toContain(
+      '{\\field{\\*\\fldinst{HYPERLINK "https://example.com/?q=%22x%22"}}{\\fldrslt{\\ul\\cf1 a link}}}',
+    );
+    expect(rtf).toContain("\\li360\\fi-360\\tx360\\f0\\fs24 \\u8226?\\tab One\\par");
+    expect(rtf).toContain("\\u9745?\\tab Done\\par");
+    expect(rtf).toContain("\\fs24 1.\\tab First\\par");
+    expect(rtf).toContain("\\li480\\f0\\fs24\\cf2\\i Quoted\\par");
+    expect(rtf).toContain("\\trhdr");
+    expect(rtf).toContain("\\qr\\f0\\fs22 Ready\\cell");
+  });
+
+  it("escapes control characters and writes Unicode as escapes", () => {
+    const rtf = markdownToRtf("Braces {} and \\\\ café 😀");
+
+    expect(rtf).toContain("Braces \\{\\} and \\\\ caf\\u233? \\u-10179?\\u-8704?\\par");
   });
 });
 

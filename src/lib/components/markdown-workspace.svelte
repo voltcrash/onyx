@@ -38,6 +38,8 @@
 		onOutputViewChange: (view: OutputView) => void;
 		onCopyText: () => void;
 		onDownloadText: () => void;
+		onCopyRichText: () => void;
+		onDownloadRtf: () => void;
 		onDownloadHtml: () => void;
 		onSavePdf: () => void;
 		onToggleRenderedPane: () => void;
@@ -61,7 +63,7 @@
 		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, outputView, plainText, htmlSource, renderedReadOnly, inlinePreviewBehavior, markdown, markdownLines, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar,
-		splitRatio, contentWidth, onToggleOutputPane, onOutputViewChange, onCopyText, onDownloadText, onDownloadHtml, onSavePdf, onToggleRenderedPane, onResize, onResizeEnd, onReload, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
+		splitRatio, contentWidth, onToggleOutputPane, onOutputViewChange, onCopyText, onDownloadText, onCopyRichText, onDownloadRtf, onDownloadHtml, onSavePdf, onToggleRenderedPane, onResize, onResizeEnd, onReload, onMarkdownChange, onSourceFocus, onLiveLineFocus, onRenderedLineInput,
 		onRenderedLineKeydown, onLiveLineChange, onLiveLineKeydown, onActivateLiveLine,
 		renderEditableLine, renderLiveLine, liveLineKind
 	}: Props = $props();
@@ -152,6 +154,11 @@
 						<button class="output-action" onclick={onCopyText} disabled={!hasContent} title="Copy this note as plain text"><Copy size={14} /><span>Copy</span></button>
 						<button class="output-action" onclick={onDownloadText} disabled={!hasContent} title="Download this note as a text file"><Download size={14} /><span>Download</span></button>
 					</div>
+				{:else if outputView === 'rich-text'}
+					<div class="output-actions">
+						<button class="output-action" onclick={onCopyRichText} disabled={!hasContent} title="Copy this note with its formatting, to paste into a document or email"><Copy size={14} /><span>Copy</span></button>
+						<button class="output-action" onclick={onDownloadRtf} disabled={!hasContent} title="Download this note as an RTF document"><Download size={14} /><span>Download</span></button>
+					</div>
 				{:else if outputView === 'html'}
 					<button class="output-action" onclick={onDownloadHtml} disabled={!hasContent} title="Download this note as an HTML file"><Download size={14} /><span>Download</span></button>
 				{:else if outputView === 'pdf'}
@@ -161,6 +168,14 @@
 			<div class="output-body">
 				{#if outputView === 'text'}
 					<pre class="output-code output-text" aria-label="Plain text">{plainText}</pre>
+				{:else if outputView === 'rich-text'}
+					<div class="rich-text-preview" aria-label="Rich text">
+						{#if hasContent}
+							<article class="prose">{@html renderedMarkdown}</article>
+						{:else}
+							<div class="preview-empty"><PencilLine size={26} /><strong>Nothing to copy yet</strong><span>Write something and it shows up here formatted.</span></div>
+						{/if}
+					</div>
 				{:else if outputView === 'html'}
 					<pre class="output-code" aria-label="Generated HTML">{htmlSource}</pre>
 				{:else if outputView === 'pdf'}

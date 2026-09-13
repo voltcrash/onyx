@@ -367,7 +367,7 @@ test("shows the note as plain text in the output pane, copies and downloads it",
     });
   });
 
-  await page.getByRole("tab", { name: "Text" }).click();
+  await page.getByRole("tab", { name: "Plain text" }).click();
   const expected = "Grocery list\n\n- Fresh bread\n- Oats (https://example.com/oats)";
   await expect(page.getByLabel("Plain text")).toHaveText(expected);
 
@@ -380,6 +380,50 @@ test("shows the note as plain text in the output pane, copies and downloads it",
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download" }).click();
   expect((await download).suggestedFilename()).toBe("grocery-list.txt");
+});
+
+test("shows the formatted note in the output pane, copies it as rich text and downloads RTF", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+  await markdown.fill("# Meeting notes\n\nDecided on **Friday**.");
+  await page.evaluate(() => {
+    const state = window as typeof window & { onyxCopied?: Record<string, string> };
+    Object.defineProperty(navigator, "clipboard", {
+      value: {
+        write: async (items: ClipboardItem[]) => {
+          const copied: Record<string, string> = {};
+          for (const type of items[0]!.types) {
+            copied[type] = await (await items[0]!.getType(type)).text();
+          }
+          state.onyxCopied = copied;
+        },
+      },
+    });
+  });
+
+  await page.getByRole("tab", { name: "Rich text" }).click();
+  const preview = page.getByLabel("Rich text");
+  await expect(preview.locator("h1")).toHaveText("Meeting notes");
+  await expect(preview.locator("strong")).toHaveText("Friday");
+
+  await page.getByRole("button", { name: "Copy" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as typeof window & { onyxCopied?: Record<string, string> }).onyxCopied,
+      ),
+    )
+    .toEqual({
+      "text/html": expect.stringContaining("<strong>Friday</strong>"),
+      "text/plain": "Meeting notes\n\nDecided on Friday.",
+    });
+
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download" }).click();
+  expect((await download).suggestedFilename()).toBe("meeting-notes.rtf");
 });
 
 test("shows the generated HTML in the output pane and downloads it", async ({ page }) => {
