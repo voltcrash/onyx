@@ -32,19 +32,21 @@
 </script>
 
 <script lang="ts">
-	import { CornerDownLeft, Search } from '@lucide/svelte';
+	import { CornerDownLeft, Search, X } from '@lucide/svelte';
+	import { fly } from 'svelte/transition';
 
 	interface Props {
 		items: PaletteItem[];
 		controls?: PaletteControl[];
+		query: string;
+		searchInput?: HTMLInputElement;
+		onQueryChange: (value: string) => void;
 		onClose: () => void;
 	}
 
-	let { items, controls = [], onClose }: Props = $props();
+	let { items, controls = [], query, searchInput = $bindable(), onQueryChange, onClose }: Props = $props();
 
-	let query = $state('');
 	let activeIndex = $state(0);
-	let input: HTMLInputElement | undefined = $state();
 	let list: HTMLElement | undefined = $state();
 
 	const entries = $derived<PaletteEntry[]>([...items, ...controls]);
@@ -74,7 +76,7 @@
 	});
 
 	$effect(() => {
-		input?.focus();
+		searchInput?.focus();
 	});
 
 	function isPaletteItem(item: PaletteEntry): item is PaletteItem {
@@ -141,32 +143,39 @@
 	}
 </script>
 
-<section id="command-palette" class="palette-panel" role="search" aria-label="Command palette">
+<section id="command-palette" class="palette-panel" role="search" aria-label="Command palette" transition:fly={{ y: -7, duration: 170 }}>
 	<div class="palette">
-		<div class="palette-field">
-			<Search size={17} />
+		<div class="palette-heading">
+			<div class="palette-title"><Search size={16} /><div><strong>Command palette</strong><span>Search notes or run a command</span></div></div>
+			<button class="icon-button palette-close" type="button" aria-label="Close command palette" title="Close command palette (Esc)" onclick={onClose}><X size={17} /></button>
+		</div>
+
+		<label class="search-box palette-search-box">
+			<span class="visually-hidden">Search notes and commands</span>
+			<Search size={15} aria-hidden="true" />
 			<input
-				bind:this={input}
-				bind:value={query}
-				type="text"
+				bind:this={searchInput}
+				value={query}
+				type="search"
 				role="combobox"
 				aria-expanded="true"
 				aria-controls="palette-list"
 				aria-activedescendant={matches[activeIndex] ? `palette-${matches[activeIndex].id}` : undefined}
 				aria-label="Search notes and commands"
-				placeholder="Jump to a note or run a command…"
+				placeholder="Search notes or commands…"
 				autocomplete="off"
 				spellcheck="false"
+				oninput={(event) => onQueryChange(event.currentTarget.value)}
 				onkeydown={onKeydown}
 			/>
 			<button type="button" class="palette-dismiss" aria-label="Close command palette" title="Close command palette (Esc)" onclick={onClose}><kbd>Esc</kbd></button>
-		</div>
+		</label>
 
 		<div class="palette-list" id="palette-list" role="listbox" aria-label="Results" bind:this={list}>
 			{#each groups as group (group.name)}
 				<div class="palette-group">{group.name}</div>
 				{#each group.items as item (item.id)}
-					{#if item.control === 'range'}
+					{#if !isPaletteItem(item)}
 						<div class="palette-control" role="group" aria-label={item.label} id={`palette-${item.id}`}>
 							<div class="palette-control-header">
 								<item.icon size={16} />

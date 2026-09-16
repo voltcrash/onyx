@@ -449,7 +449,7 @@
 	<div class="notes-heading"><div class="notes-title"><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions"><button class="icon-button sidebar-toggle" aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeftClose size={19} /></button></div></div>
 	{#if paletteOpen}
 		{#await import('$lib/components/command-palette.svelte') then { default: CommandPalette }}
-			<CommandPalette items={paletteItems} controls={paletteControls} onClose={onClosePalette} />
+			<CommandPalette items={paletteItems} controls={paletteControls} query={searchQuery} bind:searchInput onQueryChange={onSearch} onClose={onClosePalette} />
 		{/await}
 	{:else if findOpen}
 		<FindReplace
