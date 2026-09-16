@@ -6,6 +6,20 @@ async function openOutputSwitcher(page: Page): Promise<void> {
   await page.locator(".output-switcher").hover();
 }
 
+test("orders output views by file format", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  await openOutputSwitcher(page);
+  await expect(page.locator(".output-views .output-format")).toHaveText([
+    "MD",
+    "HTML",
+    "TXT",
+    "RTF",
+    "PDF",
+  ]);
+});
+
 test("keeps every output view on the same pane background", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
