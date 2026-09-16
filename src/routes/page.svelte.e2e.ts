@@ -1326,6 +1326,9 @@ test("shows the generated HTML in the output pane, copies and downloads it", asy
   await expect(html.locator("code.hljs")).toBeVisible();
   await expect(html.locator(".hljs-tag")).toHaveCount(6);
   await expect(html.locator(".hljs-name").first()).toHaveText("h1");
+  await expect(html.locator(".output-code-line")).toHaveCount(6);
+  await expect(html.locator(".output-code-line").first()).toHaveAttribute("data-line", "1");
+  await expect(html.locator(".output-code-line").last()).toHaveAttribute("data-line", "6");
 
   await openOutputSwitcher(page);
 

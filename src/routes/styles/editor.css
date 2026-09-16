@@ -443,11 +443,39 @@
 .output-text {
   font-size: 13.5px;
 }
+.output-html {
+  overflow-x: auto;
+  white-space: pre;
+  word-break: normal;
+}
 .output-code > code.hljs {
   display: block;
   overflow-x: auto;
   font: inherit;
   color: inherit;
+}
+.output-html .output-code-line {
+  display: inline;
+}
+.output-html .output-code-line::before {
+  content: attr(data-line);
+  display: inline-block;
+  position: sticky;
+  left: 0;
+  box-sizing: border-box;
+  min-width: 3ch;
+  margin-right: 1.5ch;
+  padding-right: 1ch;
+  border-right: 1px solid var(--line-soft);
+  background: var(--editor);
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: none;
+}
+.output-html .output-code-line:hover,
+.output-html .output-code-line:hover::before {
+  background: var(--subtle);
 }
 .rich-text-preview {
   flex: 1;
