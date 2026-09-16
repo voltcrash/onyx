@@ -510,7 +510,8 @@
   position: sticky;
   left: 0;
   box-sizing: border-box;
-  min-width: 3ch;
+  width: var(--line-number-width, 3ch);
+  min-width: var(--line-number-width, 3ch);
   margin-right: 1.5ch;
   padding-right: 1ch;
   border-right: 1px solid color-mix(in oklch, var(--code-text) 22%, var(--surface));
