@@ -212,7 +212,11 @@
 			<button type="button" class="palette-dismiss" aria-label="Close command palette" title="Close command palette (Esc)" onclick={onClose}><kbd>Esc</kbd></button>
 		</label>
 		<div id="palette-result-count" class="visually-hidden" role="status" aria-live="polite">
-			{#if query.trim()}{matches.length} result{matches.length === 1 ? '' : 's'}{#else}All commands and notes{/if}
+			{#if query.trim()}
+				{matches.length} result{matches.length === 1 ? '' : 's'}
+			{:else}
+				All commands and notes
+			{/if}
 		</div>
 
 		<div class="palette-list" id="palette-list" role="listbox" aria-label="Results" bind:this={list}>
