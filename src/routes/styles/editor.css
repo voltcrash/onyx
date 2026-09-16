@@ -173,7 +173,8 @@
 .preview-pane {
   transition: opacity 0.2s ease;
 }
-.output-pane {
+.output-pane,
+.preview-pane {
   position: relative;
 }
 .pane-grip {
@@ -330,6 +331,49 @@
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(10px);
+}
+.rendered-switcher {
+  position: sticky;
+  top: 8px;
+  width: max-content;
+  height: 34px;
+  margin: 0 18px -34px auto;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(10px);
+}
+.rendered-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 550;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.rendered-mode-toggle.active,
+.rendered-mode-toggle:hover {
+  background: var(--subtle-strong);
+  color: var(--ink);
+}
+.rendered-mode-toggle:focus-visible {
+  outline: 1.5px solid var(--accent);
+  outline-offset: -1.5px;
 }
 .output-views,
 .output-actions {

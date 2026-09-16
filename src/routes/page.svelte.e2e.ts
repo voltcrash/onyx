@@ -6,6 +6,43 @@ async function openOutputSwitcher(page: Page): Promise<void> {
   await page.locator(".output-switcher").hover();
 }
 
+async function toggleRenderedReadOnly(page: Page): Promise<void> {
+  await page.locator(".rendered-switcher .rendered-mode-toggle").click();
+}
+
+test("aligns the page mode toggle with the output switcher", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  const previewPane = page.locator(".preview-pane");
+  const renderedSwitcher = page.locator(".rendered-switcher");
+  const outputPane = page.locator(".output-pane");
+  const outputSwitcher = page.locator(".output-switcher");
+  const [previewBounds, renderedBounds, outputPaneBounds, outputBounds] = await Promise.all([
+    previewPane.boundingBox(),
+    renderedSwitcher.boundingBox(),
+    outputPane.boundingBox(),
+    outputSwitcher.boundingBox(),
+  ]);
+
+  expect(previewBounds).not.toBeNull();
+  expect(renderedBounds).not.toBeNull();
+  expect(outputPaneBounds).not.toBeNull();
+  expect(outputBounds).not.toBeNull();
+  expect(
+    Math.abs(renderedBounds!.y - previewBounds!.y - (outputBounds!.y - outputPaneBounds!.y)),
+  ).toBeLessThan(1);
+  expect(
+    Math.abs(
+      renderedBounds!.x + renderedBounds!.width - (previewBounds!.x + previewBounds!.width - 18),
+    ),
+  ).toBeLessThan(1);
+  await expect(previewPane.locator(".rendered-mode-toggle")).toHaveAttribute(
+    "aria-label",
+    "Turn on read-only",
+  );
+});
+
 test("orders output views by file format", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
@@ -282,6 +319,8 @@ test("traps modal focus and returns it to the opener", async ({ page }) => {
   const settings = page.getByRole("button", { name: "Settings", exact: true });
   await settings.click();
   await expect(settings).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
+  await expect(page.getByText("Preferences", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Close settings" })).toBeFocused();
   await page.keyboard.press("Shift+Tab");
   await page.keyboard.press("Tab");
@@ -560,6 +599,62 @@ test("searches note titles and Markdown content", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Project Aurora/ })).toBeVisible();
 });
 
+test("creates, moves, and manages folders and files", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  await page.getByRole("button", { name: "New folder", exact: true }).click();
+  const folderName = page.getByRole("textbox", { name: "Folder name" });
+  await folderName.fill("Plans");
+  await folderName.press("Enter");
+  const folder = page.getByRole("button", { name: "Plans", exact: true });
+  await expect(folder).toBeVisible();
+
+  await folder.click({ button: "right" });
+  const folderMenu = page.getByRole("menu", { name: "File actions" });
+  await expect(folderMenu.getByRole("menuitem", { name: "New file", exact: true })).toBeVisible();
+  await folderMenu.getByRole("menuitem", { name: "New file", exact: true }).click();
+  const fileName = page.getByRole("textbox", { name: "File name" });
+  await fileName.fill("Today.md");
+  await fileName.press("Enter");
+  const file = page.getByRole("button", { name: "Today", exact: true });
+  await expect(file).toBeVisible();
+
+  await page.getByRole("button", { name: "New folder", exact: true }).click();
+  const archiveName = page.getByRole("textbox", { name: "Folder name" });
+  await archiveName.fill("Archive");
+  await archiveName.press("Enter");
+  const archive = page.getByRole("button", { name: "Archive", exact: true });
+  await expect(archive).toBeVisible();
+  expect(
+    await page.locator("[data-folder-path]").evaluateAll((rows) =>
+      rows
+        .map((row) => row.getAttribute("data-folder-path"))
+        .filter((path): path is string => path !== null)
+        .filter((path) => !path.includes("/")),
+    ),
+  ).toEqual(["Archive", "Plans"]);
+
+  await file.dragTo(archive);
+  await expect(file).toHaveAttribute("data-file-path", "Archive/Today.md");
+  await file.dragTo(folder);
+  await expect(file).toHaveAttribute("data-file-path", "Plans/Today.md");
+  await folder.dragTo(archive);
+  await expect(file).toHaveAttribute("data-file-path", "Archive/Plans/Today.md");
+
+  await file.click({ button: "right" });
+  const fileMenu = page.getByRole("menu", { name: "File actions" });
+  await expect(fileMenu.getByRole("menuitem", { name: "Open", exact: true })).toBeVisible();
+  await expect(fileMenu.getByRole("menuitem", { name: "Rename", exact: true })).toBeVisible();
+  await expect(
+    fileMenu.getByRole("menuitem", { name: "Copy relative path", exact: true }),
+  ).toBeVisible();
+  await expect(fileMenu.getByRole("menuitem", { name: "Delete", exact: true })).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept());
+  await fileMenu.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  await expect(file).toBeHidden();
+});
+
 test("uses the first Markdown heading for notes with front matter", async ({ page }) => {
   await page.goto("/");
   const markdown = page.getByRole("textbox", { name: "Markdown editor" });
@@ -568,8 +663,7 @@ test("uses the first Markdown heading for notes with front matter", async ({ pag
   await markdown.fill("---\ntitle: Metadata title\n---\n\n# Rendered title");
 
   await expect(page.getByRole("button", { name: "Rendered title", exact: true })).toBeVisible();
-  await page.getByRole("tab", { name: "Tools" }).click();
-  await page.getByRole("button", { name: "Turn on read-only" }).click();
+  await toggleRenderedReadOnly(page);
   await expect(page.locator(".preview-pane h1")).toHaveText("Rendered title");
 });
 
@@ -1040,8 +1134,7 @@ test("keeps the editable page preview aligned with read-only rendering", async (
     ];
   });
 
-  await page.getByRole("tab", { name: "Tools" }).click();
-  await page.getByRole("button", { name: "Turn on read-only" }).click();
+  await toggleRenderedReadOnly(page);
   const article = page.locator(".preview-pane article.prose");
   expect(await article.innerHTML()).toBe(editableMarkup);
   await expect(article.locator("table")).toBeVisible();
@@ -1096,7 +1189,7 @@ test("keeps both panes synchronized and lets each pane be tucked away", async ({
   await page.getByRole("textbox", { name: "Markdown line 1" }).fill("# Written on the left");
   await expect(markdown).toHaveValue("# Written on the left");
 
-  await page.getByRole("button", { name: "Turn on read-only" }).click();
+  await toggleRenderedReadOnly(page);
   await expect(page.locator(".preview-pane h1")).toHaveText("Written on the left");
   await page.getByRole("button", { name: "Hide the page pane" }).click();
   await expect(page.locator(".preview-pane")).toBeHidden();
@@ -1177,8 +1270,7 @@ test("scrolls each pane to the part of the note shown in the other one", async (
   const views = ["Markdown", "Plain text", "Rich text", "HTML", "PDF"];
   for (const readOnly of [false, true]) {
     if (readOnly) {
-      await page.getByRole("tab", { name: "Tools" }).click();
-      await page.getByRole("button", { name: "Turn on read-only" }).click();
+      await toggleRenderedReadOnly(page);
       await expect(page.locator(".preview-pane article.prose")).toBeVisible();
     }
     for (const [index, view] of views.entries()) {
@@ -1658,8 +1750,7 @@ test("imports a Markdown folder and exports its structure and attachments as ZIP
 }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
-  await page.getByRole("tab", { name: "Tools" }).click();
-  await page.getByRole("button", { name: "Turn on read-only" }).click();
+  await toggleRenderedReadOnly(page);
   await page.getByRole("tab", { name: "Files" }).click();
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
@@ -1833,8 +1924,7 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(editor).toBeEnabled();
-  await page.getByRole("tab", { name: "Tools" }).click();
-  await page.getByRole("button", { name: "Turn on read-only" }).click();
+  await toggleRenderedReadOnly(page);
   await blockNextVaultWrite(page);
   await editor.fill("# Unsynced restore draft");
   await page.keyboard.press("ControlOrMeta+S");

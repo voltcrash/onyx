@@ -11,6 +11,7 @@ import { MirroredVaultFilesystem, VaultFilesystem } from "./filesystem.js";
 import type {
   AttachmentMetadata,
   BackupOperation,
+  FolderMetadata,
   GithubBackupState,
   ImportNoteInput,
   Note,
@@ -32,6 +33,15 @@ import { VaultConflictError } from "./types.js";
 
 const DEFAULT_DATABASE_NAME = "onyx-vault";
 const DEFAULT_DIRECTORY_NAME = "onyx";
+
+function isPathWithin(path: string, parent: string): boolean {
+  return !parent || path === parent || path.startsWith(`${parent}/`);
+}
+
+function moveSourcePath(path: string, from: string, to: string): string {
+  const suffix = path.slice(from.length).replace(/^\/+/, "");
+  return to ? (suffix ? `${to}/${suffix}` : to) : suffix;
+}
 
 export class Vault {
   readonly #database: VaultDatabase;
@@ -292,6 +302,78 @@ export class Vault {
     });
   }
 
+  listFolders(): Promise<FolderMetadata[]> {
+    return this.#withLock(() => this.#database.getFileFolders());
+  }
+
+  async saveFolders(folders: FolderMetadata[]): Promise<void> {
+    await this.#withLock(async () => {
+      await this.#database.setFileFolders(folders);
+      this.#publish({ kind: "vault" });
+    });
+  }
+
+  async deleteNote(noteId: string): Promise<boolean> {
+    return this.#withLock(async () => {
+      const note = await this.#database.getNote(noteId);
+      if (!note) return false;
+      const attachments = await this.#database.getAttachments(noteId);
+      const markdown =
+        (await this.#database.getNoteMarkdown(noteId)) ??
+        (await this.#filesystem.readText(note.path));
+      const attachmentFiles = await Promise.all(
+        attachments.map(async (attachment) => {
+          try {
+            return { attachment, file: await this.#filesystem.read(attachment.path) };
+          } catch {
+            return { attachment, file: undefined };
+          }
+        }),
+      );
+      const now = new Date().toISOString();
+      const operations: BackupOperation[] = [
+        ...attachments.map((attachment): BackupOperation => ({
+          id: crypto.randomUUID(),
+          kind: "attachment:delete",
+          entityId: attachment.id,
+          noteId,
+          path: attachment.path,
+          revision: 1,
+          createdAt: now,
+        })),
+        {
+          id: crypto.randomUUID(),
+          kind: "note:delete",
+          entityId: noteId,
+          noteId,
+          path: note.path,
+          revision: note.revision + 1,
+          createdAt: now,
+        },
+      ];
+
+      try {
+        await this.#filesystem.remove(note.path, { ignoreMissing: true });
+        for (const attachment of attachments) {
+          await this.#filesystem.remove(attachment.path, { ignoreMissing: true });
+        }
+        await this.#database.deleteNote(
+          noteId,
+          attachments.map((attachment) => attachment.id),
+          operations,
+        );
+      } catch (error) {
+        await this.#filesystem.writeText(note.path, markdown).catch(() => undefined);
+        for (const { attachment, file } of attachmentFiles) {
+          if (file) await this.#filesystem.write(attachment.path, file).catch(() => undefined);
+        }
+        throw error;
+      }
+      this.#publish({ kind: "note", noteId });
+      return true;
+    });
+  }
+
   async importNotes(inputs: ImportNoteInput[]): Promise<VaultRestoreResult> {
     if (inputs.length === 0) return { attachmentCount: 0, noteCount: 0 };
 
@@ -422,6 +504,25 @@ export class Vault {
     return this.#withLock(() => this.#database.getAttachments(noteId));
   }
 
+  async moveAttachmentSourcePaths(noteId: string, from: string, to: string): Promise<void> {
+    await this.#withLock(async () => {
+      const attachments = await this.#database.getAttachments(noteId);
+      const now = new Date().toISOString();
+      const moved = attachments.map((attachment) => {
+        const sourcePath = attachment.sourcePath;
+        if (!sourcePath || !isPathWithin(sourcePath, from)) return attachment;
+        return {
+          ...attachment,
+          sourcePath: moveSourcePath(sourcePath, from, to),
+          updatedAt: now,
+        };
+      });
+      if (moved.every((attachment, index) => attachment === attachments[index])) return;
+      await this.#database.updateAttachments(moved);
+      this.#publish({ kind: "note", noteId });
+    });
+  }
+
   async search(query: string, tags: string[] = []): Promise<VaultSearchResult[]> {
     return this.#withLock(async () => {
       const terms = tokenize(normalizeSearchText(query));
@@ -527,6 +628,7 @@ export class Vault {
       await this.#filesystem.replace([], () =>
         this.#database.replaceVault([], [], [], [], [], operations, version),
       );
+      await this.#database.setFileFolders([]);
       this.#publish({ kind: "vault" });
     });
   }
@@ -632,6 +734,7 @@ export class Vault {
           operations,
           version,
         );
+        await this.#database.setFileFolders([]);
       });
       this.#publish({ kind: "vault" });
       return { attachmentCount: attachments.length, noteCount: notes.length };

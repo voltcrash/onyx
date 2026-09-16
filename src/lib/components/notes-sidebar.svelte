@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { Bold, Braces, Code2, FileText, HardDrive, Heading2, Highlighter, Italic, Link, List, ListChecks, ListOrdered, LoaderCircle, Lock, LockOpen, LogOut, MessageSquareWarning, Minus, PanelLeftClose, Plus, Quote, Search, Settings, Sigma, Strikethrough, Wrench, X } from '@lucide/svelte';
+	import { onMount, tick } from 'svelte';
+	import { Bold, Braces, ChevronDown, ChevronRight, Code2, Copy, FilePlus2, FileText, Folder, FolderPlus, HardDrive, Heading2, Highlighter, Italic, Link, List, ListChecks, ListOrdered, LoaderCircle, Lock, LockOpen, LogOut, MessageSquareWarning, Minus, PanelLeftClose, Pencil, Plus, Quote, Search, Settings, Sigma, Strikethrough, Trash2, Wrench, X } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
 	import type { GithubUser } from '$lib/github';
 	import type { VaultDescriptor } from '$lib/storage/registry';
-	import type { VaultSearchResult } from '$lib/storage/types';
+	import type { FolderMetadata, VaultSearchResult } from '$lib/storage/types';
 	import GithubIcon from './github-icon.svelte';
 	import VaultSwitcher from './vault-switcher.svelte';
 	import type { GithubState, SaveState, TransferState } from './app-types';
@@ -15,6 +15,7 @@
 		activeNoteId: string;
 		results: VaultSearchResult[];
 		visibleResults: VaultSearchResult[];
+		folders: FolderMetadata[];
 		searchQuery: string;
 		notePage: number;
 		notePageCount: number;
@@ -30,8 +31,6 @@
 		shortcuts: KeyboardShortcuts;
 		primaryModifier: PrimaryModifier;
 		storageError: string;
-		renderedPaneVisible: boolean;
-		renderedReadOnly: boolean;
 		wordCount: number;
 		readingMinutes: number;
 		contentWidth: number;
@@ -42,6 +41,15 @@
 		onCreateVault: () => void;
 		onRenameVault: (id: string, name: string) => void;
 		onCreateNote: () => void;
+		onCreateFile: (folderPath: string, name: string) => void;
+		onCreateFolder: (parentPath: string, name: string) => void;
+		onRenameFile: (id: string, name: string) => void;
+		onRenameFolder: (path: string, name: string) => void;
+		onMoveFile: (id: string, folderPath: string) => void;
+		onMoveFolder: (path: string, parentPath: string) => void;
+		onDeleteFile: (id: string) => void;
+		onDeleteFolder: (path: string) => void;
+		onCopyFilePath: (path: string) => void;
 		onSearch: (value: string) => void;
 		onOpenPalette: () => void;
 		onOpenSettings: () => void;
@@ -52,25 +60,358 @@
 		onChangePage: (page: number) => void;
 		onInsertSyntax: (before: string, after?: string, placeholder?: string) => void;
 		onPrefixLine: (prefix: string) => void;
-		onToggleRenderedReadOnly: () => void;
 		onContentWidthChange: (value: number) => void;
 	}
 
 	let {
-		vaults, activeVaultId, activeNoteId, results, visibleResults, searchQuery, notePage, notePageCount, saveState, notesLoaded, paletteOpen, settingsOpen,
-		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, renderedPaneVisible, renderedReadOnly, wordCount, readingMinutes, contentWidth,
-		searchInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onSearch,
+		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, searchQuery, notePage, notePageCount, saveState, notesLoaded, paletteOpen, settingsOpen,
+		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, wordCount, readingMinutes, contentWidth,
+		searchInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, onCopyFilePath, onSearch,
 		onOpenPalette, onOpenSettings, onOpenStorageSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage,
-		onInsertSyntax, onPrefixLine, onToggleRenderedReadOnly, onContentWidthChange
+		onInsertSyntax, onPrefixLine, onContentWidthChange
 	}: Props = $props();
 
 	let sidebarView = $state<'files' | 'tools'>('files');
+	type TreeRow =
+		| { kind: 'folder'; key: string; path: string; label: string; depth: number; expanded: boolean; hasChildren: boolean }
+		| { kind: 'file'; key: string; path: string; label: string; depth: number; result: VaultSearchResult };
+	type ContextMenu =
+		| { kind: 'root'; x: number; y: number }
+		| { kind: 'folder'; path: string; x: number; y: number }
+		| { kind: 'file'; id: string; path: string; x: number; y: number };
+	type NamingState =
+		| { action: 'create-file'; parentPath: string }
+		| { action: 'create-folder'; parentPath: string }
+		| { action: 'rename-file'; id: string }
+		| { action: 'rename-folder'; path: string };
+	type DraggedEntry =
+		| { kind: 'file'; id: string; path: string }
+		| { kind: 'folder'; path: string };
+
+	let collapsedFolders = $state<Set<string>>(new Set());
+	let contextMenu = $state<ContextMenu>();
+	let naming = $state<NamingState>();
+	let draftName = $state('');
+	let namingInput = $state<HTMLInputElement>();
+	let draggedEntry = $state<DraggedEntry>();
+	let dropTargetPath = $state<string>();
+
+	function pathParts(path: string): string[] {
+		return path.split('/').filter(Boolean);
+	}
+
+	function parentPath(path: string): string {
+		return pathParts(path).slice(0, -1).join('/');
+	}
+
+	function basename(path: string): string {
+		return pathParts(path).at(-1) ?? '';
+	}
+
+	function joinPath(parent: string, name: string): string {
+		return [...pathParts(parent), name].join('/');
+	}
+
+	function notePath(result: VaultSearchResult): string {
+		return result.note.sourcePath?.trim() || `${result.note.title || 'Untitled'}.md`;
+	}
+
+	function noteFolder(result: VaultSearchResult): string {
+		return parentPath(notePath(result));
+	}
+
+	function noteLabel(result: VaultSearchResult): string {
+		return result.note.title || basename(notePath(result)).replace(/\.(?:md|markdown)$/i, '') || 'Untitled';
+	}
+
+	function folderLabel(path: string): string {
+		return basename(path) || path;
+	}
+
+	function buildTreeRows(): TreeRow[] {
+		if (searchQuery.trim()) {
+			return visibleResults.map((result) => ({
+				kind: 'file' as const,
+				key: `file:${result.note.id}`,
+				path: notePath(result),
+				label: noteLabel(result),
+				depth: 0,
+				result,
+			}));
+		}
+
+		const folderPaths = new Set<string>();
+		const notesByFolder = new Map<string, VaultSearchResult[]>();
+		const addFolder = (path: string): void => {
+			let current = '';
+			for (const part of pathParts(path)) {
+				current = joinPath(current, part);
+				folderPaths.add(current);
+			}
+		};
+		for (const folder of folders) addFolder(folder.path);
+		for (const result of visibleResults) {
+			const folder = noteFolder(result);
+			if (folder) addFolder(folder);
+			const notes = notesByFolder.get(folder) ?? [];
+			notes.push(result);
+			notesByFolder.set(folder, notes);
+		}
+
+		const rows: TreeRow[] = [];
+		const visit = (parent: string, depth: number): void => {
+			const childFolders = [...folderPaths]
+				.filter((path) => parentPath(path) === parent)
+				.sort((left, right) => folderLabel(left).localeCompare(folderLabel(right), undefined, { sensitivity: 'base' }));
+			for (const path of childFolders) {
+				const hasChildren = [...folderPaths].some((candidate) => parentPath(candidate) === path) || Boolean(notesByFolder.get(path)?.length);
+				const expanded = !collapsedFolders.has(path);
+				rows.push({ kind: 'folder', key: `folder:${path}`, path, label: folderLabel(path), depth, expanded, hasChildren });
+				if (expanded) visit(path, depth + 1);
+			}
+			const childNotes = (notesByFolder.get(parent) ?? []).toSorted((left, right) =>
+				noteLabel(left).localeCompare(noteLabel(right), undefined, { sensitivity: 'base' }),
+			);
+			for (const result of childNotes) {
+				rows.push({ kind: 'file', key: `file:${result.note.id}`, path: notePath(result), label: noteLabel(result), depth, result });
+			}
+		};
+		visit('', 0);
+		return rows;
+	}
+
+	let treeRows = $derived(buildTreeRows());
+
+	function menuPosition(event: MouseEvent): { x: number; y: number } {
+		const width = 210;
+		const height = 285;
+		return {
+			x: Math.max(8, Math.min(event.clientX, globalThis.innerWidth - width - 8)),
+			y: Math.max(8, Math.min(event.clientY, globalThis.innerHeight - height - 8)),
+		};
+	}
+
+	function openRootContextMenu(event: MouseEvent): void {
+		event.preventDefault();
+		contextMenu = { kind: 'root', ...menuPosition(event) };
+	}
+
+	function openFolderContextMenu(event: MouseEvent, path: string): void {
+		event.preventDefault();
+		event.stopPropagation();
+		contextMenu = { kind: 'folder', path, ...menuPosition(event) };
+	}
+
+	function openFileContextMenu(event: MouseEvent, result: VaultSearchResult): void {
+		event.preventDefault();
+		event.stopPropagation();
+		contextMenu = { kind: 'file', id: result.note.id, path: notePath(result), ...menuPosition(event) };
+	}
+
+	function closeContextMenu(): void {
+		contextMenu = undefined;
+	}
+
+	async function beginNaming(state: NamingState): Promise<void> {
+		closeContextMenu();
+		naming = state;
+		const target = state.action === 'rename-file'
+			? visibleResults.find((result) => result.note.id === state.id) ?? results.find((result) => result.note.id === state.id)
+			: undefined;
+		draftName = state.action === 'create-file'
+			? 'Untitled.md'
+			: state.action === 'create-folder'
+				? 'New folder'
+				: state.action === 'rename-file'
+					? target ? noteLabel(target) : 'Untitled.md'
+					: folderLabel(state.path);
+		if ('parentPath' in state && state.parentPath) {
+			const next = new Set(collapsedFolders);
+			next.delete(state.parentPath);
+			collapsedFolders = next;
+		}
+		await tick();
+		namingInput?.focus();
+		namingInput?.select();
+	}
+
+	function cancelNaming(): void {
+		naming = undefined;
+		draftName = '';
+	}
+
+	function commitNaming(): void {
+		const state = naming;
+		const name = draftName.trim();
+		if (!state || !name) {
+			cancelNaming();
+			return;
+		}
+		cancelNaming();
+		if (state.action === 'create-file') onCreateFile(state.parentPath, name);
+		else if (state.action === 'create-folder') onCreateFolder(state.parentPath, name);
+		else if (state.action === 'rename-file') onRenameFile(state.id, name);
+		else onRenameFolder(state.path, name);
+	}
+
+	function handleNamingKeydown(event: KeyboardEvent): void {
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			commitNaming();
+		} else if (event.key === 'Escape') {
+			event.preventDefault();
+			cancelNaming();
+		}
+	}
+
+	function toggleFolder(path: string): void {
+		const next = new Set(collapsedFolders);
+		if (next.has(path)) next.delete(path);
+		else next.add(path);
+		collapsedFolders = next;
+	}
+
+	function canDropOn(entry: DraggedEntry, targetPath: string): boolean {
+		if (entry.kind === 'file') return parentPath(entry.path) !== targetPath;
+		return entry.path !== targetPath && !targetPath.startsWith(`${entry.path}/`) && parentPath(entry.path) !== targetPath;
+	}
+
+	function startDrag(event: DragEvent, entry: DraggedEntry): void {
+		if (transferState === 'working') {
+			event.preventDefault();
+			return;
+		}
+		draggedEntry = entry;
+		event.dataTransfer?.setData('application/x-onyx-file-tree', JSON.stringify(entry));
+		event.dataTransfer?.setData('text/plain', entry.path);
+		if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+	}
+
+	function endDrag(): void {
+		draggedEntry = undefined;
+		dropTargetPath = undefined;
+	}
+
+	function isFileTreeRow(target: EventTarget | null): boolean {
+		return target instanceof HTMLElement && Boolean(target.closest('.file-tree-row'));
+	}
+
+	function keepDropTarget(event: DragEvent, path: string): void {
+		const entry = draggedEntry;
+		if (!entry || !canDropOn(entry, path)) return;
+		event.preventDefault();
+		event.stopPropagation();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+		dropTargetPath = path;
+	}
+
+	function clearDropTarget(event: DragEvent, path: string): void {
+		const currentTarget = event.currentTarget;
+		const relatedTarget = event.relatedTarget;
+		if (currentTarget instanceof HTMLElement && relatedTarget instanceof HTMLElement && currentTarget.contains(relatedTarget)) return;
+		if (dropTargetPath === path) dropTargetPath = undefined;
+	}
+
+	function dropOnFolder(event: DragEvent, path: string): void {
+		const entry = draggedEntry;
+		if (!entry || !canDropOn(entry, path)) return;
+		event.preventDefault();
+		event.stopPropagation();
+		endDrag();
+		if (entry.kind === 'file') onMoveFile(entry.id, path);
+		else onMoveFolder(entry.path, path);
+	}
+
+	function keepRootDropTarget(event: DragEvent): void {
+		if (!draggedEntry || isFileTreeRow(event.target)) return;
+		event.preventDefault();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+		dropTargetPath = '';
+	}
+
+	function clearRootDropTarget(event: DragEvent): void {
+		const currentTarget = event.currentTarget;
+		const relatedTarget = event.relatedTarget;
+		if (currentTarget instanceof HTMLElement && relatedTarget instanceof HTMLElement && currentTarget.contains(relatedTarget)) return;
+		if (dropTargetPath === '') dropTargetPath = undefined;
+	}
+
+	function dropOnRoot(event: DragEvent): void {
+		const entry = draggedEntry;
+		if (!entry || isFileTreeRow(event.target)) return;
+		event.preventDefault();
+		endDrag();
+		if (entry.kind === 'file') onMoveFile(entry.id, '');
+		else onMoveFolder(entry.path, '');
+	}
+
+	function contextAction(action: () => void): void {
+		closeContextMenu();
+		action();
+	}
+
+	function contextCreateFile(): void {
+		const menu = contextMenu;
+		if (!menu) return;
+		contextAction(() => void beginNaming({ action: 'create-file', parentPath: menu.kind === 'folder' ? menu.path : '' }));
+	}
+
+	function contextCreateFolder(): void {
+		const menu = contextMenu;
+		if (!menu) return;
+		contextAction(() => void beginNaming({ action: 'create-folder', parentPath: menu.kind === 'folder' ? menu.path : '' }));
+	}
+
+	function contextRenameFolder(): void {
+		const menu = contextMenu;
+		if (menu?.kind !== 'folder') return;
+		contextAction(() => void beginNaming({ action: 'rename-folder', path: menu.path }));
+	}
+
+	function contextCopyPath(): void {
+		const menu = contextMenu;
+		if (menu?.kind !== 'folder' && menu?.kind !== 'file') return;
+		contextAction(() => onCopyFilePath(menu.path));
+	}
+
+	function contextDeleteFolder(): void {
+		const menu = contextMenu;
+		if (menu?.kind !== 'folder') return;
+		contextAction(() => onDeleteFolder(menu.path));
+	}
+
+	function contextOpenFile(): void {
+		const menu = contextMenu;
+		if (menu?.kind !== 'file') return;
+		contextAction(() => onSelectNote(menu.id));
+	}
+
+	function contextRenameFile(): void {
+		const menu = contextMenu;
+		if (menu?.kind !== 'file') return;
+		contextAction(() => void beginNaming({ action: 'rename-file', id: menu.id }));
+	}
+
+	function contextDeleteFile(): void {
+		const menu = contextMenu;
+		if (menu?.kind !== 'file') return;
+		contextAction(() => onDeleteFile(menu.id));
+	}
+
+	function handleWindowKeydown(event: KeyboardEvent): void {
+		if (event.key === 'Escape') {
+			if (contextMenu) closeContextMenu();
+			else if (naming) cancelNaming();
+		}
+	}
 
 	// The sidebar is a drawer on narrow screens, where the tools are the harder pane to reach.
 	onMount(() => {
 		if (globalThis.matchMedia?.('(max-width: 900px)').matches) sidebarView = 'tools';
 	});
 </script>
+
+<svelte:window onkeydown={handleWindowKeydown} />
 
 <aside class="sidebar" aria-label="Notes">
 	<div class="notes-heading"><div class="notes-title"><button class="new-note" aria-label="New note" title="New note" disabled={transferState === 'working'} onclick={onCreateNote}><Plus size={17} /></button><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions"><button class="icon-button sidebar-toggle" aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeftClose size={19} /></button></div></div>
@@ -80,14 +421,22 @@
 	</div>
 	{#if sidebarView === 'files'}
 		<div class="sidebar-panel files-panel" role="tabpanel">
+			<div class="file-toolbar">
+				<div class="result-count" aria-live="polite">{searchQuery ? `${results.length} ${results.length === 1 ? 'result' : 'results'}` : `${results.length} ${results.length === 1 ? 'note' : 'notes'}`}</div>
+				<div class="file-actions" aria-label="File actions">
+					<button class="file-action" aria-label="New file" title="New file" disabled={transferState === 'working'} onclick={() => void beginNaming({ action: 'create-file', parentPath: '' })}><FilePlus2 size={16} /></button>
+					<button class="file-action" aria-label="New folder" title="New folder" disabled={transferState === 'working'} onclick={() => void beginNaming({ action: 'create-folder', parentPath: '' })}><FolderPlus size={16} /></button>
+				</div>
+			</div>
 			<label class="search-box"><Search size={15} /><input bind:this={searchInput} type="search" placeholder="Search all notes" value={searchQuery} oninput={(event) => onSearch(event.currentTarget.value)} /><button type="button" aria-label="Open the command palette" aria-haspopup="dialog" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Run a command (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><kbd>{formatShortcut(shortcuts.commandPalette, primaryModifier).replaceAll(' ', '')}</kbd></button></label>
-			<div class="result-count" aria-live="polite">{searchQuery ? `${results.length} ${results.length === 1 ? 'result' : 'results'}` : `${results.length} ${results.length === 1 ? 'note' : 'notes'}`}</div>
-			<nav class="note-list" bind:this={noteList}>
-				{#each visibleResults as result (result.note.id)}
-					<button class="file" class:active={result.note.id === activeNoteId} aria-current={result.note.id === activeNoteId ? 'true' : undefined} disabled={transferState === 'working'} onkeydown={onMoveNoteFocus} onclick={() => onSelectNote(result.note.id)}>
-						<FileText size={16} /><span><strong>{result.note.title}</strong>{#if searchQuery}<small>{result.excerpt || 'Title match'}</small>{/if}</span>{#if result.note.id === activeNoteId}<i></i>{/if}
-					</button>
-				{:else}
+			<nav class="note-list" class:drop-target={dropTargetPath === ''} bind:this={noteList} oncontextmenu={openRootContextMenu} ondragover={keepRootDropTarget} ondragleave={(event) => clearRootDropTarget(event)} ondrop={dropOnRoot}>
+				{#if naming && (naming.action === 'create-file' || naming.action === 'create-folder')}
+					<div class="file-naming-row" style={`--tree-depth: ${naming.parentPath ? 1 : 0}`}>
+						{#if naming.action === 'create-folder'}<Folder size={16} />{:else}<FileText size={16} />{/if}
+						<input bind:this={namingInput} bind:value={draftName} aria-label={naming.action === 'create-folder' ? 'Folder name' : 'File name'} spellcheck="false" onblur={commitNaming} onkeydown={handleNamingKeydown} />
+					</div>
+				{/if}
+				{#if treeRows.length === 0 && !(naming && (naming.action === 'create-file' || naming.action === 'create-folder'))}
 					{#if !notesLoaded && !storageError}
 						<div class="empty-results"><LoaderCircle class="spin" size={20} /><strong>Opening your vault…</strong><span>Notes are read from this device.</span></div>
 					{:else if searchQuery}
@@ -95,8 +444,41 @@
 					{:else}
 						<div class="empty-results"><FileText size={20} /><strong>No notes yet</strong><span>Your first note is one keystroke away.</span><button onclick={onCreateNote}><Plus size={13} /> New note</button></div>
 					{/if}
-				{/each}
+				{:else}
+					{#each treeRows as row (row.key)}
+						{#if row.kind === 'folder'}
+							<button class="file-tree-row folder-row" class:drop-target={dropTargetPath === row.path} class:dragging={draggedEntry?.kind === 'folder' && draggedEntry.path === row.path} data-folder-path={row.path} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Drag to move folder" draggable="true" disabled={transferState === 'working'} onclick={() => toggleFolder(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)} ondragstart={(event) => startDrag(event, { kind: 'folder', path: row.path })} ondragend={endDrag} ondragover={(event) => keepDropTarget(event, row.path)} ondragleave={(event) => clearDropTarget(event, row.path)} ondrop={(event) => dropOnFolder(event, row.path)}>
+								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Folder size={16} /><span class="file-tree-name">{row.label}</span>
+							</button>
+						{:else}
+							<button class="file file-tree-row" class:active={row.result.note.id === activeNoteId} class:dragging={draggedEntry?.kind === 'file' && draggedEntry.id === row.result.note.id} data-file-path={row.path} style={`--tree-depth: ${row.depth}`} aria-current={row.result.note.id === activeNoteId ? 'true' : undefined} title="Drag to move file" draggable="true" disabled={transferState === 'working'} onkeydown={onMoveNoteFocus} onclick={() => onSelectNote(row.result.note.id)} oncontextmenu={(event) => openFileContextMenu(event, row.result)} ondragstart={(event) => startDrag(event, { kind: 'file', id: row.result.note.id, path: row.path })} ondragend={endDrag}>
+								<FileText size={16} /><span>{#if naming?.action === 'rename-file' && naming.id === row.result.note.id}<input class="file-inline-input" bind:this={namingInput} bind:value={draftName} aria-label="File name" spellcheck="false" onblur={commitNaming} onkeydown={handleNamingKeydown} />{:else}<strong>{row.label}</strong>{#if searchQuery}<small>{row.result.excerpt || 'Title match'}</small>{/if}{/if}</span>{#if row.result.note.id === activeNoteId}<i></i>{/if}
+							</button>
+						{/if}
+					{/each}
+				{/if}
 			</nav>
+			{#if contextMenu}
+				<button class="file-context-backdrop" aria-label="Close file menu" onclick={closeContextMenu}></button>
+				<div class="file-context-menu" role="menu" aria-label="File actions" style={`top: ${contextMenu.y}px; left: ${contextMenu.x}px`}>
+					{#if contextMenu.kind === 'root' || contextMenu.kind === 'folder'}
+						<button role="menuitem" disabled={transferState === 'working'} onclick={contextCreateFile}><FilePlus2 size={15} /><span>New file</span></button>
+						<button role="menuitem" disabled={transferState === 'working'} onclick={contextCreateFolder}><FolderPlus size={15} /><span>New folder</span></button>
+						{#if contextMenu.kind === 'folder'}
+							<div class="file-context-divider"></div>
+							<button role="menuitem" disabled={transferState === 'working'} onclick={contextRenameFolder}><Pencil size={15} /><span>Rename</span></button>
+							<button role="menuitem" onclick={contextCopyPath}><Copy size={15} /><span>Copy relative path</span></button>
+							<button role="menuitem" class="danger" disabled={transferState === 'working'} onclick={contextDeleteFolder}><Trash2 size={15} /><span>Delete</span></button>
+						{/if}
+					{:else}
+						<button role="menuitem" disabled={transferState === 'working'} onclick={contextOpenFile}><FileText size={15} /><span>Open</span></button>
+						<button role="menuitem" disabled={transferState === 'working'} onclick={contextRenameFile}><Pencil size={15} /><span>Rename</span></button>
+						<button role="menuitem" onclick={contextCopyPath}><Copy size={15} /><span>Copy relative path</span></button>
+						<div class="file-context-divider"></div>
+						<button role="menuitem" class="danger" disabled={transferState === 'working'} onclick={contextDeleteFile}><Trash2 size={15} /><span>Delete</span></button>
+					{/if}
+				</div>
+			{/if}
 			{#if notePageCount > 1}
 				<div class="note-pagination" aria-label="Note list pages">
 					<button disabled={notePage === 0} onclick={() => onChangePage(notePage - 1)}>Previous</button>
@@ -110,7 +492,6 @@
 			<section class="tool-section">
 				<h2>View</h2>
 				<div class="sidebar-view-options">
-					<button class:active={renderedReadOnly} aria-pressed={renderedReadOnly} disabled={!renderedPaneVisible} onclick={onToggleRenderedReadOnly} aria-label={renderedReadOnly ? 'Enable page editing' : 'Turn on read-only'}>{#if renderedReadOnly}<Lock size={16} />{:else}<LockOpen size={16} />{/if}<span>{renderedReadOnly ? 'Read only' : 'Editing'}</span></button>
 					<label class="content-width-control">
 						<span><strong>Content width</strong><output>{contentWidth}px</output></span>
 						<input type="range" min="480" max="1200" step="20" value={contentWidth} aria-label="Content width" oninput={(event) => onContentWidthChange(Number(event.currentTarget.value))} />
