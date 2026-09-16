@@ -554,6 +554,24 @@
 .search-box > button:hover kbd {
   color: var(--ink);
 }
+.search-box > button.search-palette-button {
+  min-width: 32px;
+  height: 26px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--faint);
+}
+.search-box > button.search-palette-button:hover,
+.search-box > button.search-palette-button:focus-visible {
+  border-color: var(--line-hover);
+  background: var(--surface-hover);
+}
+.search-box > button.search-palette-button kbd {
+  color: inherit;
+  font-size: 10px;
+}
 .search-box input::placeholder {
   color: var(--faint);
 }

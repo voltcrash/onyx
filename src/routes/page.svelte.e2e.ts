@@ -332,6 +332,10 @@ test("opens the command palette in the sidebar and returns focus to the opener",
   await expect(settings).toHaveAttribute("aria-expanded", "false");
 
   const palette = page.getByRole("button", { name: "Open the command palette" });
+  await expect(palette).toHaveClass(/search-palette-button/);
+  const paletteButtonBounds = await palette.boundingBox();
+  expect(paletteButtonBounds?.height).toBeGreaterThanOrEqual(26);
+  expect(paletteButtonBounds?.width).toBeGreaterThanOrEqual(32);
   await palette.click();
   const commandPalette = page.locator("#command-palette");
   await expect(commandPalette).toBeVisible();
