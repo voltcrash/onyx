@@ -130,6 +130,11 @@
 		scrollActiveIntoView();
 	}
 
+	function movePage(direction: number): void {
+		const pageSize = Math.max(1, Math.floor((list?.clientHeight ?? 320) / 40));
+		move(direction * pageSize);
+	}
+
 	function scrollActiveIntoView(): void {
 		requestAnimationFrame(() => {
 			list?.querySelector('.palette-item.active')?.scrollIntoView({ block: 'nearest' });
@@ -156,6 +161,18 @@
 		} else if (event.key === 'End') {
 			event.preventDefault();
 			activeIndex = matches.length;
+			move(-1);
+		} else if (event.key === 'PageDown') {
+			event.preventDefault();
+			movePage(1);
+		} else if (event.key === 'PageUp') {
+			event.preventDefault();
+			movePage(-1);
+		} else if (event.key.toLowerCase() === 'n' && event.ctrlKey && !event.metaKey) {
+			event.preventDefault();
+			move(1);
+		} else if (event.key.toLowerCase() === 'p' && event.ctrlKey && !event.metaKey) {
+			event.preventDefault();
 			move(-1);
 		} else if (event.key === 'Enter') {
 			event.preventDefault();
