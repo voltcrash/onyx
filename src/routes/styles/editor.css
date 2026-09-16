@@ -443,6 +443,42 @@
 .output-text {
   font-size: 13.5px;
 }
+.output-html {
+  overflow-x: auto;
+  white-space: pre;
+  word-break: normal;
+  background: var(--code-bg);
+  color: var(--code-text);
+}
+.output-code > code.hljs {
+  display: block;
+  overflow-x: auto;
+  font: inherit;
+  color: inherit;
+}
+.output-html .output-code-line {
+  display: inline;
+}
+.output-html .output-code-line::before {
+  content: attr(data-line);
+  display: inline-block;
+  position: sticky;
+  left: 0;
+  box-sizing: border-box;
+  min-width: 3ch;
+  margin-right: 1.5ch;
+  padding-right: 1ch;
+  border-right: 1px solid color-mix(in oklch, var(--code-text) 22%, var(--code-bg));
+  background: var(--code-bg);
+  color: var(--code-syntax-comment);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: none;
+}
+.output-html .output-code-line:hover,
+.output-html .output-code-line:hover::before {
+  background: color-mix(in oklch, var(--code-text) 8%, var(--code-bg));
+}
 .rich-text-preview {
   flex: 1;
   min-height: 0;
@@ -837,69 +873,69 @@
   overflow-x: auto;
   font-size: inherit;
 }
-.prose :is(pre code, .code-content) .hljs-comment,
-.prose :is(pre code, .code-content) .hljs-quote,
-.prose :is(pre code, .code-content) .hljs-doctag {
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-comment,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-quote,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-doctag {
   color: var(--code-syntax-comment);
   font-style: italic;
 }
-.prose :is(pre code, .code-content) .hljs-keyword,
-.prose :is(pre code, .code-content) .hljs-selector-tag,
-.prose :is(pre code, .code-content) .hljs-literal,
-.prose :is(pre code, .code-content) .hljs-section,
-.prose :is(pre code, .code-content) .hljs-name {
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-keyword,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-selector-tag,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-literal,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-section,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-name {
   color: var(--code-syntax-keyword);
 }
-.prose :is(pre code, .code-content) .hljs-string,
-.prose :is(pre code, .code-content) .hljs-regexp {
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-string,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-regexp {
   color: var(--code-syntax-string);
 }
-.prose :is(pre code, .code-content) .hljs-attribute,
-.prose :is(pre code, .code-content) .hljs-attr {
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-attribute,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-attr {
   color: var(--code-syntax-attribute);
 }
-.prose :is(pre code, .code-content) .hljs-number,
-.prose :is(pre code, .code-content) .hljs-symbol,
-.prose :is(pre code, .code-content) .hljs-bullet {
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-number,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-symbol,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-bullet {
   color: var(--code-syntax-number);
 }
-.prose :is(pre code, .code-content) .hljs-title,
-.prose :is(pre code, .code-content) .hljs-title.class_,
-.prose :is(pre code, .code-content) .hljs-title.function_ {
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-title,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-title.class_,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-title.function_ {
   color: var(--code-syntax-title);
 }
-.prose :is(pre code, .code-content) .hljs-variable,
-.prose :is(pre code, .code-content) .hljs-template-variable,
-.prose :is(pre code, .code-content) .hljs-type,
-.prose :is(pre code, .code-content) .hljs-built_in,
-.prose :is(pre code, .code-content) .hljs-selector-class,
-.prose :is(pre code, .code-content) .hljs-selector-id,
-.prose :is(pre code, .code-content) .hljs-selector-attr,
-.prose :is(pre code, .code-content) .hljs-selector-pseudo {
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-variable,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-template-variable,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-type,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-built_in,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-selector-class,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-selector-id,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-selector-attr,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-selector-pseudo {
   color: var(--code-syntax-variable);
 }
-.prose :is(pre code, .code-content) .hljs-meta,
-.prose :is(pre code, .code-content) .hljs-meta .hljs-string,
-.prose :is(pre code, .code-content) .hljs-params {
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-meta,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-meta .hljs-string,
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-params {
   color: var(--code-syntax-meta);
 }
-.prose :is(pre code, .code-content) .hljs-tag {
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-tag {
   color: var(--code-syntax-tag);
 }
-.prose :is(pre code, .code-content) .hljs-addition {
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-addition {
   color: var(--code-syntax-addition);
 }
-.prose :is(pre code, .code-content) .hljs-deletion {
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-deletion {
   color: var(--code-syntax-deletion);
 }
-.prose :is(pre code, .code-content) .hljs-link {
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-link {
   color: var(--code-syntax-string);
   text-decoration: underline;
 }
-.prose :is(pre code, .code-content) .hljs-emphasis {
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-emphasis {
   font-style: italic;
 }
-.prose :is(pre code, .code-content) .hljs-strong {
+:is(.prose :is(pre code, .code-content), .output-code) .hljs-strong {
   font-weight: 700;
 }
 .prose kbd {
