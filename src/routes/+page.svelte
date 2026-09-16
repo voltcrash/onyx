@@ -22,6 +22,7 @@
 		activeNoteId={page.activeNoteId}
 		results={page.results}
 		visibleResults={page.visibleResults}
+		folders={page.folders}
 		searchQuery={page.searchQuery}
 		notePage={page.notePage}
 		notePageCount={page.notePageCount}
@@ -49,6 +50,15 @@
 		onCreateVault={() => void page.createVault()}
 		onRenameVault={page.renameVault}
 		onCreateNote={() => void page.createNote()}
+		onCreateFile={(folder, name) => void page.createFile(folder, name)}
+		onCreateFolder={(folder, name) => void page.createFolder(folder, name)}
+		onRenameFile={(id, name) => void page.renameFile(id, name)}
+		onRenameFolder={(path, name) => void page.renameFolder(path, name)}
+		onMoveFile={(id, folder) => void page.moveFile(id, folder)}
+		onMoveFolder={(path, parent) => void page.moveFolder(path, parent)}
+		onDeleteFile={(id) => void page.deleteFile(id)}
+		onDeleteFolder={(path) => void page.deleteFolder(path)}
+		onCopyFilePath={(path) => void page.copyFilePath(path)}
 		onSearch={page.queueSearch}
 		onOpenPalette={() => void page.openPalette()}
 		onOpenSettings={() => page.openSettings('editor')}

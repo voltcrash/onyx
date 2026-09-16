@@ -468,6 +468,41 @@
   font-size: 9px;
   white-space: nowrap;
 }
+.file-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 31px;
+  padding: 4px 6px 3px;
+}
+.file-toolbar .result-count {
+  padding: 0;
+}
+.file-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.file-action {
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.file-action:hover:not(:disabled) {
+  background: var(--subtle-strong);
+  color: var(--ink);
+}
+.file-action:disabled {
+  color: var(--faint);
+  cursor: not-allowed;
+}
 .result-count {
   padding: 11px 10px 6px;
   color: var(--faint);
@@ -481,6 +516,164 @@
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
+}
+.sidebar .note-list.drop-target {
+  outline: 1px dashed var(--focus-border);
+  outline-offset: -2px;
+  border-radius: 8px;
+  background: var(--subtle);
+}
+.file-tree-row {
+  --tree-depth: 0;
+}
+.file-tree-row[draggable="true"] {
+  cursor: grab;
+}
+.file-tree-row[draggable="true"]:active {
+  cursor: grabbing;
+}
+.file-tree-row.dragging {
+  opacity: 0.45;
+}
+.file-tree-row.drop-target {
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1px var(--focus-border);
+}
+.folder-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 10px;
+  padding-left: calc(10px + (var(--tree-depth) * 14px));
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+.folder-row:hover:not(:disabled) {
+  background: var(--subtle);
+  color: var(--ink);
+}
+.folder-row.drop-target,
+.folder-row.drop-target:hover:not(:disabled) {
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1px var(--focus-border);
+}
+.folder-row:disabled {
+  cursor: not-allowed;
+}
+.folder-row > svg {
+  color: var(--accent-quiet);
+}
+.file-tree-caret {
+  width: 13px;
+  height: 16px;
+  display: grid;
+  flex: 0 0 13px;
+  place-items: center;
+  color: var(--faint);
+}
+.file-tree-caret > span {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+.file-tree-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file.file-tree-row {
+  padding-left: calc(10px + (var(--tree-depth) * 14px));
+}
+.file-inline-input,
+.file-naming-row input {
+  min-width: 0;
+  width: 100%;
+  height: 24px;
+  padding: 2px 6px;
+  border: 1px solid var(--focus-border);
+  border-radius: 5px;
+  outline: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+}
+.file-naming-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 34px;
+  padding: 5px 10px;
+  padding-left: calc(10px + (var(--tree-depth) * 14px));
+  color: var(--accent-quiet);
+}
+.file-naming-row input {
+  flex: 1;
+}
+.file-context-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+.file-context-menu {
+  position: fixed;
+  z-index: 81;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+.file-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 31px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-body);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+.file-context-menu button span {
+  flex: 1;
+}
+.file-context-menu button:hover:not(:disabled) {
+  background: var(--subtle-strong);
+  color: var(--ink);
+}
+.file-context-menu button:disabled {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+.file-context-menu button.danger {
+  color: var(--danger);
+}
+.file-context-menu button.danger:hover:not(:disabled) {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.file-context-divider {
+  margin: 4px 2px;
+  border-top: 1px solid var(--line-soft);
 }
 .sidebar-footer {
   display: flex;
