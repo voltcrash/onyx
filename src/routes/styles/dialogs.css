@@ -864,9 +864,6 @@ kbd {
   cursor: wait;
   opacity: 0.55;
 }
-.transfer-input {
-  display: none;
-}
 .backup-form {
   padding: 20px 22px 4px;
 }
@@ -1063,58 +1060,4 @@ kbd {
   border-color: var(--danger-solid);
   background: var(--danger-solid);
   color: #fff;
-}
-.backup-notice {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  max-width: min(440px, calc(100vw - 36px));
-  padding: 10px 10px 10px 13px;
-  border: 1px solid var(--ok-border);
-  border-radius: 9px;
-  background: var(--ok-bg);
-  color: var(--ok-text);
-  font-size: 12px;
-  box-shadow: var(--shadow-md);
-  animation: rise-corner 0.2s ease-out;
-}
-@keyframes rise-corner {
-  from {
-    opacity: 0;
-    transform: translateY(7px);
-  }
-}
-.transfer-notice {
-  bottom: 66px;
-}
-.backup-notice.error {
-  border-color: var(--danger-border);
-  background: var(--danger-bg);
-  color: var(--danger-strong);
-}
-.backup-notice span {
-  line-height: 1.4;
-}
-.backup-notice a {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: inherit;
-  font-weight: 650;
-  white-space: nowrap;
-}
-.backup-notice button {
-  width: 25px;
-  height: 25px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
 }

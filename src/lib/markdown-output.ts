@@ -5,19 +5,15 @@ import {
   type RenderedBlock,
   type SourceLines,
 } from "./markdown.js";
+import { PLAIN_TEXT_SEPARATOR, joinTextBlocks, type TextBlock } from "./markdown-output-types.js";
 
-/** A top-level block of a text output, with the Markdown lines it was written from. */
-export interface TextBlock {
-  text: string;
-  lines?: SourceLines;
-}
-
-export const PLAIN_TEXT_SEPARATOR = "\n\n";
-export const HTML_SOURCE_SEPARATOR = "\n";
-
-export function joinTextBlocks(blocks: TextBlock[], separator: string): string {
-  return blocks.map((block) => block.text).join(separator);
-}
+export {
+  HTML_SOURCE_SEPARATOR,
+  PLAIN_TEXT_SEPARATOR,
+  joinTextBlocks,
+} from "./markdown-output-types.js";
+export type { TextBlock } from "./markdown-output-types.js";
+export { outputFileName } from "./output-utils.js";
 
 const INLINE_TAGS = new Set([
   "a",
@@ -182,19 +178,6 @@ ${body
   </body>
 </html>
 `;
-}
-
-/** Turns a note title into a file name that every platform accepts. */
-export function outputFileName(title: string, extension: string): string {
-  const stem =
-    title
-      .normalize("NFKD")
-      .replace(/[^\w\s-]+/g, "")
-      .trim()
-      .replace(/\s+/g, "-")
-      .toLowerCase()
-      .slice(0, 60) || "note";
-  return `${stem}.${extension}`;
 }
 
 function escapeHtml(value: string): string {

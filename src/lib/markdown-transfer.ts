@@ -1,6 +1,6 @@
 import { BlobReader, BlobWriter, ZipReader, ZipWriter, type Entry } from "@zip.js/zip.js";
 
-import { titleFromMarkdown } from "./markdown.js";
+import { titleFromMarkdown } from "./markdown-utils.js";
 import type { Vault } from "./storage/vault.js";
 
 const BYTES_PER_MEBIBYTE = 1024 * 1024;

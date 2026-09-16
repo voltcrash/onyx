@@ -46,7 +46,11 @@ export function manageModalFocus(node: HTMLElement): { destroy: () => void } {
   return {
     destroy: () => {
       node.removeEventListener("keydown", trapFocus);
-      if (previouslyFocused?.isConnected) queueMicrotask(() => previouslyFocused.focus());
+      if (previouslyFocused?.isConnected) {
+        requestAnimationFrame(() => {
+          if (previouslyFocused.isConnected) previouslyFocused.focus();
+        });
+      }
     },
   };
 }

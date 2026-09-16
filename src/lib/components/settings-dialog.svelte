@@ -5,14 +5,16 @@
 		FolderInput, FolderOutput, HardDrive, LoaderCircle, LogOut, Monitor, Moon, RefreshCw, ShieldCheck,
 		Sun, Trash2, TriangleAlert, WifiOff, X
 	} from '@lucide/svelte';
+	import { listGithubRepositories, type GithubRepository, type GithubUser } from '$lib/github';
+	import { defaultFontChoices, fontOptions, fontRoles, type FontChoices, type FontRole } from '$lib/fonts';
+	import { colorThemeOptions, type ColorTheme, type ResolvedTheme, type ThemePreference } from '$lib/theme';
+	import { persistenceDeniedMessage } from '$lib/browser-storage';
 	import {
-		listGithubRepositories, type GithubBackupState, type GithubRepository, type GithubUser,
-		defaultFontChoices, fontOptions, fontRoles,
-		colorThemeOptions, formatShortcut, persistenceDeniedMessage, shortcutActions, shortcutFromEvent, shortcutParts, shortcutsEqual, type ColorTheme,
-		type FontChoices, type FontRole,
-		type KeyboardShortcut, type KeyboardShortcuts, type PrimaryModifier, type ResolvedTheme, type ShortcutAction, type ThemePreference,
-		type Vault, type VaultStorageUsage
-	} from '$lib';
+		formatShortcut, shortcutActions, shortcutFromEvent, shortcutParts, shortcutsEqual,
+		type KeyboardShortcut, type KeyboardShortcuts, type PrimaryModifier, type ShortcutAction
+	} from '$lib/keyboard-shortcuts';
+	import type { Vault } from '$lib/storage/vault';
+	import type { GithubBackupState, VaultStorageUsage } from '$lib/storage/types';
 	import { manageModalFocus } from '$lib/modal-focus';
 	import GithubIcon from './github-icon.svelte';
 	import type { SettingsSection } from './settings-types';
