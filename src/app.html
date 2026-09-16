@@ -15,10 +15,27 @@
             storedMode === "light" || storedMode === "dark" || storedMode === "system"
               ? storedMode
               : "system";
+          const colorThemes = [
+            "ember",
+            "monochrome",
+            "ocean",
+            "phosphor",
+            "graphite",
+            "marigold",
+            "espresso",
+            "ink",
+            "lavender",
+            "burgundy",
+            "rose",
+            "solarized",
+          ];
+          const storedColorTheme = localStorage.getItem("onyx-color-theme");
           root.dataset.theme =
             preference === "dark" || (preference === "system" && systemDark) ? "dark" : "light";
           root.dataset.themePreference = preference;
-          root.dataset.colorTheme = localStorage.getItem("onyx-color-theme") || "monochrome";
+          root.dataset.colorTheme = colorThemes.includes(storedColorTheme ?? "")
+            ? storedColorTheme
+            : "monochrome";
         } catch {
           root.dataset.theme = systemDark ? "dark" : "light";
           root.dataset.themePreference = "system";
@@ -26,6 +43,68 @@
         }
       })();
     </script>
+    <style>
+      /* Keep the SSR shell recognizable before the route stylesheet is parsed. */
+      html,
+      body {
+        min-width: 320px;
+        min-height: 100%;
+        margin: 0;
+      }
+      body {
+        overflow: hidden;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      button,
+      input,
+      textarea,
+      select {
+        font: inherit;
+      }
+      .app {
+        display: grid;
+        grid-template-columns: 238px minmax(0, 1fr);
+        height: 100dvh;
+      }
+      .app.sidebar-collapsed {
+        grid-template-columns: 0 minmax(0, 1fr);
+      }
+      .sidebar {
+        grid-column: 1;
+        grid-row: 1 / -1;
+        min-height: 0;
+      }
+      .workspace {
+        display: flex;
+        min-width: 0;
+        min-height: 0;
+        flex-direction: column;
+      }
+      .editor-shell {
+        display: grid;
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
+        grid-template-columns: minmax(0, 50%) 1px minmax(0, 1fr);
+      }
+      .output-pane,
+      .preview-pane {
+        min-width: 0;
+        min-height: 0;
+      }
+      .output-pane {
+        grid-column: 1;
+        grid-row: 1;
+      }
+      .preview-pane {
+        grid-column: 3;
+        grid-row: 1;
+      }
+    </style>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">
