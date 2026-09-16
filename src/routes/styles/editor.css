@@ -555,6 +555,7 @@
 .output-body {
   flex: 1;
   min-height: 0;
+  position: relative;
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -581,6 +582,47 @@
 }
 .output-body > textarea::selection {
   background: var(--selection);
+}
+.source-find-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: min(100%, var(--content-width));
+  margin: 0 auto;
+  overflow: hidden;
+  pointer-events: none;
+}
+.source-find-layer > div {
+  min-height: 100%;
+  padding: 52px clamp(28px, 5vw, 72px) 60px;
+  color: var(--ink-body);
+  font-family: var(--font-code);
+  font-size: 15px;
+  line-height: 1.78;
+  tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+.source-find-layer .find-match {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: inherit;
+}
+.source-find-layer .find-match-current {
+  background: color-mix(in srgb, var(--accent) 48%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 48%, transparent);
+}
+.output-body > textarea.find-highlights-active {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--ink);
+  -webkit-text-fill-color: transparent;
+}
+.output-body > textarea.find-highlights-active::placeholder {
+  color: var(--faint);
+  -webkit-text-fill-color: var(--faint);
 }
 .live-editor {
   flex: 1;

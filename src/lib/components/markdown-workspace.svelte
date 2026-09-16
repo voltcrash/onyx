@@ -2,6 +2,7 @@
 	import { onMount, tick } from 'svelte';
 	import { Copy, Download, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, Lock, LockOpen, Moon, PanelLeft, PencilLine, Sun, X } from '@lucide/svelte';
 	import { HTML_SOURCE_SEPARATOR, PLAIN_TEXT_SEPARATOR, type TextBlock } from '$lib/markdown-output-types';
+	import { highlightFindMatches, type FindMatch } from '$lib/find-replace';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
 	import type { ColorTheme, ResolvedTheme } from '$lib/theme';
 	import type { SourceLines } from '$lib/markdown-lite';
@@ -26,6 +27,10 @@
 		renderedReadOnly: boolean;
 		markdown: string;
 		markdownLines: string[];
+		findOpen: boolean;
+		findQuery: string;
+		findMatches: FindMatch[];
+		activeFindMatch: number;
 		liveLine: number;
 		saveState: SaveState;
 		transferState: TransferState;
@@ -67,7 +72,7 @@
 	}
 
 	let {
-		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, outputView, plainText, plainTextBlocks, htmlSource, htmlSourceBlocks, highlightedHtmlSourceLines, renderedBlockLines, renderedReadOnly, markdown, markdownLines, liveLine,
+		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, outputView, plainText, plainTextBlocks, htmlSource, htmlSourceBlocks, highlightedHtmlSourceLines, renderedBlockLines, renderedReadOnly, markdown, markdownLines, findOpen, findQuery, findMatches, activeFindMatch, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar,
 		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onOutputViewChange, onCopy, onDownload, onToggleRenderedPane, onToggleRenderedReadOnly, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onSourceFocus, onLiveLineFocus, onRenderedInput,
@@ -93,6 +98,19 @@
 	let activeOutputTheme = $derived(outputTheme ?? resolvedTheme);
 	type LiveLineRect = { top: number; left: number; width: number; height: number };
 	let liveLineRects = $state<LiveLineRect[]>([]);
+	let sourceScrollTop = $state(0);
+	let sourceScrollLeft = $state(0);
+	let sourceFindActive = $derived(findOpen && outputView === 'markdown' && Boolean(findQuery));
+	let sourceFindMarkup = $derived(
+		sourceFindActive ? highlightFindMatches(markdown, findMatches, activeFindMatch) : '',
+	);
+
+	function syncSourceFindLayer(event?: Event): void {
+		const target = event?.currentTarget instanceof HTMLTextAreaElement ? event.currentTarget : editor;
+		if (!target) return;
+		sourceScrollTop = target.scrollTop;
+		sourceScrollLeft = target.scrollLeft;
+	}
 
 	function toggleOutputTheme(): void {
 		outputTheme = activeOutputTheme === 'dark' ? 'light' : 'dark';
@@ -498,6 +516,11 @@
 	});
 
 	$effect(() => {
+		void [sourceFindActive, sourceFindMarkup, editor];
+		void tick().then(() => syncSourceFindLayer());
+	});
+
+	$effect(() => {
 		if (!liveEditorContainer || renderedReadOnly) return;
 		const syncSelection = () => syncLiveSelectionDecorations();
 		document.addEventListener('selectionchange', syncSelection);
@@ -589,7 +612,10 @@
 						</div>
 					</div>
 				{:else}
-					<textarea bind:this={editor} value={markdown} onfocus={onSourceFocus} onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} oninput={(event) => onMarkdownChange(event.currentTarget.value)} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
+					<textarea bind:this={editor} class:find-highlights-active={sourceFindActive} value={markdown} onfocus={onSourceFocus} onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} oninput={(event) => onMarkdownChange(event.currentTarget.value)} onscroll={syncSourceFindLayer} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
+					{#if sourceFindActive}
+						<div class="source-find-layer" aria-hidden="true"><div style={`transform: translate(${-sourceScrollLeft}px, ${-sourceScrollTop}px)`}>{@html sourceFindMarkup}</div></div>
+					{/if}
 				{/if}
 			</div>
 		</div>
