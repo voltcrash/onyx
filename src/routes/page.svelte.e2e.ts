@@ -1693,6 +1693,21 @@ test("shows the generated HTML in the output pane, copies and downloads it", asy
   await expect(markdown).toHaveValue(/Release notes/);
 });
 
+test("keeps the HTML line-number gutter aligned when it reaches two digits", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  await openOutputSwitcher(page);
+  await page.getByRole("tab", { name: "HTML" }).click();
+
+  const gutterWidths = await page
+    .locator(".output-code-line")
+    .evaluateAll((lines) =>
+      lines.slice(7, 10).map((line) => getComputedStyle(line, "::before").width),
+    );
+  expect(gutterWidths).toEqual([gutterWidths[0], gutterWidths[0], gutterWidths[0]]);
+});
+
 test("previews the printed page and prints it from the output pane", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/");

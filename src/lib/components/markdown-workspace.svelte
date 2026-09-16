@@ -307,6 +307,11 @@
 		onResizeEnd();
 	}
 
+	function lineNumberWidth(lineCount: number): string {
+		const digits = Math.max(1, String(lineCount).length);
+		return `${Math.max(3, digits + 1.25)}ch`;
+	}
+
 	type Pane = 'output' | 'rendered';
 	const DRAG_THRESHOLD = 5;
 	const MOVE_EASING = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
@@ -600,7 +605,7 @@
 						{/if}
 					</div>
 				{:else if outputView === 'html'}
-					<pre class="output-code output-html" aria-label="Generated HTML"><code class="hljs">{#each highlightedHtmlSourceLines as line, index}<span class="output-code-line" data-line={index + 1}>{@html line}</span>{#if index < highlightedHtmlSourceLines.length - 1}{'\n'}{/if}{/each}</code></pre>
+					<pre class="output-code output-html" style={`--line-number-width: ${lineNumberWidth(highlightedHtmlSourceLines.length)}`} aria-label="Generated HTML"><code class="hljs">{#each highlightedHtmlSourceLines as line, index}<span class="output-code-line" data-line={index + 1}>{@html line}</span>{#if index < highlightedHtmlSourceLines.length - 1}{'\n'}{/if}{/each}</code></pre>
 				{:else if outputView === 'pdf'}
 					<div class="pdf-preview paper-surface">
 						<div class="pdf-sheet paper-surface" aria-label="PDF preview">
