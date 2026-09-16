@@ -84,6 +84,7 @@ import {
   detectPrimaryModifier,
   formatShortcut,
   readKeyboardShortcuts,
+  shortcutsEqual,
   shortcutMatchesEvent,
   writeKeyboardShortcuts,
   type KeyboardShortcut,
@@ -489,6 +490,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       .filter((note): note is NoteMetadata => Boolean(note)),
   );
   const paletteSearchResults = $derived(new Map(results.map((result) => [result.note.id, result])));
+  const fontsAreDefault = $derived(
+    (Object.keys(defaultFontChoices) as FontRole[]).every(
+      (role) => fonts[role] === defaultFontChoices[role],
+    ),
+  );
+  const shortcutsAreDefault = $derived(
+    (Object.keys(defaultKeyboardShortcuts) as ShortcutAction[]).every((action) =>
+      shortcutsEqual(shortcuts[action], defaultKeyboardShortcuts[action]),
+    ),
+  );
   const paletteItems = $derived([
     ...recentNotes.map((note) => ({
       id: `recent-note-${note.id}`,
@@ -890,6 +901,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       run: () => openSettings("editor"),
     },
     {
+      id: "reset-fonts",
+      group: "Settings",
+      label: "Restore default fonts",
+      icon: Type,
+      keywords: "editor typography reset appearance",
+      disabled: fontsAreDefault,
+      run: resetFonts,
+    },
+    {
       id: "settings-themes",
       group: "Settings",
       label: "Theme settings",
@@ -905,6 +925,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       icon: Keyboard,
       keywords: "help keys reference",
       run: () => openSettings("shortcuts"),
+    },
+    {
+      id: "reset-shortcuts",
+      group: "Settings",
+      label: "Restore default keyboard shortcuts",
+      icon: Keyboard,
+      keywords: "keys reset defaults customize",
+      disabled: shortcutsAreDefault,
+      run: resetShortcuts,
     },
     {
       id: "settings-github",
@@ -937,6 +966,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       icon: HardDrive,
       keywords: "space quota usage persistent folder opfs",
       run: () => openSettings("storage"),
+    },
+    {
+      id: "request-persistent-storage",
+      group: "Settings",
+      label: "Request persistent storage",
+      icon: HardDrive,
+      keywords: "storage browser keep notes safe durable",
+      run: () => void ensurePersistentStorage(),
     },
     {
       id: "settings-transfer",
