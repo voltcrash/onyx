@@ -551,6 +551,8 @@ test("keeps the editor usable and pauses GitHub features offline", async ({ cont
     "href",
     "/manifest.webmanifest",
   );
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", /\/icons\/icon\.svg$/);
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("type", "image/svg+xml");
   await page.evaluate(async () => {
     if (navigator.serviceWorker.controller) return;
     await new Promise<void>((resolve) => {
