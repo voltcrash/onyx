@@ -490,18 +490,18 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 52px clamp(14px, 3vw, 40px) 50px;
+  padding: 0;
   background: var(--surface);
 }
-/* A4 at 96dpi, so the preview matches what the print dialog lays out. */
+/* Keep the print typography and margins while letting the page fill the available pane. */
 .pdf-sheet {
-  width: min(100%, 794px);
-  min-height: 1123px;
-  margin: 0 auto;
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
   padding: 46px clamp(24px, 5%, 58px) 64px;
-  border: 1px solid var(--line-soft);
+  border: 0;
   background: var(--surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 .pdf-sheet .prose {
   width: 100%;

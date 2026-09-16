@@ -1410,6 +1410,16 @@ test("previews the printed page and prints it from the output pane", async ({ pa
     "background-color",
     await sheet.evaluate((element) => getComputedStyle(element).backgroundColor),
   );
+  const previewBounds = await page.locator(".pdf-preview").boundingBox();
+  const sheetBounds = await sheet.boundingBox();
+  expect(previewBounds).not.toBeNull();
+  expect(sheetBounds).not.toBeNull();
+  expect(sheetBounds).toMatchObject({
+    x: previewBounds!.x,
+    y: previewBounds!.y,
+    width: previewBounds!.width,
+    height: previewBounds!.height,
+  });
   await expect(page.getByRole("button", { name: "Copy" })).toBeDisabled();
 
   await openOutputSwitcher(page);
