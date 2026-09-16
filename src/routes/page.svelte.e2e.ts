@@ -1389,6 +1389,7 @@ test("shows the generated HTML in the output pane, copies and downloads it", asy
 });
 
 test("previews the printed page and prints it from the output pane", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/");
   const markdown = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(markdown).toBeEnabled();
@@ -1405,6 +1406,10 @@ test("previews the printed page and prints it from the output pane", async ({ pa
   await page.getByRole("tab", { name: "PDF" }).click();
   const sheet = page.locator(".pdf-sheet");
   await expect(sheet.locator("h1")).toHaveText("Field report");
+  await expect(page.locator(".pdf-preview")).toHaveCSS(
+    "background-color",
+    await sheet.evaluate((element) => getComputedStyle(element).backgroundColor),
+  );
   await expect(page.getByRole("button", { name: "Copy" })).toBeDisabled();
 
   await openOutputSwitcher(page);

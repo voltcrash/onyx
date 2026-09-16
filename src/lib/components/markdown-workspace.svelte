@@ -548,7 +548,7 @@
 				{:else if outputView === 'html'}
 					<pre class="output-code output-html" aria-label="Generated HTML"><code class="hljs">{#each highlightedHtmlSourceLines as line, index}<span class="output-code-line" data-line={index + 1}>{@html line}</span>{#if index < highlightedHtmlSourceLines.length - 1}{'\n'}{/if}{/each}</code></pre>
 				{:else if outputView === 'pdf'}
-					<div class="pdf-preview">
+					<div class="pdf-preview paper-surface">
 						<div class="pdf-sheet paper-surface" aria-label="PDF preview">
 							{#if hasContent}
 								<article class="prose">{@html renderedMarkdown}</article>
