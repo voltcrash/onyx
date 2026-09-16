@@ -581,6 +581,9 @@ test("keeps the editor usable and pauses GitHub features offline", async ({ cont
 test("searches note titles and Markdown content", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await expect(
+    page.locator(".notes-heading").getByRole("button", { name: "New note" }),
+  ).toHaveCount(0);
   const filesPanel = page.locator(".files-panel");
   const childOrder = await filesPanel.evaluate((panel) =>
     ["search-box", "file-toolbar", "note-list"].map((className) =>
@@ -589,7 +592,8 @@ test("searches note titles and Markdown content", async ({ page }) => {
   );
   expect(childOrder).toEqual([0, 1, 2]);
 
-  await page.getByRole("button", { name: "New note" }).click();
+  await page.getByRole("button", { name: "New file" }).click();
+  await page.getByRole("textbox", { name: "File name" }).press("Enter");
   await expect(page.getByRole("button", { name: "Untitled", exact: true })).toHaveAttribute(
     "aria-current",
     "true",
