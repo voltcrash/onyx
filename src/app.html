@@ -15,10 +15,27 @@
             storedMode === "light" || storedMode === "dark" || storedMode === "system"
               ? storedMode
               : "system";
+          const colorThemes = [
+            "ember",
+            "monochrome",
+            "ocean",
+            "phosphor",
+            "graphite",
+            "marigold",
+            "espresso",
+            "ink",
+            "lavender",
+            "burgundy",
+            "rose",
+            "solarized",
+          ];
+          const storedColorTheme = localStorage.getItem("onyx-color-theme");
           root.dataset.theme =
             preference === "dark" || (preference === "system" && systemDark) ? "dark" : "light";
           root.dataset.themePreference = preference;
-          root.dataset.colorTheme = localStorage.getItem("onyx-color-theme") || "monochrome";
+          root.dataset.colorTheme = colorThemes.includes(storedColorTheme ?? "")
+            ? storedColorTheme
+            : "monochrome";
         } catch {
           root.dataset.theme = systemDark ? "dark" : "light";
           root.dataset.themePreference = "system";
@@ -26,9 +43,44 @@
         }
       })();
     </script>
+    <link rel="stylesheet" href="/startup.css" />
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">
-    <div style="display: contents">%sveltekit.body%</div>
+    <div id="startup-shell" aria-hidden="true">
+      <aside class="startup-sidebar">
+        <div class="startup-heading">
+          <span class="startup-add">+</span>
+          <strong>Notes</strong>
+          <span class="startup-chevron">⌄</span>
+        </div>
+        <div class="startup-switcher"><span>▧ Files</span><span>⚒ Tools</span></div>
+        <div class="startup-toolbar"><span>0 notes</span><span>＋　▱</span></div>
+        <div class="startup-search"></div>
+        <div class="startup-message">
+          <span class="startup-ring"></span>
+          <strong>Opening your vault…</strong>
+          <span>Notes are read from this device.</span>
+        </div>
+      </aside>
+      <main class="startup-workspace">
+        <div class="startup-editor">
+          <div class="startup-pane">
+            <div class="startup-bar heading"></div>
+            <div class="startup-bar long"></div>
+            <div class="startup-bar medium"></div>
+            <div class="startup-bar short"></div>
+          </div>
+          <div class="startup-divider"></div>
+          <div class="startup-pane">
+            <div class="startup-bar heading"></div>
+            <div class="startup-bar long"></div>
+            <div class="startup-bar long"></div>
+            <div class="startup-bar medium"></div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <div class="sveltekit-body">%sveltekit.body%</div>
   </body>
 </html>
