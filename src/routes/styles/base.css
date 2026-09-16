@@ -1,4 +1,4 @@
-/* The light palette doubles as the paper palette, so printed output ignores the dark theme. */
+/* Printed output stays on light paper; in-pane paper surfaces inherit the active output theme. */
 :root,
 .paper-surface {
   font-family: "Inter Variable", Inter, sans-serif;

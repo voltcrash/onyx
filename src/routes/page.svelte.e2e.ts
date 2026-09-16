@@ -6,6 +6,102 @@ async function openOutputSwitcher(page: Page): Promise<void> {
   await page.locator(".output-switcher").hover();
 }
 
+test("orders output views by file format", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  await openOutputSwitcher(page);
+  await expect(page.locator(".output-views .output-format")).toHaveText([
+    "MD",
+    "HTML",
+    "TXT",
+    "RTF",
+    "PDF",
+  ]);
+});
+
+test("matches the PDF view to the selected mode by default", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  const outputPane = page.locator(".output-pane");
+  const pdfTab = page.getByRole("tab", { name: "PDF", exact: true });
+  const pdfPreview = page.locator(".pdf-preview");
+  const pdfSheet = page.locator(".pdf-sheet");
+
+  for (const mode of ["dark", "light"] as const) {
+    await page.evaluate((nextMode) => localStorage.setItem("onyx-theme", nextMode), mode);
+    await page.reload();
+    await expect(outputPane).toBeVisible();
+    await expect(outputPane).toHaveAttribute("data-output-theme", mode);
+
+    await openOutputSwitcher(page);
+    await pdfTab.click();
+    await expect(pdfPreview).toHaveCSS(
+      "background-color",
+      await outputPane.evaluate((element) => getComputedStyle(element).backgroundColor),
+    );
+    await expect(pdfSheet).toHaveCSS(
+      "color",
+      await outputPane.evaluate((element) => getComputedStyle(element).color),
+    );
+  }
+});
+
+test("keeps every output view on the same pane background", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  const expectedBackground = await page
+    .locator(".preview-pane")
+    .evaluate((pane) => getComputedStyle(pane).backgroundColor);
+  const views = [
+    ["Markdown", ".output-body"],
+    ["Plain text", ".output-text"],
+    ["Rich text", ".rich-text-preview"],
+    ["HTML", ".output-html"],
+    ["PDF", ".pdf-preview"],
+  ] as const;
+
+  for (const [view, selector] of views) {
+    await openOutputSwitcher(page);
+    await page.getByRole("tab", { name: view, exact: true }).click();
+    await expect
+      .poll(() =>
+        page.locator(selector).evaluate((element) => getComputedStyle(element).backgroundColor),
+      )
+      .toBe(expectedBackground);
+  }
+});
+
+test("toggles the color mode from the output toolbar", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  const globalTheme = await page.locator("html").getAttribute("data-theme");
+  const outputPane = page.locator(".output-pane");
+  const initialOutputTheme = await outputPane.getAttribute("data-output-theme");
+  const switchToOtherMode = page.getByRole("button", {
+    name: initialOutputTheme === "dark" ? "Switch to light mode" : "Switch to dark mode",
+  });
+  await openOutputSwitcher(page);
+  await expect(switchToOtherMode).toBeVisible();
+  await switchToOtherMode.click();
+  await expect(outputPane).toHaveAttribute(
+    "data-output-theme",
+    initialOutputTheme === "dark" ? "light" : "dark",
+  );
+  await expect(page.locator("html")).toHaveAttribute("data-theme", globalTheme!);
+
+  await openOutputSwitcher(page);
+  await page
+    .getByRole("button", {
+      name: initialOutputTheme === "dark" ? "Switch to dark mode" : "Switch to light mode",
+    })
+    .click();
+  await expect(outputPane).toHaveAttribute("data-output-theme", initialOutputTheme!);
+});
+
 async function blockNextVaultWrite(page: Page): Promise<void> {
   await page.evaluate(() => {
     const prototype = FileSystemFileHandle.prototype;
@@ -1324,10 +1420,21 @@ test("shows the generated HTML in the output pane, copies and downloads it", asy
   await expect(html).toContainText('<h1 id="user-content-release-notes">');
   await expect(html).toContainText("<strong>");
   await expect(html.locator("code.hljs")).toBeVisible();
-  await expect(html).toHaveCSS("background-color", "rgb(10, 10, 10)");
+  await expect(html).toHaveCSS(
+    "background-color",
+    await page.locator(".preview-pane").evaluate((pane) => getComputedStyle(pane).backgroundColor),
+  );
   await expect(html.locator(".hljs-tag")).toHaveCount(6);
   await expect(html.locator(".hljs-name").first()).toHaveText("h1");
-  await expect(html.locator(".hljs-name").first()).toHaveCSS("color", "rgb(255, 255, 255)");
+  const expectedSyntaxColor = await page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--accent-strong)";
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+  await expect(html.locator(".hljs-name").first()).toHaveCSS("color", expectedSyntaxColor);
   await expect(html.locator(".output-code-line")).toHaveCount(6);
   await expect(html.locator(".output-code-line").first()).toHaveAttribute("data-line", "1");
   await expect(html.locator(".output-code-line").last()).toHaveAttribute("data-line", "6");
@@ -1352,6 +1459,7 @@ test("shows the generated HTML in the output pane, copies and downloads it", asy
 });
 
 test("previews the printed page and prints it from the output pane", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/");
   const markdown = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(markdown).toBeEnabled();
@@ -1368,6 +1476,20 @@ test("previews the printed page and prints it from the output pane", async ({ pa
   await page.getByRole("tab", { name: "PDF" }).click();
   const sheet = page.locator(".pdf-sheet");
   await expect(sheet.locator("h1")).toHaveText("Field report");
+  await expect(page.locator(".pdf-preview")).toHaveCSS(
+    "background-color",
+    await sheet.evaluate((element) => getComputedStyle(element).backgroundColor),
+  );
+  const previewBounds = await page.locator(".pdf-preview").boundingBox();
+  const sheetBounds = await sheet.boundingBox();
+  expect(previewBounds).not.toBeNull();
+  expect(sheetBounds).not.toBeNull();
+  expect(sheetBounds).toMatchObject({
+    x: previewBounds!.x,
+    y: previewBounds!.y,
+    width: previewBounds!.width,
+    height: previewBounds!.height,
+  });
   await expect(page.getByRole("button", { name: "Copy" })).toBeDisabled();
 
   await openOutputSwitcher(page);

@@ -23,6 +23,15 @@ export const outputViews: OutputViewOption[] = [
     downloadTitle: "Download this note as a Markdown file",
   },
   {
+    id: "html",
+    label: "HTML",
+    description: "Read the generated HTML, then copy or download it",
+    format: "HTML",
+    copyTitle: "Copy this note as HTML",
+    downloadLabel: "Download",
+    downloadTitle: "Download this note as an HTML file",
+  },
+  {
     id: "text",
     label: "Plain text",
     description: "Read the note as plain text, then copy or download it",
@@ -39,15 +48,6 @@ export const outputViews: OutputViewOption[] = [
     copyTitle: "Copy this note with its formatting, to paste into a document or email",
     downloadLabel: "Download",
     downloadTitle: "Download this note as an RTF document",
-  },
-  {
-    id: "html",
-    label: "HTML",
-    description: "Read the generated HTML, then copy or download it",
-    format: "HTML",
-    copyTitle: "Copy this note as HTML",
-    downloadLabel: "Download",
-    downloadTitle: "Download this note as an HTML file",
   },
   {
     id: "pdf",

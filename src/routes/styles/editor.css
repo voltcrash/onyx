@@ -35,7 +35,7 @@
   grid-column: 1;
   display: flex;
   flex-direction: column;
-  background: var(--editor);
+  background: var(--surface);
 }
 .panes-swapped .output-pane {
   grid-column: 3;
@@ -439,6 +439,7 @@
   tab-size: 2;
   white-space: pre-wrap;
   word-break: break-word;
+  background: var(--surface);
 }
 .output-text {
   font-size: 13.5px;
@@ -447,8 +448,8 @@
   overflow-x: auto;
   white-space: pre;
   word-break: normal;
-  background: var(--code-bg);
-  color: var(--code-text);
+  background: var(--surface);
+  color: var(--ink-body);
 }
 .output-code > code.hljs {
   display: block;
@@ -468,8 +469,8 @@
   min-width: 3ch;
   margin-right: 1.5ch;
   padding-right: 1ch;
-  border-right: 1px solid color-mix(in oklch, var(--code-text) 22%, var(--code-bg));
-  background: var(--code-bg);
+  border-right: 1px solid color-mix(in oklch, var(--code-text) 22%, var(--surface));
+  background: var(--surface);
   color: var(--code-syntax-comment);
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -477,7 +478,7 @@
 }
 .output-html .output-code-line:hover,
 .output-html .output-code-line:hover::before {
-  background: color-mix(in oklch, var(--code-text) 8%, var(--code-bg));
+  background: color-mix(in oklch, var(--code-text) 8%, var(--surface));
 }
 .rich-text-preview {
   flex: 1;
@@ -489,18 +490,18 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 52px clamp(14px, 3vw, 40px) 50px;
-  background: var(--canvas);
-}
-/* A4 at 96dpi, so the preview matches what the print dialog lays out. */
-.pdf-sheet {
-  width: min(100%, 794px);
-  min-height: 1123px;
-  margin: 0 auto;
-  padding: 46px clamp(24px, 5%, 58px) 64px;
-  border: 1px solid var(--line-soft);
+  padding: 0;
   background: var(--surface);
-  box-shadow: var(--shadow-sm);
+}
+/* Keep the print typography and margins while letting the page fill the available pane. */
+.pdf-sheet {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 46px clamp(24px, 5%, 58px) 64px;
+  border: 0;
+  background: var(--surface);
+  box-shadow: none;
 }
 .pdf-sheet .prose {
   width: 100%;
@@ -512,6 +513,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  background: var(--surface);
 }
 .output-body > textarea {
   flex: 1;
@@ -937,6 +939,53 @@
 }
 :is(.prose :is(pre code, .code-content), .output-code) .hljs-strong {
   font-weight: 700;
+}
+/* HTML output shares the reading surface, so its syntax colors use the theme's readable UI roles. */
+.output-code.output-html .hljs-comment,
+.output-code.output-html .hljs-quote,
+.output-code.output-html .hljs-doctag,
+.output-code.output-html .hljs-meta,
+.output-code.output-html .hljs-params {
+  color: var(--muted);
+}
+.output-code.output-html .hljs-keyword,
+.output-code.output-html .hljs-selector-tag,
+.output-code.output-html .hljs-literal,
+.output-code.output-html .hljs-section,
+.output-code.output-html .hljs-name,
+.output-code.output-html .hljs-tag {
+  color: var(--accent-strong);
+}
+.output-code.output-html .hljs-string,
+.output-code.output-html .hljs-regexp,
+.output-code.output-html .hljs-number,
+.output-code.output-html .hljs-symbol,
+.output-code.output-html .hljs-bullet,
+.output-code.output-html .hljs-link {
+  color: var(--accent-link);
+}
+.output-code.output-html .hljs-attribute,
+.output-code.output-html .hljs-attr,
+.output-code.output-html .hljs-variable,
+.output-code.output-html .hljs-template-variable,
+.output-code.output-html .hljs-type,
+.output-code.output-html .hljs-built_in,
+.output-code.output-html .hljs-selector-class,
+.output-code.output-html .hljs-selector-id,
+.output-code.output-html .hljs-selector-attr,
+.output-code.output-html .hljs-selector-pseudo {
+  color: var(--accent-quiet);
+}
+.output-code.output-html .hljs-title,
+.output-code.output-html .hljs-title.class_,
+.output-code.output-html .hljs-title.function_ {
+  color: var(--ink-strong);
+}
+.output-code.output-html .hljs-addition {
+  color: var(--ok-text);
+}
+.output-code.output-html .hljs-deletion {
+  color: var(--danger-deep);
 }
 .prose kbd {
   display: inline-block;
