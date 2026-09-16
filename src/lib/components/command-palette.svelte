@@ -7,6 +7,7 @@
 		label: string;
 		hint?: string;
 		keywords?: string;
+		aliases?: string[];
 		shortcut?: string;
 		icon: LucideIcon;
 		disabled?: boolean;
@@ -86,7 +87,7 @@
 	function score(item: PaletteEntry, rawQuery: string): number {
 		const needle = rawQuery.trim().toLowerCase();
 		const label = item.label.toLowerCase();
-		const haystack = `${label} ${item.hint ?? ''} ${item.keywords ?? ''}`.toLowerCase();
+		const haystack = `${label} ${item.hint ?? ''} ${item.keywords ?? ''} ${(item.aliases ?? []).join(' ')}`.toLowerCase();
 		const terms = needle.split(/\s+/).filter(Boolean);
 		if (!terms.every((term) => haystack.includes(term) || fuzzyMatch(haystack, term))) return 0;
 		if (label === needle) return 1400;

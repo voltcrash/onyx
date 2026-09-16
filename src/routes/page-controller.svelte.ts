@@ -526,6 +526,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       shortcut: shortcutLabel("newNote"),
       icon: FilePlus2,
       keywords: "create add page",
+      aliases: ["create note", "quick note"],
       disabled: transferState === "working",
       run: () => void createNote(),
     },
@@ -555,6 +556,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       shortcut: shortcutLabel("searchNotes"),
       icon: Search,
       keywords: "find full text",
+      aliases: ["find notes", "global search"],
       run: () => focusSearch(),
     },
     {
@@ -898,6 +900,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: "Editor settings",
       icon: Settings,
       keywords: "preferences options writing fonts typeface",
+      aliases: ["preferences", "configuration"],
       run: () => openSettings("editor"),
     },
     {
@@ -915,6 +918,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: "Theme settings",
       icon: Sun,
       keywords: "appearance color mode light dark system",
+      aliases: ["appearance", "color scheme"],
       run: () => openSettings("themes"),
     },
     {
