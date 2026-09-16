@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { Bold, Braces, ChevronDown, ChevronRight, Code2, Copy, FilePlus2, FileText, Folder, FolderPlus, HardDrive, Heading2, Highlighter, Italic, Link, List, ListChecks, ListOrdered, LoaderCircle, Lock, LockOpen, LogOut, MessageSquareWarning, Minus, PanelLeftClose, Pencil, Plus, Quote, Search, Settings, Sigma, Strikethrough, Trash2, Wrench, X } from '@lucide/svelte';
+	import { Bold, Braces, ChevronDown, ChevronRight, Code2, Copy, FilePlus2, FileText, Folder, FolderPlus, HardDrive, Heading2, Highlighter, Italic, Link, List, ListChecks, ListOrdered, LoaderCircle, Lock, LockOpen, LogOut, MessageSquareWarning, Minus, PanelLeftClose, Pencil, Plus, Quote, Search, Settings, Sigma, Strikethrough, Trash2, Type, Wrench, X } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
 	import type { GithubUser } from '$lib/github';
 	import type { VaultDescriptor } from '$lib/storage/registry';
@@ -8,7 +8,7 @@
 	import GithubIcon from './github-icon.svelte';
 	import VaultSwitcher from './vault-switcher.svelte';
 	import type { GithubState, SaveState, TransferState } from './app-types';
-	import type { PaletteItem } from './command-palette.svelte';
+	import type { PaletteControl, PaletteItem } from './command-palette.svelte';
 
 	interface Props {
 		vaults: VaultDescriptor[];
@@ -75,6 +75,21 @@
 	}: Props = $props();
 
 	let sidebarView = $state<'files' | 'tools'>('files');
+	const paletteControls = $derived<PaletteControl[]>([
+		{
+			id: 'content-width',
+			group: 'View',
+			label: 'Content width',
+			keywords: 'page text reading width',
+			icon: Type,
+			control: 'range',
+			value: contentWidth,
+			min: 480,
+			max: 1200,
+			step: 20,
+			onChange: onContentWidthChange,
+		},
+	]);
 	type TreeRow =
 		| { kind: 'folder'; key: string; path: string; label: string; depth: number; expanded: boolean; hasChildren: boolean }
 		| { kind: 'file'; key: string; path: string; label: string; depth: number; result: VaultSearchResult };
@@ -420,7 +435,7 @@
 	<div class="notes-heading"><div class="notes-title"><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions"><button class="icon-button sidebar-toggle" aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeftClose size={19} /></button></div></div>
 	{#if paletteOpen}
 		{#await import('$lib/components/command-palette.svelte') then { default: CommandPalette }}
-			<CommandPalette items={paletteItems} onClose={onClosePalette} />
+			<CommandPalette items={paletteItems} controls={paletteControls} onClose={onClosePalette} />
 		{/await}
 	{:else}
 		<div class="sidebar-switcher" role="tablist" aria-label="Sidebar view">
@@ -497,15 +512,6 @@
 		</div>
 		{:else}
 		<div class="sidebar-panel tools-panel" role="tabpanel">
-			<section class="tool-section">
-				<h2>View</h2>
-				<div class="sidebar-view-options">
-					<label class="content-width-control">
-						<span><strong>Content width</strong><output>{contentWidth}px</output></span>
-						<input type="range" min="480" max="1200" step="20" value={contentWidth} aria-label="Content width" oninput={(event) => onContentWidthChange(Number(event.currentTarget.value))} />
-					</label>
-				</div>
-			</section>
 			<section class="tool-section">
 				<h2>Formatting</h2>
 				<div class="formatting-tools">

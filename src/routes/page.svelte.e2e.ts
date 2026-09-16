@@ -358,6 +358,26 @@ test("opens the command palette from the keyboard with a collapsed sidebar", asy
   await page.keyboard.press("Escape");
 });
 
+test("adjusts content width from the command palette", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  await page.getByRole("button", { name: "Open the command palette" }).click();
+  const slider = page.getByRole("slider", { name: "Content width" });
+  await expect(slider).toHaveValue("700");
+  await slider.evaluate((element) => {
+    const input = element as HTMLInputElement;
+    input.value = "840";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(slider).toHaveValue("840");
+  await expect(page.locator(".editor-shell")).toHaveAttribute("style", /--content-width: 840px/);
+
+  await page.keyboard.press("Escape");
+  await page.getByRole("tab", { name: "Tools" }).click();
+  await expect(page.getByRole("slider", { name: "Content width" })).toHaveCount(0);
+});
+
 test("offers additional color themes and persists the selection", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();

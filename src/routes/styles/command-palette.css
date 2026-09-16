@@ -52,6 +52,55 @@
   color: var(--faint);
   font-size: 10px;
 }
+.palette-control {
+  display: grid;
+  gap: 9px;
+  margin: 4px 0;
+  padding: 9px 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+}
+.palette-control-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.palette-control-header > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.palette-control-header > span {
+  min-width: 0;
+  flex: 1;
+}
+.palette-control strong,
+.palette-control small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palette-control strong {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 550;
+}
+.palette-control small {
+  margin-top: 2px;
+  color: var(--faint);
+  font-size: 11px;
+}
+.palette-control output {
+  color: var(--faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.palette-control-input {
+  width: 100%;
+  accent-color: var(--accent);
+}
 .palette-dismiss {
   flex: 0 0 auto;
   padding: 0;
