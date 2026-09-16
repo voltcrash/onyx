@@ -6,6 +6,32 @@ async function openOutputSwitcher(page: Page): Promise<void> {
   await page.locator(".output-switcher").hover();
 }
 
+test("keeps every output view on the same pane background", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  const expectedBackground = await page
+    .locator(".preview-pane")
+    .evaluate((pane) => getComputedStyle(pane).backgroundColor);
+  const views = [
+    ["Markdown", ".output-body"],
+    ["Plain text", ".output-text"],
+    ["Rich text", ".rich-text-preview"],
+    ["HTML", ".output-html"],
+    ["PDF", ".pdf-preview"],
+  ] as const;
+
+  for (const [view, selector] of views) {
+    await openOutputSwitcher(page);
+    await page.getByRole("tab", { name: view, exact: true }).click();
+    await expect
+      .poll(() =>
+        page.locator(selector).evaluate((element) => getComputedStyle(element).backgroundColor),
+      )
+      .toBe(expectedBackground);
+  }
+});
+
 async function blockNextVaultWrite(page: Page): Promise<void> {
   await page.evaluate(() => {
     const prototype = FileSystemFileHandle.prototype;
@@ -1324,10 +1350,21 @@ test("shows the generated HTML in the output pane, copies and downloads it", asy
   await expect(html).toContainText('<h1 id="user-content-release-notes">');
   await expect(html).toContainText("<strong>");
   await expect(html.locator("code.hljs")).toBeVisible();
-  await expect(html).toHaveCSS("background-color", "rgb(10, 10, 10)");
+  await expect(html).toHaveCSS(
+    "background-color",
+    await page.locator(".preview-pane").evaluate((pane) => getComputedStyle(pane).backgroundColor),
+  );
   await expect(html.locator(".hljs-tag")).toHaveCount(6);
   await expect(html.locator(".hljs-name").first()).toHaveText("h1");
-  await expect(html.locator(".hljs-name").first()).toHaveCSS("color", "rgb(255, 255, 255)");
+  const expectedSyntaxColor = await page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--accent-strong)";
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+  await expect(html.locator(".hljs-name").first()).toHaveCSS("color", expectedSyntaxColor);
   await expect(html.locator(".output-code-line")).toHaveCount(6);
   await expect(html.locator(".output-code-line").first()).toHaveAttribute("data-line", "1");
   await expect(html.locator(".output-code-line").last()).toHaveAttribute("data-line", "6");
