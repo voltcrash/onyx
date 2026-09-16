@@ -7,6 +7,7 @@
 		label: string;
 		hint?: string;
 		keywords?: string;
+		aliases?: string[];
 		shortcut?: string;
 		icon: LucideIcon;
 		disabled?: boolean;
@@ -32,28 +33,30 @@
 </script>
 
 <script lang="ts">
-	import { CornerDownLeft, Search } from '@lucide/svelte';
+	import { Search, X } from '@lucide/svelte';
+	import { fly } from 'svelte/transition';
 
 	interface Props {
 		items: PaletteItem[];
 		controls?: PaletteControl[];
+		query: string;
+		searchInput?: HTMLInputElement;
+		onQueryChange: (value: string) => void;
 		onClose: () => void;
 	}
 
-	let { items, controls = [], onClose }: Props = $props();
+	let { items, controls = [], query, searchInput = $bindable(), onQueryChange, onClose }: Props = $props();
 
-	let query = $state('');
 	let activeIndex = $state(0);
-	let input: HTMLInputElement | undefined = $state();
 	let list: HTMLElement | undefined = $state();
 
 	const entries = $derived<PaletteEntry[]>([...items, ...controls]);
 	const filtered = $derived(
 		query.trim()
 			? entries
-					.map((item) => ({ item, score: score(item, query.trim().toLowerCase()) }))
+					.map((item) => ({ item, score: score(item, query.trim()) }))
 					.filter((entry) => entry.score > 0)
-					.sort((a, b) => b.score - a.score)
+					.sort((a, b) => b.score - a.score || a.item.label.localeCompare(b.item.label))
 					.map((entry) => entry.item)
 			: entries
 	);
@@ -74,25 +77,46 @@
 	});
 
 	$effect(() => {
-		input?.focus();
+		searchInput?.focus();
 	});
 
 	function isPaletteItem(item: PaletteEntry): item is PaletteItem {
 		return !('control' in item);
 	}
 
-	function score(item: PaletteEntry, needle: string): number {
-		const haystack = `${item.label} ${item.hint ?? ''} ${item.keywords ?? ''}`.toLowerCase();
+	function score(item: PaletteEntry, rawQuery: string): number {
+		const needle = rawQuery.trim().toLowerCase();
 		const label = item.label.toLowerCase();
-		if (label.startsWith(needle)) return 1000 - label.length;
-		if (label.includes(needle)) return 500 - label.length;
-		if (haystack.includes(needle)) return 250;
+		const haystack = `${label} ${item.hint ?? ''} ${item.keywords ?? ''} ${(item.aliases ?? []).join(' ')}`.toLowerCase();
+		const terms = needle.split(/\s+/).filter(Boolean);
+		if (!terms.every((term) => haystack.includes(term) || fuzzyMatch(haystack, term))) return 0;
+		if (label === needle) return 1400;
+		if (label.startsWith(needle)) return 1200 - label.length;
+		if (label.includes(needle)) return 1000 - label.length;
+		const labelTermMatches = terms.filter((term) => label.includes(term)).length;
+		if (labelTermMatches > 0) return 800 + labelTermMatches * 30 - label.length;
+		if (terms.every((term) => haystack.includes(term))) return 500 - haystack.indexOf(terms[0]);
+		return 200;
+	}
+
+	function fuzzyMatch(value: string, needle: string): boolean {
 		let index = -1;
 		for (const character of needle) {
-			index = haystack.indexOf(character, index + 1);
-			if (index === -1) return 0;
+			index = value.indexOf(character, index + 1);
+			if (index === -1) return false;
 		}
-		return 100;
+		return true;
+	}
+
+	function highlightedLabel(label: string, rawQuery: string): Array<{ text: string; match: boolean }> {
+		const terms = rawQuery.trim().split(/\s+/).filter(Boolean).map(escapeRegExp);
+		if (terms.length === 0) return [{ text: label, match: false }];
+		const parts = label.split(new RegExp(`(${terms.join('|')})`, 'ig'));
+		return parts.filter(Boolean).map((text) => ({ text, match: terms.some((term) => new RegExp(`^${term}$`, 'i').test(text)) }));
+	}
+
+	function escapeRegExp(value: string): string {
+		return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	}
 
 	function move(delta: number): void {
@@ -104,6 +128,11 @@
 		}
 		activeIndex = next;
 		scrollActiveIntoView();
+	}
+
+	function movePage(direction: number): void {
+		const pageSize = Math.max(1, Math.floor((list?.clientHeight ?? 320) / 40));
+		move(direction * pageSize);
 	}
 
 	function scrollActiveIntoView(): void {
@@ -133,6 +162,18 @@
 			event.preventDefault();
 			activeIndex = matches.length;
 			move(-1);
+		} else if (event.key === 'PageDown') {
+			event.preventDefault();
+			movePage(1);
+		} else if (event.key === 'PageUp') {
+			event.preventDefault();
+			movePage(-1);
+		} else if (event.key.toLowerCase() === 'n' && event.ctrlKey && !event.metaKey) {
+			event.preventDefault();
+			move(1);
+		} else if (event.key.toLowerCase() === 'p' && event.ctrlKey && !event.metaKey) {
+			event.preventDefault();
+			move(-1);
 		} else if (event.key === 'Enter') {
 			event.preventDefault();
 			const item = matches[activeIndex];
@@ -141,32 +182,48 @@
 	}
 </script>
 
-<section id="command-palette" class="palette-panel" role="search" aria-label="Command palette">
+<section id="command-palette" class="palette-panel" role="search" aria-label="Command palette" transition:fly={{ y: -7, duration: 170 }}>
 	<div class="palette">
-		<div class="palette-field">
-			<Search size={17} />
+		<div class="palette-heading">
+			<div class="palette-title"><Search size={16} /><div><strong id="command-palette-title">Command palette</strong><span id="command-palette-description">Search notes or run a command</span></div></div>
+			<button class="icon-button palette-close" type="button" aria-label="Close command palette" title="Close command palette (Esc)" onclick={onClose}><X size={17} /></button>
+		</div>
+
+		<label class="search-box palette-search-box">
+			<span class="visually-hidden">Search notes and commands</span>
+			<Search size={15} aria-hidden="true" />
 			<input
-				bind:this={input}
-				bind:value={query}
-				type="text"
+				bind:this={searchInput}
+				value={query}
+				type="search"
 				role="combobox"
 				aria-expanded="true"
 				aria-controls="palette-list"
+				aria-labelledby="command-palette-title"
+				aria-describedby="command-palette-description palette-result-count"
 				aria-activedescendant={matches[activeIndex] ? `palette-${matches[activeIndex].id}` : undefined}
 				aria-label="Search notes and commands"
-				placeholder="Jump to a note or run a command…"
+				placeholder="Search notes or commands…"
 				autocomplete="off"
 				spellcheck="false"
+				oninput={(event) => onQueryChange(event.currentTarget.value)}
 				onkeydown={onKeydown}
 			/>
 			<button type="button" class="palette-dismiss" aria-label="Close command palette" title="Close command palette (Esc)" onclick={onClose}><kbd>Esc</kbd></button>
+		</label>
+		<div id="palette-result-count" class="visually-hidden" role="status" aria-live="polite">
+			{#if query.trim()}
+				{matches.length} result{matches.length === 1 ? '' : 's'}
+			{:else}
+				All commands and notes
+			{/if}
 		</div>
 
 		<div class="palette-list" id="palette-list" role="listbox" aria-label="Results" bind:this={list}>
 			{#each groups as group (group.name)}
 				<div class="palette-group">{group.name}</div>
 				{#each group.items as item (item.id)}
-					{#if item.control === 'range'}
+					{#if !isPaletteItem(item)}
 						<div class="palette-control" role="group" aria-label={item.label} id={`palette-${item.id}`}>
 							<div class="palette-control-header">
 								<item.icon size={16} />
@@ -189,7 +246,7 @@
 							onclick={() => choose(item)}
 						>
 							<item.icon size={16} />
-							<span><strong>{item.label}</strong>{#if item.hint}<small>{item.hint}</small>{/if}</span>
+							<span><strong>{#each highlightedLabel(item.label, query) as part}{#if part.match}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</strong>{#if item.hint}<small>{item.hint}</small>{/if}</span>
 							{#if item.shortcut}<kbd>{item.shortcut}</kbd>{/if}
 						</button>
 					{/if}
@@ -201,12 +258,6 @@
 					<span>Search by note title, or try a command such as “new note”, “dark”, or “export”.</span>
 				</div>
 			{/each}
-		</div>
-
-		<div class="palette-footer">
-			<span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
-			<span><kbd><CornerDownLeft size={10} /></kbd> Open</span>
-			<span><kbd>Esc</kbd> Dismiss</span>
 		</div>
 	</div>
 </section>

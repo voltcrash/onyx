@@ -84,6 +84,7 @@ import {
   detectPrimaryModifier,
   formatShortcut,
   readKeyboardShortcuts,
+  shortcutsEqual,
   shortcutMatchesEvent,
   writeKeyboardShortcuts,
   type KeyboardShortcut,
@@ -340,6 +341,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let fonts = $state<FontChoices>({ ...defaultFontChoices });
   let paletteOpen = $state(false);
   let paletteNotes = $state<NoteMetadata[]>([]);
+  let recentNoteIds = $state<string[]>([]);
   let sidebarCollapsed = $state(false);
   let shortcuts = $state<KeyboardShortcuts>(structuredClone(defaultKeyboardShortcuts));
   let primaryModifier = $state<PrimaryModifier>("meta");
@@ -482,14 +484,39 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   // Narrow viewports show one pane at a time, where neither arrangement is visible.
   const effectivePaneLayout = $derived<PaneLayout>(singlePaneMode ? "columns" : paneLayout);
 
+  const recentNotes = $derived(
+    recentNoteIds
+      .map((id) => paletteNotes.find((note) => note.id === id))
+      .filter((note): note is NoteMetadata => Boolean(note)),
+  );
+  const paletteSearchResults = $derived(new Map(results.map((result) => [result.note.id, result])));
+  const fontsAreDefault = $derived(
+    (Object.keys(defaultFontChoices) as FontRole[]).every(
+      (role) => fonts[role] === defaultFontChoices[role],
+    ),
+  );
+  const shortcutsAreDefault = $derived(
+    (Object.keys(defaultKeyboardShortcuts) as ShortcutAction[]).every((action) =>
+      shortcutsEqual(shortcuts[action], defaultKeyboardShortcuts[action]),
+    ),
+  );
   const paletteItems = $derived([
+    ...recentNotes.map((note) => ({
+      id: `recent-note-${note.id}`,
+      group: "Recent",
+      label: note.title,
+      hint: note.id === activeNoteId ? "Open note" : formatNoteDate(note.updatedAt),
+      icon: FileText,
+      keywords: `recent note open jump ${paletteSearchResults.get(note.id)?.excerpt ?? ""}`,
+      run: () => void selectNote(note.id),
+    })),
     ...paletteNotes.map((note) => ({
       id: `note-${note.id}`,
       group: "Notes",
       label: note.title,
       hint: note.id === activeNoteId ? "Open note" : formatNoteDate(note.updatedAt),
       icon: FileText,
-      keywords: "note open jump",
+      keywords: `note open jump ${paletteSearchResults.get(note.id)?.excerpt ?? ""}`,
       run: () => void selectNote(note.id),
     })),
     {
@@ -499,6 +526,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       shortcut: shortcutLabel("newNote"),
       icon: FilePlus2,
       keywords: "create add page",
+      aliases: ["create note", "quick note"],
       disabled: transferState === "working",
       run: () => void createNote(),
     },
@@ -528,6 +556,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       shortcut: shortcutLabel("searchNotes"),
       icon: Search,
       keywords: "find full text",
+      aliases: ["find notes", "global search"],
       run: () => focusSearch(),
     },
     {
@@ -867,28 +896,104 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     },
     {
       id: "settings",
-      group: "Onyx",
-      label: "Open settings",
+      group: "Settings",
+      label: "Editor settings",
       icon: Settings,
-      keywords: "preferences options github storage themes",
+      keywords: "preferences options writing fonts typeface",
+      aliases: ["preferences", "configuration"],
       run: () => openSettings("editor"),
     },
     {
-      id: "storage",
-      group: "Onyx",
-      label: "Review storage choices",
-      icon: HardDrive,
-      keywords: "space quota usage persistent",
-      run: () => openSettings("storage"),
+      id: "reset-fonts",
+      group: "Settings",
+      label: "Restore default fonts",
+      icon: Type,
+      keywords: "editor typography reset appearance",
+      disabled: fontsAreDefault,
+      run: resetFonts,
+    },
+    {
+      id: "settings-themes",
+      group: "Settings",
+      label: "Theme settings",
+      icon: Sun,
+      keywords: "appearance color mode light dark system",
+      aliases: ["appearance", "color scheme"],
+      run: () => openSettings("themes"),
     },
     {
       id: "shortcuts",
-      group: "Onyx",
+      group: "Settings",
       label: "Keyboard shortcuts",
       shortcut: shortcutLabel("openShortcuts"),
       icon: Keyboard,
       keywords: "help keys reference",
       run: () => openSettings("shortcuts"),
+    },
+    {
+      id: "reset-shortcuts",
+      group: "Settings",
+      label: "Restore default keyboard shortcuts",
+      icon: Keyboard,
+      keywords: "keys reset defaults customize",
+      disabled: shortcutsAreDefault,
+      run: resetShortcuts,
+    },
+    {
+      id: "settings-github",
+      group: "Settings",
+      label: "GitHub backup & sync settings",
+      icon: CloudUpload,
+      keywords: "account sign in backup cross device",
+      run: () => openSettings("github"),
+    },
+    {
+      id: "settings-repository",
+      group: "Settings",
+      label: "Sync repository settings",
+      icon: FolderOutput,
+      keywords: "github repository branch directory remote",
+      run: () => openSettings("repository"),
+    },
+    {
+      id: "settings-backup",
+      group: "Settings",
+      label: "Sync status settings",
+      icon: CloudDownload,
+      keywords: "backup history commit pending changes",
+      run: () => openSettings("backup"),
+    },
+    {
+      id: "storage",
+      group: "Settings",
+      label: "Storage choices",
+      icon: HardDrive,
+      keywords: "space quota usage persistent folder opfs",
+      run: () => openSettings("storage"),
+    },
+    {
+      id: "request-persistent-storage",
+      group: "Settings",
+      label: "Request persistent storage",
+      icon: HardDrive,
+      keywords: "storage browser keep notes safe durable",
+      run: () => void ensurePersistentStorage(),
+    },
+    {
+      id: "settings-transfer",
+      group: "Settings",
+      label: "Import & export settings",
+      icon: ArrowLeftRight,
+      keywords: "markdown zip folder transfer files",
+      run: () => openSettings("transfer"),
+    },
+    {
+      id: "settings-vault",
+      group: "Settings",
+      label: "Vault settings",
+      icon: Lock,
+      keywords: "delete clear notes vault data",
+      run: () => openSettings("vault"),
     },
   ]);
 
@@ -1673,6 +1778,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (id === activeNoteId || transferState === "working") return;
     if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
     await loadNote(id);
+    recentNoteIds = [id, ...recentNoteIds.filter((recentId) => recentId !== id)].slice(0, 8);
   }
 
   async function refreshFileTree(): Promise<NoteMetadata[]> {

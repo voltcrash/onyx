@@ -332,6 +332,10 @@ test("opens the command palette in the sidebar and returns focus to the opener",
   await expect(settings).toHaveAttribute("aria-expanded", "false");
 
   const palette = page.getByRole("button", { name: "Open the command palette" });
+  await expect(palette).toHaveClass(/search-palette-button/);
+  const paletteButtonBounds = await palette.boundingBox();
+  expect(paletteButtonBounds?.height).toBeGreaterThanOrEqual(26);
+  expect(paletteButtonBounds?.width).toBeGreaterThanOrEqual(32);
   await palette.click();
   const commandPalette = page.locator("#command-palette");
   await expect(commandPalette).toBeVisible();
@@ -413,6 +417,37 @@ test("offers formatting actions from the command palette", async ({ page }) => {
   await expect(page.locator(".sidebar-switcher")).toHaveCount(0);
   await expect(page.locator(".formatting-tools")).toHaveCount(0);
   await expect(page.getByText("Document", { exact: true })).toBeVisible();
+});
+
+test("opens every settings section from the command palette", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  const settingsCommands = [
+    ["settings", "Editor settings", "Editor"],
+    ["settings-themes", "Theme settings", "Themes"],
+    ["shortcuts", "Keyboard shortcuts", "Keyboard shortcuts"],
+    ["settings-github", "GitHub backup & sync settings", "Backup & sync"],
+    ["settings-repository", "Sync repository settings", "Sync repository"],
+    ["settings-backup", "Sync status settings", "Sync status"],
+    ["storage", "Storage choices", "Storage choices"],
+    ["settings-transfer", "Import & export settings", "Import & export"],
+    ["settings-vault", "Vault settings", "Vault"],
+  ] as const;
+
+  for (const [id, command, section] of settingsCommands) {
+    await page.getByRole("button", { name: "Open the command palette" }).click();
+    const option = page.locator(`#palette-${id}`);
+    await expect(option).toBeVisible();
+    await expect(option).toContainText(command);
+    await option.click();
+    await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+    await expect(page.getByRole("button", { name: section, exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await page.getByRole("button", { name: "Close settings" }).click();
+  }
 });
 
 test("offers additional color themes and persists the selection", async ({ page }) => {
