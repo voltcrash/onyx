@@ -32,6 +32,34 @@ test("keeps every output view on the same pane background", async ({ page }) => 
   }
 });
 
+test("toggles the color mode from the output toolbar", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  const globalTheme = await page.locator("html").getAttribute("data-theme");
+  const outputPane = page.locator(".output-pane");
+  const initialOutputTheme = await outputPane.getAttribute("data-output-theme");
+  const switchToOtherMode = page.getByRole("button", {
+    name: initialOutputTheme === "dark" ? "Switch to light mode" : "Switch to dark mode",
+  });
+  await openOutputSwitcher(page);
+  await expect(switchToOtherMode).toBeVisible();
+  await switchToOtherMode.click();
+  await expect(outputPane).toHaveAttribute(
+    "data-output-theme",
+    initialOutputTheme === "dark" ? "light" : "dark",
+  );
+  await expect(page.locator("html")).toHaveAttribute("data-theme", globalTheme!);
+
+  await openOutputSwitcher(page);
+  await page
+    .getByRole("button", {
+      name: initialOutputTheme === "dark" ? "Switch to dark mode" : "Switch to light mode",
+    })
+    .click();
+  await expect(outputPane).toHaveAttribute("data-output-theme", initialOutputTheme!);
+});
+
 async function blockNextVaultWrite(page: Page): Promise<void> {
   await page.evaluate(() => {
     const prototype = FileSystemFileHandle.prototype;

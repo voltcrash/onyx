@@ -95,6 +95,8 @@
 		splitRatio={page.splitRatio}
 		contentWidth={page.contentWidth}
 		onToggleOutputPane={page.toggleOutputPane}
+		resolvedTheme={page.resolvedTheme}
+		colorTheme={page.colorTheme}
 		onOutputViewChange={page.setOutputView}
 		onCopy={() => void page.copyOutput()}
 		onDownload={page.downloadOutput}

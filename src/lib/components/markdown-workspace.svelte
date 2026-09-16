@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { Copy, Download, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, PanelLeft, PencilLine, X } from '@lucide/svelte';
-	import { formatShortcut, HTML_SOURCE_SEPARATOR, PLAIN_TEXT_SEPARATOR, type KeyboardShortcuts, type PrimaryModifier, type TextBlock } from '$lib';
+	import { Copy, Download, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, Moon, PanelLeft, PencilLine, Sun, X } from '@lucide/svelte';
+	import { formatShortcut, HTML_SOURCE_SEPARATOR, PLAIN_TEXT_SEPARATOR, type ColorTheme, type KeyboardShortcuts, type PrimaryModifier, type ResolvedTheme, type TextBlock } from '$lib';
 	import type { SourceLines } from '$lib/markdown';
 	import { elementAnchors, scrollAnchors, syncedScrollTop, textAnchors, textareaAnchors, type ScrollAnchor } from '$lib/scroll-sync';
 	import type { PaneEdge, PaneLayout, PaneOrder, SaveState, TransferState } from './app-types';
@@ -39,6 +39,8 @@
 		splitRatio: number;
 		contentWidth: number;
 		onToggleOutputPane: () => void;
+		resolvedTheme: ResolvedTheme;
+		colorTheme: ColorTheme;
 		onOutputViewChange: (view: OutputView) => void;
 		onCopy: () => void;
 		onDownload: () => void;
@@ -65,7 +67,7 @@
 		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, outputView, plainText, plainTextBlocks, htmlSource, htmlSourceBlocks, highlightedHtmlSourceLines, renderedBlockLines, renderedReadOnly, markdown, markdownLines, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar,
-		splitRatio, contentWidth, onToggleOutputPane, onOutputViewChange, onCopy, onDownload, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onSourceFocus, onLiveLineFocus, onRenderedInput,
+		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onOutputViewChange, onCopy, onDownload, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onSourceFocus, onLiveLineFocus, onRenderedInput,
 		onRenderedLineKeydown, renderEditableLine, liveLineKind, liveCodeLanguage
 	}: Props = $props();
 
@@ -84,8 +86,14 @@
 	let towardsStart = $derived(stacked ? ChevronUp : ChevronLeft);
 	let towardsEnd = $derived(stacked ? ChevronDown : ChevronRight);
 	let activeView = $derived(outputViews.find((view) => view.id === outputView) ?? outputViews[0]);
+	let outputTheme = $state<ResolvedTheme>();
+	let activeOutputTheme = $derived(outputTheme ?? resolvedTheme);
 	type LiveLineRect = { top: number; left: number; width: number; height: number };
 	let liveLineRects = $state<LiveLineRect[]>([]);
+
+	function toggleOutputTheme(): void {
+		outputTheme = activeOutputTheme === 'dark' ? 'light' : 'dark';
+	}
 
 	function isFenceLine(line: string): boolean {
 		return /^\s*(?:`{3,}|~{3,})/.test(line);
@@ -522,7 +530,7 @@
 	{/if}
 
 	<section bind:this={shell} class="editor-shell" class:output-hidden={!outputPaneVisible} class:rendered-hidden={!renderedPaneVisible} class:panes-stacked={stacked} class:panes-swapped={swapped} class:first-hidden={!firstPaneVisible} class:second-hidden={!secondPaneVisible} class:resizing class:pane-moving={drag?.moving} style={`--split: ${splitRatio}%; --content-width: ${contentWidth}px`}>
-		<div bind:this={outputPaneElement} class="output-pane" class:dragged={drag?.moving && drag.pane === 'output'} style={drag?.moving && drag.pane === 'output' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined}>
+		<div bind:this={outputPaneElement} class="output-pane" class:dragged={drag?.moving && drag.pane === 'output'} data-output-theme={activeOutputTheme} data-color-theme={colorTheme} style={drag?.moving && drag.pane === 'output' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined}>
 			<div class="output-switcher">
 				<div class="output-views" role="tablist" aria-label="Output view">
 					{#each outputViews as view (view.id)}
@@ -530,6 +538,14 @@
 					{/each}
 				</div>
 				<div class="output-actions">
+					<button class="output-action" onclick={toggleOutputTheme} aria-label={activeOutputTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title={activeOutputTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+						{#if activeOutputTheme === 'dark'}
+							<Sun size={14} />
+						{:else}
+							<Moon size={14} />
+						{/if}
+						<span>{activeOutputTheme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+					</button>
 					<button class="output-action" onclick={onCopy} disabled={!hasContent || !activeView.copyTitle} title={activeView.copyTitle ?? 'There is nothing to copy from the PDF view'}><Copy size={14} /><span>Copy</span></button>
 					<button class="output-action" onclick={onDownload} disabled={!hasContent} title={activeView.downloadTitle}><Download size={14} /><span>{activeView.downloadLabel}</span></button>
 				</div>
