@@ -1663,8 +1663,8 @@ test("shows the generated HTML in the output pane, copies and downloads it", asy
   await expect(html.locator(".hljs-name").first()).toHaveText("h1");
   const expectedSyntaxColor = await page.evaluate(() => {
     const probe = document.createElement("span");
-    probe.style.color = "var(--accent-strong)";
-    document.body.append(probe);
+    probe.style.color = "var(--output-syntax-tag)";
+    document.querySelector(".output-pane")?.append(probe);
     const color = getComputedStyle(probe).color;
     probe.remove();
     return color;

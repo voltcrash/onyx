@@ -1027,32 +1027,35 @@
 :is(.prose :is(pre code, .code-content), .output-code) .hljs-strong {
   font-weight: 700;
 }
-/* HTML output shares the reading surface, so its syntax colors use the theme's readable UI roles. */
+/* Use the Highlight.js GitHub palette for generated HTML, with contrast tuned for every surface. */
 .output-code.output-html .hljs-comment,
-.output-code.output-html .hljs-quote,
-.output-code.output-html .hljs-doctag,
-.output-code.output-html .hljs-meta,
-.output-code.output-html .hljs-params {
-  color: var(--muted);
+.output-code.output-html .hljs-quote {
+  color: var(--output-syntax-comment);
 }
 .output-code.output-html .hljs-keyword,
 .output-code.output-html .hljs-selector-tag,
 .output-code.output-html .hljs-literal,
 .output-code.output-html .hljs-section,
-.output-code.output-html .hljs-name,
-.output-code.output-html .hljs-tag {
-  color: var(--accent-strong);
+.output-code.output-html .hljs-doctag {
+  color: var(--output-syntax-keyword);
+}
+.output-code.output-html .hljs-name {
+  color: var(--output-syntax-tag);
 }
 .output-code.output-html .hljs-string,
 .output-code.output-html .hljs-regexp,
-.output-code.output-html .hljs-number,
-.output-code.output-html .hljs-symbol,
-.output-code.output-html .hljs-bullet,
 .output-code.output-html .hljs-link {
-  color: var(--accent-link);
+  color: var(--output-syntax-string);
 }
 .output-code.output-html .hljs-attribute,
-.output-code.output-html .hljs-attr,
+.output-code.output-html .hljs-attr {
+  color: var(--output-syntax-attribute);
+}
+.output-code.output-html .hljs-number,
+.output-code.output-html .hljs-symbol,
+.output-code.output-html .hljs-bullet {
+  color: var(--output-syntax-number);
+}
 .output-code.output-html .hljs-variable,
 .output-code.output-html .hljs-template-variable,
 .output-code.output-html .hljs-type,
@@ -1061,18 +1064,27 @@
 .output-code.output-html .hljs-selector-id,
 .output-code.output-html .hljs-selector-attr,
 .output-code.output-html .hljs-selector-pseudo {
-  color: var(--accent-quiet);
+  color: var(--output-syntax-variable);
+}
+.output-code.output-html .hljs-meta {
+  color: var(--output-syntax-meta);
+}
+.output-code.output-html .hljs-params {
+  color: var(--output-syntax-meta);
 }
 .output-code.output-html .hljs-title,
 .output-code.output-html .hljs-title.class_,
 .output-code.output-html .hljs-title.function_ {
-  color: var(--ink-strong);
+  color: var(--output-syntax-title);
+}
+.output-code.output-html .hljs-tag {
+  color: inherit;
 }
 .output-code.output-html .hljs-addition {
-  color: var(--ok-text);
+  color: var(--output-syntax-addition);
 }
 .output-code.output-html .hljs-deletion {
-  color: var(--danger-deep);
+  color: var(--output-syntax-deletion);
 }
 .prose kbd {
   display: inline-block;
