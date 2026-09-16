@@ -28,8 +28,6 @@
 		shortcuts: KeyboardShortcuts;
 		primaryModifier: PrimaryModifier;
 		storageError: string;
-		renderedPaneVisible: boolean;
-		renderedReadOnly: boolean;
 		wordCount: number;
 		readingMinutes: number;
 		contentWidth: number;
@@ -59,16 +57,15 @@
 		onChangePage: (page: number) => void;
 		onInsertSyntax: (before: string, after?: string, placeholder?: string) => void;
 		onPrefixLine: (prefix: string) => void;
-		onToggleRenderedReadOnly: () => void;
 		onContentWidthChange: (value: number) => void;
 	}
 
 	let {
 		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, searchQuery, notePage, notePageCount, saveState, notesLoaded, paletteOpen, settingsOpen,
-		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, renderedPaneVisible, renderedReadOnly, wordCount, readingMinutes, contentWidth,
+		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, wordCount, readingMinutes, contentWidth,
 		searchInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, onCopyFilePath, onSearch,
 		onOpenPalette, onOpenSettings, onOpenStorageSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage,
-		onInsertSyntax, onPrefixLine, onToggleRenderedReadOnly, onContentWidthChange
+		onInsertSyntax, onPrefixLine, onContentWidthChange
 	}: Props = $props();
 
 	let sidebarView = $state<'files' | 'tools'>('files');
@@ -492,7 +489,6 @@
 			<section class="tool-section">
 				<h2>View</h2>
 				<div class="sidebar-view-options">
-					<button class:active={renderedReadOnly} aria-pressed={renderedReadOnly} disabled={!renderedPaneVisible} onclick={onToggleRenderedReadOnly} aria-label={renderedReadOnly ? 'Enable page editing' : 'Turn on read-only'}>{#if renderedReadOnly}<Lock size={16} />{:else}<LockOpen size={16} />{/if}<span>{renderedReadOnly ? 'Read only' : 'Editing'}</span></button>
 					<label class="content-width-control">
 						<span><strong>Content width</strong><output>{contentWidth}px</output></span>
 						<input type="range" min="480" max="1200" step="20" value={contentWidth} aria-label="Content width" oninput={(event) => onContentWidthChange(Number(event.currentTarget.value))} />

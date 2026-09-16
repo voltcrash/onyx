@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { Copy, Download, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, Moon, PanelLeft, PencilLine, Sun, X } from '@lucide/svelte';
+	import { Copy, Download, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, Lock, LockOpen, Moon, PanelLeft, PencilLine, Sun, X } from '@lucide/svelte';
 	import { formatShortcut, HTML_SOURCE_SEPARATOR, PLAIN_TEXT_SEPARATOR, type ColorTheme, type KeyboardShortcuts, type PrimaryModifier, type ResolvedTheme, type TextBlock } from '$lib';
 	import type { SourceLines } from '$lib/markdown';
 	import { elementAnchors, scrollAnchors, syncedScrollTop, textAnchors, textareaAnchors, type ScrollAnchor } from '$lib/scroll-sync';
@@ -45,6 +45,7 @@
 		onCopy: () => void;
 		onDownload: () => void;
 		onToggleRenderedPane: () => void;
+		onToggleRenderedReadOnly: () => void;
 		onResize: (ratio: number) => void;
 		onResizeEnd: () => void;
 		onPlacePane: (pane: 'output' | 'rendered', edge: PaneEdge) => void;
@@ -67,7 +68,7 @@
 		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, outputView, plainText, plainTextBlocks, htmlSource, htmlSourceBlocks, highlightedHtmlSourceLines, renderedBlockLines, renderedReadOnly, markdown, markdownLines, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar,
-		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onOutputViewChange, onCopy, onDownload, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onSourceFocus, onLiveLineFocus, onRenderedInput,
+		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onOutputViewChange, onCopy, onDownload, onToggleRenderedPane, onToggleRenderedReadOnly, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onSourceFocus, onLiveLineFocus, onRenderedInput,
 		onRenderedLineKeydown, renderEditableLine, liveLineKind, liveCodeLanguage
 	}: Props = $props();
 
@@ -597,6 +598,12 @@
 			{/if}
 		</div>
 		<div bind:this={renderedPaneElement} class="preview-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
+			<div class="rendered-switcher">
+				<button class="rendered-mode-toggle" class:active={renderedReadOnly} type="button" aria-pressed={renderedReadOnly} onclick={() => onToggleRenderedReadOnly()} aria-label={renderedReadOnly ? 'Enable page editing' : 'Turn on read-only'} title={renderedReadOnly ? 'Enable page editing' : 'Turn on read-only'}>
+					{#if renderedReadOnly}<Lock size={14} />{:else}<LockOpen size={14} />{/if}
+					<span>{renderedReadOnly ? 'Read only' : 'Editing'}</span>
+				</button>
+			</div>
 			{#if renderedReadOnly}
 				{#if hasContent}
 					<article class="prose">{@html renderedMarkdown}</article>

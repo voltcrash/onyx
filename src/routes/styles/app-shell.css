@@ -17,7 +17,6 @@
 }
 .icon-button,
 .sidebar-switcher button,
-.sidebar-view-options button,
 .formatting-tools button,
 .collapsed-sidebar-toggle {
   border: 0;
@@ -324,7 +323,6 @@
   display: grid;
   gap: 6px;
 }
-.sidebar-view-options button,
 .formatting-tools button {
   min-width: 0;
   display: flex;
@@ -337,20 +335,9 @@
   font-size: 11px;
   text-align: left;
 }
-.sidebar-view-options button {
-  height: 38px;
-  padding: 0 9px;
-}
-.sidebar-view-options button:hover,
 .formatting-tools button:hover {
   border-color: var(--line-hover);
   color: var(--ink);
-}
-.sidebar-view-options button.active {
-  border-color: var(--accent-border);
-  background: var(--accent-bg);
-  color: var(--accent-quiet);
-  box-shadow: 0 0 0 1px var(--accent-border);
 }
 .content-width-control {
   display: grid;

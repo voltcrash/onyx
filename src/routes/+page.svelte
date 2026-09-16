@@ -38,8 +38,6 @@
 		githubMessage={page.githubMessage}
 		shortcuts={page.shortcuts}
 		primaryModifier={page.primaryModifier}
-		renderedPaneVisible={page.renderedPaneVisible}
-		renderedReadOnly={page.renderedReadOnly}
 		wordCount={page.wordCount}
 		readingMinutes={page.readingMinutes}
 		contentWidth={page.contentWidth}
@@ -69,7 +67,6 @@
 		onChangePage={page.changeNotePage}
 		onInsertSyntax={(before, after, placeholder) => void page.insertSyntax(before, after, placeholder)}
 		onPrefixLine={(prefix) => void page.prefixLine(prefix)}
-		onToggleRenderedReadOnly={page.toggleRenderedReadOnly}
 		onContentWidthChange={page.setContentWidth}
 	/>
 
@@ -111,6 +108,7 @@
 		onCopy={() => void page.copyOutput()}
 		onDownload={page.downloadOutput}
 		onToggleRenderedPane={page.toggleRenderedPane}
+		onToggleRenderedReadOnly={() => page.toggleRenderedReadOnly()}
 		onResize={page.setSplitRatio}
 		onResizeEnd={page.saveSplitRatio}
 		onPlacePane={page.placePane}
