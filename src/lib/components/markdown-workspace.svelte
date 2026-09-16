@@ -19,6 +19,7 @@
 		plainTextBlocks: TextBlock[];
 		htmlSource: string;
 		htmlSourceBlocks: TextBlock[];
+		highlightedHtmlSource: string;
 		renderedBlockLines: (SourceLines | undefined)[];
 		renderedReadOnly: boolean;
 		markdown: string;
@@ -61,7 +62,7 @@
 	}
 
 	let {
-		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, outputView, plainText, plainTextBlocks, htmlSource, htmlSourceBlocks, renderedBlockLines, renderedReadOnly, markdown, markdownLines, liveLine,
+		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, outputView, plainText, plainTextBlocks, htmlSource, htmlSourceBlocks, highlightedHtmlSource, renderedBlockLines, renderedReadOnly, markdown, markdownLines, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar,
 		splitRatio, contentWidth, onToggleOutputPane, onOutputViewChange, onCopy, onDownload, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onSourceFocus, onLiveLineFocus, onRenderedInput,
@@ -545,7 +546,7 @@
 						{/if}
 					</div>
 				{:else if outputView === 'html'}
-					<pre class="output-code" aria-label="Generated HTML">{htmlSource}</pre>
+					<pre class="output-code output-html" aria-label="Generated HTML"><code class="hljs">{@html highlightedHtmlSource}</code></pre>
 				{:else if outputView === 'pdf'}
 					<div class="pdf-preview">
 						<div class="pdf-sheet paper-surface" aria-label="PDF preview">

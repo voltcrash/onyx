@@ -272,6 +272,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   const plainText = $derived(joinTextBlocks(plainTextBlocks, PLAIN_TEXT_SEPARATOR));
   const htmlSourceBlocks = $derived(formatHtmlBlocks(renderedBlocks));
   const htmlSource = $derived(joinTextBlocks(htmlSourceBlocks, HTML_SOURCE_SEPARATOR));
+  const highlightedHtmlSource = $derived(highlightCodeLines(htmlSource, "html").join("\n"));
   const noteTitle = $derived(titleFromMarkdown(markdown));
   const markdownLines = $derived(markdown.split("\n"));
   const liveCodeLines = $derived.by(() => {
@@ -2927,6 +2928,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     },
     get htmlSource() {
       return htmlSource;
+    },
+    get highlightedHtmlSource() {
+      return highlightedHtmlSource;
     },
     get paletteItems() {
       return paletteItems;

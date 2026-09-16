@@ -75,6 +75,7 @@
 		plainTextBlocks={page.plainTextBlocks}
 		htmlSource={page.htmlSource}
 		htmlSourceBlocks={page.htmlSourceBlocks}
+		highlightedHtmlSource={page.highlightedHtmlSource}
 		renderedBlockLines={page.liveRenderedBlockLines}
 		renderedReadOnly={page.renderedReadOnly}
 		markdown={page.markdown}

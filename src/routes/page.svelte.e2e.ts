@@ -1323,6 +1323,9 @@ test("shows the generated HTML in the output pane, copies and downloads it", asy
   const html = page.locator(".output-code");
   await expect(html).toContainText('<h1 id="user-content-release-notes">');
   await expect(html).toContainText("<strong>");
+  await expect(html.locator("code.hljs")).toBeVisible();
+  await expect(html.locator(".hljs-tag")).toHaveCount(6);
+  await expect(html.locator(".hljs-name").first()).toHaveText("h1");
 
   await openOutputSwitcher(page);
 
