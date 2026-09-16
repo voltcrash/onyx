@@ -41,85 +41,76 @@ import type {
 import { isOutputView, type OutputView } from "$lib/components/output-views";
 import type { SettingsSection } from "$lib/components/settings-types";
 import {
-  codeLanguageLabel,
-  highlightCodeLines,
-  renderMarkdown,
-  renderMarkdownBlocks,
+  codeLanguageLabel as liteCodeLanguageLabel,
+  highlightCodeLines as liteHighlightCodeLines,
+  renderMarkdownBlocks as renderLiteMarkdownBlocks,
+} from "$lib/markdown-lite";
+import {
   resolveLocalAttachmentUrl,
   titleFromMarkdown,
   type LocalAttachmentUrl,
-} from "$lib/markdown";
+} from "$lib/markdown-utils";
 import {
-  applyColorTheme,
-  applyFontChoices,
-  applyTheme,
-  backupVaultToGithub,
   browserStorageWarnings,
-  createMarkdownExport,
-  createHtmlDocument,
-  createMarkdownZip,
-  createPrivateGithubRepository,
-  createVaultDescriptor,
-  defaultFontChoices,
-  defaultKeyboardShortcuts,
   detectBrowserStorageSupport,
-  detectPrimaryModifier,
-  disconnectGithub,
-  connectGithub,
-  formatShortcut,
-  GithubRequestError,
-  importMarkdownFiles,
-  listGithubBackupCommits,
-  formatHtmlBlocks,
-  formatHtmlSource,
-  HTML_SOURCE_SEPARATOR,
-  joinTextBlocks,
-  PLAIN_TEXT_SEPARATOR,
-  plainTextBlocks as notePlainTextBlocks,
-  markdownToRtf,
-  nextThemePreference,
-  normalizeVaultName,
-  outputFileName,
   persistenceDeniedMessage,
-  readColorTheme,
-  readFontChoices,
-  readKeyboardShortcuts,
   readLocalStorage,
-  readMarkdownFolder,
-  isDefaultVault,
-  readMarkdownZip,
-  readThemePreference,
-  readVaultRegistry,
-  uniqueVaultName,
-  restoreGithubSession,
-  restoreVaultFromGithub,
-  shortcutMatchesEvent,
-  suggestedRepositoryName,
-  validateGithubBackupRepository,
-  Vault,
-  vaultOptions,
-  watchSystemTheme,
-  writeKeyboardShortcuts,
   writeLocalStorage,
-  writeMarkdownFolder,
-  writeVaultRegistry,
-  type ColorTheme,
+} from "$lib/browser-storage";
+import {
+  applyFontChoices,
+  defaultFontChoices,
+  readFontChoices,
   type FontChoices,
   type FontRole,
-  type GithubBackupCommit,
-  type GithubBackupState,
-  type GithubUser,
+} from "$lib/fonts";
+import { loadFont, loadFontChoices } from "$lib/font-loader";
+import {
+  defaultKeyboardShortcuts,
+  detectPrimaryModifier,
+  formatShortcut,
+  readKeyboardShortcuts,
+  shortcutMatchesEvent,
+  writeKeyboardShortcuts,
   type KeyboardShortcut,
   type KeyboardShortcuts,
-  type NoteMetadata,
   type PrimaryModifier,
-  type ResolvedTheme,
   type ShortcutAction,
-  type ThemePreference,
+} from "$lib/keyboard-shortcuts";
+import {
+  createVaultDescriptor,
+  isDefaultVault,
+  normalizeVaultName,
+  readVaultRegistry,
+  suggestedRepositoryName,
+  uniqueVaultName,
+  vaultOptions,
+  Vault,
+  writeVaultRegistry,
   type VaultChangeEvent,
   type VaultDescriptor,
   type VaultSearchResult,
-} from "$lib";
+} from "$lib/storage/index";
+import type { GithubBackupCommit, GithubUser } from "$lib/github";
+import type { GithubBackupState, NoteMetadata } from "$lib/storage/types";
+import {
+  applyColorTheme,
+  applyTheme,
+  nextThemePreference,
+  readColorTheme,
+  readThemePreference,
+  watchSystemTheme,
+  type ColorTheme,
+  type ResolvedTheme,
+  type ThemePreference,
+} from "$lib/theme";
+import {
+  HTML_SOURCE_SEPARATOR,
+  PLAIN_TEXT_SEPARATOR,
+  joinTextBlocks,
+} from "$lib/markdown-output-types";
+import { outputFileName } from "$lib/output-utils";
+import type { MarkdownTransferFile } from "$lib/markdown-transfer";
 import { onMount, tick } from "svelte";
 
 const NOTE_PAGE_SIZE = 100;
@@ -128,6 +119,22 @@ const DEFAULT_CONTENT_WIDTH = 700;
 // Matches the single-column breakpoint in the responsive stylesheet.
 const NARROW_VIEWPORT = "(max-width: 900px)";
 const EDITOR_HISTORY_LIMIT = 200;
+
+type GithubModule = typeof import("$lib/github");
+type LazyStylesModule = typeof import("$lib/lazy-styles");
+type MarkdownModule = typeof import("$lib/markdown");
+type MarkdownOutputModule = typeof import("$lib/markdown-output");
+
+let githubModulePromise: Promise<GithubModule> | undefined;
+let lazyStylesModulePromise: Promise<LazyStylesModule> | undefined;
+
+function loadGithubModule(): Promise<GithubModule> {
+  return (githubModulePromise ??= import("$lib/github"));
+}
+
+function loadLazyStylesModule(): Promise<LazyStylesModule> {
+  return (lazyStylesModulePromise ??= import("$lib/lazy-styles"));
+}
 
 type EditorSurface = "source" | "rendered";
 
@@ -246,6 +253,20 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let noteList: HTMLElement | undefined = $state();
   let activeNoteSourcePath: string | undefined = $state();
   let localAttachmentUrls = $state<LocalAttachmentUrl[]>([]);
+  let markdownModule: MarkdownModule | undefined;
+  let markdownModulePromise: Promise<MarkdownModule> | undefined;
+  let markdownModuleRevision = $state(0);
+  let markdownOutputModule: MarkdownOutputModule | undefined;
+  let markdownOutputModulePromise: Promise<MarkdownOutputModule> | undefined;
+  let markdownOutputModuleRevision = $state(0);
+  let commandPaletteStylesPromise: Promise<void> | undefined;
+  let dialogStylesPromise: Promise<void> | undefined;
+  let fontLoadTimer: number | undefined;
+  let serviceWorkerTimer: number | undefined;
+  let githubRestoreTimer: number | undefined;
+  let outputViewRequest = 0;
+  let settingsOpener: HTMLElement | undefined;
+  let paletteOpener: HTMLElement | undefined;
   let unsubscribeVault: (() => void) | undefined;
   let remoteSyncRun: Promise<void> | undefined;
   let remoteSyncRequested = false;
@@ -258,23 +279,36 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   );
   const wordCount = $derived(markdown.trim() ? markdown.trim().split(/\s+/).length : 0);
   const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
-  const renderedBlocks = $derived(renderMarkdownBlocks(previewMarkdown, resolveAttachmentUrl));
+  const renderedBlocks = $derived.by(() => {
+    void markdownModuleRevision;
+    return renderMarkdownBlocksForPage(previewMarkdown, resolveAttachmentUrl);
+  });
   const renderedMarkdown = $derived(renderedBlocks.map((block) => block.html).join(""));
   const renderedBlockLines = $derived(
     renderedBlocks.filter((block) => block.element).map((block) => block.lines),
   );
-  const liveRenderedBlocks = $derived(renderMarkdownBlocks(markdown, resolveAttachmentUrl));
+  const liveRenderedBlocks = $derived.by(() => {
+    void markdownModuleRevision;
+    return renderMarkdownBlocksForPage(markdown, resolveAttachmentUrl);
+  });
   const liveRenderedMarkdown = $derived(liveRenderedBlocks.map((block) => block.html).join(""));
   const liveRenderedBlockLines = $derived(
     liveRenderedBlocks.filter((block) => block.element).map((block) => block.lines),
   );
-  const plainTextBlocks = $derived(notePlainTextBlocks(markdown));
+  const plainTextBlocks = $derived.by(() => {
+    void markdownOutputModuleRevision;
+    return markdownOutputModule?.plainTextBlocks(markdown) ?? [];
+  });
   const plainText = $derived(joinTextBlocks(plainTextBlocks, PLAIN_TEXT_SEPARATOR));
-  const htmlSourceBlocks = $derived(formatHtmlBlocks(renderedBlocks));
+  const htmlSourceBlocks = $derived.by(() => {
+    void markdownOutputModuleRevision;
+    return markdownOutputModule?.formatHtmlBlocks(renderedBlocks) ?? [];
+  });
   const htmlSource = $derived(joinTextBlocks(htmlSourceBlocks, HTML_SOURCE_SEPARATOR));
-  const highlightedHtmlSourceLines = $derived(
-    htmlSource ? highlightCodeLines(htmlSource, "html") : [],
-  );
+  const highlightedHtmlSourceLines = $derived.by(() => {
+    void markdownModuleRevision;
+    return htmlSource ? highlightCodeLinesForPage(htmlSource, "html") : [];
+  });
   const noteTitle = $derived(titleFromMarkdown(markdown));
   const markdownLines = $derived(markdown.split("\n"));
   const liveCodeLines = $derived.by(() => {
@@ -309,12 +343,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     });
   });
   const liveCodeHighlights = $derived.by(() => {
+    void markdownModuleRevision;
     const highlights = new Map<number, string>();
     let start = -1;
     let language = "";
     const flush = (end: number): void => {
       if (start < 0) return;
-      highlightCodeLines(markdownLines.slice(start, end).join("\n"), language).forEach(
+      highlightCodeLinesForPage(markdownLines.slice(start, end).join("\n"), language).forEach(
         (line, offset) => highlights.set(start + offset, line),
       );
       start = -1;
@@ -620,6 +655,77 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     },
   ]);
 
+  function loadMarkdownModule(): Promise<MarkdownModule> {
+    return (markdownModulePromise ??= import("$lib/markdown").then((module) => {
+      markdownModule = module;
+      markdownModuleRevision += 1;
+      return module;
+    }));
+  }
+
+  function loadMarkdownOutputModule(): Promise<MarkdownOutputModule> {
+    return (markdownOutputModulePromise ??= import("$lib/markdown-output").then((module) => {
+      markdownOutputModule = module;
+      markdownOutputModuleRevision += 1;
+      void loadMarkdownModule().catch(() => undefined);
+      return module;
+    }));
+  }
+
+  function loadCommandPaletteStyles(): Promise<void> {
+    return (commandPaletteStylesPromise ??= loadLazyStylesModule().then((module) =>
+      module.loadCommandPaletteStyles(),
+    ));
+  }
+
+  function loadDialogStyles(): Promise<void> {
+    return (dialogStylesPromise ??= loadLazyStylesModule().then((module) =>
+      module.loadDialogStyles(),
+    ));
+  }
+
+  function renderMarkdownBlocksForPage(
+    source: string,
+    resolveLocalUrl: (destination: string) => string | undefined,
+  ) {
+    return (
+      markdownModule?.renderMarkdownBlocks(source, resolveLocalUrl) ??
+      renderLiteMarkdownBlocks(source, resolveLocalUrl)
+    );
+  }
+
+  function highlightCodeLinesForPage(source: string, language: string): string[] {
+    return (
+      markdownModule?.highlightCodeLines(source, language) ??
+      liteHighlightCodeLines(source, language)
+    );
+  }
+
+  function codeLanguageLabelForPage(language: string): string {
+    return markdownModule?.codeLanguageLabel(language) ?? liteCodeLanguageLabel(language);
+  }
+
+  function needsFullMarkdownParser(source: string): boolean {
+    return (
+      /(^|\n)\s*(?:---\s*$|`{3,}|~{3,}|\|.+\||>\s*\[![A-Z]+\]|<\/?[a-z])/im.test(source) ||
+      /\$\$[\s\S]*?\$\$|\$[^$\n]+\$/.test(source) ||
+      /\[\^[^\]]+\](?::|\s)/.test(source)
+    );
+  }
+
+  function maybeLoadFullMarkdownParser(source: string): void {
+    if (!markdownModule && needsFullMarkdownParser(source)) {
+      void loadMarkdownModule().catch(() => undefined);
+    }
+  }
+
+  function scheduleDeferredFontLoad(): void {
+    fontLoadTimer = window.setTimeout(() => {
+      fontLoadTimer = undefined;
+      void loadFontChoices(fonts).catch(() => undefined);
+    }, 1_500);
+  }
+
   onMount(() => {
     const registry = readVaultRegistry();
     vaults = registry.vaults;
@@ -652,11 +758,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     applyColorTheme(colorTheme);
     fonts = readFontChoices();
     applyFontChoices(fonts);
+    scheduleDeferredFontLoad();
+    if (outputView !== "markdown" && outputView !== "pdf") {
+      void loadMarkdownOutputModule().catch(() => undefined);
+    }
     const stopThemeWatch = watchSystemTheme(() => {
       if (theme === "system") resolvedTheme = applyTheme(theme);
     });
-    void openVault().finally(() => registerServiceWorker());
-    if (isOnline) void restoreGitHub();
+    void openVault().finally(scheduleServiceWorkerRegistration);
+    if (isOnline) scheduleGithubRestore();
     else githubState = "disconnected";
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       if (markdown === lastSavedMarkdown) return;
@@ -665,11 +775,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const onKeydown = (event: KeyboardEvent) => handleShortcut(event);
     const onOnline = () => {
       isOnline = true;
-      void restoreGitHub();
+      scheduleGithubRestore();
     };
     const onOffline = () => {
       isOnline = false;
       restoreModalOpen = false;
+      if (githubRestoreTimer !== undefined) {
+        window.clearTimeout(githubRestoreTimer);
+        githubRestoreTimer = undefined;
+      }
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden" && markdown !== lastSavedMarkdown) void saveDraft();
@@ -690,6 +804,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       if (saveTimer) window.clearTimeout(saveTimer);
       if (searchTimer) window.clearTimeout(searchTimer);
       if (previewTimer) window.clearTimeout(previewTimer);
+      if (fontLoadTimer) window.clearTimeout(fontLoadTimer);
+      if (serviceWorkerTimer) window.clearTimeout(serviceWorkerTimer);
+      if (githubRestoreTimer) window.clearTimeout(githubRestoreTimer);
       unsubscribeVault?.();
       releaseLocalAttachmentUrls();
       vault?.close();
@@ -702,7 +819,33 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
   }
 
+  function scheduleServiceWorkerRegistration(): void {
+    if (serviceWorkerTimer !== undefined) return;
+    serviceWorkerTimer = window.setTimeout(() => {
+      serviceWorkerTimer = undefined;
+      registerServiceWorker();
+    }, 2_000);
+  }
+
+  function scheduleGithubRestore(): void {
+    if (githubState === "loading" || githubRestoreTimer !== undefined) return;
+    const hasGithubCallback = new URLSearchParams(location.search).has("github");
+    if (hasGithubCallback) {
+      void restoreGitHub();
+      return;
+    }
+    githubRestoreTimer = window.setTimeout(() => {
+      githubRestoreTimer = undefined;
+      void restoreGitHub();
+    }, 2_000);
+  }
+
   async function restoreGitHub(): Promise<void> {
+    if (githubState === "loading") return;
+    if (githubRestoreTimer !== undefined) {
+      window.clearTimeout(githubRestoreTimer);
+      githubRestoreTimer = undefined;
+    }
     const result = new URLSearchParams(location.search).get("github");
     if (result) history.replaceState(history.state, "", location.pathname + location.hash);
     if (result && result !== "connected") {
@@ -721,7 +864,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
     githubState = "loading";
     try {
-      githubUser = await restoreGithubSession();
+      githubUser = await (await loadGithubModule()).restoreGithubSession();
       githubState = githubUser ? "connected" : githubMessage ? "error" : "disconnected";
     } catch (error) {
       githubState = "error";
@@ -732,7 +875,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   async function disconnectGitHub(): Promise<void> {
     if (!isOnline) return;
     try {
-      await disconnectGithub();
+      await (await loadGithubModule()).disconnectGithub();
       githubUser = undefined;
       githubState = "disconnected";
       githubMessage = "";
@@ -747,7 +890,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     githubState = "loading";
     githubMessage = "";
     try {
-      await connectGithub();
+      await (await loadGithubModule()).connectGithub();
     } catch (error) {
       githubState = "error";
       githubMessage =
@@ -759,15 +902,33 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!isOnline || !vault || backupState === "backing-up") return;
     if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
     if (!githubBackup) {
-      openSettings("repository");
+      void openSettings("repository").catch(() => undefined);
       return;
     }
     await runBackup(githubBackup);
   }
 
-  function openSettings(target: SettingsSection = "editor"): void {
+  async function openSettings(target: SettingsSection = "editor"): Promise<void> {
+    if (!settingsOpen && document.activeElement instanceof HTMLElement) {
+      settingsOpener = document.activeElement;
+    }
     settingsSection = target;
+    await loadDialogStyles();
     settingsOpen = true;
+  }
+
+  function closeSettings(): void {
+    settingsOpen = false;
+    const opener = settingsOpener;
+    settingsOpener = undefined;
+    restoreModalFocus(opener);
+  }
+
+  function restoreModalFocus(opener: HTMLElement | undefined): void {
+    if (!opener) return;
+    requestAnimationFrame(() => {
+      if (opener.isConnected) opener.focus();
+    });
   }
 
   async function selectBackupRepository(
@@ -775,7 +936,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   ): Promise<void> {
     if (!vault) return;
     try {
-      await validateGithubBackupRepository({ ...state, updatedAt: new Date().toISOString() });
+      await (
+        await loadGithubModule()
+      ).validateGithubBackupRepository({
+        ...state,
+        updatedAt: new Date().toISOString(),
+      });
       await vault.saveGithubBackupState(state);
       githubBackup = await vault.getGithubBackupState();
       backupState = "idle";
@@ -850,7 +1016,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     backupMessage = "Creating your private repository…";
     settingsOpen = false;
     try {
-      const configuration = await createPrivateGithubRepository(name);
+      const configuration = await (await loadGithubModule()).createPrivateGithubRepository(name);
       await vault.saveGithubBackupState(configuration);
       githubBackup = configuration;
       await runBackup(configuration);
@@ -865,7 +1031,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     backupMessage = "Preparing one GitHub commit…";
     backupCommitUrl = "";
     try {
-      const result = await backupVaultToGithub(vault, configuration);
+      const result = await (await loadGithubModule()).backupVaultToGithub(vault, configuration);
       githubBackup = result.state;
       pendingBackupCount = (await vault.getPendingBackupOperations()).length;
       backupState = "success";
@@ -880,12 +1046,19 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function showBackupError(error: unknown): void {
     backupState = "error";
-    backupMessage =
-      error instanceof GithubRequestError && error.status === 422
-        ? "GitHub could not create that repository or update its branch. Check the name and try again."
-        : error instanceof Error
-          ? error.message
-          : "The GitHub backup failed.";
+    backupMessage = isGithubStatus(error, 422)
+      ? "GitHub could not create that repository or update its branch. Check the name and try again."
+      : error instanceof Error
+        ? error.message
+        : "The GitHub backup failed.";
+  }
+
+  function isGithubStatus(error: unknown, status: number): boolean {
+    return (
+      error instanceof Error &&
+      "status" in error &&
+      (error as Error & { status?: unknown }).status === status
+    );
   }
 
   async function openRestore(): Promise<void> {
@@ -898,6 +1071,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     restoreCommits = [];
     selectedRestoreSha = "";
     restoreMessage = "";
+    await loadDialogStyles();
     restoreModalOpen = true;
     await loadRestoreCommits();
   }
@@ -922,7 +1096,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     restoreMessage = "";
     selectedRestoreSha = "";
     try {
-      restoreCommits = await listGithubBackupCommits(restoreConfiguration());
+      restoreCommits = await (
+        await loadGithubModule()
+      ).listGithubBackupCommits(restoreConfiguration());
       selectedRestoreSha = restoreCommits[0]?.sha ?? "";
       restoreMessage =
         restoreCommits.length === 0
@@ -950,11 +1126,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     restoreState = "restoring";
     restoreMessage = "Downloading and rebuilding your local vault…";
     try {
-      const result = await restoreVaultFromGithub(
-        vault,
-        restoreConfiguration(),
-        selectedRestoreSha,
-      );
+      const result = await (
+        await loadGithubModule()
+      ).restoreVaultFromGithub(vault, restoreConfiguration(), selectedRestoreSha);
       githubBackup = result.state;
       pendingBackupCount = (await vault.getPendingBackupOperations()).length;
       const notes = await vault.listNotes();
@@ -1144,6 +1318,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     activeNoteId = note.id;
     noteRevision = note.revision;
     markdown = note.markdown;
+    maybeLoadFullMarkdownParser(note.markdown);
     updatePreviewImmediately(note.markdown);
     lastSavedMarkdown = note.markdown;
     resetEditorHistory();
@@ -1240,6 +1415,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   async function importFolder(files: FileList | null): Promise<void> {
     if (!files?.length) return;
+    const { readMarkdownFolder } = await import("$lib/markdown-transfer");
     await runImport(readMarkdownFolder(files));
     if (folderInput) folderInput.value = "";
   }
@@ -1250,6 +1426,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     transferState = "working";
     transferMessage = "Reading ZIP archive…";
     try {
+      const { readMarkdownZip } = await import("$lib/markdown-transfer");
       const entries = await readMarkdownZip(file);
       transferState = "idle";
       await runImport(entries);
@@ -1260,7 +1437,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
   }
 
-  async function runImport(files: ReturnType<typeof readMarkdownFolder>): Promise<void> {
+  async function runImport(files: MarkdownTransferFile[]): Promise<void> {
     if (!vault || transferState === "working") return;
     transferState = "working";
     transferMessage = "Importing Markdown and attachments…";
@@ -1270,6 +1447,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       return;
     }
     try {
+      const { importMarkdownFiles } = await import("$lib/markdown-transfer");
       const result = await importMarkdownFiles(vault, files);
       searchQuery = "";
       const notes = await vault.listNotes();
@@ -1293,7 +1471,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   // Browsers save PDFs through their own print dialog, which the print stylesheet feeds.
-  function savePdf(): void {
+  async function savePdf(): Promise<void> {
+    await import("./styles/print.css");
     window.print();
   }
 
@@ -1309,39 +1488,44 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   async function copyText(): Promise<void> {
-    await copyToClipboard(() => navigator.clipboard.writeText(plainText), "plain text");
+    await copyToClipboard(async () => {
+      const output = await loadMarkdownOutputModule();
+      await navigator.clipboard.writeText(output.markdownToPlainText(markdown));
+    }, "plain text");
   }
 
-  function downloadText(): void {
+  async function downloadText(): Promise<void> {
+    const output = await loadMarkdownOutputModule();
     downloadBlob(
-      new Blob([`${plainText}\n`], { type: "text/plain" }),
+      new Blob([`${output.markdownToPlainText(markdown)}\n`], { type: "text/plain" }),
       outputFileName(noteTitle, "txt"),
     );
   }
 
   async function copyRichText(): Promise<void> {
-    await copyToClipboard(
-      () =>
-        navigator.clipboard.write([
-          new ClipboardItem({
-            "text/html": new Blob([exportedHtml()], { type: "text/html" }),
-            "text/plain": new Blob([plainText], { type: "text/plain" }),
-          }),
-        ]),
-      "rich text",
-    );
+    await copyToClipboard(async () => {
+      const [html, output] = await Promise.all([exportedHtml(), loadMarkdownOutputModule()]);
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob([html], { type: "text/html" }),
+          "text/plain": new Blob([output.markdownToPlainText(markdown)], { type: "text/plain" }),
+        }),
+      ]);
+    }, "rich text");
   }
 
-  function downloadRtf(): void {
+  async function downloadRtf(): Promise<void> {
+    const output = await loadMarkdownOutputModule();
     downloadBlob(
-      new Blob([markdownToRtf(markdown)], { type: "application/rtf" }),
+      new Blob([output.markdownToRtf(markdown)], { type: "application/rtf" }),
       outputFileName(noteTitle, "rtf"),
     );
   }
 
   // Exports keep the note's own attachment paths, because in-app blob URLs die with the tab.
-  function exportedHtml(): string {
-    return renderMarkdown(markdown, undefined, { remoteImages: "allow" });
+  async function exportedHtml(): Promise<string> {
+    const markdownModule = await loadMarkdownModule();
+    return markdownModule.renderMarkdown(markdown, undefined, { remoteImages: "allow" });
   }
 
   async function copyToClipboard(write: () => Promise<void>, format: string): Promise<void> {
@@ -1357,15 +1541,18 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   async function copyHtml(): Promise<void> {
-    await copyToClipboard(
-      () => navigator.clipboard.writeText(formatHtmlSource(exportedHtml())),
-      "HTML",
-    );
+    await copyToClipboard(async () => {
+      const [html, output] = await Promise.all([exportedHtml(), loadMarkdownOutputModule()]);
+      await navigator.clipboard.writeText(output.formatHtmlSource(html));
+    }, "HTML");
   }
 
-  function downloadHtml(): void {
-    const body = formatHtmlSource(exportedHtml());
-    const html = createHtmlDocument({ title: noteTitle, body });
+  async function downloadHtml(): Promise<void> {
+    const [body, output] = await Promise.all([exportedHtml(), loadMarkdownOutputModule()]);
+    const html = output.createHtmlDocument({
+      title: noteTitle,
+      body: output.formatHtmlSource(body),
+    });
     downloadBlob(new Blob([html], { type: "text/html" }), outputFileName(noteTitle, "html"));
   }
 
@@ -1376,7 +1563,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     "rich-text": copyRichText,
     html: copyHtml,
   };
-  const outputDownload: Record<OutputView, () => void> = {
+  const outputDownload: Record<OutputView, () => void | Promise<void>> = {
     markdown: downloadMarkdown,
     text: downloadText,
     "rich-text": downloadRtf,
@@ -1389,7 +1576,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function downloadOutput(): void {
-    outputDownload[outputView]();
+    void outputDownload[outputView]();
   }
 
   async function exportZip(): Promise<void> {
@@ -1402,6 +1589,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       return;
     }
     try {
+      const { createMarkdownExport, createMarkdownZip } = await import("$lib/markdown-transfer");
       const files = await createMarkdownExport(vault);
       const archive = await createMarkdownZip(files);
       downloadBlob(archive, `onyx-markdown-${new Date().toISOString().slice(0, 10)}.zip`);
@@ -1435,6 +1623,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         transferMessage = "";
         return;
       }
+      const { createMarkdownExport, writeMarkdownFolder } = await import("$lib/markdown-transfer");
       const files = await createMarkdownExport(vault);
       await writeMarkdownFolder(directory, files);
       transferState = "idle";
@@ -1533,6 +1722,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
     pendingEditorState = undefined;
     markdown = value;
+    maybeLoadFullMarkdownParser(value);
     queuePreview(value);
     queueSave();
   }
@@ -1589,8 +1779,24 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function setOutputView(view: OutputView): void {
-    outputView = view;
-    writeLocalStorage("onyx:output-view", view);
+    const request = ++outputViewRequest;
+    if (view === "markdown" || view === "pdf") {
+      outputView = view;
+      writeLocalStorage("onyx:output-view", view);
+      return;
+    }
+    void loadMarkdownOutputModule().then(
+      () => {
+        if (request !== outputViewRequest) return;
+        outputView = view;
+        writeLocalStorage("onyx:output-view", view);
+      },
+      () => {
+        if (request !== outputViewRequest) return;
+        outputView = view;
+        writeLocalStorage("onyx:output-view", view);
+      },
+    );
   }
 
   function togglePaneLayout(): void {
@@ -1998,11 +2204,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   function setFont(role: FontRole, id: string): void {
     fonts = { ...fonts, [role]: id };
     applyFontChoices(fonts);
+    void loadFont(id).catch(() => undefined);
   }
 
   function resetFonts(): void {
     fonts = { ...defaultFontChoices };
     applyFontChoices(fonts);
+    void loadFontChoices(fonts).catch(() => undefined);
   }
 
   function shortcutLabel(action: ShortcutAction): string | undefined {
@@ -2020,7 +2228,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     writeKeyboardShortcuts(shortcuts);
   }
 
-  function updateRenderedInput(event: InputEvent): void {
+  function updateRenderedInput(event: Event): void {
     const browserSelection = window.getSelection();
     const element =
       liveLineElement(event.target instanceof Node ? event.target : null) ??
@@ -2395,11 +2603,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     else if (action === "bold") void insertSyntax("**", "**", "bold text");
     else if (action === "italic") void insertSyntax("_", "_", "italic text");
     else if (action === "togglePreview") toggleRenderedPane();
-    else if (action === "openShortcuts") openSettings("shortcuts");
+    else if (action === "openShortcuts") void openSettings("shortcuts").catch(() => undefined);
     else if (action === "closePanel") {
       if (restoreModalOpen && restoreState !== "restoring") restoreModalOpen = false;
-      else if (settingsOpen) settingsOpen = false;
-      else if (paletteOpen) paletteOpen = false;
+      else if (settingsOpen) closeSettings();
+      else if (paletteOpen) closePalette();
       else if (sidebarOpen) sidebarOpen = false;
       else if (searchQuery) {
         queueSearch("");
@@ -2475,8 +2683,19 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   async function openPalette(): Promise<void> {
+    if (!paletteOpen && document.activeElement instanceof HTMLElement) {
+      paletteOpener = document.activeElement;
+    }
     paletteNotes = vault ? await vault.listNotes() : [];
+    await loadCommandPaletteStyles();
     paletteOpen = true;
+  }
+
+  function closePalette(): void {
+    paletteOpen = false;
+    const opener = paletteOpener;
+    paletteOpener = undefined;
+    restoreModalFocus(opener);
   }
 
   function moveNoteFocus(event: KeyboardEvent): void {
@@ -2494,7 +2713,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function liveCodeLanguage(index: number): string {
-    return codeLanguageLabel(liveCodeLanguages[index] ?? "");
+    return codeLanguageLabelForPage(liveCodeLanguages[index] ?? "");
   }
 
   function isListLine(line: string): boolean {
@@ -3000,7 +3219,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     createNote,
     queueSearch,
     openPalette,
+    closePalette,
     openSettings,
+    closeSettings,
     connectGitHub,
     disconnectGitHub,
     moveNoteFocus,

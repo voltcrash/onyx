@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { CloudDownload, GitCommitHorizontal, LoaderCircle, X } from '@lucide/svelte';
-	import type { GithubBackupCommit } from '$lib';
+	import type { GithubBackupCommit } from '$lib/github';
 	import { manageModalFocus } from '$lib/modal-focus';
 	import type { RestoreState } from './app-types';
 

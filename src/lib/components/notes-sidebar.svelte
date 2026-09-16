@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Bold, Braces, Code2, FileText, HardDrive, Heading2, Highlighter, Italic, Link, List, ListChecks, ListOrdered, LoaderCircle, Lock, LockOpen, LogOut, MessageSquareWarning, Minus, PanelLeftClose, Plus, Quote, Search, Settings, Sigma, Strikethrough, Wrench, X } from '@lucide/svelte';
-	import { formatShortcut, type GithubUser, type KeyboardShortcuts, type PrimaryModifier, type VaultDescriptor, type VaultSearchResult } from '$lib';
+	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
+	import type { GithubUser } from '$lib/github';
+	import type { VaultDescriptor } from '$lib/storage/registry';
+	import type { VaultSearchResult } from '$lib/storage/types';
 	import GithubIcon from './github-icon.svelte';
 	import VaultSwitcher from './vault-switcher.svelte';
 	import type { GithubState, SaveState, TransferState } from './app-types';

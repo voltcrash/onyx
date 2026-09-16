@@ -1,14 +1,14 @@
 /* Printed output stays on light paper; in-pane paper surfaces inherit the active output theme. */
 :root,
 .paper-surface {
-  font-family: "Inter Variable", Inter, sans-serif;
+  font-family: var(--font-content);
   font-synthesis: none;
   color: var(--ink);
   background: var(--canvas);
 
   /* Writing typefaces. Overridden per role on the root element from settings. */
   --font-heading: "Newsreader Variable", Georgia, "Times New Roman", serif;
-  --font-content: "Geist Variable", "Inter Variable", Inter, sans-serif;
+  --font-content: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   --font-code: "Fira Code Variable", ui-monospace, "SFMono-Regular", Consolas, monospace;
 }
 
@@ -56,4 +56,7 @@ label:focus-visible,
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+.print-document {
+  display: none;
 }

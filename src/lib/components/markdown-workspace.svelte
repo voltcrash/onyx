@@ -1,8 +1,10 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { Copy, Download, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, Moon, PanelLeft, PencilLine, Sun, X } from '@lucide/svelte';
-	import { formatShortcut, HTML_SOURCE_SEPARATOR, PLAIN_TEXT_SEPARATOR, type ColorTheme, type KeyboardShortcuts, type PrimaryModifier, type ResolvedTheme, type TextBlock } from '$lib';
-	import type { SourceLines } from '$lib/markdown';
+	import { HTML_SOURCE_SEPARATOR, PLAIN_TEXT_SEPARATOR, type TextBlock } from '$lib/markdown-output-types';
+	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
+	import type { ColorTheme, ResolvedTheme } from '$lib/theme';
+	import type { SourceLines } from '$lib/markdown-lite';
 	import { elementAnchors, scrollAnchors, syncedScrollTop, textAnchors, textareaAnchors, type ScrollAnchor } from '$lib/scroll-sync';
 	import type { PaneEdge, PaneLayout, PaneOrder, SaveState, TransferState } from './app-types';
 	import { outputViews, type OutputView } from './output-views';
@@ -56,7 +58,7 @@
 		onEditorPaste: (event: ClipboardEvent) => void;
 		onSourceFocus: () => void;
 		onLiveLineFocus: (line: number) => void;
-		onRenderedInput: (event: InputEvent) => void;
+		onRenderedInput: (event: Event) => void;
 		onRenderedLineKeydown: (event: KeyboardEvent) => void;
 		renderEditableLine: (line: string, index: number) => string;
 		liveLineKind: (line: string, index: number) => string;
@@ -109,13 +111,14 @@
 	}
 
 	function measureLiveLines(): void {
-		if (!liveEditorContainer || renderedReadOnly) {
+		const container = liveEditorContainer;
+		if (!container || renderedReadOnly) {
 			liveLineRects = [];
 			return;
 		}
-		const renderedContent = liveEditorContainer.querySelector<HTMLElement>('.live-rendered-content');
+		const renderedContent = container.querySelector<HTMLElement>('.live-rendered-content');
 		if (!renderedContent) return;
-		const containerRect = liveEditorContainer.getBoundingClientRect();
+		const containerRect = container.getBoundingClientRect();
 		const rects: Array<LiveLineRect | undefined> = Array.from({ length: markdownLines.length });
 		const renderedBlocks = [...renderedContent.children] as HTMLElement[];
 
@@ -166,7 +169,7 @@
 					if (!row) return;
 					const rowRect = row.getBoundingClientRect();
 					if (tableColumnWidths.length) {
-						const overlayRow = liveEditorContainer.querySelector<HTMLElement>(
+						const overlayRow = container.querySelector<HTMLElement>(
 							`[data-live-line="${index}"] .live-table-row`,
 						);
 						overlayRow?.style.setProperty(
@@ -510,6 +513,17 @@
 			cancelAnimationFrame(syncFrame);
 			syncFrame = 0;
 		};
+	});
+
+	onMount(() => {
+		const fontSet = document.fonts;
+		if (!fontSet) return;
+		const refreshAfterFontLoad = () => {
+			measureLiveLines();
+			queueScrollSync(leadingPane());
+		};
+		fontSet.addEventListener('loadingdone', refreshAfterFontLoad);
+		return () => fontSet.removeEventListener('loadingdone', refreshAfterFontLoad);
 	});
 </script>
 

@@ -1,9 +1,6 @@
 <script lang="ts">
-	import CommandPalette from '$lib/components/command-palette.svelte';
 	import MarkdownWorkspace from '$lib/components/markdown-workspace.svelte';
 	import NotesSidebar from '$lib/components/notes-sidebar.svelte';
-	import RestoreDialog from '$lib/components/restore-dialog.svelte';
-	import SettingsDialog from '$lib/components/settings-dialog.svelte';
 	import StatusNotices from '$lib/components/status-notices.svelte';
 	import { createPageController } from './page-controller.svelte.js';
 
@@ -132,73 +129,79 @@
 	onDismissTransfer={page.dismissTransferMessage}
 />
 
-{#if page.paletteOpen}
-	<CommandPalette items={page.paletteItems} onClose={() => (page.paletteOpen = false)} />
-{/if}
+	{#if page.paletteOpen}
+	{#await import('$lib/components/command-palette.svelte') then { default: CommandPalette }}
+		<CommandPalette items={page.paletteItems} onClose={page.closePalette} />
+	{/await}
+	{/if}
 
 {#if page.settingsOpen}
-	<SettingsDialog
-		vault={page.vault}
-		vaultName={page.vaultName}
-		suggestedRepositoryName={page.suggestedRepositoryName}
-		isOnline={page.isOnline}
-		githubUser={page.githubUser}
-		githubState={page.githubState}
-		githubMessage={page.githubMessage}
-		githubBackup={page.githubBackup}
-		pendingBackupCount={page.pendingBackupCount}
-		backupState={page.backupState}
-		backupMessage={page.backupMessage}
-		backupCommitUrl={page.backupCommitUrl}
-		transferState={page.transferState}
-		theme={page.theme}
-		resolvedTheme={page.resolvedTheme}
-		colorTheme={page.colorTheme}
-		fonts={page.fonts}
-		shortcuts={page.shortcuts}
-		primaryModifier={page.primaryModifier}
-		onThemeChange={page.setTheme}
-		onColorThemeChange={page.setColorTheme}
-		onFontChange={page.setFont}
-		onResetFonts={page.resetFonts}
-		onShortcutChange={page.setShortcut}
-		onResetShortcuts={page.resetShortcuts}
-		bind:section={page.settingsSection}
-		onClose={() => (page.settingsOpen = false)}
-		onConnectGithub={() => void page.connectGitHub()}
-		onDisconnectGithub={() => void page.disconnectGitHub()}
-		onCreateRepository={(name) => void page.createBackupRepository(name)}
-		onSelectRepository={(state) => void page.selectBackupRepository(state)}
-		onForgetRepository={() => void page.forgetBackupRepository()}
-		onBackup={() => void page.beginBackup()}
-		onRestore={() => { page.settingsOpen = false; void page.openRestore(); }}
-		onImportFolder={() => page.folderInput?.click()}
-		onImportZip={() => page.zipInput?.click()}
-		onExportFolder={() => void page.exportFolder()}
-		onExportZip={() => void page.exportZip()}
-		onPrepareVaultDeletion={page.prepareVaultDeletion}
-		onDeleteVault={page.clearVault}
-	/>
+	{#await import('$lib/components/settings-dialog.svelte') then { default: SettingsDialog }}
+		<SettingsDialog
+			vault={page.vault}
+			vaultName={page.vaultName}
+			suggestedRepositoryName={page.suggestedRepositoryName}
+			isOnline={page.isOnline}
+			githubUser={page.githubUser}
+			githubState={page.githubState}
+			githubMessage={page.githubMessage}
+			githubBackup={page.githubBackup}
+			pendingBackupCount={page.pendingBackupCount}
+			backupState={page.backupState}
+			backupMessage={page.backupMessage}
+			backupCommitUrl={page.backupCommitUrl}
+			transferState={page.transferState}
+			theme={page.theme}
+			resolvedTheme={page.resolvedTheme}
+			colorTheme={page.colorTheme}
+			fonts={page.fonts}
+			shortcuts={page.shortcuts}
+			primaryModifier={page.primaryModifier}
+			onThemeChange={page.setTheme}
+			onColorThemeChange={page.setColorTheme}
+			onFontChange={page.setFont}
+			onResetFonts={page.resetFonts}
+			onShortcutChange={page.setShortcut}
+			onResetShortcuts={page.resetShortcuts}
+			bind:section={page.settingsSection}
+			onClose={page.closeSettings}
+			onConnectGithub={() => void page.connectGitHub()}
+			onDisconnectGithub={() => void page.disconnectGitHub()}
+			onCreateRepository={(name) => void page.createBackupRepository(name)}
+			onSelectRepository={(state) => void page.selectBackupRepository(state)}
+			onForgetRepository={() => void page.forgetBackupRepository()}
+			onBackup={() => void page.beginBackup()}
+			onRestore={() => { page.settingsOpen = false; void page.openRestore(); }}
+			onImportFolder={() => page.folderInput?.click()}
+			onImportZip={() => page.zipInput?.click()}
+			onExportFolder={() => void page.exportFolder()}
+			onExportZip={() => void page.exportZip()}
+			onPrepareVaultDeletion={page.prepareVaultDeletion}
+			onDeleteVault={page.clearVault}
+		/>
+	{/await}
 {/if}
 
 <input class="transfer-input" bind:this={page.folderInput} type="file" webkitdirectory multiple onchange={(event) => void page.importFolder(event.currentTarget.files)} />
 <input class="transfer-input" bind:this={page.zipInput} type="file" accept=".zip,application/zip" onchange={(event) => void page.importZip(event.currentTarget.files)} />
 
 {#if page.restoreModalOpen}
-	<RestoreDialog
-		isOnline={page.isOnline}
-		restoreState={page.restoreState}
-		restoreMessage={page.restoreMessage}
-		restoreCommits={page.restoreCommits}
-		pendingBackupCount={page.pendingBackupCount}
-		bind:selectedRestoreSha={page.selectedRestoreSha}
-		bind:restoreOwner={page.restoreOwner}
-		bind:restoreRepository={page.restoreRepository}
-		bind:restoreBranch={page.restoreBranch}
-		bind:restoreDirectory={page.restoreDirectory}
-		onClose={() => (page.restoreModalOpen = false)}
-		onLoadCommits={() => void page.loadRestoreCommits()}
-		onRestore={() => void page.restoreSelectedCommit()}
-		formatCommitDate={page.formatCommitDate}
-	/>
+	{#await import('$lib/components/restore-dialog.svelte') then { default: RestoreDialog }}
+		<RestoreDialog
+			isOnline={page.isOnline}
+			restoreState={page.restoreState}
+			restoreMessage={page.restoreMessage}
+			restoreCommits={page.restoreCommits}
+			pendingBackupCount={page.pendingBackupCount}
+			bind:selectedRestoreSha={page.selectedRestoreSha}
+			bind:restoreOwner={page.restoreOwner}
+			bind:restoreRepository={page.restoreRepository}
+			bind:restoreBranch={page.restoreBranch}
+			bind:restoreDirectory={page.restoreDirectory}
+			onClose={() => (page.restoreModalOpen = false)}
+			onLoadCommits={() => void page.loadRestoreCommits()}
+			onRestore={() => void page.restoreSelectedCommit()}
+			formatCommitDate={page.formatCommitDate}
+		/>
+	{/await}
 {/if}

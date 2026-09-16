@@ -115,12 +115,14 @@ Onyx requests the `repo` scope so it can create private repositories and write b
   responsive, and print styles.
 - `src/lib/theme-catalog.json` is the source of truth for theme metadata and preference keys;
   `src/lib/theme-tokens.json` contains the semantic palette overrides. Run `vp run themes:generate`
-  after changing either file; it updates the static CSS and first-paint initializer consumed by the
-  app.
+  after changing either file; it updates the static CSS. The document applies the mode and palette
+  inline before hydration for a fast first paint.
 - `src/lib/storage/` implements the IndexedDB vault and its OPFS/native-folder file abstraction.
 - `src/lib/markdown-transfer.ts` implements folder and ZIP import/export.
 - `src/lib/markdown-output.ts` formats the generated HTML, builds standalone HTML exports, and
   converts notes to plain text and RTF.
+- `src/lib/markdown-lite.ts` keeps the first editor render dependency-free; the full parser,
+  export/transfer tools, fonts, and dialog styles load only when needed.
 - `src/lib/github.ts` implements repository validation, backup, and restore.
 - `src/service-worker.ts` caches the application shell for offline use.
 

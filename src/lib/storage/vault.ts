@@ -5,7 +5,7 @@ import {
   type SearchPosting,
 } from "./database.js";
 import { detectBrowserStorageSupport } from "../browser-storage.js";
-import { titleFromMarkdown } from "../markdown.js";
+import { titleFromMarkdown } from "../markdown-utils.js";
 import { VaultCoordination } from "./coordination.js";
 import { MirroredVaultFilesystem, VaultFilesystem } from "./filesystem.js";
 import type {
