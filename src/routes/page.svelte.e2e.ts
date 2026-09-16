@@ -374,8 +374,8 @@ test("adjusts content width from the command palette", async ({ page }) => {
   await expect(page.locator(".editor-shell")).toHaveAttribute("style", /--content-width: 840px/);
 
   await page.keyboard.press("Escape");
-  await page.getByRole("tab", { name: "Tools" }).click();
   await expect(page.getByRole("slider", { name: "Content width" })).toHaveCount(0);
+  await expect(page.getByText("Document", { exact: true })).toBeVisible();
 });
 
 test("offers formatting actions from the command palette", async ({ page }) => {
@@ -409,7 +409,8 @@ test("offers formatting actions from the command palette", async ({ page }) => {
   await page.getByRole("option", { name: /^Bold/ }).click();
   await expect(editor).toHaveValue("**hello**");
 
-  await page.getByRole("tab", { name: "Tools" }).click();
+  await expect(page.getByRole("tab", { name: "Tools" })).toHaveCount(0);
+  await expect(page.locator(".sidebar-switcher")).toHaveCount(0);
   await expect(page.locator(".formatting-tools")).toHaveCount(0);
   await expect(page.getByText("Document", { exact: true })).toBeVisible();
 });
@@ -1276,7 +1277,6 @@ test("keeps both panes synchronized and lets each pane be tucked away", async ({
   await page.getByRole("button", { name: "Show the output pane" }).click();
   await expect(markdown).toBeVisible();
 
-  await page.getByRole("tab", { name: "Tools" }).click();
   await page.getByRole("textbox", { name: "Markdown line 1" }).fill("# Written on the left");
   await expect(markdown).toHaveValue("# Written on the left");
 
@@ -1842,7 +1842,6 @@ test("imports a Markdown folder and exports its structure and attachments as ZIP
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
   await toggleRenderedReadOnly(page);
-  await page.getByRole("tab", { name: "Files" }).click();
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Import & export", exact: true }).click();

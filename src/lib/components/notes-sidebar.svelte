@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
-	import { ChevronDown, ChevronRight, Copy, FilePlus2, FileText, Folder, FolderPlus, HardDrive, LoaderCircle, Lock, LockOpen, LogOut, PanelLeftClose, Pencil, Plus, Search, Settings, Trash2, Type, Wrench, X } from '@lucide/svelte';
+	import { tick } from 'svelte';
+	import { ChevronDown, ChevronRight, Copy, FilePlus2, FileText, Folder, FolderPlus, HardDrive, LoaderCircle, Lock, LockOpen, LogOut, PanelLeftClose, Pencil, Plus, Search, Settings, Trash2, Type, X } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
 	import type { GithubUser } from '$lib/github';
 	import type { VaultDescriptor } from '$lib/storage/registry';
@@ -72,7 +72,6 @@
 		onContentWidthChange
 	}: Props = $props();
 
-	let sidebarView = $state<'files' | 'tools'>('files');
 	const paletteControls = $derived<PaletteControl[]>([
 		{
 			id: 'content-width',
@@ -421,10 +420,6 @@
 		}
 	}
 
-	// The sidebar is a drawer on narrow screens, where the tools are the harder pane to reach.
-	onMount(() => {
-		if (globalThis.matchMedia?.('(max-width: 900px)').matches) sidebarView = 'tools';
-	});
 </script>
 
 <svelte:window onkeydown={handleWindowKeydown} />
@@ -436,12 +431,7 @@
 			<CommandPalette items={paletteItems} controls={paletteControls} onClose={onClosePalette} />
 		{/await}
 	{:else}
-		<div class="sidebar-switcher" role="tablist" aria-label="Sidebar view">
-			<button role="tab" aria-selected={sidebarView === 'files'} class:active={sidebarView === 'files'} onclick={() => (sidebarView = 'files')}><FileText size={14} /> Files</button>
-			<button role="tab" aria-selected={sidebarView === 'tools'} class:active={sidebarView === 'tools'} onclick={() => (sidebarView = 'tools')}><Wrench size={14} /> Tools</button>
-		</div>
-		{#if sidebarView === 'files'}
-		<div class="sidebar-panel files-panel" role="tabpanel">
+		<div class="sidebar-panel files-panel">
 			<label class="search-box"><Search size={15} /><input bind:this={searchInput} type="search" placeholder="Search all notes" value={searchQuery} oninput={(event) => onSearch(event.currentTarget.value)} /><button type="button" aria-label="Open the command palette" aria-haspopup="listbox" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Run a command (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><kbd>{formatShortcut(shortcuts.commandPalette, primaryModifier).replaceAll(' ', '')}</kbd></button></label>
 			<div class="file-toolbar">
 				<div class="result-count" aria-live="polite">{searchQuery ? `${results.length} ${results.length === 1 ? 'result' : 'results'}` : `${results.length} ${results.length === 1 ? 'note' : 'notes'}`}</div>
@@ -507,17 +497,13 @@
 					<button disabled={notePage === notePageCount - 1} onclick={() => onChangePage(notePage + 1)}>Next</button>
 				</div>
 			{/if}
-		</div>
-		{:else}
-		<div class="sidebar-panel tools-panel" role="tabpanel">
-			<section class="tool-section document-details">
+			<section class="document-details">
 				<h2>Document</h2>
 				<div><span>Words</span><strong>{wordCount}</strong></div>
 				<div><span>Reading time</span><strong>{readingMinutes} min</strong></div>
 				<div><span>Status</span><strong>{saveState === 'loading' ? 'Opening' : saveState === 'error' ? 'Save failed' : 'Saved locally'}</strong></div>
 			</section>
 		</div>
-		{/if}
 	{/if}
 	<div class="sidebar-footer">
 		{#if githubState === 'connected' && githubUser}
