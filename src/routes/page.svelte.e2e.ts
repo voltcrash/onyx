@@ -20,6 +20,34 @@ test("orders output views by file format", async ({ page }) => {
   ]);
 });
 
+test("matches the PDF view to the selected mode by default", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  const outputPane = page.locator(".output-pane");
+  const pdfTab = page.getByRole("tab", { name: "PDF", exact: true });
+  const pdfPreview = page.locator(".pdf-preview");
+  const pdfSheet = page.locator(".pdf-sheet");
+
+  for (const mode of ["dark", "light"] as const) {
+    await page.evaluate((nextMode) => localStorage.setItem("onyx-theme", nextMode), mode);
+    await page.reload();
+    await expect(outputPane).toBeVisible();
+    await expect(outputPane).toHaveAttribute("data-output-theme", mode);
+
+    await openOutputSwitcher(page);
+    await pdfTab.click();
+    await expect(pdfPreview).toHaveCSS(
+      "background-color",
+      await outputPane.evaluate((element) => getComputedStyle(element).backgroundColor),
+    );
+    await expect(pdfSheet).toHaveCSS(
+      "color",
+      await outputPane.evaluate((element) => getComputedStyle(element).color),
+    );
+  }
+});
+
 test("keeps every output view on the same pane background", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
