@@ -378,6 +378,42 @@ test("adjusts content width from the command palette", async ({ page }) => {
   await expect(page.getByRole("slider", { name: "Content width" })).toHaveCount(0);
 });
 
+test("offers formatting actions from the command palette", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill("hello");
+  await editor.selectText();
+
+  await page.getByRole("button", { name: "Open the command palette" }).click();
+  for (const label of [
+    "Bold",
+    "Italic",
+    "Strikethrough",
+    "Highlight",
+    "Heading",
+    "Bulleted list",
+    "Numbered list",
+    "Task list",
+    "Quote",
+    "Callout",
+    "Inline code",
+    "Code block",
+    "Link",
+    "Divider",
+    "Math",
+  ]) {
+    await expect(page.getByRole("option", { name: new RegExp(label) })).toBeVisible();
+  }
+
+  await page.getByRole("option", { name: /^Bold/ }).click();
+  await expect(editor).toHaveValue("**hello**");
+
+  await page.getByRole("tab", { name: "Tools" }).click();
+  await expect(page.locator(".formatting-tools")).toHaveCount(0);
+  await expect(page.getByText("Document", { exact: true })).toBeVisible();
+});
+
 test("offers additional color themes and persists the selection", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();

@@ -64,8 +64,6 @@
 		onMoveNoteFocus={page.moveNoteFocus}
 		onSelectNote={(id) => void page.selectNote(id)}
 		onChangePage={page.changeNotePage}
-		onInsertSyntax={(before, after, placeholder) => void page.insertSyntax(before, after, placeholder)}
-		onPrefixLine={(prefix) => void page.prefixLine(prefix)}
 		onContentWidthChange={page.setContentWidth}
 	/>
 

@@ -17,7 +17,6 @@
 }
 .icon-button,
 .sidebar-switcher button,
-.formatting-tools button,
 .collapsed-sidebar-toggle {
   border: 0;
   background: transparent;
@@ -303,36 +302,6 @@
   font-weight: 650;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-}
-.formatting-tools button {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 11px;
-  text-align: left;
-}
-.formatting-tools button:hover {
-  border-color: var(--line-hover);
-  color: var(--ink);
-}
-.formatting-tools {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-.formatting-tools button {
-  height: 38px;
-  padding: 0 10px;
-}
-.formatting-tools button span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .document-details {
   padding: 11px;
