@@ -581,6 +581,13 @@ test("keeps the editor usable and pauses GitHub features offline", async ({ cont
 test("searches note titles and Markdown content", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  const filesPanel = page.locator(".files-panel");
+  const childOrder = await filesPanel.evaluate((panel) =>
+    ["search-box", "file-toolbar", "note-list"].map((className) =>
+      [...panel.children].findIndex((child) => child.classList.contains(className)),
+    ),
+  );
+  expect(childOrder).toEqual([0, 1, 2]);
 
   await page.getByRole("button", { name: "New note" }).click();
   await expect(page.getByRole("button", { name: "Untitled", exact: true })).toHaveAttribute(
