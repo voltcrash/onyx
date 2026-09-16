@@ -156,6 +156,15 @@ function joinPath(parent: string, name: string): string {
   return [...pathParts(parent), name].join("/");
 }
 
+function isPathWithin(path: string, parent: string): boolean {
+  return !parent || path === parent || path.startsWith(`${parent}/`);
+}
+
+function movePath(path: string, from: string, to: string): string {
+  const suffix = path.slice(from.length).replace(/^\/+/, "");
+  return suffix ? joinPath(to, suffix) : to;
+}
+
 function basename(path: string): string {
   return pathParts(path).at(-1) ?? "";
 }
@@ -1398,48 +1407,134 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     try {
       const name = normalizeFolderName(requestedName);
       const nextPath = joinPath(parentPath(path), name);
-      if (nextPath.toLocaleLowerCase() === path.toLocaleLowerCase()) return;
-      const notes = await vault.listNotes();
-      const existingFolders = await vault.listFolders();
-      const isInside = (candidate: string): boolean =>
-        candidate === path || candidate.startsWith(`${path}/`);
-      const nextFolders = existingFolders.map((folder) =>
-        isInside(folder.path)
-          ? {
-              ...folder,
-              path: `${nextPath}${folder.path.slice(path.length)}`,
-              updatedAt: new Date().toISOString(),
-            }
-          : folder,
-      );
-      const folderPaths = new Set(nextFolders.map((folder) => folder.path.toLocaleLowerCase()));
-      if (folderPaths.size !== nextFolders.length)
-        throw new Error(`A folder named “${name}” already exists here.`);
+      await relocateFolder(path, nextPath);
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "The folder could not be renamed.";
+    }
+  }
 
-      const affectedNotes = notes.filter((note) => {
-        const folder = noteFolderPath(note);
-        return folder === path || folder.startsWith(`${path}/`);
+  async function moveFile(noteId: string, targetFolder: string): Promise<void> {
+    if (!vault || transferState === "working") return;
+    if (!(await settleDraft())) return;
+    try {
+      const note = await vault.getNote(noteId);
+      if (!note) return;
+      const currentPath = noteFilePath(note);
+      const nextPath = joinPath(targetFolder, basename(currentPath));
+      if (nextPath.toLocaleLowerCase() === currentPath.toLocaleLowerCase()) return;
+      const notes = await vault.listNotes();
+      if (
+        notes.some(
+          (candidate) =>
+            candidate.id !== noteId &&
+            noteFilePath(candidate).toLocaleLowerCase() === nextPath.toLocaleLowerCase(),
+        )
+      ) {
+        throw new Error(`A file named “${basename(nextPath)}” already exists here.`);
+      }
+      const saved = await vault.saveNote({
+        id: note.id,
+        title: note.title,
+        markdown: note.markdown,
+        sourcePath: nextPath,
+        expectedRevision: note.revision,
       });
-      for (const note of affectedNotes) {
-        const sourcePath = noteFilePath(note);
-        const nextSourcePath = `${nextPath}${sourcePath.slice(path.length)}`;
-        await vault.saveNote({
-          id: note.id,
-          title: note.title,
-          markdown: (await vault.getNote(note.id))?.markdown ?? "",
-          sourcePath: nextSourcePath,
-          expectedRevision: note.revision,
-        });
-      }
-      await vault.saveFolders(nextFolders);
-      folders = nextFolders;
-      if (activeNoteId && affectedNotes.some((note) => note.id === activeNoteId)) {
-        await loadNote(activeNoteId);
-      }
+      await vault.moveAttachmentSourcePaths(note.id, parentPath(currentPath), parentPath(nextPath));
+      if (activeNoteId === noteId) await loadNote(saved.id);
       storageError = "";
       await refreshFileTree();
     } catch (error) {
-      storageError = error instanceof Error ? error.message : "The folder could not be renamed.";
+      storageError = error instanceof Error ? error.message : "The file could not be moved.";
+    }
+  }
+
+  async function relocateFolder(path: string, nextPath: string): Promise<void> {
+    if (!vault || nextPath.toLocaleLowerCase() === path.toLocaleLowerCase()) return;
+    const notes = await vault.listNotes();
+    const existingFolders = await vault.listFolders();
+    const affectedNotes = notes.filter((note) => isPathWithin(noteFolderPath(note), path));
+    const affectedNoteIds = new Set(affectedNotes.map((note) => note.id));
+    const nextFolders = existingFolders.map((folder) =>
+      isPathWithin(folder.path, path)
+        ? {
+            ...folder,
+            path: movePath(folder.path, path, nextPath),
+            updatedAt: new Date().toISOString(),
+          }
+        : folder,
+    );
+
+    const currentFolderPaths = new Set([
+      ...existingFolders.map((folder) => folder.path),
+      ...notes.map((note) => noteFolderPath(note)).filter(Boolean),
+    ]);
+    const nextFolderPaths = new Set<string>();
+    for (const currentFolderPath of currentFolderPaths) {
+      const candidate = isPathWithin(currentFolderPath, path)
+        ? movePath(currentFolderPath, path, nextPath)
+        : currentFolderPath;
+      const key = candidate.toLocaleLowerCase();
+      if (nextFolderPaths.has(key)) {
+        throw new Error(`A folder named “${basename(nextPath)}” already exists here.`);
+      }
+      nextFolderPaths.add(key);
+    }
+
+    const movedNotePaths = new Set<string>();
+    for (const note of affectedNotes) {
+      const sourcePath = noteFilePath(note);
+      const nextSourcePath = movePath(sourcePath, path, nextPath);
+      const key = nextSourcePath.toLocaleLowerCase();
+      if (
+        movedNotePaths.has(key) ||
+        notes.some(
+          (candidate) =>
+            !affectedNoteIds.has(candidate.id) &&
+            noteFilePath(candidate).toLocaleLowerCase() === key,
+        )
+      ) {
+        throw new Error(`A file named “${basename(nextSourcePath)}” already exists here.`);
+      }
+      movedNotePaths.add(key);
+    }
+
+    const fullNotes = await Promise.all(
+      affectedNotes.map(async (note) => {
+        const fullNote = await vault!.getNote(note.id);
+        if (!fullNote)
+          throw new Error(`The file “${basename(noteFilePath(note))}” could not be moved.`);
+        return { note, markdown: fullNote.markdown };
+      }),
+    );
+    for (const { note, markdown: noteMarkdown } of fullNotes) {
+      const sourcePath = noteFilePath(note);
+      await vault.saveNote({
+        id: note.id,
+        title: note.title,
+        markdown: noteMarkdown,
+        sourcePath: movePath(sourcePath, path, nextPath),
+        expectedRevision: note.revision,
+      });
+      await vault.moveAttachmentSourcePaths(note.id, path, nextPath);
+    }
+    await vault.saveFolders(nextFolders);
+    folders = nextFolders;
+    if (activeNoteId && affectedNoteIds.has(activeNoteId)) await loadNote(activeNoteId);
+    storageError = "";
+    await refreshFileTree();
+  }
+
+  async function moveFolder(path: string, targetParent: string): Promise<void> {
+    if (!vault || transferState === "working") return;
+    if (isPathWithin(targetParent, path)) {
+      storageError = "A folder cannot be moved into itself or one of its children.";
+      return;
+    }
+    if (!(await settleDraft())) return;
+    try {
+      await relocateFolder(path, joinPath(targetParent, basename(path)));
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "The folder could not be moved.";
     }
   }
 
@@ -1494,7 +1589,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   async function copyFilePath(path: string): Promise<void> {
-    await copyToClipboard(() => navigator.clipboard.writeText(path), "file path");
+    await copyToClipboard(() => navigator.clipboard.writeText(path), "relative path");
   }
 
   async function importFolder(files: FileList | null): Promise<void> {
@@ -3271,6 +3366,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     createFolder,
     renameFile,
     renameFolder,
+    moveFile,
+    moveFolder,
     deleteFile,
     deleteFolder,
     copyFilePath,

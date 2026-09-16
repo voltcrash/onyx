@@ -560,7 +560,7 @@ test("searches note titles and Markdown content", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Project Aurora/ })).toBeVisible();
 });
 
-test("creates folders and files and opens the file context menu", async ({ page }) => {
+test("creates, moves, and manages folders and files", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
@@ -581,10 +581,35 @@ test("creates folders and files and opens the file context menu", async ({ page 
   const file = page.getByRole("button", { name: "Today", exact: true });
   await expect(file).toBeVisible();
 
+  await page.getByRole("button", { name: "New folder", exact: true }).click();
+  const archiveName = page.getByRole("textbox", { name: "Folder name" });
+  await archiveName.fill("Archive");
+  await archiveName.press("Enter");
+  const archive = page.getByRole("button", { name: "Archive", exact: true });
+  await expect(archive).toBeVisible();
+  expect(
+    await page.locator("[data-folder-path]").evaluateAll((rows) =>
+      rows
+        .map((row) => row.getAttribute("data-folder-path"))
+        .filter((path): path is string => path !== null)
+        .filter((path) => !path.includes("/")),
+    ),
+  ).toEqual(["Archive", "Plans"]);
+
+  await file.dragTo(archive);
+  await expect(file).toHaveAttribute("data-file-path", "Archive/Today.md");
+  await file.dragTo(folder);
+  await expect(file).toHaveAttribute("data-file-path", "Plans/Today.md");
+  await folder.dragTo(archive);
+  await expect(file).toHaveAttribute("data-file-path", "Archive/Plans/Today.md");
+
   await file.click({ button: "right" });
   const fileMenu = page.getByRole("menu", { name: "File actions" });
   await expect(fileMenu.getByRole("menuitem", { name: "Open", exact: true })).toBeVisible();
   await expect(fileMenu.getByRole("menuitem", { name: "Rename", exact: true })).toBeVisible();
+  await expect(
+    fileMenu.getByRole("menuitem", { name: "Copy relative path", exact: true }),
+  ).toBeVisible();
   await expect(fileMenu.getByRole("menuitem", { name: "Delete", exact: true })).toBeVisible();
   page.once("dialog", (dialog) => dialog.accept());
   await fileMenu.getByRole("menuitem", { name: "Delete", exact: true }).click();

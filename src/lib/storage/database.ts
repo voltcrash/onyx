@@ -174,6 +174,26 @@ export class VaultDatabase {
     return attachments;
   }
 
+  async updateAttachments(attachments: AttachmentMetadata[]): Promise<void> {
+    if (attachments.length === 0) return;
+    const transaction = this.#database.transaction(["attachments", "settings"], "readwrite");
+    const complete = transactionDone(transaction);
+    try {
+      const store = transaction.objectStore("attachments");
+      for (const attachment of attachments) store.put(attachment);
+      await advanceVaultVersion(transaction);
+      await complete;
+    } catch (error) {
+      try {
+        transaction.abort();
+      } catch {
+        // The transaction may already have completed or aborted.
+      }
+      await complete.catch(() => undefined);
+      throw error;
+    }
+  }
+
   getSearchDocuments(): Promise<SearchDocument[]> {
     return this.#getAll<SearchDocument>("searchDocuments");
   }

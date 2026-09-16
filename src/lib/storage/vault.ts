@@ -34,6 +34,15 @@ import { VaultConflictError } from "./types.js";
 const DEFAULT_DATABASE_NAME = "onyx-vault";
 const DEFAULT_DIRECTORY_NAME = "onyx";
 
+function isPathWithin(path: string, parent: string): boolean {
+  return !parent || path === parent || path.startsWith(`${parent}/`);
+}
+
+function moveSourcePath(path: string, from: string, to: string): string {
+  const suffix = path.slice(from.length).replace(/^\/+/, "");
+  return to ? (suffix ? `${to}/${suffix}` : to) : suffix;
+}
+
 export class Vault {
   readonly #database: VaultDatabase;
   readonly #filesystem: MirroredVaultFilesystem;
@@ -493,6 +502,25 @@ export class Vault {
 
   listAttachments(noteId?: string): Promise<AttachmentMetadata[]> {
     return this.#withLock(() => this.#database.getAttachments(noteId));
+  }
+
+  async moveAttachmentSourcePaths(noteId: string, from: string, to: string): Promise<void> {
+    await this.#withLock(async () => {
+      const attachments = await this.#database.getAttachments(noteId);
+      const now = new Date().toISOString();
+      const moved = attachments.map((attachment) => {
+        const sourcePath = attachment.sourcePath;
+        if (!sourcePath || !isPathWithin(sourcePath, from)) return attachment;
+        return {
+          ...attachment,
+          sourcePath: moveSourcePath(sourcePath, from, to),
+          updatedAt: now,
+        };
+      });
+      if (moved.every((attachment, index) => attachment === attachments[index])) return;
+      await this.#database.updateAttachments(moved);
+      this.#publish({ kind: "note", noteId });
+    });
   }
 
   async search(query: string, tags: string[] = []): Promise<VaultSearchResult[]> {

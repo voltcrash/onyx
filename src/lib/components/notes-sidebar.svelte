@@ -44,6 +44,8 @@
 		onCreateFolder: (parentPath: string, name: string) => void;
 		onRenameFile: (id: string, name: string) => void;
 		onRenameFolder: (path: string, name: string) => void;
+		onMoveFile: (id: string, folderPath: string) => void;
+		onMoveFolder: (path: string, parentPath: string) => void;
 		onDeleteFile: (id: string) => void;
 		onDeleteFolder: (path: string) => void;
 		onCopyFilePath: (path: string) => void;
@@ -64,7 +66,7 @@
 	let {
 		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, searchQuery, notePage, notePageCount, saveState, notesLoaded, paletteOpen, settingsOpen,
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, renderedPaneVisible, renderedReadOnly, wordCount, readingMinutes, contentWidth,
-		searchInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onDeleteFile, onDeleteFolder, onCopyFilePath, onSearch,
+		searchInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, onCopyFilePath, onSearch,
 		onOpenPalette, onOpenSettings, onOpenStorageSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage,
 		onInsertSyntax, onPrefixLine, onToggleRenderedReadOnly, onContentWidthChange
 	}: Props = $props();
@@ -82,12 +84,17 @@
 		| { action: 'create-folder'; parentPath: string }
 		| { action: 'rename-file'; id: string }
 		| { action: 'rename-folder'; path: string };
+	type DraggedEntry =
+		| { kind: 'file'; id: string; path: string }
+		| { kind: 'folder'; path: string };
 
 	let collapsedFolders = $state<Set<string>>(new Set());
 	let contextMenu = $state<ContextMenu>();
 	let naming = $state<NamingState>();
 	let draftName = $state('');
 	let namingInput = $state<HTMLInputElement>();
+	let draggedEntry = $state<DraggedEntry>();
+	let dropTargetPath = $state<string>();
 
 	function pathParts(path: string): string[] {
 		return path.split('/').filter(Boolean);
@@ -264,6 +271,80 @@
 		collapsedFolders = next;
 	}
 
+	function canDropOn(entry: DraggedEntry, targetPath: string): boolean {
+		if (entry.kind === 'file') return parentPath(entry.path) !== targetPath;
+		return entry.path !== targetPath && !targetPath.startsWith(`${entry.path}/`) && parentPath(entry.path) !== targetPath;
+	}
+
+	function startDrag(event: DragEvent, entry: DraggedEntry): void {
+		if (transferState === 'working') {
+			event.preventDefault();
+			return;
+		}
+		draggedEntry = entry;
+		event.dataTransfer?.setData('application/x-onyx-file-tree', JSON.stringify(entry));
+		event.dataTransfer?.setData('text/plain', entry.path);
+		if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+	}
+
+	function endDrag(): void {
+		draggedEntry = undefined;
+		dropTargetPath = undefined;
+	}
+
+	function isFileTreeRow(target: EventTarget | null): boolean {
+		return target instanceof HTMLElement && Boolean(target.closest('.file-tree-row'));
+	}
+
+	function keepDropTarget(event: DragEvent, path: string): void {
+		const entry = draggedEntry;
+		if (!entry || !canDropOn(entry, path)) return;
+		event.preventDefault();
+		event.stopPropagation();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+		dropTargetPath = path;
+	}
+
+	function clearDropTarget(event: DragEvent, path: string): void {
+		const currentTarget = event.currentTarget;
+		const relatedTarget = event.relatedTarget;
+		if (currentTarget instanceof HTMLElement && relatedTarget instanceof HTMLElement && currentTarget.contains(relatedTarget)) return;
+		if (dropTargetPath === path) dropTargetPath = undefined;
+	}
+
+	function dropOnFolder(event: DragEvent, path: string): void {
+		const entry = draggedEntry;
+		if (!entry || !canDropOn(entry, path)) return;
+		event.preventDefault();
+		event.stopPropagation();
+		endDrag();
+		if (entry.kind === 'file') onMoveFile(entry.id, path);
+		else onMoveFolder(entry.path, path);
+	}
+
+	function keepRootDropTarget(event: DragEvent): void {
+		if (!draggedEntry || isFileTreeRow(event.target)) return;
+		event.preventDefault();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+		dropTargetPath = '';
+	}
+
+	function clearRootDropTarget(event: DragEvent): void {
+		const currentTarget = event.currentTarget;
+		const relatedTarget = event.relatedTarget;
+		if (currentTarget instanceof HTMLElement && relatedTarget instanceof HTMLElement && currentTarget.contains(relatedTarget)) return;
+		if (dropTargetPath === '') dropTargetPath = undefined;
+	}
+
+	function dropOnRoot(event: DragEvent): void {
+		const entry = draggedEntry;
+		if (!entry || isFileTreeRow(event.target)) return;
+		event.preventDefault();
+		endDrag();
+		if (entry.kind === 'file') onMoveFile(entry.id, '');
+		else onMoveFolder(entry.path, '');
+	}
+
 	function contextAction(action: () => void): void {
 		closeContextMenu();
 		action();
@@ -348,7 +429,7 @@
 				</div>
 			</div>
 			<label class="search-box"><Search size={15} /><input bind:this={searchInput} type="search" placeholder="Search all notes" value={searchQuery} oninput={(event) => onSearch(event.currentTarget.value)} /><button type="button" aria-label="Open the command palette" aria-haspopup="dialog" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Run a command (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><kbd>{formatShortcut(shortcuts.commandPalette, primaryModifier).replaceAll(' ', '')}</kbd></button></label>
-			<nav class="note-list" bind:this={noteList} oncontextmenu={openRootContextMenu}>
+			<nav class="note-list" class:drop-target={dropTargetPath === ''} bind:this={noteList} oncontextmenu={openRootContextMenu} ondragover={keepRootDropTarget} ondragleave={(event) => clearRootDropTarget(event)} ondrop={dropOnRoot}>
 				{#if naming && (naming.action === 'create-file' || naming.action === 'create-folder')}
 					<div class="file-naming-row" style={`--tree-depth: ${naming.parentPath ? 1 : 0}`}>
 						{#if naming.action === 'create-folder'}<Folder size={16} />{:else}<FileText size={16} />{/if}
@@ -366,11 +447,11 @@
 				{:else}
 					{#each treeRows as row (row.key)}
 						{#if row.kind === 'folder'}
-							<button class="file-tree-row folder-row" style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} disabled={transferState === 'working'} onclick={() => toggleFolder(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)}>
+							<button class="file-tree-row folder-row" class:drop-target={dropTargetPath === row.path} class:dragging={draggedEntry?.kind === 'folder' && draggedEntry.path === row.path} data-folder-path={row.path} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Drag to move folder" draggable="true" disabled={transferState === 'working'} onclick={() => toggleFolder(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)} ondragstart={(event) => startDrag(event, { kind: 'folder', path: row.path })} ondragend={endDrag} ondragover={(event) => keepDropTarget(event, row.path)} ondragleave={(event) => clearDropTarget(event, row.path)} ondrop={(event) => dropOnFolder(event, row.path)}>
 								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Folder size={16} /><span class="file-tree-name">{row.label}</span>
 							</button>
 						{:else}
-							<button class="file file-tree-row" class:active={row.result.note.id === activeNoteId} style={`--tree-depth: ${row.depth}`} aria-current={row.result.note.id === activeNoteId ? 'true' : undefined} disabled={transferState === 'working'} onkeydown={onMoveNoteFocus} onclick={() => onSelectNote(row.result.note.id)} oncontextmenu={(event) => openFileContextMenu(event, row.result)}>
+							<button class="file file-tree-row" class:active={row.result.note.id === activeNoteId} class:dragging={draggedEntry?.kind === 'file' && draggedEntry.id === row.result.note.id} data-file-path={row.path} style={`--tree-depth: ${row.depth}`} aria-current={row.result.note.id === activeNoteId ? 'true' : undefined} title="Drag to move file" draggable="true" disabled={transferState === 'working'} onkeydown={onMoveNoteFocus} onclick={() => onSelectNote(row.result.note.id)} oncontextmenu={(event) => openFileContextMenu(event, row.result)} ondragstart={(event) => startDrag(event, { kind: 'file', id: row.result.note.id, path: row.path })} ondragend={endDrag}>
 								<FileText size={16} /><span>{#if naming?.action === 'rename-file' && naming.id === row.result.note.id}<input class="file-inline-input" bind:this={namingInput} bind:value={draftName} aria-label="File name" spellcheck="false" onblur={commitNaming} onkeydown={handleNamingKeydown} />{:else}<strong>{row.label}</strong>{#if searchQuery}<small>{row.result.excerpt || 'Title match'}</small>{/if}{/if}</span>{#if row.result.note.id === activeNoteId}<i></i>{/if}
 							</button>
 						{/if}
@@ -386,13 +467,13 @@
 						{#if contextMenu.kind === 'folder'}
 							<div class="file-context-divider"></div>
 							<button role="menuitem" disabled={transferState === 'working'} onclick={contextRenameFolder}><Pencil size={15} /><span>Rename</span></button>
-							<button role="menuitem" onclick={contextCopyPath}><Copy size={15} /><span>Copy path</span></button>
+							<button role="menuitem" onclick={contextCopyPath}><Copy size={15} /><span>Copy relative path</span></button>
 							<button role="menuitem" class="danger" disabled={transferState === 'working'} onclick={contextDeleteFolder}><Trash2 size={15} /><span>Delete</span></button>
 						{/if}
 					{:else}
 						<button role="menuitem" disabled={transferState === 'working'} onclick={contextOpenFile}><FileText size={15} /><span>Open</span></button>
 						<button role="menuitem" disabled={transferState === 'working'} onclick={contextRenameFile}><Pencil size={15} /><span>Rename</span></button>
-						<button role="menuitem" onclick={contextCopyPath}><Copy size={15} /><span>Copy path</span></button>
+						<button role="menuitem" onclick={contextCopyPath}><Copy size={15} /><span>Copy relative path</span></button>
 						<div class="file-context-divider"></div>
 						<button role="menuitem" class="danger" disabled={transferState === 'working'} onclick={contextDeleteFile}><Trash2 size={15} /><span>Delete</span></button>
 					{/if}

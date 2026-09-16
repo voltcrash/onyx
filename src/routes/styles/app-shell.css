@@ -517,8 +517,27 @@
   overflow-y: auto;
   scrollbar-width: thin;
 }
+.sidebar .note-list.drop-target {
+  outline: 1px dashed var(--focus-border);
+  outline-offset: -2px;
+  border-radius: 8px;
+  background: var(--subtle);
+}
 .file-tree-row {
   --tree-depth: 0;
+}
+.file-tree-row[draggable="true"] {
+  cursor: grab;
+}
+.file-tree-row[draggable="true"]:active {
+  cursor: grabbing;
+}
+.file-tree-row.dragging {
+  opacity: 0.45;
+}
+.file-tree-row.drop-target {
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1px var(--focus-border);
 }
 .folder-row {
   width: 100%;
@@ -539,6 +558,11 @@
 .folder-row:hover:not(:disabled) {
   background: var(--subtle);
   color: var(--ink);
+}
+.folder-row.drop-target,
+.folder-row.drop-target:hover:not(:disabled) {
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1px var(--focus-border);
 }
 .folder-row:disabled {
   cursor: not-allowed;
