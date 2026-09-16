@@ -113,9 +113,10 @@
 			liveLineRects = [];
 			return;
 		}
-		const renderedContent = liveEditorContainer.querySelector<HTMLElement>('.live-rendered-content');
+		const liveEditor = liveEditorContainer;
+		const renderedContent = liveEditor.querySelector<HTMLElement>('.live-rendered-content');
 		if (!renderedContent) return;
-		const containerRect = liveEditorContainer.getBoundingClientRect();
+		const containerRect = liveEditor.getBoundingClientRect();
 		const rects: Array<LiveLineRect | undefined> = Array.from({ length: markdownLines.length });
 		const renderedBlocks = [...renderedContent.children] as HTMLElement[];
 
@@ -166,7 +167,7 @@
 					if (!row) return;
 					const rowRect = row.getBoundingClientRect();
 					if (tableColumnWidths.length) {
-						const overlayRow = liveEditorContainer.querySelector<HTMLElement>(
+						const overlayRow = liveEditor.querySelector<HTMLElement>(
 							`[data-live-line="${index}"] .live-table-row`,
 						);
 						overlayRow?.style.setProperty(
@@ -605,7 +606,7 @@
 			{:else}
 				<div class="live-editor prose" bind:this={liveEditorContainer} aria-label="Page editor">
 					<div class="live-rendered-content" aria-hidden="true">{@html renderedMarkdown}</div>
-					<div class="live-editing-overlay" contenteditable={saveState !== 'loading' && transferState !== 'working'} role="textbox" tabindex="-1" aria-label="Page editor" aria-multiline="true" spellcheck="true" onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} oninput={onRenderedInput} onkeydown={onRenderedLineKeydown}>
+					<div class="live-editing-overlay" contenteditable={saveState !== 'loading' && transferState !== 'working'} role="textbox" tabindex="-1" aria-label="Page editor" aria-multiline="true" spellcheck="true" onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} oninput={(event) => onRenderedInput(event as unknown as InputEvent)} onkeydown={onRenderedLineKeydown}>
 						{#each markdownLines as line, index}
 							<div class="live-editable-line {liveLineKind(line, index)}" class:active={index === liveLine} style={liveLineStyle(index)} role="textbox" tabindex="0" aria-label={`Markdown line ${index + 1}`} aria-multiline="false" data-live-line={index} data-code-language={liveCodeLanguage(index) || undefined} onfocus={() => onLiveLineFocus(index)}>{@html renderEditableLine(line, index)}</div>
 						{/each}

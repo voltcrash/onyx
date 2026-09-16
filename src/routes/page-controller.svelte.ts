@@ -106,6 +106,7 @@ import {
   type ColorTheme,
   type FontChoices,
   type FontRole,
+  type FolderMetadata,
   type GithubBackupCommit,
   type GithubBackupState,
   type GithubUser,
@@ -128,6 +129,7 @@ const DEFAULT_CONTENT_WIDTH = 700;
 // Matches the single-column breakpoint in the responsive stylesheet.
 const NARROW_VIEWPORT = "(max-width: 900px)";
 const EDITOR_HISTORY_LIMIT = 200;
+const MARKDOWN_EXTENSION = ".md";
 
 type EditorSurface = "source" | "rendered";
 
@@ -140,6 +142,66 @@ interface EditorSelection {
 interface EditorHistoryEntry {
   markdown: string;
   selection?: EditorSelection;
+}
+
+function pathParts(path: string): string[] {
+  return path.split("/").filter(Boolean);
+}
+
+function parentPath(path: string): string {
+  return pathParts(path).slice(0, -1).join("/");
+}
+
+function joinPath(parent: string, name: string): string {
+  return [...pathParts(parent), name].join("/");
+}
+
+function basename(path: string): string {
+  return pathParts(path).at(-1) ?? "";
+}
+
+function noteFilePath(note: Pick<NoteMetadata, "sourcePath" | "title">): string {
+  const sourcePath = note.sourcePath?.trim();
+  if (sourcePath) return sourcePath;
+  const fallback = (note.title || "Untitled").replace(/[\\/]+/g, "-").trim() || "Untitled";
+  return `${fallback}${MARKDOWN_EXTENSION}`;
+}
+
+function noteFolderPath(note: Pick<NoteMetadata, "sourcePath" | "title">): string {
+  return parentPath(noteFilePath(note));
+}
+
+function fileStem(path: string): string {
+  return basename(path).replace(/\.(?:md|markdown)$/i, "") || "Untitled";
+}
+
+function hasControlCharacters(value: string): boolean {
+  for (const character of value) {
+    if (character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127) return true;
+  }
+  return false;
+}
+
+function normalizeFileName(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "." || trimmed === ".." || /[\\/]/.test(trimmed)) {
+    throw new Error("File names cannot be empty or contain slashes.");
+  }
+  if (hasControlCharacters(trimmed)) {
+    throw new Error("File names cannot contain control characters.");
+  }
+  return /\.(?:md|markdown)$/i.test(trimmed) ? trimmed : `${trimmed}${MARKDOWN_EXTENSION}`;
+}
+
+function normalizeFolderName(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "." || trimmed === ".." || /[\\/]/.test(trimmed)) {
+    throw new Error("Folder names cannot be empty or contain slashes.");
+  }
+  if (hasControlCharacters(trimmed)) {
+    throw new Error("Folder names cannot contain control characters.");
+  }
+  return trimmed;
 }
 
 export function createPageController() {
@@ -179,6 +241,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let previewMarkdown = $state(initialMarkdown);
   let lastSavedMarkdown = $state(initialMarkdown);
   let results = $state<VaultSearchResult[]>([]);
+  let folders = $state<FolderMetadata[]>([]);
   let notePage = $state(0);
   let searchQuery = $state("");
   let singlePaneMode = $state(false);
@@ -830,6 +893,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     searchQuery = "";
     notePage = 0;
     results = [];
+    folders = [];
     paletteNotes = [];
     activeNoteId = "";
     noteRevision = 0;
@@ -958,6 +1022,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       githubBackup = result.state;
       pendingBackupCount = (await vault.getPendingBackupOperations()).length;
       const notes = await vault.listNotes();
+      folders = await vault.listFolders();
       searchQuery = "";
       await loadNote(notes[0].id);
       await runSearch("");
@@ -997,6 +1062,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       unsubscribeVault?.();
       unsubscribeVault = vault.subscribe(queueRemoteVaultSync);
       let notes = await vault.listNotes();
+      folders = await vault.listFolders();
       if (notes.length === 0) {
         const legacyDraft =
           activeVault && isDefaultVault(activeVault) ? await readLegacyDraft() : "";
@@ -1222,20 +1288,213 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     await loadNote(id);
   }
 
-  async function createNote(): Promise<void> {
+  async function refreshFileTree(): Promise<NoteMetadata[]> {
+    if (!vault) return [];
+    const notes = await vault.listNotes();
+    folders = await vault.listFolders();
+    paletteNotes = notes;
+    await runSearch(searchQuery);
+    return notes;
+  }
+
+  async function createNote(parent = "", requestedName = ""): Promise<void> {
     if (!vault || transferState === "working") return;
     saveState = "loading";
     if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
     try {
-      const note = await vault.saveNote({ title: "Untitled", markdown: "" });
+      const name = normalizeFileName(requestedName || "Untitled");
+      const path = joinPath(parent, name);
+      const notes = await vault.listNotes();
+      if (
+        notes.some((note) => noteFilePath(note).toLocaleLowerCase() === path.toLocaleLowerCase())
+      ) {
+        throw new Error(`A file named “${name}” already exists here.`);
+      }
+      const note = await vault.saveNote({
+        title: fileStem(name),
+        markdown: "",
+        sourcePath: path,
+      });
       searchQuery = "";
       await loadNote(note.id);
-      await runSearch("");
+      await refreshFileTree();
       requestAnimationFrame(() => editor?.focus());
     } catch (error) {
       storageError = error instanceof Error ? error.message : "A new note could not be created.";
       saveState = "error";
     }
+  }
+
+  async function createFolder(parent = "", requestedName = ""): Promise<void> {
+    if (!vault || transferState === "working") return;
+    try {
+      const name = normalizeFolderName(requestedName || "New folder");
+      const path = joinPath(parent, name);
+      const notes = await vault.listNotes();
+      const existingFolders = await vault.listFolders();
+      const noteFolders = notes.flatMap((note) => {
+        const folder = noteFolderPath(note);
+        return folder ? [folder] : [];
+      });
+      if (
+        [...existingFolders.map((folder) => folder.path), ...noteFolders].some(
+          (candidate) => candidate.toLocaleLowerCase() === path.toLocaleLowerCase(),
+        )
+      ) {
+        throw new Error(`A folder named “${name}” already exists here.`);
+      }
+      const now = new Date().toISOString();
+      const folder: FolderMetadata = {
+        id: crypto.randomUUID(),
+        path,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await vault.saveFolders([...existingFolders, folder]);
+      searchQuery = "";
+      await refreshFileTree();
+      storageError = "";
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "A new folder could not be created.";
+    }
+  }
+
+  async function renameFile(noteId: string, requestedName: string): Promise<void> {
+    if (!vault || transferState === "working") return;
+    if (!(await settleDraft())) return;
+    try {
+      const note = await vault.getNote(noteId);
+      if (!note) return;
+      const name = normalizeFileName(requestedName);
+      const path = joinPath(noteFolderPath(note), name);
+      const notes = await vault.listNotes();
+      if (
+        notes.some(
+          (candidate) =>
+            candidate.id !== noteId &&
+            noteFilePath(candidate).toLocaleLowerCase() === path.toLocaleLowerCase(),
+        )
+      ) {
+        throw new Error(`A file named “${name}” already exists here.`);
+      }
+      const saved = await vault.saveNote({
+        id: note.id,
+        title: note.title,
+        markdown: note.markdown,
+        sourcePath: path,
+        expectedRevision: note.revision,
+      });
+      if (activeNoteId === noteId) await loadNote(saved.id);
+      storageError = "";
+      await refreshFileTree();
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "The file could not be renamed.";
+    }
+  }
+
+  async function renameFolder(path: string, requestedName: string): Promise<void> {
+    if (!vault || transferState === "working") return;
+    if (!(await settleDraft())) return;
+    try {
+      const name = normalizeFolderName(requestedName);
+      const nextPath = joinPath(parentPath(path), name);
+      if (nextPath.toLocaleLowerCase() === path.toLocaleLowerCase()) return;
+      const notes = await vault.listNotes();
+      const existingFolders = await vault.listFolders();
+      const isInside = (candidate: string): boolean =>
+        candidate === path || candidate.startsWith(`${path}/`);
+      const nextFolders = existingFolders.map((folder) =>
+        isInside(folder.path)
+          ? {
+              ...folder,
+              path: `${nextPath}${folder.path.slice(path.length)}`,
+              updatedAt: new Date().toISOString(),
+            }
+          : folder,
+      );
+      const folderPaths = new Set(nextFolders.map((folder) => folder.path.toLocaleLowerCase()));
+      if (folderPaths.size !== nextFolders.length)
+        throw new Error(`A folder named “${name}” already exists here.`);
+
+      const affectedNotes = notes.filter((note) => {
+        const folder = noteFolderPath(note);
+        return folder === path || folder.startsWith(`${path}/`);
+      });
+      for (const note of affectedNotes) {
+        const sourcePath = noteFilePath(note);
+        const nextSourcePath = `${nextPath}${sourcePath.slice(path.length)}`;
+        await vault.saveNote({
+          id: note.id,
+          title: note.title,
+          markdown: (await vault.getNote(note.id))?.markdown ?? "",
+          sourcePath: nextSourcePath,
+          expectedRevision: note.revision,
+        });
+      }
+      await vault.saveFolders(nextFolders);
+      folders = nextFolders;
+      if (activeNoteId && affectedNotes.some((note) => note.id === activeNoteId)) {
+        await loadNote(activeNoteId);
+      }
+      storageError = "";
+      await refreshFileTree();
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "The folder could not be renamed.";
+    }
+  }
+
+  async function deleteFile(noteId: string): Promise<void> {
+    if (!vault || transferState === "working") return;
+    const note = await vault.getNote(noteId);
+    if (!note || !window.confirm(`Delete “${fileStem(noteFilePath(note))}”?`)) return;
+    if (!(await settleDraft())) return;
+    try {
+      await vault.deleteNote(noteId);
+      const notes = await refreshFileTree();
+      if (activeNoteId === noteId) {
+        if (notes[0]) await loadNote(notes[0].id);
+        else resetActiveNote();
+      }
+      storageError = "";
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "The file could not be deleted.";
+    }
+  }
+
+  async function deleteFolder(path: string): Promise<void> {
+    if (!vault || transferState === "working") return;
+    const notes = await vault.listNotes();
+    const affectedNotes = notes.filter((note) => {
+      const folder = noteFolderPath(note);
+      return folder === path || folder.startsWith(`${path}/`);
+    });
+    const label = basename(path);
+    const suffix = affectedNotes.length
+      ? ` and its ${affectedNotes.length} ${affectedNotes.length === 1 ? "file" : "files"}`
+      : "";
+    if (!window.confirm(`Delete folder “${label}”${suffix}?`)) return;
+    if (!(await settleDraft())) return;
+    try {
+      for (const note of affectedNotes) await vault.deleteNote(note.id);
+      const existingFolders = await vault.listFolders();
+      const nextFolders = existingFolders.filter(
+        (folder) => folder.path !== path && !folder.path.startsWith(`${path}/`),
+      );
+      await vault.saveFolders(nextFolders);
+      folders = nextFolders;
+      const remaining = await refreshFileTree();
+      if (activeNoteId && affectedNotes.some((note) => note.id === activeNoteId)) {
+        if (remaining[0]) await loadNote(remaining[0].id);
+        else resetActiveNote();
+      }
+      storageError = "";
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "The folder could not be deleted.";
+    }
+  }
+
+  async function copyFilePath(path: string): Promise<void> {
+    await copyToClipboard(() => navigator.clipboard.writeText(path), "file path");
   }
 
   async function importFolder(files: FileList | null): Promise<void> {
@@ -2724,6 +2983,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get visibleResults() {
       return visibleResults;
     },
+    get folders() {
+      return folders;
+    },
     get searchQuery() {
       return searchQuery;
     },
@@ -3005,6 +3267,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     disconnectGitHub,
     moveNoteFocus,
     selectNote,
+    createFile: createNote,
+    createFolder,
+    renameFile,
+    renameFolder,
+    deleteFile,
+    deleteFolder,
+    copyFilePath,
     changeNotePage,
     saveDraft,
     openVault,

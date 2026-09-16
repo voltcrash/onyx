@@ -560,6 +560,37 @@ test("searches note titles and Markdown content", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Project Aurora/ })).toBeVisible();
 });
 
+test("creates folders and files and opens the file context menu", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  await page.getByRole("button", { name: "New folder", exact: true }).click();
+  const folderName = page.getByRole("textbox", { name: "Folder name" });
+  await folderName.fill("Plans");
+  await folderName.press("Enter");
+  const folder = page.getByRole("button", { name: "Plans", exact: true });
+  await expect(folder).toBeVisible();
+
+  await folder.click({ button: "right" });
+  const folderMenu = page.getByRole("menu", { name: "File actions" });
+  await expect(folderMenu.getByRole("menuitem", { name: "New file", exact: true })).toBeVisible();
+  await folderMenu.getByRole("menuitem", { name: "New file", exact: true }).click();
+  const fileName = page.getByRole("textbox", { name: "File name" });
+  await fileName.fill("Today.md");
+  await fileName.press("Enter");
+  const file = page.getByRole("button", { name: "Today", exact: true });
+  await expect(file).toBeVisible();
+
+  await file.click({ button: "right" });
+  const fileMenu = page.getByRole("menu", { name: "File actions" });
+  await expect(fileMenu.getByRole("menuitem", { name: "Open", exact: true })).toBeVisible();
+  await expect(fileMenu.getByRole("menuitem", { name: "Rename", exact: true })).toBeVisible();
+  await expect(fileMenu.getByRole("menuitem", { name: "Delete", exact: true })).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept());
+  await fileMenu.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  await expect(file).toBeHidden();
+});
+
 test("uses the first Markdown heading for notes with front matter", async ({ page }) => {
   await page.goto("/");
   const markdown = page.getByRole("textbox", { name: "Markdown editor" });
