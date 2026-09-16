@@ -2,6 +2,7 @@ import { readLocalStorage, writeLocalStorage } from "./browser-storage.js";
 
 export const shortcutActions = [
   { id: "commandPalette", label: "Command palette" },
+  { id: "findInNote", label: "Find in note" },
   { id: "searchNotes", label: "Search all notes" },
   { id: "newNote", label: "New note" },
   { id: "saveNote", label: "Save note" },
@@ -38,6 +39,7 @@ const STORAGE_KEY = "onyx:keyboard-shortcuts";
 
 export const defaultKeyboardShortcuts: KeyboardShortcuts = {
   commandPalette: { key: "k", primary: true },
+  findInNote: { key: "f", primary: true },
   searchNotes: { key: "f", primary: true, shift: true },
   newNote: { key: "Enter", primary: true },
   saveNote: { key: "s", primary: true },

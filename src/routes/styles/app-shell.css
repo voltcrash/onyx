@@ -272,6 +272,220 @@
   display: flex;
   flex-direction: column;
 }
+.find-panel {
+  overflow-y: auto;
+  padding: 1px 4px 18px;
+  scrollbar-width: thin;
+}
+.find-heading,
+.find-title,
+.find-navigation,
+.find-options,
+.find-replace-actions {
+  display: flex;
+  align-items: center;
+}
+.find-heading {
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 3px 18px;
+}
+.find-title {
+  min-width: 0;
+  gap: 8px;
+  color: var(--accent-quiet);
+}
+.find-title > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.find-title strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.find-title span {
+  color: var(--faint);
+  font-size: 10px;
+}
+.find-close {
+  width: 29px;
+  height: 29px;
+  flex: 0 0 auto;
+}
+.find-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+}
+.find-field {
+  min-width: 0;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--faint);
+}
+.find-field:focus-within {
+  border-color: var(--focus-border);
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+.find-field input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+}
+.find-field input::placeholder {
+  color: var(--faint);
+}
+.find-field input::-webkit-search-cancel-button {
+  display: none;
+}
+.find-clear {
+  width: 18px;
+  height: 20px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+.find-clear:hover {
+  color: var(--ink);
+}
+.find-count {
+  flex: 0 0 auto;
+  color: var(--faint);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.find-navigation {
+  gap: 2px;
+}
+.find-navigation button {
+  width: 29px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.find-navigation button:hover:not(:disabled) {
+  border-color: var(--line-hover);
+  color: var(--ink);
+}
+.find-navigation button:disabled {
+  color: var(--faint);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.find-fields .replace-field {
+  grid-column: 1 / -1;
+}
+.find-replace-glyph,
+.find-option-glyph {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+.find-replace-glyph {
+  width: 15px;
+  font-size: 16px;
+}
+.find-options {
+  gap: 6px;
+  margin-top: 11px;
+}
+.find-options button {
+  min-width: 0;
+  flex: 1;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.find-options button:hover,
+.find-options button.active {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent-quiet);
+}
+.find-options button.active .find-option-glyph {
+  color: var(--accent);
+}
+.find-replace-actions {
+  gap: 6px;
+  margin-top: 9px;
+}
+.find-replace-actions button {
+  min-width: 0;
+  flex: 1;
+  height: 32px;
+  padding: 0 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 11px;
+}
+.find-replace-actions button:first-child {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent-quiet);
+}
+.find-replace-actions button:hover:not(:disabled) {
+  border-color: var(--line-hover);
+  color: var(--ink);
+}
+.find-replace-actions button:first-child:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.find-replace-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.find-status {
+  margin-top: 18px;
+  padding: 12px 4px 0;
+  border-top: 1px solid var(--line-soft);
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.45;
+}
 .document-details {
   margin: 14px 4px 0;
   padding: 11px;

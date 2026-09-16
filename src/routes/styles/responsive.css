@@ -80,6 +80,10 @@
     padding: 28px 22px 70px;
     font-size: 14px;
   }
+  .source-find-layer > div {
+    padding: 28px 22px 70px;
+    font-size: 14px;
+  }
   .live-editor {
     padding: 28px 25px 70px;
   }

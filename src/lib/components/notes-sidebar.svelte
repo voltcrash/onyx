@@ -7,6 +7,7 @@
 	import type { FolderMetadata, VaultSearchResult } from '$lib/storage/types';
 	import GithubIcon from './github-icon.svelte';
 	import VaultSwitcher from './vault-switcher.svelte';
+	import FindReplace from './find-replace.svelte';
 	import type { GithubState, SaveState, TransferState } from './app-types';
 	import type { PaletteControl, PaletteItem } from './command-palette.svelte';
 
@@ -18,6 +19,14 @@
 		visibleResults: VaultSearchResult[];
 		folders: FolderMetadata[];
 		searchQuery: string;
+		findOpen: boolean;
+		findQuery: string;
+		findReplacement: string;
+		findMatchCase: boolean;
+		findWholeWord: boolean;
+		findMatchCount: number;
+		activeFindMatch: number;
+		findCanEdit: boolean;
 		notePage: number;
 		notePageCount: number;
 		saveState: SaveState;
@@ -37,6 +46,8 @@
 		contentWidth: number;
 		paletteItems: PaletteItem[];
 		searchInput?: HTMLInputElement;
+		findInput?: HTMLInputElement;
+		findReplaceInput?: HTMLInputElement;
 		noteList?: HTMLElement;
 		onToggleSidebar: () => void;
 		onSelectVault: (id: string) => void;
@@ -53,6 +64,15 @@
 		onDeleteFolder: (path: string) => void;
 		onCopyFilePath: (path: string) => void;
 		onSearch: (value: string) => void;
+		onFindQueryChange: (value: string) => void;
+		onFindReplacementChange: (value: string) => void;
+		onFindMatchCaseChange: (value: boolean) => void;
+		onFindWholeWordChange: (value: boolean) => void;
+		onFindPrevious: () => void;
+		onFindNext: () => void;
+		onFindReplace: () => void;
+		onFindReplaceAll: () => void;
+		onCloseFind: () => void;
 		onOpenPalette: () => void;
 		onClosePalette: () => void;
 		onOpenSettings: () => void;
@@ -65,9 +85,10 @@
 	}
 
 	let {
-		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, searchQuery, notePage, notePageCount, saveState, notesLoaded, paletteOpen, paletteItems, settingsOpen,
+		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, searchQuery, findOpen, findQuery, findReplacement, findMatchCase, findWholeWord, findMatchCount, activeFindMatch, findCanEdit, notePage, notePageCount, saveState, notesLoaded, paletteOpen, paletteItems, settingsOpen,
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, wordCount, readingMinutes, contentWidth,
-		searchInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, onCopyFilePath, onSearch,
+		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, onCopyFilePath, onSearch,
+		onFindQueryChange, onFindReplacementChange, onFindMatchCaseChange, onFindWholeWordChange, onFindPrevious, onFindNext, onFindReplace, onFindReplaceAll, onCloseFind,
 		onOpenPalette, onClosePalette, onOpenSettings, onOpenStorageSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage,
 		onContentWidthChange
 	}: Props = $props();
@@ -430,6 +451,28 @@
 		{#await import('$lib/components/command-palette.svelte') then { default: CommandPalette }}
 			<CommandPalette items={paletteItems} controls={paletteControls} onClose={onClosePalette} />
 		{/await}
+	{:else if findOpen}
+		<FindReplace
+			query={findQuery}
+			replacement={findReplacement}
+			matchCase={findMatchCase}
+			wholeWord={findWholeWord}
+			matchCount={findMatchCount}
+			activeMatch={activeFindMatch}
+			canEdit={findCanEdit}
+			{primaryModifier}
+			bind:findInput
+			bind:replaceInput={findReplaceInput}
+			onQueryChange={onFindQueryChange}
+			onReplacementChange={onFindReplacementChange}
+			onMatchCaseChange={onFindMatchCaseChange}
+			onWholeWordChange={onFindWholeWordChange}
+			onPrevious={onFindPrevious}
+			onNext={onFindNext}
+			onReplace={onFindReplace}
+			onReplaceAll={onFindReplaceAll}
+			onClose={onCloseFind}
+		/>
 	{:else}
 		<div class="sidebar-panel files-panel">
 			<label class="search-box"><Search size={15} /><input bind:this={searchInput} type="search" placeholder="Search all notes" value={searchQuery} oninput={(event) => onSearch(event.currentTarget.value)} /><button type="button" aria-label="Open the command palette" aria-haspopup="listbox" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Run a command (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><kbd>{formatShortcut(shortcuts.commandPalette, primaryModifier).replaceAll(' ', '')}</kbd></button></label>

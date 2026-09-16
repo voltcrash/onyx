@@ -21,6 +21,14 @@
 		visibleResults={page.visibleResults}
 		folders={page.folders}
 		searchQuery={page.searchQuery}
+		findOpen={page.findOpen}
+		findQuery={page.findQuery}
+		findReplacement={page.findReplacement}
+		findMatchCase={page.findMatchCase}
+		findWholeWord={page.findWholeWord}
+		findMatchCount={page.findMatchCount}
+		activeFindMatch={page.activeFindMatch}
+		findCanEdit={page.findCanEdit}
 		notePage={page.notePage}
 		notePageCount={page.notePageCount}
 		saveState={page.saveState}
@@ -40,6 +48,8 @@
 		readingMinutes={page.readingMinutes}
 		contentWidth={page.contentWidth}
 		bind:searchInput={page.searchInput}
+		bind:findInput={page.findInput}
+		bind:findReplaceInput={page.findReplaceInput}
 		bind:noteList={page.noteList}
 		onToggleSidebar={page.toggleSidebar}
 		onSelectVault={(id) => void page.selectVault(id)}
@@ -56,6 +66,15 @@
 		onDeleteFolder={(path) => void page.deleteFolder(path)}
 		onCopyFilePath={(path) => void page.copyFilePath(path)}
 		onSearch={page.queueSearch}
+		onFindQueryChange={page.setFindQuery}
+		onFindReplacementChange={page.setFindReplacement}
+		onFindMatchCaseChange={page.setFindMatchCase}
+		onFindWholeWordChange={page.setFindWholeWord}
+		onFindPrevious={page.previousFindMatch}
+		onFindNext={page.nextFindMatch}
+		onFindReplace={page.replaceFind}
+		onFindReplaceAll={page.replaceAllFind}
+		onCloseFind={page.closeFind}
 		onOpenPalette={() => void page.openPalette()}
 		onClosePalette={page.closePalette}
 		onOpenSettings={() => page.openSettings('editor')}
@@ -84,6 +103,10 @@
 		renderedReadOnly={page.renderedReadOnly}
 		markdown={page.markdown}
 		markdownLines={page.markdownLines}
+		findOpen={page.findOpen}
+		findQuery={page.findQuery}
+		findMatches={page.findMatches}
+		activeFindMatch={page.activeFindMatch}
 		liveLine={page.liveLine}
 		saveState={page.saveState}
 		transferState={page.transferState}

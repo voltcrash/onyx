@@ -123,6 +123,7 @@ import {
   PLAIN_TEXT_SEPARATOR,
   joinTextBlocks,
 } from "$lib/markdown-output-types";
+import { findTextMatches, type FindMatch } from "$lib/find-replace";
 import { outputFileName } from "$lib/output-utils";
 import type { MarkdownTransferFile } from "$lib/markdown-transfer";
 import { onMount, tick } from "svelte";
@@ -296,6 +297,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let liveEditorContainer: HTMLDivElement | undefined = $state();
   let liveLine = $state(0);
   let searchInput: HTMLInputElement | undefined = $state();
+  let findOpen = $state(false);
+  let findQuery = $state("");
+  let findReplacement = $state("");
+  let findMatchCase = $state(false);
+  let findWholeWord = $state(false);
+  let findMatchIndex = $state(-1);
+  let findInput: HTMLInputElement | undefined = $state();
+  let findReplaceInput: HTMLInputElement | undefined = $state();
+  let findOpener: HTMLElement | undefined = $state();
+  let findNavigationSequence = 0;
   let sidebarOpen = $state(false);
   let storageError = $state("");
   let storageNotice = $state("");
@@ -396,6 +407,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   });
   const noteTitle = $derived(titleFromMarkdown(markdown));
   const markdownLines = $derived(markdown.split("\n"));
+  const findMatches = $derived.by(() =>
+    findTextMatches(markdown, findQuery, {
+      matchCase: findMatchCase,
+      wholeWord: findWholeWord,
+    }),
+  );
+  const activeFindMatch = $derived(
+    findMatches.length > 0 ? Math.min(Math.max(findMatchIndex, 0), findMatches.length - 1) : -1,
+  );
+  const findCanEdit = $derived(saveState !== "loading" && transferState !== "working");
   const liveCodeLines = $derived.by(() => {
     let fence = "";
     return markdownLines.map((line) => {
@@ -490,6 +511,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       keywords: "write store",
       disabled: saveState === "saving" || transferState === "working",
       run: () => void saveDraft(),
+    },
+    {
+      id: "find-in-note",
+      group: "Actions",
+      label: "Find in note",
+      shortcut: shortcutLabel("findInNote"),
+      icon: Search,
+      keywords: "find replace current note text",
+      run: () => openFind(),
     },
     {
       id: "search",
@@ -3100,7 +3130,189 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     });
   }
 
+  function findSurface(): EditorSurface {
+    return isRenderedEditingActive() ? "rendered" : "source";
+  }
+
+  function keepFindInputFocused(): void {
+    requestAnimationFrame(() => {
+      if (findOpen && findInput && document.activeElement !== findInput) findInput.focus();
+    });
+  }
+
+  function focusFindMatch(index: number, sequence = findNavigationSequence): void {
+    if (!findOpen || sequence !== findNavigationSequence) return;
+    const match = findMatches[index];
+    if (!match) return;
+
+    if (findSurface() === "rendered" && liveEditorContainer) {
+      const position = markdownPosition(match.start);
+      liveLine = position.line;
+      void tick().then(() => {
+        if (
+          sequence !== findNavigationSequence ||
+          !findOpen ||
+          !liveEditorContainer ||
+          renderedReadOnly
+        )
+          return;
+        const target = liveEditorContainer.querySelector<HTMLElement>(
+          `[data-live-line="${position.line}"]`,
+        );
+        if (!target) return;
+        focusRenderedLine(position.line, position.position);
+        setRenderedGlobalSelection(match.start, match.end);
+        keepFindInputFocused();
+      });
+      return;
+    }
+
+    if (singlePaneMode && !outputPaneVisible) showOnlyPane("source");
+    if (!editor) {
+      if (outputView !== "markdown") setOutputView("markdown");
+      void tick().then(() => focusFindMatch(index, sequence));
+      return;
+    }
+
+    const target = editor;
+    target.focus({ preventScroll: true });
+    target.setSelectionRange(match.start, match.end);
+    const line = markdown.slice(0, match.start).split("\n").length - 1;
+    const lineHeight = Number.parseFloat(getComputedStyle(target).lineHeight) || 24;
+    const paddingTop = Number.parseFloat(getComputedStyle(target).paddingTop) || 0;
+    const targetTop = paddingTop + line * lineHeight;
+    target.scrollTop = Math.max(
+      0,
+      Math.min(target.scrollHeight - target.clientHeight, targetTop - target.clientHeight / 2),
+    );
+    keepFindInputFocused();
+  }
+
+  function queueFindNavigation(): void {
+    const sequence = ++findNavigationSequence;
+    void tick().then(() => {
+      if (sequence !== findNavigationSequence || !findOpen || activeFindMatch < 0) return;
+      focusFindMatch(activeFindMatch, sequence);
+    });
+  }
+
+  function setFindQuery(value: string): void {
+    findQuery = value;
+    findMatchIndex = value ? 0 : -1;
+    queueFindNavigation();
+  }
+
+  function setFindReplacement(value: string): void {
+    findReplacement = value;
+  }
+
+  function setFindMatchCase(value: boolean): void {
+    findMatchCase = value;
+    findMatchIndex = findQuery ? 0 : -1;
+    queueFindNavigation();
+  }
+
+  function setFindWholeWord(value: boolean): void {
+    findWholeWord = value;
+    findMatchIndex = findQuery ? 0 : -1;
+    queueFindNavigation();
+  }
+
+  function moveFindMatch(direction: 1 | -1): void {
+    if (findMatches.length === 0) return;
+    const current = activeFindMatch < 0 ? (direction > 0 ? -1 : 0) : activeFindMatch;
+    findMatchIndex = (current + direction + findMatches.length) % findMatches.length;
+    queueFindNavigation();
+  }
+
+  function openFind(): void {
+    if (findOpen) {
+      requestAnimationFrame(() => {
+        findInput?.focus();
+        findInput?.select();
+      });
+      return;
+    }
+    findOpener = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+    const selection = getEditorSelection();
+    if (selection && selection.start !== selection.end) {
+      findQuery = markdown.slice(selection.start, selection.end);
+    }
+    findMatchIndex = findQuery ? 0 : -1;
+    sidebarCollapsed = false;
+    if (window.innerWidth <= 900) sidebarOpen = true;
+    findOpen = true;
+    const sequence = ++findNavigationSequence;
+    void tick().then(() => {
+      if (sequence !== findNavigationSequence || !findOpen) return;
+      findInput?.focus();
+      findInput?.select();
+      if (activeFindMatch >= 0) focusFindMatch(activeFindMatch, sequence);
+    });
+  }
+
+  function closeFind(): void {
+    if (!findOpen) return;
+    findOpen = false;
+    findNavigationSequence += 1;
+    const opener = findOpener;
+    findOpener = undefined;
+    restoreModalFocus(opener);
+  }
+
+  function replaceFind(): void {
+    const match = findMatches[activeFindMatch];
+    if (!match || !findCanEdit) return;
+    const surface = findSurface();
+    rememberEditorState({ start: match.start, end: match.end, surface });
+    const nextValue = markdown.slice(0, match.start) + findReplacement + markdown.slice(match.end);
+    const nextMatches = findTextMatches(nextValue, findQuery, {
+      matchCase: findMatchCase,
+      wholeWord: findWholeWord,
+    });
+    const nextIndex = nextMatches.findIndex(
+      (candidate) => candidate.start >= match.start + findReplacement.length,
+    );
+    updateMarkdown(nextValue);
+    findMatchIndex = nextMatches.length === 0 ? -1 : nextIndex >= 0 ? nextIndex : 0;
+    queueFindNavigation();
+  }
+
+  function replaceAllFind(): void {
+    if (findMatches.length === 0 || !findCanEdit) return;
+    const matches = findMatches;
+    rememberEditorState({
+      start: matches[0]!.start,
+      end: matches.at(-1)!.end,
+      surface: findSurface(),
+    });
+    let nextValue = markdown;
+    for (let index = matches.length - 1; index >= 0; index -= 1) {
+      const match = matches[index]!;
+      nextValue = `${nextValue.slice(0, match.start)}${findReplacement}${nextValue.slice(match.end)}`;
+    }
+    const nextMatches = findTextMatches(nextValue, findQuery, {
+      matchCase: findMatchCase,
+      wholeWord: findWholeWord,
+    });
+    updateMarkdown(nextValue);
+    findMatchIndex = nextMatches.length > 0 ? 0 : -1;
+    queueFindNavigation();
+  }
+
   function handleShortcut(event: KeyboardEvent): void {
+    if (event.defaultPrevented) return;
+    if (
+      findOpen &&
+      !event.altKey &&
+      (event.key === "F3" ||
+        (event.key.toLowerCase() === "g" &&
+          (primaryModifier === "meta" ? event.metaKey : event.ctrlKey)))
+    ) {
+      event.preventDefault();
+      moveFindMatch(event.shiftKey ? -1 : 1);
+      return;
+    }
     const action = (Object.keys(shortcuts) as ShortcutAction[]).find((candidate) =>
       shortcutMatchesEvent(shortcuts[candidate], event, primaryModifier),
     );
@@ -3128,10 +3340,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       !shortcut?.alt
     )
       return;
-    if (paletteOpen && action !== "commandPalette" && action !== "closePanel") return;
+    if (paletteOpen && action !== "commandPalette" && action !== "closePanel") {
+      event.preventDefault();
+      return;
+    }
     event.preventDefault();
 
     if (action === "commandPalette") togglePalette();
+    else if (action === "findInNote") openFind();
     else if (action === "saveNote" && transferState !== "working") void saveDraft();
     else if (action === "newNote" && transferState !== "working") void createNote();
     else if (action === "searchNotes" || action === "focusSearch") focusSearch();
@@ -3145,6 +3361,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       if (restoreModalOpen && restoreState !== "restoring") restoreModalOpen = false;
       else if (settingsOpen) closeSettings();
       else if (paletteOpen) closePalette();
+      else if (findOpen) closeFind();
       else if (sidebarOpen) sidebarOpen = false;
       else if (searchQuery) {
         queueSearch("");
@@ -3494,6 +3711,36 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get searchQuery() {
       return searchQuery;
     },
+    get findOpen() {
+      return findOpen;
+    },
+    set findOpen(value: boolean) {
+      findOpen = value;
+    },
+    get findQuery() {
+      return findQuery;
+    },
+    get findReplacement() {
+      return findReplacement;
+    },
+    get findMatchCase() {
+      return findMatchCase;
+    },
+    get findWholeWord() {
+      return findWholeWord;
+    },
+    get findMatchCount() {
+      return findMatches.length;
+    },
+    get activeFindMatch() {
+      return activeFindMatch;
+    },
+    get findMatches(): FindMatch[] {
+      return findMatches;
+    },
+    get findCanEdit() {
+      return findCanEdit;
+    },
     get notePage() {
       return notePage;
     },
@@ -3743,6 +3990,18 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     set searchInput(value: HTMLInputElement | undefined) {
       searchInput = value;
     },
+    get findInput() {
+      return findInput;
+    },
+    set findInput(value: HTMLInputElement | undefined) {
+      findInput = value;
+    },
+    get findReplaceInput() {
+      return findReplaceInput;
+    },
+    set findReplaceInput(value: HTMLInputElement | undefined) {
+      findReplaceInput = value;
+    },
     get noteList() {
       return noteList;
     },
@@ -3766,6 +4025,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     renameVault,
     createNote,
     queueSearch,
+    openFind,
+    closeFind,
+    setFindQuery,
+    setFindReplacement,
+    setFindMatchCase,
+    setFindWholeWord,
+    previousFindMatch: () => moveFindMatch(-1),
+    nextFindMatch: () => moveFindMatch(1),
+    replaceFind,
+    replaceAllFind,
     openPalette,
     closePalette,
     openSettings,
