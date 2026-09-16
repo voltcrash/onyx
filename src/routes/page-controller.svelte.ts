@@ -808,7 +808,28 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     );
   }
 
+  function revealStartupShell(): void {
+    const startupShell = document.getElementById("startup-shell");
+    if (!startupShell) return;
+
+    const app = document.querySelector<HTMLElement>(".app");
+    const sidebar = document.querySelector<HTMLElement>(".sidebar");
+    const editorShell = document.querySelector<HTMLElement>(".editor-shell");
+    const appReady = app && getComputedStyle(app).display === "grid";
+    const sidebarDisplay = sidebar ? getComputedStyle(sidebar).display : "";
+    const sidebarReady = sidebarDisplay === "flex" || sidebarDisplay === "none";
+    const editorReady = editorShell && getComputedStyle(editorShell).display === "grid";
+
+    if (!appReady || !sidebarReady || !editorReady) {
+      window.requestAnimationFrame(revealStartupShell);
+      return;
+    }
+
+    startupShell.remove();
+  }
+
   onMount(() => {
+    revealStartupShell();
     const registry = readVaultRegistry();
     vaults = registry.vaults;
     activeVaultId = registry.activeId;

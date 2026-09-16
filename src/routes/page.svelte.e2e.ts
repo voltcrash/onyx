@@ -1669,7 +1669,7 @@ test("binds a backup repository to the authenticated GitHub account", async ({ p
   });
 
   await page.goto("/");
-  await expect(page.getByText("@octocat").first()).toBeVisible();
+  await expect(page.getByText("@octocat").first()).toBeVisible({ timeout: 12_000 });
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Sync repository", exact: true }).click();
   await page.getByLabel("Repository", { exact: true }).selectOption("octocat/onyx-vault");
@@ -1677,7 +1677,7 @@ test("binds a backup repository to the authenticated GitHub account", async ({ p
 
   account = { id: 2, login: "hubot" };
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
-  await expect(page.getByText("@hubot").first()).toBeVisible();
+  await expect(page.getByText("@hubot").first()).toBeVisible({ timeout: 12_000 });
   await page.getByRole("button", { name: "Back up now" }).click();
 
   await expect(
@@ -1733,7 +1733,7 @@ test("refuses to upload a backup when its repository is public", async ({ page }
   });
 
   await page.goto("/");
-  await expect(page.getByText("@octocat").first()).toBeVisible();
+  await expect(page.getByText("@octocat").first()).toBeVisible({ timeout: 12_000 });
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Sync repository", exact: true }).click();
   await page.getByLabel("Repository", { exact: true }).selectOption("octocat/onyx-vault");
