@@ -12,7 +12,7 @@
 	<meta name="description" content="A fast, local-first Markdown editor with full-text search that works offline." />
 </svelte:head>
 
-<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} inert={page.paletteOpen || page.settingsOpen || page.restoreModalOpen}>
+<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:palette-open={page.paletteOpen} inert={page.settingsOpen || page.restoreModalOpen}>
 	<NotesSidebar
 		vaults={page.vaults}
 		activeVaultId={page.activeVaultId}
@@ -28,6 +28,7 @@
 		transferState={page.transferState}
 		storageError={page.storageError}
 		paletteOpen={page.paletteOpen}
+		paletteItems={page.paletteItems}
 		settingsOpen={page.settingsOpen}
 		isOnline={page.isOnline}
 		githubState={page.githubState}
@@ -56,14 +57,13 @@
 		onCopyFilePath={(path) => void page.copyFilePath(path)}
 		onSearch={page.queueSearch}
 		onOpenPalette={() => void page.openPalette()}
+		onClosePalette={page.closePalette}
 		onOpenSettings={() => page.openSettings('editor')}
 		onOpenStorageSettings={() => page.openSettings('storage')}
 		onDisconnectGithub={() => void page.disconnectGitHub()}
 		onMoveNoteFocus={page.moveNoteFocus}
 		onSelectNote={(id) => void page.selectNote(id)}
 		onChangePage={page.changeNotePage}
-		onInsertSyntax={(before, after, placeholder) => void page.insertSyntax(before, after, placeholder)}
-		onPrefixLine={(prefix) => void page.prefixLine(prefix)}
 		onContentWidthChange={page.setContentWidth}
 	/>
 
@@ -136,12 +136,6 @@
 	onDismissBackup={page.dismissBackupMessage}
 	onDismissTransfer={page.dismissTransferMessage}
 />
-
-	{#if page.paletteOpen}
-	{#await import('$lib/components/command-palette.svelte') then { default: CommandPalette }}
-		<CommandPalette items={page.paletteItems} onClose={page.closePalette} />
-	{/await}
-	{/if}
 
 {#if page.settingsOpen}
 	{#await import('$lib/components/settings-dialog.svelte') then { default: SettingsDialog }}

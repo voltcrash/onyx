@@ -12,35 +12,53 @@
 		disabled?: boolean;
 		run: () => void;
 	}
+
+	export interface PaletteControl {
+		id: string;
+		group: string;
+		label: string;
+		keywords?: string;
+		hint?: string;
+		icon: LucideIcon;
+		control: 'range';
+		value: number;
+		min: number;
+		max: number;
+		step: number;
+		onChange: (value: number) => void;
+	}
+
+	type PaletteEntry = PaletteItem | PaletteControl;
 </script>
 
 <script lang="ts">
 	import { CornerDownLeft, Search } from '@lucide/svelte';
-	import { manageModalFocus } from '$lib/modal-focus';
 
 	interface Props {
 		items: PaletteItem[];
+		controls?: PaletteControl[];
 		onClose: () => void;
 	}
 
-	let { items, onClose }: Props = $props();
+	let { items, controls = [], onClose }: Props = $props();
 
 	let query = $state('');
 	let activeIndex = $state(0);
 	let input: HTMLInputElement | undefined = $state();
 	let list: HTMLElement | undefined = $state();
 
+	const entries = $derived<PaletteEntry[]>([...items, ...controls]);
 	const filtered = $derived(
 		query.trim()
-			? items
+			? entries
 					.map((item) => ({ item, score: score(item, query.trim().toLowerCase()) }))
 					.filter((entry) => entry.score > 0)
 					.sort((a, b) => b.score - a.score)
 					.map((entry) => entry.item)
-			: items
+			: entries
 	);
 	const groups = $derived(
-		filtered.reduce<Array<{ name: string; items: PaletteItem[] }>>((accumulator, item) => {
+		filtered.reduce<Array<{ name: string; items: PaletteEntry[] }>>((accumulator, item) => {
 			const group = accumulator.find((candidate) => candidate.name === item.group);
 			if (group) group.items.push(item);
 			else accumulator.push({ name: item.group, items: [item] });
@@ -48,7 +66,7 @@
 		}, [])
 	);
 	// Flattened in render order so arrow navigation and the active index always agree.
-	const matches = $derived(groups.flatMap((group) => group.items));
+	const matches = $derived(groups.flatMap((group) => group.items).filter(isPaletteItem));
 
 	$effect(() => {
 		const first = matches.findIndex((item) => !item.disabled);
@@ -59,7 +77,11 @@
 		input?.focus();
 	});
 
-	function score(item: PaletteItem, needle: string): number {
+	function isPaletteItem(item: PaletteEntry): item is PaletteItem {
+		return !('control' in item);
+	}
+
+	function score(item: PaletteEntry, needle: string): number {
 		const haystack = `${item.label} ${item.hint ?? ''} ${item.keywords ?? ''}`.toLowerCase();
 		const label = item.label.toLowerCase();
 		if (label.startsWith(needle)) return 1000 - label.length;
@@ -119,8 +141,8 @@
 	}
 </script>
 
-<div class="palette-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-	<div id="command-palette" class="palette" role="dialog" aria-modal="true" aria-label="Command palette" tabindex="-1" use:manageModalFocus>
+<section id="command-palette" class="palette-panel" role="search" aria-label="Command palette">
+	<div class="palette">
 		<div class="palette-field">
 			<Search size={17} />
 			<input
@@ -137,29 +159,40 @@
 				spellcheck="false"
 				onkeydown={onKeydown}
 			/>
-			<kbd>Esc</kbd>
+			<button type="button" class="palette-dismiss" aria-label="Close command palette" title="Close command palette (Esc)" onclick={onClose}><kbd>Esc</kbd></button>
 		</div>
 
 		<div class="palette-list" id="palette-list" role="listbox" aria-label="Results" bind:this={list}>
 			{#each groups as group (group.name)}
 				<div class="palette-group">{group.name}</div>
 				{#each group.items as item (item.id)}
-					{@const index = matches.indexOf(item)}
-					<button
-						class="palette-item"
-						class:active={index === activeIndex}
-						id={`palette-${item.id}`}
-						type="button"
-						role="option"
-						aria-selected={index === activeIndex}
-						disabled={item.disabled}
-						onmousemove={() => (activeIndex = index)}
-						onclick={() => choose(item)}
-					>
-						<item.icon size={16} />
-						<span><strong>{item.label}</strong>{#if item.hint}<small>{item.hint}</small>{/if}</span>
-						{#if item.shortcut}<kbd>{item.shortcut}</kbd>{/if}
-					</button>
+					{#if item.control === 'range'}
+						<div class="palette-control" role="group" aria-label={item.label} id={`palette-${item.id}`}>
+							<div class="palette-control-header">
+								<item.icon size={16} />
+								<span><strong>{item.label}</strong>{#if item.hint}<small>{item.hint}</small>{/if}</span>
+								<output>{item.value}px</output>
+							</div>
+							<input class="palette-control-input" type="range" min={item.min} max={item.max} step={item.step} value={item.value} aria-label={item.label} oninput={(event) => item.onChange(Number(event.currentTarget.value))} />
+						</div>
+					{:else}
+						{@const index = matches.indexOf(item)}
+						<button
+							class="palette-item"
+							class:active={index === activeIndex}
+							id={`palette-${item.id}`}
+							type="button"
+							role="option"
+							aria-selected={index === activeIndex}
+							disabled={item.disabled}
+							onmousemove={() => (activeIndex = index)}
+							onclick={() => choose(item)}
+						>
+							<item.icon size={16} />
+							<span><strong>{item.label}</strong>{#if item.hint}<small>{item.hint}</small>{/if}</span>
+							{#if item.shortcut}<kbd>{item.shortcut}</kbd>{/if}
+						</button>
+					{/if}
 				{/each}
 			{:else}
 				<div class="palette-empty">
@@ -176,4 +209,4 @@
 			<span><kbd>Esc</kbd> Dismiss</span>
 		</div>
 	</div>
-</div>
+</section>

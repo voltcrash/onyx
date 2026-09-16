@@ -312,7 +312,9 @@ async function renderedSelectionDetails(page: Page) {
   });
 }
 
-test("traps modal focus and returns it to the opener", async ({ page }) => {
+test("opens the command palette in the sidebar and returns focus to the opener", async ({
+  page,
+}) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
@@ -331,9 +333,86 @@ test("traps modal focus and returns it to the opener", async ({ page }) => {
 
   const palette = page.getByRole("button", { name: "Open the command palette" });
   await palette.click();
-  await expect(page.getByRole("combobox", { name: "Search notes and commands" })).toBeFocused();
+  const commandPalette = page.locator("#command-palette");
+  await expect(commandPalette).toBeVisible();
+  await expect(commandPalette).toHaveAttribute("role", "search");
+  await expect(page.locator(".palette-backdrop")).toHaveCount(0);
+  await expect(page.locator(".app")).not.toHaveAttribute("inert");
+  await expect(commandPalette.locator('input[role="combobox"]')).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(palette).toBeFocused();
+});
+
+test("opens the command palette from the keyboard with a collapsed sidebar", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await page.getByRole("button", { name: "Hide notes sidebar" }).click();
+  await expect(page.locator(".app")).toHaveClass(/sidebar-collapsed/);
+  await editor.focus();
+  await page.keyboard.press("ControlOrMeta+K");
+
+  await expect(page.locator(".sidebar #command-palette")).toBeVisible();
+  await expect(page.locator(".app")).not.toHaveClass(/sidebar-collapsed/);
+  await page.keyboard.press("Escape");
+});
+
+test("adjusts content width from the command palette", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  await page.getByRole("button", { name: "Open the command palette" }).click();
+  const slider = page.getByRole("slider", { name: "Content width" });
+  await expect(slider).toHaveValue("700");
+  await slider.evaluate((element) => {
+    const input = element as HTMLInputElement;
+    input.value = "840";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(slider).toHaveValue("840");
+  await expect(page.locator(".editor-shell")).toHaveAttribute("style", /--content-width: 840px/);
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("slider", { name: "Content width" })).toHaveCount(0);
+  await expect(page.getByText("Document", { exact: true })).toBeVisible();
+});
+
+test("offers formatting actions from the command palette", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill("hello");
+  await editor.selectText();
+
+  await page.getByRole("button", { name: "Open the command palette" }).click();
+  for (const label of [
+    "Bold",
+    "Italic",
+    "Strikethrough",
+    "Highlight",
+    "Heading",
+    "Bulleted list",
+    "Numbered list",
+    "Task list",
+    "Quote",
+    "Callout",
+    "Inline code",
+    "Code block",
+    "Link",
+    "Divider",
+    "Math",
+  ]) {
+    await expect(page.getByRole("option", { name: new RegExp(label) })).toBeVisible();
+  }
+
+  await page.getByRole("option", { name: /^Bold/ }).click();
+  await expect(editor).toHaveValue("**hello**");
+
+  await expect(page.getByRole("tab", { name: "Tools" })).toHaveCount(0);
+  await expect(page.locator(".sidebar-switcher")).toHaveCount(0);
+  await expect(page.locator(".formatting-tools")).toHaveCount(0);
+  await expect(page.getByText("Document", { exact: true })).toBeVisible();
 });
 
 test("offers additional color themes and persists the selection", async ({ page }) => {
@@ -1198,7 +1277,6 @@ test("keeps both panes synchronized and lets each pane be tucked away", async ({
   await page.getByRole("button", { name: "Show the output pane" }).click();
   await expect(markdown).toBeVisible();
 
-  await page.getByRole("tab", { name: "Tools" }).click();
   await page.getByRole("textbox", { name: "Markdown line 1" }).fill("# Written on the left");
   await expect(markdown).toHaveValue("# Written on the left");
 
@@ -1764,7 +1842,6 @@ test("imports a Markdown folder and exports its structure and attachments as ZIP
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
   await toggleRenderedReadOnly(page);
-  await page.getByRole("tab", { name: "Files" }).click();
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Import & export", exact: true }).click();

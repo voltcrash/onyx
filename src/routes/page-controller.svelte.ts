@@ -1,5 +1,7 @@
 import {
   ArrowLeftRight,
+  Bold,
+  Braces,
   CloudDownload,
   Code2,
   Columns2,
@@ -12,8 +14,17 @@ import {
   FolderInput,
   FolderOutput,
   HardDrive,
+  Heading2,
+  Highlighter,
+  Italic,
+  Link,
+  List,
+  ListChecks,
+  ListOrdered,
   Keyboard,
   Monitor,
+  MessageSquareWarning,
+  Minus,
   Moon,
   Pilcrow,
   PanelLeft,
@@ -25,8 +36,11 @@ import {
   Save,
   Search,
   Settings,
+  Sigma,
   Sun,
+  Strikethrough,
   Type,
+  Quote,
 } from "@lucide/svelte";
 import type {
   BackupState,
@@ -485,6 +499,128 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       icon: Search,
       keywords: "find full text",
       run: () => focusSearch(),
+    },
+    {
+      id: "bold",
+      group: "Formatting",
+      label: "Bold",
+      shortcut: shortcutLabel("bold"),
+      icon: Bold,
+      keywords: "strong emphasis format",
+      run: () => void insertSyntax("**", "**", "bold text"),
+    },
+    {
+      id: "italic",
+      group: "Formatting",
+      label: "Italic",
+      shortcut: shortcutLabel("italic"),
+      icon: Italic,
+      keywords: "emphasis slant format",
+      run: () => void insertSyntax("_", "_", "italic text"),
+    },
+    {
+      id: "strikethrough",
+      group: "Formatting",
+      label: "Strikethrough",
+      icon: Strikethrough,
+      keywords: "strike delete format",
+      run: () => void insertSyntax("~~", "~~", "struck text"),
+    },
+    {
+      id: "highlight",
+      group: "Formatting",
+      label: "Highlight",
+      icon: Highlighter,
+      keywords: "mark emphasize format",
+      run: () => void insertSyntax("==", "==", "highlighted text"),
+    },
+    {
+      id: "heading",
+      group: "Formatting",
+      label: "Heading",
+      icon: Heading2,
+      keywords: "title header format",
+      run: () => void prefixLine("## "),
+    },
+    {
+      id: "bulleted-list",
+      group: "Formatting",
+      label: "Bulleted list",
+      icon: List,
+      keywords: "unordered list format",
+      run: () => void prefixLine("- "),
+    },
+    {
+      id: "numbered-list",
+      group: "Formatting",
+      label: "Numbered list",
+      icon: ListOrdered,
+      keywords: "ordered list format",
+      run: () => void prefixLine("1. "),
+    },
+    {
+      id: "task-list",
+      group: "Formatting",
+      label: "Task list",
+      icon: ListChecks,
+      keywords: "checklist todo checkbox format",
+      run: () => void prefixLine("- [ ] "),
+    },
+    {
+      id: "quote",
+      group: "Formatting",
+      label: "Quote",
+      icon: Quote,
+      keywords: "blockquote format",
+      run: () => void prefixLine("> "),
+    },
+    {
+      id: "callout",
+      group: "Formatting",
+      label: "Callout",
+      icon: MessageSquareWarning,
+      keywords: "note admonition alert format",
+      run: () => void prefixLine("> [!NOTE]\n> "),
+    },
+    {
+      id: "inline-code",
+      group: "Formatting",
+      label: "Inline code",
+      icon: Code2,
+      keywords: "code format",
+      run: () => void insertSyntax("`", "`", "code"),
+    },
+    {
+      id: "code-block",
+      group: "Formatting",
+      label: "Code block",
+      icon: Braces,
+      keywords: "fenced code format",
+      run: () => void insertSyntax("```\n", "\n```", "code block"),
+    },
+    {
+      id: "link",
+      group: "Formatting",
+      label: "Link",
+      icon: Link,
+      keywords: "url hyperlink format",
+      run: () => void insertSyntax("[", "](https://)", "link text"),
+    },
+    {
+      id: "divider",
+      group: "Formatting",
+      label: "Divider",
+      icon: Minus,
+      keywords: "horizontal rule separator format",
+      run: () => void prefixLine("---\n"),
+    },
+    {
+      id: "math",
+      group: "Formatting",
+      label: "Math",
+      icon: Sigma,
+      keywords: "equation latex formula format",
+      run: () => void insertSyntax("$$\n", "\n$$", "equation"),
     },
     {
       id: "toggle-output-pane",
@@ -3089,6 +3225,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
     paletteNotes = vault ? await vault.listNotes() : [];
     await loadCommandPaletteStyles();
+    sidebarCollapsed = false;
+    if (window.innerWidth <= 900) sidebarOpen = true;
     paletteOpen = true;
   }
 
@@ -3096,7 +3234,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     paletteOpen = false;
     const opener = paletteOpener;
     paletteOpener = undefined;
-    restoreModalFocus(opener);
+    if (opener?.isConnected) {
+      restoreModalFocus(opener);
+      return;
+    }
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('[aria-label="Open the command palette"]')?.focus();
+    });
   }
 
   function moveNoteFocus(event: KeyboardEvent): void {
