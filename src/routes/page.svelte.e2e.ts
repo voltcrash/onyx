@@ -282,6 +282,8 @@ test("traps modal focus and returns it to the opener", async ({ page }) => {
   const settings = page.getByRole("button", { name: "Settings", exact: true });
   await settings.click();
   await expect(settings).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
+  await expect(page.getByText("Preferences", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Close settings" })).toBeFocused();
   await page.keyboard.press("Shift+Tab");
   await page.keyboard.press("Tab");

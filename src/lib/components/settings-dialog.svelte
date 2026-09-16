@@ -282,7 +282,7 @@
 <div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget && clearState !== 'clearing') onClose(); }}>
 	<div id="settings-dialog" class="shortcut-modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1" use:manageModalFocus>
 		<div class="modal-title">
-			<div><span>Preferences</span><h2 id="settings-title">Settings</h2></div>
+			<div><h2 id="settings-title">Settings</h2></div>
 			<button class="icon-button" aria-label="Close settings" onclick={onClose}><X size={18} /></button>
 		</div>
 
