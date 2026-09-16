@@ -80,6 +80,9 @@ kbd {
 .settings-modal {
   width: min(100%, 760px);
 }
+.settings-modal .modal-title h2 {
+  margin-top: 0;
+}
 .settings-body {
   display: grid;
   grid-template-columns: 186px minmax(0, 1fr);
