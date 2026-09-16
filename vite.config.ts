@@ -37,6 +37,7 @@ export default defineConfig({
             "object-src": ["none"],
             "script-src": ["self"],
             "style-src": ["self"],
+            "style-src-attr": ["unsafe-inline"],
             "worker-src": ["self", "blob:"],
           },
         },

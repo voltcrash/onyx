@@ -64,7 +64,7 @@ import {
   type FontChoices,
   type FontRole,
 } from "$lib/fonts";
-import { loadFont, loadFontChoices } from "$lib/font-loader";
+import { loadFont } from "$lib/font-loader";
 import {
   defaultKeyboardShortcuts,
   detectPrimaryModifier,
@@ -116,6 +116,7 @@ import { onMount, tick } from "svelte";
 const NOTE_PAGE_SIZE = 100;
 const PREVIEW_DELAY_MS = 120;
 const DEFAULT_CONTENT_WIDTH = 700;
+const DEFERRED_STARTUP_DELAY_MS = 8_000;
 // Matches the single-column breakpoint in the responsive stylesheet.
 const NARROW_VIEWPORT = "(max-width: 900px)";
 const EDITOR_HISTORY_LIMIT = 200;
@@ -332,7 +333,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let markdownOutputModuleRevision = $state(0);
   let commandPaletteStylesPromise: Promise<void> | undefined;
   let dialogStylesPromise: Promise<void> | undefined;
-  let fontLoadTimer: number | undefined;
   let serviceWorkerTimer: number | undefined;
   let githubRestoreTimer: number | undefined;
   let outputViewRequest = 0;
@@ -790,14 +790,46 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
   }
 
-  function scheduleDeferredFontLoad(): void {
-    fontLoadTimer = window.setTimeout(() => {
-      fontLoadTimer = undefined;
-      void loadFontChoices(fonts).catch(() => undefined);
-    }, 1_500);
+  function applyStoredFontChoices(): void {
+    const storedFonts = readFontChoices();
+    fonts = storedFonts;
+    const customRoles = (Object.keys(storedFonts) as FontRole[]).filter(
+      (role) => storedFonts[role] !== defaultFontChoices[role],
+    );
+    if (customRoles.length === 0) return;
+
+    void Promise.all(customRoles.map((role) => loadFont(storedFonts[role]))).then(
+      () => {
+        if (fonts === storedFonts) applyFontChoices(storedFonts);
+      },
+      () => {
+        if (fonts === storedFonts) applyFontChoices(storedFonts);
+      },
+    );
+  }
+
+  function revealStartupShell(): void {
+    const startupShell = document.getElementById("startup-shell");
+    if (!startupShell) return;
+
+    const app = document.querySelector<HTMLElement>(".app");
+    const sidebar = document.querySelector<HTMLElement>(".sidebar");
+    const editorShell = document.querySelector<HTMLElement>(".editor-shell");
+    const appReady = app && getComputedStyle(app).display === "grid";
+    const sidebarDisplay = sidebar ? getComputedStyle(sidebar).display : "";
+    const sidebarReady = sidebarDisplay === "flex" || sidebarDisplay === "none";
+    const editorReady = editorShell && getComputedStyle(editorShell).display === "grid";
+
+    if (!appReady || !sidebarReady || !editorReady) {
+      window.requestAnimationFrame(revealStartupShell);
+      return;
+    }
+
+    startupShell.remove();
   }
 
   onMount(() => {
+    revealStartupShell();
     const registry = readVaultRegistry();
     vaults = registry.vaults;
     activeVaultId = registry.activeId;
@@ -824,12 +856,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (Number.isFinite(storedContentWidth)) contentWidth = clampContentWidth(storedContentWidth);
     shortcuts = readKeyboardShortcuts();
     theme = readThemePreference();
-    resolvedTheme = applyTheme(theme);
+    resolvedTheme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+    if (document.documentElement.dataset.themePreference !== theme) {
+      resolvedTheme = applyTheme(theme);
+    }
     colorTheme = readColorTheme();
-    applyColorTheme(colorTheme);
-    fonts = readFontChoices();
-    applyFontChoices(fonts);
-    scheduleDeferredFontLoad();
+    if (document.documentElement.dataset.colorTheme !== colorTheme) {
+      applyColorTheme(colorTheme);
+    }
+    applyStoredFontChoices();
     if (outputView !== "markdown" && outputView !== "pdf") {
       void loadMarkdownOutputModule().catch(() => undefined);
     }
@@ -875,7 +910,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       if (saveTimer) window.clearTimeout(saveTimer);
       if (searchTimer) window.clearTimeout(searchTimer);
       if (previewTimer) window.clearTimeout(previewTimer);
-      if (fontLoadTimer) window.clearTimeout(fontLoadTimer);
       if (serviceWorkerTimer) window.clearTimeout(serviceWorkerTimer);
       if (githubRestoreTimer) window.clearTimeout(githubRestoreTimer);
       unsubscribeVault?.();
@@ -895,7 +929,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     serviceWorkerTimer = window.setTimeout(() => {
       serviceWorkerTimer = undefined;
       registerServiceWorker();
-    }, 2_000);
+    }, DEFERRED_STARTUP_DELAY_MS);
   }
 
   function scheduleGithubRestore(): void {
@@ -908,7 +942,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     githubRestoreTimer = window.setTimeout(() => {
       githubRestoreTimer = undefined;
       void restoreGitHub();
-    }, 2_000);
+    }, DEFERRED_STARTUP_DELAY_MS);
   }
 
   async function restoreGitHub(): Promise<void> {
@@ -1366,11 +1400,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const sequence = ++noteLoadSequence;
     const note = await currentVault.getNote(id);
     if (!note) return;
+    const fullMarkdownParser =
+      !markdownModule && needsFullMarkdownParser(note.markdown)
+        ? loadMarkdownModule().catch(() => undefined)
+        : undefined;
     const attachments = await Promise.all(
       (await currentVault.listAttachments(note.id)).map((attachment) =>
         currentVault.getAttachment(attachment.id),
       ),
     );
+    if (fullMarkdownParser) await fullMarkdownParser;
     const nextUrls = attachments.flatMap((attachment): LocalAttachmentUrl[] =>
       attachment
         ? [
@@ -1392,7 +1431,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     activeNoteId = note.id;
     noteRevision = note.revision;
     markdown = note.markdown;
-    maybeLoadFullMarkdownParser(note.markdown);
     updatePreviewImmediately(note.markdown);
     lastSavedMarkdown = note.markdown;
     resetEditorHistory();
@@ -2555,15 +2593,25 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function setFont(role: FontRole, id: string): void {
-    fonts = { ...fonts, [role]: id };
-    applyFontChoices(fonts);
-    void loadFont(id).catch(() => undefined);
+    const nextFonts = { ...fonts, [role]: id };
+    fonts = nextFonts;
+    if (id === defaultFontChoices[role]) {
+      applyFontChoices(nextFonts);
+      return;
+    }
+    void loadFont(id).then(
+      () => {
+        if (fonts === nextFonts) applyFontChoices(nextFonts);
+      },
+      () => {
+        if (fonts === nextFonts) applyFontChoices(nextFonts);
+      },
+    );
   }
 
   function resetFonts(): void {
     fonts = { ...defaultFontChoices };
     applyFontChoices(fonts);
-    void loadFontChoices(fonts).catch(() => undefined);
   }
 
   function shortcutLabel(action: ShortcutAction): string | undefined {
