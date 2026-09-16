@@ -32,7 +32,7 @@
 </script>
 
 <script lang="ts">
-	import { CornerDownLeft, Search, X } from '@lucide/svelte';
+	import { Search, X } from '@lucide/svelte';
 	import { fly } from 'svelte/transition';
 
 	interface Props {
@@ -210,12 +210,6 @@
 					<span>Search by note title, or try a command such as “new note”, “dark”, or “export”.</span>
 				</div>
 			{/each}
-		</div>
-
-		<div class="palette-footer">
-			<span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
-			<span><kbd><CornerDownLeft size={10} /></kbd> Open</span>
-			<span><kbd>Esc</kbd> Dismiss</span>
 		</div>
 	</div>
 </section>
