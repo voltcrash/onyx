@@ -2138,7 +2138,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       writeLocalStorage("onyx:output-view", view);
       return;
     }
-    void loadMarkdownOutputModule().then(
+    void Promise.all([loadMarkdownOutputModule(), loadMarkdownModule()]).then(
       () => {
         if (request !== outputViewRequest) return;
         outputView = view;
