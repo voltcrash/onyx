@@ -340,6 +340,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let fonts = $state<FontChoices>({ ...defaultFontChoices });
   let paletteOpen = $state(false);
   let paletteNotes = $state<NoteMetadata[]>([]);
+  let recentNoteIds = $state<string[]>([]);
   let sidebarCollapsed = $state(false);
   let shortcuts = $state<KeyboardShortcuts>(structuredClone(defaultKeyboardShortcuts));
   let primaryModifier = $state<PrimaryModifier>("meta");
@@ -482,7 +483,21 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   // Narrow viewports show one pane at a time, where neither arrangement is visible.
   const effectivePaneLayout = $derived<PaneLayout>(singlePaneMode ? "columns" : paneLayout);
 
+  const recentNotes = $derived(
+    recentNoteIds
+      .map((id) => paletteNotes.find((note) => note.id === id))
+      .filter((note): note is NoteMetadata => Boolean(note)),
+  );
   const paletteItems = $derived([
+    ...recentNotes.map((note) => ({
+      id: `recent-note-${note.id}`,
+      group: "Recent",
+      label: note.title,
+      hint: note.id === activeNoteId ? "Open note" : formatNoteDate(note.updatedAt),
+      icon: FileText,
+      keywords: "recent note open jump",
+      run: () => void selectNote(note.id),
+    })),
     ...paletteNotes.map((note) => ({
       id: `note-${note.id}`,
       group: "Notes",
@@ -1721,6 +1736,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (id === activeNoteId || transferState === "working") return;
     if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
     await loadNote(id);
+    recentNoteIds = [id, ...recentNoteIds.filter((recentId) => recentId !== id)].slice(0, 8);
   }
 
   async function refreshFileTree(): Promise<NoteMetadata[]> {
