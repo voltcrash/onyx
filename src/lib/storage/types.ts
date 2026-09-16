@@ -16,6 +16,13 @@ export interface Note extends NoteMetadata {
   markdown: string;
 }
 
+export interface FolderMetadata {
+  id: VaultId;
+  path: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface SaveNoteInput {
   id?: VaultId;
   expectedRevision?: number;

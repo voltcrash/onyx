@@ -17,6 +17,7 @@ export type {
   AttachmentMetadata,
   BackupOperation,
   BackupOperationKind,
+  FolderMetadata,
   GithubBackupState,
   ImportAttachmentInput,
   ImportNoteInput,

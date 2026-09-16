@@ -1,6 +1,7 @@
 import type {
   AttachmentMetadata,
   BackupOperation,
+  FolderMetadata,
   GithubBackupState,
   NoteMetadata,
 } from "./types.js";
@@ -9,6 +10,7 @@ import { VaultConflictError } from "./types.js";
 const DATABASE_VERSION = 3;
 const VAULT_VERSION_KEY = "vaultVersion";
 const NATIVE_DIRECTORY_HANDLE_KEY = "nativeDirectoryHandle";
+const FILE_FOLDERS_KEY = "fileFolders";
 
 export interface SearchDocument {
   noteId: string;
@@ -172,6 +174,26 @@ export class VaultDatabase {
     return attachments;
   }
 
+  async updateAttachments(attachments: AttachmentMetadata[]): Promise<void> {
+    if (attachments.length === 0) return;
+    const transaction = this.#database.transaction(["attachments", "settings"], "readwrite");
+    const complete = transactionDone(transaction);
+    try {
+      const store = transaction.objectStore("attachments");
+      for (const attachment of attachments) store.put(attachment);
+      await advanceVaultVersion(transaction);
+      await complete;
+    } catch (error) {
+      try {
+        transaction.abort();
+      } catch {
+        // The transaction may already have completed or aborted.
+      }
+      await complete.catch(() => undefined);
+      throw error;
+    }
+  }
+
   getSearchDocuments(): Promise<SearchDocument[]> {
     return this.#getAll<SearchDocument>("searchDocuments");
   }
@@ -267,6 +289,14 @@ export class VaultDatabase {
     return this.#deleteSetting(NATIVE_DIRECTORY_HANDLE_KEY);
   }
 
+  getFileFolders(): Promise<FolderMetadata[]> {
+    return this.#getSetting<FolderMetadata[]>(FILE_FOLDERS_KEY).then((folders) => folders ?? []);
+  }
+
+  setFileFolders(folders: FolderMetadata[]): Promise<void> {
+    return this.#putSetting(FILE_FOLDERS_KEY, folders);
+  }
+
   getBackupOperations(): Promise<BackupOperation[]> {
     return this.#getAll<BackupOperation>("backupQueue", "createdAt");
   }
@@ -278,6 +308,50 @@ export class VaultDatabase {
     for (const id of ids) store.delete(id);
     await advanceVaultVersion(transaction);
     await transactionDone(transaction);
+  }
+
+  async deleteNote(
+    noteId: string,
+    attachmentIds: string[],
+    operations: BackupOperation[],
+  ): Promise<void> {
+    const transaction = this.#database.transaction(
+      [
+        "notes",
+        "noteContents",
+        "attachments",
+        "searchDocuments",
+        "searchPostings",
+        "backupQueue",
+        "settings",
+      ],
+      "readwrite",
+    );
+    const complete = transactionDone(transaction);
+    try {
+      transaction.objectStore("notes").delete(noteId);
+      transaction.objectStore("noteContents").delete(noteId);
+      transaction.objectStore("searchDocuments").delete(noteId);
+      const postings = transaction.objectStore("searchPostings");
+      const postingKeys = await requestResult<IDBValidKey[]>(
+        postings.index("noteId").getAllKeys(noteId),
+      );
+      for (const key of postingKeys) postings.delete(key);
+      const attachments = transaction.objectStore("attachments");
+      for (const attachmentId of attachmentIds) attachments.delete(attachmentId);
+      const backupQueue = transaction.objectStore("backupQueue");
+      for (const operation of operations) backupQueue.put(operation);
+      await advanceVaultVersion(transaction);
+      await complete;
+    } catch (error) {
+      try {
+        transaction.abort();
+      } catch {
+        // The transaction may already have completed or aborted.
+      }
+      await complete.catch(() => undefined);
+      throw error;
+    }
   }
 
   async replaceVault(
