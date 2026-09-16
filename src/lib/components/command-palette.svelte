@@ -185,7 +185,7 @@
 <section id="command-palette" class="palette-panel" role="search" aria-label="Command palette" transition:fly={{ y: -7, duration: 170 }}>
 	<div class="palette">
 		<div class="palette-heading">
-			<div class="palette-title"><Search size={16} /><div><strong>Command palette</strong><span>Search notes or run a command</span></div></div>
+			<div class="palette-title"><Search size={16} /><div><strong id="command-palette-title">Command palette</strong><span id="command-palette-description">Search notes or run a command</span></div></div>
 			<button class="icon-button palette-close" type="button" aria-label="Close command palette" title="Close command palette (Esc)" onclick={onClose}><X size={17} /></button>
 		</div>
 
@@ -199,6 +199,8 @@
 				role="combobox"
 				aria-expanded="true"
 				aria-controls="palette-list"
+				aria-labelledby="command-palette-title"
+				aria-describedby="command-palette-description palette-result-count"
 				aria-activedescendant={matches[activeIndex] ? `palette-${matches[activeIndex].id}` : undefined}
 				aria-label="Search notes and commands"
 				placeholder="Search notes or commands…"
@@ -209,6 +211,9 @@
 			/>
 			<button type="button" class="palette-dismiss" aria-label="Close command palette" title="Close command palette (Esc)" onclick={onClose}><kbd>Esc</kbd></button>
 		</label>
+		<div id="palette-result-count" class="visually-hidden" role="status" aria-live="polite">
+			{#if query.trim()}{matches.length} result{matches.length === 1 ? '' : 's'}{#else}All commands and notes{/if}
+		</div>
 
 		<div class="palette-list" id="palette-list" role="listbox" aria-label="Results" bind:this={list}>
 			{#each groups as group (group.name)}
