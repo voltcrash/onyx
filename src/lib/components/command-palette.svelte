@@ -53,9 +53,9 @@
 	const filtered = $derived(
 		query.trim()
 			? entries
-					.map((item) => ({ item, score: score(item, query.trim().toLowerCase()) }))
+					.map((item) => ({ item, score: score(item, query.trim()) }))
 					.filter((entry) => entry.score > 0)
-					.sort((a, b) => b.score - a.score)
+					.sort((a, b) => b.score - a.score || a.item.label.localeCompare(b.item.label))
 					.map((entry) => entry.item)
 			: entries
 	);
@@ -83,18 +83,39 @@
 		return !('control' in item);
 	}
 
-	function score(item: PaletteEntry, needle: string): number {
-		const haystack = `${item.label} ${item.hint ?? ''} ${item.keywords ?? ''}`.toLowerCase();
+	function score(item: PaletteEntry, rawQuery: string): number {
+		const needle = rawQuery.trim().toLowerCase();
 		const label = item.label.toLowerCase();
-		if (label.startsWith(needle)) return 1000 - label.length;
-		if (label.includes(needle)) return 500 - label.length;
-		if (haystack.includes(needle)) return 250;
+		const haystack = `${label} ${item.hint ?? ''} ${item.keywords ?? ''}`.toLowerCase();
+		const terms = needle.split(/\s+/).filter(Boolean);
+		if (!terms.every((term) => haystack.includes(term) || fuzzyMatch(haystack, term))) return 0;
+		if (label === needle) return 1400;
+		if (label.startsWith(needle)) return 1200 - label.length;
+		if (label.includes(needle)) return 1000 - label.length;
+		const labelTermMatches = terms.filter((term) => label.includes(term)).length;
+		if (labelTermMatches > 0) return 800 + labelTermMatches * 30 - label.length;
+		if (terms.every((term) => haystack.includes(term))) return 500 - haystack.indexOf(terms[0]);
+		return 200;
+	}
+
+	function fuzzyMatch(value: string, needle: string): boolean {
 		let index = -1;
 		for (const character of needle) {
-			index = haystack.indexOf(character, index + 1);
-			if (index === -1) return 0;
+			index = value.indexOf(character, index + 1);
+			if (index === -1) return false;
 		}
-		return 100;
+		return true;
+	}
+
+	function highlightedLabel(label: string, rawQuery: string): Array<{ text: string; match: boolean }> {
+		const terms = rawQuery.trim().split(/\s+/).filter(Boolean).map(escapeRegExp);
+		if (terms.length === 0) return [{ text: label, match: false }];
+		const parts = label.split(new RegExp(`(${terms.join('|')})`, 'ig'));
+		return parts.filter(Boolean).map((text) => ({ text, match: terms.some((term) => new RegExp(`^${term}$`, 'i').test(text)) }));
+	}
+
+	function escapeRegExp(value: string): string {
+		return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	}
 
 	function move(delta: number): void {
@@ -198,7 +219,7 @@
 							onclick={() => choose(item)}
 						>
 							<item.icon size={16} />
-							<span><strong>{item.label}</strong>{#if item.hint}<small>{item.hint}</small>{/if}</span>
+							<span><strong>{#each highlightedLabel(item.label, query) as part}{#if part.match}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</strong>{#if item.hint}<small>{item.hint}</small>{/if}</span>
 							{#if item.shortcut}<kbd>{item.shortcut}</kbd>{/if}
 						</button>
 					{/if}

@@ -488,6 +488,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       .map((id) => paletteNotes.find((note) => note.id === id))
       .filter((note): note is NoteMetadata => Boolean(note)),
   );
+  const paletteSearchResults = $derived(new Map(results.map((result) => [result.note.id, result])));
   const paletteItems = $derived([
     ...recentNotes.map((note) => ({
       id: `recent-note-${note.id}`,
@@ -495,7 +496,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: note.title,
       hint: note.id === activeNoteId ? "Open note" : formatNoteDate(note.updatedAt),
       icon: FileText,
-      keywords: "recent note open jump",
+      keywords: `recent note open jump ${paletteSearchResults.get(note.id)?.excerpt ?? ""}`,
       run: () => void selectNote(note.id),
     })),
     ...paletteNotes.map((note) => ({
@@ -504,7 +505,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: note.title,
       hint: note.id === activeNoteId ? "Open note" : formatNoteDate(note.updatedAt),
       icon: FileText,
-      keywords: "note open jump",
+      keywords: `note open jump ${paletteSearchResults.get(note.id)?.excerpt ?? ""}`,
       run: () => void selectNote(note.id),
     })),
     {

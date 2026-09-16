@@ -185,6 +185,12 @@
   font-size: 13px;
   font-weight: 550;
 }
+.palette-item mark {
+  color: inherit;
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  border-radius: 3px;
+  padding: 0 1px;
+}
 .palette-item small {
   margin-top: 2px;
   color: var(--faint);
