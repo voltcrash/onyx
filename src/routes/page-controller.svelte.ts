@@ -3089,6 +3089,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
     paletteNotes = vault ? await vault.listNotes() : [];
     await loadCommandPaletteStyles();
+    sidebarCollapsed = false;
+    if (window.innerWidth <= 900) sidebarOpen = true;
     paletteOpen = true;
   }
 
@@ -3096,7 +3098,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     paletteOpen = false;
     const opener = paletteOpener;
     paletteOpener = undefined;
-    restoreModalFocus(opener);
+    if (opener?.isConnected) {
+      restoreModalFocus(opener);
+      return;
+    }
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('[aria-label="Open the command palette"]')?.focus();
+    });
   }
 
   function moveNoteFocus(event: KeyboardEvent): void {

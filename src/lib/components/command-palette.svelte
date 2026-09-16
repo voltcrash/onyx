@@ -16,7 +16,6 @@
 
 <script lang="ts">
 	import { CornerDownLeft, Search } from '@lucide/svelte';
-	import { manageModalFocus } from '$lib/modal-focus';
 
 	interface Props {
 		items: PaletteItem[];
@@ -119,8 +118,8 @@
 	}
 </script>
 
-<div class="palette-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-	<div id="command-palette" class="palette" role="dialog" aria-modal="true" aria-label="Command palette" tabindex="-1" use:manageModalFocus>
+<section id="command-palette" class="palette-panel" role="search" aria-label="Command palette">
+	<div class="palette">
 		<div class="palette-field">
 			<Search size={17} />
 			<input
@@ -137,7 +136,7 @@
 				spellcheck="false"
 				onkeydown={onKeydown}
 			/>
-			<kbd>Esc</kbd>
+			<button type="button" class="palette-dismiss" aria-label="Close command palette" title="Close command palette (Esc)" onclick={onClose}><kbd>Esc</kbd></button>
 		</div>
 
 		<div class="palette-list" id="palette-list" role="listbox" aria-label="Results" bind:this={list}>
@@ -176,4 +175,4 @@
 			<span><kbd>Esc</kbd> Dismiss</span>
 		</div>
 	</div>
-</div>
+</section>

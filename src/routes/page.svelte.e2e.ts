@@ -312,7 +312,9 @@ async function renderedSelectionDetails(page: Page) {
   });
 }
 
-test("traps modal focus and returns it to the opener", async ({ page }) => {
+test("opens the command palette in the sidebar and returns focus to the opener", async ({
+  page,
+}) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
@@ -331,9 +333,29 @@ test("traps modal focus and returns it to the opener", async ({ page }) => {
 
   const palette = page.getByRole("button", { name: "Open the command palette" });
   await palette.click();
-  await expect(page.getByRole("combobox", { name: "Search notes and commands" })).toBeFocused();
+  const commandPalette = page.locator("#command-palette");
+  await expect(commandPalette).toBeVisible();
+  await expect(commandPalette).toHaveAttribute("role", "search");
+  await expect(page.locator(".palette-backdrop")).toHaveCount(0);
+  await expect(page.locator(".app")).not.toHaveAttribute("inert");
+  await expect(commandPalette.locator('input[role="combobox"]')).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(palette).toBeFocused();
+});
+
+test("opens the command palette from the keyboard with a collapsed sidebar", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await page.getByRole("button", { name: "Hide notes sidebar" }).click();
+  await expect(page.locator(".app")).toHaveClass(/sidebar-collapsed/);
+  await editor.focus();
+  await page.keyboard.press("ControlOrMeta+K");
+
+  await expect(page.locator(".sidebar #command-palette")).toBeVisible();
+  await expect(page.locator(".app")).not.toHaveClass(/sidebar-collapsed/);
+  await page.keyboard.press("Escape");
 });
 
 test("offers additional color themes and persists the selection", async ({ page }) => {

@@ -31,6 +31,9 @@
     z-index: 15;
     background: var(--scrim);
   }
+  .sidebar-open.palette-open::after {
+    display: none;
+  }
   .workspace {
     grid-column: 1;
   }
@@ -121,12 +124,6 @@
   .restore-source button {
     grid-column: 1 / -1;
     justify-content: center;
-  }
-  .palette-backdrop {
-    padding: 12px;
-  }
-  .palette {
-    max-height: min(80vh, 560px);
   }
   .palette-footer {
     display: none;

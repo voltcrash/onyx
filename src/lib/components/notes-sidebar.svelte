@@ -8,6 +8,7 @@
 	import GithubIcon from './github-icon.svelte';
 	import VaultSwitcher from './vault-switcher.svelte';
 	import type { GithubState, SaveState, TransferState } from './app-types';
+	import type { PaletteItem } from './command-palette.svelte';
 
 	interface Props {
 		vaults: VaultDescriptor[];
@@ -34,6 +35,7 @@
 		wordCount: number;
 		readingMinutes: number;
 		contentWidth: number;
+		paletteItems: PaletteItem[];
 		searchInput?: HTMLInputElement;
 		noteList?: HTMLElement;
 		onToggleSidebar: () => void;
@@ -52,6 +54,7 @@
 		onCopyFilePath: (path: string) => void;
 		onSearch: (value: string) => void;
 		onOpenPalette: () => void;
+		onClosePalette: () => void;
 		onOpenSettings: () => void;
 		onOpenStorageSettings: () => void;
 		onDisconnectGithub: () => void;
@@ -64,10 +67,10 @@
 	}
 
 	let {
-		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, searchQuery, notePage, notePageCount, saveState, notesLoaded, paletteOpen, settingsOpen,
+		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, searchQuery, notePage, notePageCount, saveState, notesLoaded, paletteOpen, paletteItems, settingsOpen,
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, wordCount, readingMinutes, contentWidth,
 		searchInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, onCopyFilePath, onSearch,
-		onOpenPalette, onOpenSettings, onOpenStorageSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage,
+		onOpenPalette, onClosePalette, onOpenSettings, onOpenStorageSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage,
 		onInsertSyntax, onPrefixLine, onContentWidthChange
 	}: Props = $props();
 
@@ -415,13 +418,18 @@
 
 <aside class="sidebar" aria-label="Notes">
 	<div class="notes-heading"><div class="notes-title"><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions"><button class="icon-button sidebar-toggle" aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeftClose size={19} /></button></div></div>
-	<div class="sidebar-switcher" role="tablist" aria-label="Sidebar view">
-		<button role="tab" aria-selected={sidebarView === 'files'} class:active={sidebarView === 'files'} onclick={() => (sidebarView = 'files')}><FileText size={14} /> Files</button>
-		<button role="tab" aria-selected={sidebarView === 'tools'} class:active={sidebarView === 'tools'} onclick={() => (sidebarView = 'tools')}><Wrench size={14} /> Tools</button>
-	</div>
-	{#if sidebarView === 'files'}
+	{#if paletteOpen}
+		{#await import('$lib/components/command-palette.svelte') then { default: CommandPalette }}
+			<CommandPalette items={paletteItems} onClose={onClosePalette} />
+		{/await}
+	{:else}
+		<div class="sidebar-switcher" role="tablist" aria-label="Sidebar view">
+			<button role="tab" aria-selected={sidebarView === 'files'} class:active={sidebarView === 'files'} onclick={() => (sidebarView = 'files')}><FileText size={14} /> Files</button>
+			<button role="tab" aria-selected={sidebarView === 'tools'} class:active={sidebarView === 'tools'} onclick={() => (sidebarView = 'tools')}><Wrench size={14} /> Tools</button>
+		</div>
+		{#if sidebarView === 'files'}
 		<div class="sidebar-panel files-panel" role="tabpanel">
-			<label class="search-box"><Search size={15} /><input bind:this={searchInput} type="search" placeholder="Search all notes" value={searchQuery} oninput={(event) => onSearch(event.currentTarget.value)} /><button type="button" aria-label="Open the command palette" aria-haspopup="dialog" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Run a command (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><kbd>{formatShortcut(shortcuts.commandPalette, primaryModifier).replaceAll(' ', '')}</kbd></button></label>
+			<label class="search-box"><Search size={15} /><input bind:this={searchInput} type="search" placeholder="Search all notes" value={searchQuery} oninput={(event) => onSearch(event.currentTarget.value)} /><button type="button" aria-label="Open the command palette" aria-haspopup="listbox" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Run a command (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><kbd>{formatShortcut(shortcuts.commandPalette, primaryModifier).replaceAll(' ', '')}</kbd></button></label>
 			<div class="file-toolbar">
 				<div class="result-count" aria-live="polite">{searchQuery ? `${results.length} ${results.length === 1 ? 'result' : 'results'}` : `${results.length} ${results.length === 1 ? 'note' : 'notes'}`}</div>
 				<div class="file-actions" aria-label="File actions">
@@ -487,7 +495,7 @@
 				</div>
 			{/if}
 		</div>
-	{:else}
+		{:else}
 		<div class="sidebar-panel tools-panel" role="tabpanel">
 			<section class="tool-section">
 				<h2>View</h2>
@@ -525,6 +533,7 @@
 				<div><span>Status</span><strong>{saveState === 'loading' ? 'Opening' : saveState === 'error' ? 'Save failed' : 'Saved locally'}</strong></div>
 			</section>
 		</div>
+		{/if}
 	{/if}
 	<div class="sidebar-footer">
 		{#if githubState === 'connected' && githubUser}
