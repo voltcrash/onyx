@@ -10,6 +10,9 @@ const themes = themeTokens.themes as Record<string, Record<ThemeMode, TokenMap>>
 const syntaxTokenNames = Object.keys(defaults.light).filter((name) =>
   name.startsWith("--code-syntax-"),
 );
+const outputSyntaxTokenNames = Object.keys(defaults.light).filter((name) =>
+  name.startsWith("--output-syntax-"),
+);
 
 function relativeLuminance(hex: string): number {
   const channels = hex
@@ -63,18 +66,33 @@ describe("code syntax theme tokens", () => {
     }
   });
 
-  it("keeps the monochrome syntax ramp hue-free and visibly separated", () => {
-    for (const mode of ["light", "dark"] as const) {
-      const tokens = resolvedTokens(themes.monochrome!, mode);
-      const colors = syntaxTokenNames.map((tokenName) => tokens[tokenName]!);
-      const channels = colors.map((color) => color.slice(1, 3));
+  it("shares the chromatic code palette across every color theme", () => {
+    for (const [themeId, theme] of Object.entries(themes)) {
+      for (const mode of ["light", "dark"] as const) {
+        const tokens = resolvedTokens(theme, mode);
+        for (const tokenName of syntaxTokenNames) {
+          expect(tokens[tokenName], `${themeId}/${mode} ${tokenName}`).toBe(
+            defaults[mode][tokenName],
+          );
+        }
+      }
+    }
 
-      expect(colors.every((color) => color.slice(1, 3) === color.slice(3, 5))).toBe(true);
-      expect(colors.every((color) => color.slice(3, 5) === color.slice(5, 7))).toBe(true);
-      expect(
-        Math.max(...channels.map((channel) => parseInt(channel, 16))) -
-          Math.min(...channels.map((channel) => parseInt(channel, 16))),
-      ).toBeGreaterThanOrEqual(80);
+    const colors = syntaxTokenNames.map((tokenName) => defaults.dark[tokenName]!);
+    expect(new Set(colors).size).toBeGreaterThanOrEqual(8);
+  });
+
+  it("keeps the generated HTML palette readable on every color surface", () => {
+    for (const [themeId, theme] of Object.entries(themes)) {
+      for (const mode of ["light", "dark"] as const) {
+        const tokens = resolvedTokens(theme, mode);
+        for (const tokenName of outputSyntaxTokenNames) {
+          expect(
+            contrastRatio(tokens[tokenName]!, tokens["--surface"]!),
+            `${themeId}/${mode} ${tokenName}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
     }
   });
 });
