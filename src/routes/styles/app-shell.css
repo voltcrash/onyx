@@ -536,6 +536,7 @@
   color: var(--faint);
   cursor: pointer;
   font: inherit;
+  font-size: 12px;
   text-align: left;
 }
 .search-palette-trigger:hover {
