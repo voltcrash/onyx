@@ -2558,6 +2558,38 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     pendingEditorState = { markdown, selection };
   }
 
+  function handleEditorBeforeInput(event: InputEvent): void {
+    captureEditorState();
+    if (!(event.currentTarget instanceof HTMLElement)) return;
+    if (!event.currentTarget.classList.contains("live-editing-overlay")) return;
+    const isLineBreak =
+      event.inputType === "insertParagraph" || event.inputType === "insertLineBreak";
+    const isDeletion =
+      event.inputType === "deleteContentBackward" || event.inputType === "deleteContentForward";
+    if (!isLineBreak && !isDeletion) return;
+
+    const editorSelection = getEditorSelection(event.currentTarget);
+    if (editorSelection && editorSelection.start !== editorSelection.end) {
+      event.preventDefault();
+      replaceEditorSelection(editorSelection, isLineBreak ? "\n" : "");
+      return;
+    }
+
+    const element = renderedLineForTarget(event.currentTarget);
+    const sourceSelection = element && getSourceSelection(element);
+    if (!element || !sourceSelection) return;
+    event.preventDefault();
+    if (isLineBreak) {
+      insertRenderedLineBreak(element, sourceSelection);
+      return;
+    }
+    deleteRenderedContent(
+      element,
+      sourceSelection,
+      event.inputType === "deleteContentBackward" ? "backward" : "forward",
+    );
+  }
+
   function editorSurfaceForTarget(target: EventTarget | null): EditorSurface | undefined {
     if (typeof document === "undefined") return;
     const candidate =
@@ -2660,7 +2692,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       remaining -= length;
       node = walker.nextNode();
     }
-    return { node: element, offset: element.childNodes.length };
+    return { node: element, offset: 0 };
   }
 
   function markdownPosition(offset: number): { line: number; position: number } {
@@ -2979,15 +3011,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const value = element.textContent ?? "";
     if (event.key === "Enter") {
       event.preventDefault();
-      const before = value.slice(0, sourceSelection.start);
-      const after = value.slice(sourceSelection.end);
-      const marker = before.match(/^(\s*(?:[-*]\s+(?:\[[ xX]\]\s+)?|>\s+))/)?.[1] ?? "";
-      const continuation = marker && before.trim() !== marker.trim() ? marker : "";
-      const lines = [...markdownLines];
-      lines.splice(line, 1, before, `${continuation}${after}`);
-      updateMarkdown(lines.join("\n"));
-      liveLine = line + 1;
-      void tick().then(() => focusRenderedLine(line + 1, continuation.length));
+      insertRenderedLineBreak(element, sourceSelection);
     } else if (
       event.key === "Backspace" &&
       sourceSelection.start === 0 &&
@@ -2995,12 +3019,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       line > 0
     ) {
       event.preventDefault();
-      const lines = [...markdownLines];
-      const previousLength = lines[line - 1].length;
-      lines.splice(line - 1, 2, `${lines[line - 1]}${value}`);
-      updateMarkdown(lines.join("\n"));
-      liveLine = line - 1;
-      void tick().then(() => focusRenderedLine(line - 1, previousLength));
+      deleteRenderedContent(element, sourceSelection, "backward");
     } else if (
       event.key === "Delete" &&
       sourceSelection.start === value.length &&
@@ -3008,10 +3027,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       line < markdownLines.length - 1
     ) {
       event.preventDefault();
-      const lines = [...markdownLines];
-      lines.splice(line, 2, `${lines[line]}${lines[line + 1]}`);
-      updateMarkdown(lines.join("\n"));
-      void tick().then(() => focusRenderedLine(line, value.length));
+      deleteRenderedContent(element, sourceSelection, "forward");
     } else if (
       event.key === "ArrowLeft" &&
       sourceSelection.start === 0 &&
@@ -3081,6 +3097,87 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     return getSourceSelection(element)?.end ?? element.textContent?.length ?? 0;
   }
 
+  function renderedLineForTarget(target: EventTarget | null): HTMLElement | undefined {
+    const browserSelection = window.getSelection();
+    return (
+      liveLineElement(target instanceof Node ? target : null) ??
+      liveLineElement(browserSelection?.anchorNode ?? null) ??
+      liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${liveLine}"]`) ??
+      undefined
+    );
+  }
+
+  function insertRenderedLineBreak(
+    element: HTMLElement,
+    sourceSelection: { start: number; end: number },
+  ): void {
+    const line = liveLineIndex(element);
+    if (line === undefined) return;
+    const value = element.textContent ?? "";
+    const before = value.slice(0, sourceSelection.start);
+    const after = value.slice(sourceSelection.end);
+    const marker =
+      before.match(/^(\s*(?:(?:[-+*])\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|>\s+))/)?.[1] ?? "";
+    const hasContent = marker.length > 0 && before.slice(marker.length).trim().length > 0;
+    const orderedMarker = marker.match(/^(\s*)(\d+)([.)])(\s+)$/);
+    const continuation = hasContent
+      ? orderedMarker
+        ? `${orderedMarker[1]}${Number(orderedMarker[2]) + 1}${orderedMarker[3]}${orderedMarker[4]}`
+        : marker
+      : "";
+    const lines = [...markdownLines];
+    lines.splice(line, 1, before, `${continuation}${after}`);
+    updateMarkdown(lines.join("\n"));
+    liveLine = line + 1;
+    void tick().then(() => focusRenderedLine(line + 1, continuation.length));
+  }
+
+  function deleteRenderedContent(
+    element: HTMLElement,
+    sourceSelection: { start: number; end: number },
+    direction: "backward" | "forward",
+  ): void {
+    const line = liveLineIndex(element);
+    if (line === undefined) return;
+    const value = element.textContent ?? "";
+    if (sourceSelection.start !== sourceSelection.end) {
+      const lineOffset = markdownLineOffset(line);
+      replaceEditorSelection(
+        {
+          start: lineOffset + sourceSelection.start,
+          end: lineOffset + sourceSelection.end,
+          surface: "rendered",
+        },
+        "",
+      );
+      return;
+    }
+    if (direction === "backward" && sourceSelection.start === 0) {
+      if (line === 0) return;
+      const lines = [...markdownLines];
+      const previousLength = lines[line - 1].length;
+      lines.splice(line - 1, 2, `${lines[line - 1]}${value}`);
+      updateMarkdown(lines.join("\n"));
+      liveLine = line - 1;
+      void tick().then(() => focusRenderedLine(line - 1, previousLength));
+      return;
+    }
+    if (direction === "forward" && sourceSelection.start === value.length) {
+      if (line >= markdownLines.length - 1) return;
+      const lines = [...markdownLines];
+      lines.splice(line, 2, `${lines[line]}${lines[line + 1]}`);
+      updateMarkdown(lines.join("\n"));
+      void tick().then(() => focusRenderedLine(line, value.length));
+      return;
+    }
+    const offset = markdownLineOffset(line) + sourceSelection.start;
+    const start = direction === "backward" ? offset - 1 : offset;
+    replaceEditorSelection(
+      { start, end: direction === "backward" ? offset : offset + 1, surface: "rendered" },
+      "",
+    );
+  }
+
   function focusRenderedLine(line: number, position?: number): void {
     const element = liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${line}"]`);
     if (!element) return;
@@ -3093,31 +3190,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function setRenderedSelection(element: HTMLElement, start: number, end: number): void {
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-    let remaining = start;
-    let node = walker.nextNode();
-    while (node && remaining >= (node.textContent?.length ?? 0)) {
-      remaining -= node.textContent?.length ?? 0;
-      node = walker.nextNode();
-    }
+    const startPoint = textPointAt(element, start);
+    const endPoint = textPointAt(element, end);
     const range = document.createRange();
-    if (node) range.setStart(node, remaining);
-    else {
-      range.selectNodeContents(element);
-      range.collapse(false);
-    }
-    if (end === start) range.collapse(true);
-    else {
-      const endWalker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-      let endRemaining = end;
-      let endNode = endWalker.nextNode();
-      while (endNode && endRemaining >= (endNode.textContent?.length ?? 0)) {
-        endRemaining -= endNode.textContent?.length ?? 0;
-        endNode = endWalker.nextNode();
-      }
-      if (endNode) range.setEnd(endNode, endRemaining);
-      else range.setEndAfter(element.lastChild ?? element);
-    }
+    range.setStart(startPoint.node, startPoint.offset);
+    range.setEnd(endPoint.node, endPoint.offset);
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
@@ -4180,6 +4257,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     focusSourceEditor,
     focusLiveLine,
     captureEditorState,
+    handleEditorBeforeInput,
     handleEditorCopy,
     handleEditorCut,
     handleEditorPaste,

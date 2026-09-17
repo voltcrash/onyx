@@ -168,7 +168,7 @@ export function highlightCodeLines(source: string, _language: string): string[] 
 }
 
 function isListItem(line: string): boolean {
-  return /^\s*(?:[-+*]|\d+[.)])\s+/.test(line);
+  return /^\s*(?:[-+*]|\d+[.)])\s+\S/.test(line);
 }
 
 function isBlockStart(line: string): boolean {

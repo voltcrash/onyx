@@ -1199,6 +1199,183 @@ test("keeps the rendered caret usable through typing and line boundaries", async
   await expect(markdown).toHaveValue("a\nXb");
 });
 
+test.describe("mobile rendered typing", () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+  test("keeps the caret inside the line for repeated backspace input", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Show the output pane" }).click();
+    const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+    await expect(markdown).toBeEnabled();
+
+    await markdown.fill("abcdefgh");
+    await page.getByRole("button", { name: "Show the page pane" }).click();
+    await expect(page.getByRole("textbox", { name: "Page editor" })).toBeVisible();
+    await setRenderedSelection(page, 0, "abcdefgh".length);
+    await page.keyboard.press("Backspace");
+    const renderedLine = page.locator('[data-live-line="0"]');
+    await expect(renderedLine).toHaveText("abcdefg");
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const selection = window.getSelection();
+          const line =
+            selection?.anchorNode?.parentElement?.closest<HTMLElement>("[data-live-line]");
+          return {
+            line: line?.dataset.liveLine ?? null,
+            nodeType: selection?.anchorNode?.nodeType ?? null,
+            offset: selection?.anchorOffset ?? null,
+          };
+        }),
+      )
+      .toEqual({ line: "0", nodeType: 3, offset: 7 });
+
+    for (const value of ["abcdef", "abcde", "abcd"]) {
+      await page.keyboard.press("Backspace");
+      await expect(renderedLine).toHaveText(value);
+    }
+  });
+
+  test("merges lines for mobile backspace beforeinput", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Show the output pane" }).click();
+    const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+    await expect(markdown).toBeEnabled();
+    await markdown.fill("one\ntwo");
+    await page.getByRole("button", { name: "Show the page pane" }).click();
+    await expect(page.getByRole("textbox", { name: "Page editor" })).toBeVisible();
+    await setRenderedSelection(page, 1, 0);
+
+    const handled = await page.evaluate(() => {
+      const overlay = document.querySelector<HTMLElement>(".live-editing-overlay");
+      if (!overlay) throw new Error("The rendered editor is not available");
+      const event = new InputEvent("beforeinput", {
+        bubbles: true,
+        cancelable: true,
+        inputType: "deleteContentBackward",
+      });
+      const dispatched = overlay.dispatchEvent(event);
+      return { dispatched, defaultPrevented: event.defaultPrevented };
+    });
+    expect(handled).toEqual({ dispatched: false, defaultPrevented: true });
+    await expect(page.locator('[data-live-line="0"]')).toHaveText("onetwo");
+    await expect(page.locator('[data-live-line="1"]')).toHaveCount(0);
+  });
+
+  test("inserts a line break from mobile beforeinput events", async ({ page }) => {
+    await page.goto("/");
+
+    for (const inputType of ["insertParagraph", "insertLineBreak"]) {
+      await page.getByRole("button", { name: "Show the output pane" }).click();
+      const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+      await expect(markdown).toBeEnabled();
+      await markdown.fill("ab");
+      await page.getByRole("button", { name: "Show the page pane" }).click();
+      await expect(page.getByRole("textbox", { name: "Page editor" })).toBeVisible();
+      await setRenderedSelection(page, 0, 1);
+
+      await page.evaluate((type) => {
+        const overlay = document.querySelector<HTMLElement>(".live-editing-overlay");
+        if (!overlay) throw new Error("The rendered editor is not available");
+        const event = new InputEvent("beforeinput", {
+          bubbles: true,
+          cancelable: true,
+          inputType: type,
+        });
+        overlay.dispatchEvent(event);
+        if (!event.defaultPrevented) throw new Error("The line break input was not handled");
+      }, inputType);
+
+      await expect(page.locator('[data-live-line="0"]')).toHaveText("a");
+      await expect(page.locator('[data-live-line="1"]')).toHaveText("b");
+    }
+  });
+
+  test("continues every Markdown list marker after a mobile Enter", async ({ page }) => {
+    await page.goto("/");
+
+    for (const source of [
+      "- item",
+      "+ item",
+      "* item",
+      "1. first",
+      "1) first",
+      "  12. first",
+      "> quote",
+    ]) {
+      await page.getByRole("button", { name: "Show the output pane" }).click();
+      const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+      await expect(markdown).toBeEnabled();
+      await markdown.fill(source);
+      await page.getByRole("button", { name: "Show the page pane" }).click();
+      await expect(page.getByRole("textbox", { name: "Page editor" })).toBeVisible();
+      await setRenderedSelection(page, 0, source.length);
+      await page.evaluate(() => {
+        const overlay = document.querySelector<HTMLElement>(".live-editing-overlay");
+        if (!overlay) throw new Error("The rendered editor is not available");
+        const event = new InputEvent("beforeinput", {
+          bubbles: true,
+          cancelable: true,
+          inputType: "insertParagraph",
+        });
+        overlay.dispatchEvent(event);
+        if (!event.defaultPrevented) throw new Error("The list break input was not handled");
+      });
+      await page.getByRole("textbox", { name: "Markdown line 2" }).pressSequentially("next");
+
+      const marker = source.match(/^(\s*(?:[-+*]|\d+[.)])\s+)/)?.[1];
+      const expectedMarker = marker
+        ? /^\s*\d+[.)]\s+/.test(marker)
+          ? `${marker.replace(/\d+/, (value) => String(Number(value) + 1))}`
+          : marker
+        : "> ";
+      await expect
+        .poll(() => page.locator('textarea[aria-label="Markdown editor"]').inputValue())
+        .toBe(`${source}\n${expectedMarker}next`);
+    }
+  });
+
+  test("keeps mobile typing aligned inside formatted and blank lines", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Show the output pane" }).click();
+    const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+    await expect(markdown).toBeEnabled();
+    await markdown.fill("This is **bold** text.\n\nA final line.");
+    await page.getByRole("button", { name: "Show the page pane" }).click();
+    await expect(page.getByRole("textbox", { name: "Page editor" })).toBeVisible();
+
+    await setRenderedSelection(page, 0, "This is **bo".length);
+    await page.keyboard.type("X");
+    await expect
+      .poll(() => page.locator('textarea[aria-label="Markdown editor"]').inputValue())
+      .toBe("This is **boXld** text.\n\nA final line.");
+
+    await setRenderedSelection(page, 1, 0);
+    await page.keyboard.type("Inserted on the blank line");
+    await expect
+      .poll(() => page.locator('textarea[aria-label="Markdown editor"]').inputValue())
+      .toBe("This is **boXld** text.\nInserted on the blank line\nA final line.");
+  });
+
+  test("repeats mobile Backspace inside formatted text", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Show the output pane" }).click();
+    const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+    await expect(markdown).toBeEnabled();
+    await markdown.fill("This is **bold** text.");
+    await page.getByRole("button", { name: "Show the page pane" }).click();
+    await expect(page.getByRole("textbox", { name: "Page editor" })).toBeVisible();
+
+    await setRenderedSelection(page, 0, "This is **bold".length);
+    for (const expected of ["This is **bol** text.", "This is **bo** text."]) {
+      await page.keyboard.press("Backspace");
+      await expect
+        .poll(() => page.locator('textarea[aria-label="Markdown editor"]').inputValue())
+        .toBe(expected);
+    }
+  });
+});
+
 test("supports standard editing shortcuts in the page pane", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
