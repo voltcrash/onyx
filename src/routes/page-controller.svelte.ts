@@ -292,6 +292,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let saveRun: Promise<boolean> | undefined;
   let saveRequested = false;
   let searchTimer: number | undefined = $state();
+  let searchPending = $state(false);
   let previewTimer: number | undefined = $state();
   let searchSequence = 0;
   let editor: HTMLTextAreaElement | undefined = $state();
@@ -357,7 +358,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let markdownOutputModule: MarkdownOutputModule | undefined;
   let markdownOutputModulePromise: Promise<MarkdownOutputModule> | undefined;
   let markdownOutputModuleRevision = $state(0);
-  let commandPaletteStylesPromise: Promise<void> | undefined;
   let dialogStylesPromise: Promise<void> | undefined;
   let serviceWorkerTimer: number | undefined;
   let githubRestoreTimer: number | undefined;
@@ -488,7 +488,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       .map((id) => paletteNotes.find((note) => note.id === id))
       .filter((note): note is NoteMetadata => Boolean(note)),
   );
-  const paletteSearchResults = $derived(new Map(results.map((result) => [result.note.id, result])));
   const fontsAreDefault = $derived(
     (Object.keys(defaultFontChoices) as FontRole[]).every(
       (role) => fonts[role] === defaultFontChoices[role],
@@ -499,25 +498,62 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       shortcutsEqual(shortcuts[action], defaultKeyboardShortcuts[action]),
     ),
   );
+  function paletteNoteItem(
+    note: NoteMetadata,
+    id: string,
+    group: string,
+    hint: string,
+    keywords: string,
+  ) {
+    return {
+      id,
+      group,
+      label: note.title || "Untitled",
+      hint,
+      icon: FileText,
+      keywords,
+      run: () => void selectNote(note.id),
+    };
+  }
+
+  const paletteNoteItems = $derived.by(() => {
+    if (searchQuery.trim()) {
+      if (searchPending) return [];
+      return results.map((result) =>
+        paletteNoteItem(
+          result.note,
+          `search-note-${result.note.id}`,
+          "Notes",
+          result.excerpt || "Title match",
+          `${searchQuery} note open jump ${result.note.sourcePath ?? ""} ${result.excerpt}`,
+        ),
+      );
+    }
+
+    return [
+      ...recentNotes.map((note) =>
+        paletteNoteItem(
+          note,
+          `recent-note-${note.id}`,
+          "Recent",
+          note.id === activeNoteId ? "Open note" : formatNoteDate(note.updatedAt),
+          "recent note open jump",
+        ),
+      ),
+      ...paletteNotes.map((note) =>
+        paletteNoteItem(
+          note,
+          `note-${note.id}`,
+          "Notes",
+          note.id === activeNoteId ? "Open note" : formatNoteDate(note.updatedAt),
+          "note open jump",
+        ),
+      ),
+    ];
+  });
+
   const paletteItems = $derived([
-    ...recentNotes.map((note) => ({
-      id: `recent-note-${note.id}`,
-      group: "Recent",
-      label: note.title,
-      hint: note.id === activeNoteId ? "Open note" : formatNoteDate(note.updatedAt),
-      icon: FileText,
-      keywords: `recent note open jump ${paletteSearchResults.get(note.id)?.excerpt ?? ""}`,
-      run: () => void selectNote(note.id),
-    })),
-    ...paletteNotes.map((note) => ({
-      id: `note-${note.id}`,
-      group: "Notes",
-      label: note.title,
-      hint: note.id === activeNoteId ? "Open note" : formatNoteDate(note.updatedAt),
-      icon: FileText,
-      keywords: `note open jump ${paletteSearchResults.get(note.id)?.excerpt ?? ""}`,
-      run: () => void selectNote(note.id),
-    })),
+    ...paletteNoteItems,
     {
       id: "new-note",
       group: "Actions",
@@ -547,16 +583,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       icon: Search,
       keywords: "find replace current note text",
       run: () => openFind(),
-    },
-    {
-      id: "search",
-      group: "Actions",
-      label: "Search all notes",
-      shortcut: shortcutLabel("searchNotes"),
-      icon: Search,
-      keywords: "find full text",
-      aliases: ["find notes", "global search"],
-      run: () => focusSearch(),
     },
     {
       id: "bold",
@@ -1013,12 +1039,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }));
   }
 
-  function loadCommandPaletteStyles(): Promise<void> {
-    return (commandPaletteStylesPromise ??= loadLazyStylesModule().then((module) =>
-      module.loadCommandPaletteStyles(),
-    ));
-  }
-
   function loadDialogStyles(): Promise<void> {
     return (dialogStylesPromise ??= loadLazyStylesModule().then((module) =>
       module.loadDialogStyles(),
@@ -1302,6 +1322,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   function restoreModalFocus(opener: HTMLElement | undefined): void {
     if (!opener) return;
     requestAnimationFrame(() => {
+      if (paletteOpen || findOpen || settingsOpen) return;
       if (opener.isConnected) opener.focus();
     });
   }
@@ -1369,6 +1390,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     searchSequence += 1;
     noteLoadSequence += 1;
     searchQuery = "";
+    searchPending = false;
     notePage = 0;
     results = [];
     folders = [];
@@ -1561,6 +1583,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       }
       await loadNote(notes[0].id);
       await runSearch("");
+      if (searchQuery.trim()) await runSearch(searchQuery);
       githubBackup = await vault.getGithubBackupState();
       pendingBackupCount = (await vault.getPendingBackupOperations()).length;
       if (detectBrowserStorageSupport().persistentStorage) void ensurePersistentStorage();
@@ -3185,19 +3208,25 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function queueSearch(value: string): void {
     searchQuery = value;
+    searchPending = Boolean(value.trim());
     notePage = 0;
     if (searchTimer) window.clearTimeout(searchTimer);
-    searchTimer = window.setTimeout(() => void runSearch(value), 120);
+    searchTimer = window.setTimeout(() => {
+      searchTimer = undefined;
+      void runSearch(value);
+    }, 120);
   }
 
   async function runSearch(query: string): Promise<void> {
     if (!vault) return;
+    searchPending = Boolean(query.trim());
     const sequence = ++searchSequence;
     const nextResults = await vault.search(query);
     if (sequence === searchSequence) {
       results = nextResults;
       notePage = 0;
       notesLoaded = true;
+      searchPending = false;
     }
   }
 
@@ -3529,10 +3558,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       else if (paletteOpen) closePalette();
       else if (findOpen) closeFind();
       else if (sidebarOpen) sidebarOpen = false;
-      else if (searchQuery) {
-        queueSearch("");
-        searchInput?.blur();
-      }
+      else if (searchQuery) resetPaletteSearch();
     }
   }
 
@@ -3571,12 +3597,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function focusSearch(): void {
-    sidebarCollapsed = false;
-    if (window.innerWidth <= 900) sidebarOpen = true;
-    requestAnimationFrame(() => {
-      searchInput?.focus();
-      searchInput?.select();
-    });
+    if (paletteOpen) {
+      requestAnimationFrame(() => {
+        searchInput?.focus();
+        searchInput?.select();
+      });
+      return;
+    }
+    openPalette();
   }
 
   function toggleSidebar(): void {
@@ -3596,25 +3624,35 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function togglePalette(): void {
     if (paletteOpen) {
-      paletteOpen = false;
+      closePalette();
       return;
     }
-    void openPalette();
+    openPalette();
   }
 
-  async function openPalette(): Promise<void> {
+  function openPalette(): void {
+    if (paletteOpen) {
+      focusSearch();
+      return;
+    }
     if (!paletteOpen && document.activeElement instanceof HTMLElement) {
       paletteOpener = document.activeElement;
     }
-    paletteNotes = vault ? await vault.listNotes() : [];
-    await loadCommandPaletteStyles();
     sidebarCollapsed = false;
     if (window.innerWidth <= 900) sidebarOpen = true;
     paletteOpen = true;
+    void refreshPaletteNotes();
+  }
+
+  async function refreshPaletteNotes(): Promise<void> {
+    const openedVault = vault;
+    const notes = openedVault ? await openedVault.listNotes() : [];
+    if (openedVault === vault) paletteNotes = notes;
   }
 
   function closePalette(): void {
     paletteOpen = false;
+    resetPaletteSearch();
     const opener = paletteOpener;
     paletteOpener = undefined;
     if (opener?.isConnected) {
@@ -3624,6 +3662,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     requestAnimationFrame(() => {
       document.querySelector<HTMLElement>('[aria-label="Open the command palette"]')?.focus();
     });
+  }
+
+  function resetPaletteSearch(): void {
+    if (searchTimer) window.clearTimeout(searchTimer);
+    searchTimer = undefined;
+    searchSequence += 1;
+    searchQuery = "";
+    searchPending = false;
+    notePage = 0;
+    void runSearch("");
   }
 
   function moveNoteFocus(event: KeyboardEvent): void {
@@ -3876,6 +3924,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     },
     get searchQuery() {
       return searchQuery;
+    },
+    get searchPending() {
+      return searchPending;
     },
     get findOpen() {
       return findOpen;

@@ -694,19 +694,22 @@ test("keeps the editor usable and pauses GitHub features offline", async ({ cont
   await page.keyboard.press("ControlOrMeta+S");
 });
 
-test("searches note titles and Markdown content", async ({ page }) => {
+test("searches note titles and Markdown content from the command palette", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
   await expect(
     page.locator(".notes-heading").getByRole("button", { name: "New note" }),
   ).toHaveCount(0);
+  await expect(
+    page.locator(".notes-heading").getByRole("button", { name: "Open the command palette" }),
+  ).toHaveCount(1);
   const filesPanel = page.locator(".files-panel");
   const childOrder = await filesPanel.evaluate((panel) =>
-    ["search-box", "file-toolbar", "note-list"].map((className) =>
+    ["file-toolbar", "note-list"].map((className) =>
       [...panel.children].findIndex((child) => child.classList.contains(className)),
     ),
   );
-  expect(childOrder).toEqual([0, 1, 2]);
+  expect(childOrder).toEqual([0, 1]);
 
   await page.getByRole("button", { name: "New file" }).click();
   await page.getByRole("textbox", { name: "File name" }).press("Enter");
@@ -721,9 +724,23 @@ test("searches note titles and Markdown content", async ({ page }) => {
   await expect(page.getByText("Saving…", { exact: true })).toBeHidden();
   await page.keyboard.press("ControlOrMeta+S");
 
-  await page.getByPlaceholder("Search all notes").fill("neut");
-  await expect(page.getByText("1 result")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Project Aurora/ })).toBeVisible();
+  await expect(page.getByPlaceholder("Search all notes")).toHaveCount(0);
+  await page.getByRole("button", { name: "Open the command palette" }).click();
+  const paletteSearch = page.getByPlaceholder("Search notes or commands…");
+  await paletteSearch.fill("neut");
+  const result = page.getByRole("option", { name: /Project Aurora/ });
+  await expect(result).toBeVisible();
+  await expect(result).toContainText("the neutrino research summary is ready.");
+
+  await paletteSearch.fill("Project Aurora");
+  const project = page.getByRole("option", { name: /Project Aurora/ });
+  await expect(project).toBeVisible();
+  await project.click();
+  await expect(page.locator("#command-palette")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Project Aurora", exact: true })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
 });
 
 test("opens sidebar find and replace with the platform shortcut", async ({ page }) => {
@@ -1984,11 +2001,11 @@ test("customizes and persists keyboard shortcuts", async ({ page }) => {
   await page.getByRole("button", { name: "Close settings" }).click();
 
   await page.keyboard.press("ControlOrMeta+Shift+Y");
-  await expect(page.getByPlaceholder("Search all notes")).toBeFocused();
+  await expect(page.getByPlaceholder("Search notes or commands…")).toBeFocused();
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
   await page.keyboard.press("ControlOrMeta+Shift+Y");
-  await expect(page.getByPlaceholder("Search all notes")).toBeFocused();
+  await expect(page.getByPlaceholder("Search notes or commands…")).toBeFocused();
 });
 
 test("binds a backup repository to the authenticated GitHub account", async ({ page }) => {
