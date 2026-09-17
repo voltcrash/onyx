@@ -34,7 +34,6 @@
 
 <script lang="ts">
 	import { LoaderCircle, Search, X } from '@lucide/svelte';
-	import { fly } from 'svelte/transition';
 
 	interface Props {
 		items: PaletteItem[];
@@ -184,7 +183,7 @@
 	}
 </script>
 
-	<section id="command-palette" class="palette-panel" role="search" aria-label="Command palette" aria-busy={loading} transition:fly={{ y: -7, duration: 170 }}>
+	<section id="command-palette" class="palette-panel" role="search" aria-label="Command palette" aria-busy={loading}>
 	<div class="palette">
 		<div class="palette-heading">
 			<div class="palette-title"><Search size={16} /><div><strong id="command-palette-title">Command palette</strong><span id="command-palette-description">Search notes or run a command</span></div></div>
