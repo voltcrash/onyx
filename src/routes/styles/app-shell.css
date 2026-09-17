@@ -611,6 +611,7 @@
 .sidebar .note-list {
   flex: 1;
   min-height: 0;
+  margin-inline: -7px;
   overflow-y: auto;
   scrollbar-width: thin;
 }
