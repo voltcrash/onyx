@@ -33,19 +33,20 @@
 </script>
 
 <script lang="ts">
-	import { Search, X } from '@lucide/svelte';
+	import { LoaderCircle, Search, X } from '@lucide/svelte';
 	import { fly } from 'svelte/transition';
 
 	interface Props {
 		items: PaletteItem[];
 		controls?: PaletteControl[];
 		query: string;
+		loading?: boolean;
 		searchInput?: HTMLInputElement;
 		onQueryChange: (value: string) => void;
 		onClose: () => void;
 	}
 
-	let { items, controls = [], query, searchInput = $bindable(), onQueryChange, onClose }: Props = $props();
+	let { items, controls = [], query, loading = false, searchInput = $bindable(), onQueryChange, onClose }: Props = $props();
 
 	let activeIndex = $state(0);
 	let list: HTMLElement | undefined = $state();
@@ -87,7 +88,8 @@
 	function score(item: PaletteEntry, rawQuery: string): number {
 		const needle = rawQuery.trim().toLowerCase();
 		const label = item.label.toLowerCase();
-		const haystack = `${label} ${item.hint ?? ''} ${item.keywords ?? ''} ${(item.aliases ?? []).join(' ')}`.toLowerCase();
+		const aliases = 'aliases' in item ? item.aliases ?? [] : [];
+		const haystack = `${label} ${item.hint ?? ''} ${item.keywords ?? ''} ${aliases.join(' ')}`.toLowerCase();
 		const terms = needle.split(/\s+/).filter(Boolean);
 		if (!terms.every((term) => haystack.includes(term) || fuzzyMatch(haystack, term))) return 0;
 		if (label === needle) return 1400;
@@ -182,7 +184,7 @@
 	}
 </script>
 
-<section id="command-palette" class="palette-panel" role="search" aria-label="Command palette" transition:fly={{ y: -7, duration: 170 }}>
+	<section id="command-palette" class="palette-panel" role="search" aria-label="Command palette" aria-busy={loading} transition:fly={{ y: -7, duration: 170 }}>
 	<div class="palette">
 		<div class="palette-heading">
 			<div class="palette-title"><Search size={16} /><div><strong id="command-palette-title">Command palette</strong><span id="command-palette-description">Search notes or run a command</span></div></div>
@@ -212,7 +214,9 @@
 			<button type="button" class="palette-dismiss" aria-label="Close command palette" title="Close command palette (Esc)" onclick={onClose}><kbd>Esc</kbd></button>
 		</label>
 		<div id="palette-result-count" class="visually-hidden" role="status" aria-live="polite">
-			{#if query.trim()}
+			{#if loading && query.trim()}
+				Searching notes…
+			{:else if query.trim()}
 				{matches.length} result{matches.length === 1 ? '' : 's'}
 			{:else}
 				All commands and notes
@@ -251,13 +255,20 @@
 						</button>
 					{/if}
 				{/each}
-			{:else}
+			{/each}
+			{#if groups.length === 0 && loading}
+				<div class="palette-empty" role="status">
+					<LoaderCircle class="spin" size={22} />
+					<strong>Searching notes…</strong>
+					<span>Checking every title and every word.</span>
+				</div>
+			{:else if groups.length === 0}
 				<div class="palette-empty">
 					<Search size={22} />
 					<strong>No matches for “{query}”</strong>
-					<span>Search by note title, or try a command such as “new note”, “dark”, or “export”.</span>
+					<span>Search note titles and Markdown content, or try a command such as “new note”, “dark”, or “export”.</span>
 				</div>
-			{/each}
+			{/if}
 		</div>
 	</div>
 </section>
