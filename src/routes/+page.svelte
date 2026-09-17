@@ -154,10 +154,7 @@
 	backupMessage={page.backupMessage}
 	backupState={page.backupState}
 	backupCommitUrl={page.backupCommitUrl}
-	transferMessage={page.transferMessage}
-	transferState={page.transferState}
 	onDismissBackup={page.dismissBackupMessage}
-	onDismissTransfer={page.dismissTransferMessage}
 />
 
 {#if page.settingsOpen}

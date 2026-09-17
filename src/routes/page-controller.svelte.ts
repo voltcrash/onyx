@@ -332,7 +332,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let restoreBranch = $state("main");
   let restoreDirectory = $state("vault");
   let transferState = $state<TransferState>("idle");
-  let transferMessage = $state("");
   let folderInput: HTMLInputElement | undefined = $state();
   let zipInput: HTMLInputElement | undefined = $state();
   let theme = $state<ThemePreference>("system");
@@ -2073,7 +2072,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   async function copyFilePath(path: string): Promise<void> {
-    await copyToClipboard(() => navigator.clipboard.writeText(path), "relative path");
+    await copyToClipboard(() => navigator.clipboard.writeText(path));
   }
 
   async function importFolder(files: FileList | null): Promise<void> {
@@ -2087,14 +2086,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const file = files?.[0];
     if (!file) return;
     transferState = "working";
-    transferMessage = "Reading ZIP archive…";
     try {
       const { readMarkdownZip } = await import("$lib/markdown-transfer");
       const entries = await readMarkdownZip(file);
       transferState = "idle";
       await runImport(entries);
-    } catch (error) {
-      showTransferError(error, "The ZIP archive could not be imported.");
+    } catch {
+      showTransferError();
     } finally {
       if (zipInput) zipInput.value = "";
     }
@@ -2103,24 +2101,21 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   async function runImport(files: MarkdownTransferFile[]): Promise<void> {
     if (!vault || transferState === "working") return;
     transferState = "working";
-    transferMessage = "Importing Markdown and attachments…";
     if (!(await settleDraft())) {
       transferState = "idle";
-      transferMessage = "";
       return;
     }
     try {
       const { importMarkdownFiles } = await import("$lib/markdown-transfer");
-      const result = await importMarkdownFiles(vault, files);
+      await importMarkdownFiles(vault, files);
       searchQuery = "";
       const notes = await vault.listNotes();
       await loadNote(notes[0].id);
       await runSearch("");
       pendingBackupCount = (await vault.getPendingBackupOperations()).length;
       transferState = "idle";
-      transferMessage = `Imported ${result.noteCount} ${result.noteCount === 1 ? "note" : "notes"} and ${result.attachmentCount} ${result.attachmentCount === 1 ? "attachment" : "attachments"}.`;
-    } catch (error) {
-      showTransferError(error, "The Markdown folder could not be imported.");
+    } catch {
+      showTransferError();
     }
   }
 
@@ -2140,7 +2135,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   async function copyMarkdown(): Promise<void> {
-    await copyToClipboard(() => navigator.clipboard.writeText(markdown), "Markdown");
+    await copyToClipboard(() => navigator.clipboard.writeText(markdown));
   }
 
   function downloadMarkdown(): void {
@@ -2154,7 +2149,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     await copyToClipboard(async () => {
       const output = await loadMarkdownOutputModule();
       await navigator.clipboard.writeText(output.markdownToPlainText(markdown));
-    }, "plain text");
+    });
   }
 
   async function downloadText(): Promise<void> {
@@ -2174,7 +2169,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
           "text/plain": new Blob([output.markdownToPlainText(markdown)], { type: "text/plain" }),
         }),
       ]);
-    }, "rich text");
+    });
   }
 
   async function downloadRtf(): Promise<void> {
@@ -2191,15 +2186,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     return markdownModule.renderMarkdown(markdown, undefined, { remoteImages: "allow" });
   }
 
-  async function copyToClipboard(write: () => Promise<void>, format: string): Promise<void> {
+  async function copyToClipboard(write: () => Promise<void>): Promise<void> {
     if (transferState === "working") return;
     try {
       await write();
       transferState = "idle";
-      transferMessage = `Copied this note as ${format}.`;
     } catch {
       transferState = "error";
-      transferMessage = "The browser did not allow copying to the clipboard.";
     }
   }
 
@@ -2207,7 +2200,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     await copyToClipboard(async () => {
       const [html, output] = await Promise.all([exportedHtml(), loadMarkdownOutputModule()]);
       await navigator.clipboard.writeText(output.formatHtmlSource(html));
-    }, "HTML");
+    });
   }
 
   async function downloadHtml(): Promise<void> {
@@ -2245,10 +2238,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   async function exportZip(): Promise<void> {
     if (!vault || transferState === "working") return;
     transferState = "working";
-    transferMessage = "Building ZIP archive…";
     if (!(await settleDraft())) {
       transferState = "idle";
-      transferMessage = "";
       return;
     }
     try {
@@ -2257,9 +2248,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       const archive = await createMarkdownZip(files);
       downloadBlob(archive, `onyx-markdown-${new Date().toISOString().slice(0, 10)}.zip`);
       transferState = "idle";
-      transferMessage = "";
-    } catch (error) {
-      showTransferError(error, "The ZIP archive could not be exported.");
+    } catch {
+      showTransferError();
     }
   }
 
@@ -2274,32 +2264,27 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     ).showDirectoryPicker;
     if (!picker) {
       transferState = "error";
-      transferMessage = "Folder export is not supported by this browser. Use ZIP export instead.";
       return;
     }
     try {
       const directory = await picker.call(window, { mode: "readwrite" });
       transferState = "working";
-      transferMessage = "Writing Markdown folder…";
       if (!(await settleDraft())) {
         transferState = "idle";
-        transferMessage = "";
         return;
       }
       const { createMarkdownExport, writeMarkdownFolder } = await import("$lib/markdown-transfer");
       const files = await createMarkdownExport(vault);
       await writeMarkdownFolder(directory, files);
       transferState = "idle";
-      transferMessage = "";
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      showTransferError(error, "The Markdown folder could not be exported.");
+      showTransferError();
     }
   }
 
-  function showTransferError(error: unknown, fallback: string): void {
+  function showTransferError(): void {
     transferState = "error";
-    transferMessage = error instanceof Error ? error.message : fallback;
   }
 
   async function settleDraft(): Promise<boolean> {
@@ -2806,7 +2791,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!clipboard || typeof clipboard.writeText !== "function") return false;
     void Promise.resolve(clipboard.writeText(text)).catch(() => {
       transferState = "error";
-      transferMessage = "The browser did not allow copying to the clipboard.";
     });
     return true;
   }
@@ -2833,7 +2817,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       .then((text) => replaceEditorSelection(selection, text))
       .catch(() => {
         transferState = "error";
-        transferMessage = "The browser did not allow pasting from the clipboard.";
       });
     return true;
   }
@@ -4032,12 +4015,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     set restoreDirectory(value: string) {
       restoreDirectory = value;
     },
-    get transferMessage() {
-      return transferMessage;
-    },
-    set transferMessage(value: string) {
-      transferMessage = value;
-    },
     get theme() {
       return theme;
     },
@@ -4290,9 +4267,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     formatCommitDate,
     dismissBackupMessage() {
       backupMessage = "";
-    },
-    dismissTransferMessage() {
-      transferMessage = "";
     },
   };
 }
