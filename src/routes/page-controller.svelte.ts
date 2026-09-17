@@ -364,6 +364,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let outputViewRequest = 0;
   let settingsOpener: HTMLElement | undefined;
   let paletteOpener: HTMLElement | undefined;
+  let focusRestoreFrame: number | undefined;
   let unsubscribeVault: (() => void) | undefined;
   let remoteSyncRun: Promise<void> | undefined;
   let remoteSyncRequested = false;
@@ -1320,9 +1321,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function restoreModalFocus(opener: HTMLElement | undefined): void {
+    if (focusRestoreFrame !== undefined) cancelAnimationFrame(focusRestoreFrame);
+    focusRestoreFrame = undefined;
     if (!opener) return;
-    requestAnimationFrame(() => {
-      if (opener.isConnected) opener.focus();
+    focusRestoreFrame = requestAnimationFrame(() => {
+      focusRestoreFrame = undefined;
+      if (opener.isConnected && !paletteOpen && !settingsOpen) opener.focus();
     });
   }
 
@@ -3630,6 +3634,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   async function openPalette(): Promise<void> {
+    if (focusRestoreFrame !== undefined) cancelAnimationFrame(focusRestoreFrame);
+    focusRestoreFrame = undefined;
     if (paletteOpen) {
       focusSearch();
       return;
