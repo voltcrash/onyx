@@ -1322,6 +1322,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   function restoreModalFocus(opener: HTMLElement | undefined): void {
     if (!opener) return;
     requestAnimationFrame(() => {
+      if (paletteOpen || findOpen || settingsOpen) return;
       if (opener.isConnected) opener.focus();
     });
   }
