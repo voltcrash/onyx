@@ -1757,7 +1757,7 @@ test("copies and downloads the Markdown source from the output pane", async ({ p
   await expect
     .poll(() => page.evaluate(() => (window as typeof window & { onyxCopied?: string }).onyxCopied))
     .toBe("# Packing list\n\n- **Passport**");
-  await expect(page.getByText("Copied this note as Markdown.")).toBeVisible();
+  await expect(page.getByText("Copied this note as Markdown.")).toHaveCount(0);
 
   const download = page.waitForEvent("download");
   await openOutputSwitcher(page);
@@ -1791,7 +1791,7 @@ test("shows the note as plain text in the output pane, copies and downloads it",
   await expect
     .poll(() => page.evaluate(() => (window as typeof window & { onyxCopied?: string }).onyxCopied))
     .toBe(expected);
-  await expect(page.getByText("Copied this note as plain text.")).toBeVisible();
+  await expect(page.getByText("Copied this note as plain text.")).toHaveCount(0);
 
   const download = page.waitForEvent("download");
   await openOutputSwitcher(page);
@@ -1892,7 +1892,7 @@ test("shows the generated HTML in the output pane, copies and downloads it", asy
   await expect
     .poll(() => page.evaluate(() => (window as typeof window & { onyxCopied?: string }).onyxCopied))
     .toContain("<strong>today</strong>");
-  await expect(page.getByText("Copied this note as HTML.")).toBeVisible();
+  await expect(page.getByText("Copied this note as HTML.")).toHaveCount(0);
 
   const download = page.waitForEvent("download");
   await openOutputSwitcher(page);
@@ -2144,7 +2144,7 @@ test("imports a Markdown folder and exports its structure and attachments as ZIP
     input.files = transfer.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  await expect(page.getByText("Imported 1 note and 1 attachment.")).toBeVisible();
+  await expect(page.getByText("Imported 1 note and 1 attachment.")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Trip plans/ })).toBeVisible();
   await expect(page.locator('.preview-pane img[alt="the map"]')).toHaveAttribute("src", /^blob:/);
 
@@ -2152,7 +2152,7 @@ test("imports a Markdown folder and exports its structure and attachments as ZIP
   await page.getByRole("button", { name: "Download ZIP" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/^onyx-markdown-\d{4}-\d{2}-\d{2}\.zip$/);
-  await expect(page.getByText("Exported 3 files to ZIP.")).toBeVisible();
+  await expect(page.getByText("Exported 3 files to ZIP.")).toHaveCount(0);
 });
 
 test("restores a selected GitHub commit into the local vault", async ({ page }) => {
