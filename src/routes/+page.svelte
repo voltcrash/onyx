@@ -36,6 +36,7 @@
 		transferState={page.transferState}
 		storageError={page.storageError}
 		paletteOpen={page.paletteOpen}
+		searchPending={page.searchPending}
 		paletteItems={page.paletteItems}
 		settingsOpen={page.settingsOpen}
 		isOnline={page.isOnline}
@@ -75,7 +76,7 @@
 		onFindReplace={page.replaceFind}
 		onFindReplaceAll={page.replaceAllFind}
 		onCloseFind={page.closeFind}
-		onOpenPalette={() => void page.openPalette()}
+		onOpenPalette={page.openPalette}
 		onClosePalette={page.closePalette}
 		onOpenSettings={() => page.openSettings('editor')}
 		onOpenStorageSettings={() => page.openSettings('storage')}
