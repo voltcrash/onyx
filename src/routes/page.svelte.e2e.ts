@@ -1261,6 +1261,35 @@ test.describe("mobile rendered typing", () => {
     await expect(page.locator('[data-live-line="0"]')).toHaveText("onetwo");
     await expect(page.locator('[data-live-line="1"]')).toHaveCount(0);
   });
+
+  test("inserts a line break from mobile beforeinput events", async ({ page }) => {
+    await page.goto("/");
+
+    for (const inputType of ["insertParagraph", "insertLineBreak"]) {
+      await page.getByRole("button", { name: "Show the output pane" }).click();
+      const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+      await expect(markdown).toBeEnabled();
+      await markdown.fill("ab");
+      await page.getByRole("button", { name: "Show the page pane" }).click();
+      await expect(page.getByRole("textbox", { name: "Page editor" })).toBeVisible();
+      await setRenderedSelection(page, 0, 1);
+
+      await page.evaluate((type) => {
+        const overlay = document.querySelector<HTMLElement>(".live-editing-overlay");
+        if (!overlay) throw new Error("The rendered editor is not available");
+        const event = new InputEvent("beforeinput", {
+          bubbles: true,
+          cancelable: true,
+          inputType: type,
+        });
+        overlay.dispatchEvent(event);
+        if (!event.defaultPrevented) throw new Error("The line break input was not handled");
+      }, inputType);
+
+      await expect(page.locator('[data-live-line="0"]')).toHaveText("a");
+      await expect(page.locator('[data-live-line="1"]')).toHaveText("b");
+    }
+  });
 });
 
 test("supports standard editing shortcuts in the page pane", async ({ page }) => {

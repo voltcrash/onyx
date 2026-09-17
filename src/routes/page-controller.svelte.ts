@@ -2562,14 +2562,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     captureEditorState();
     if (!(event.currentTarget instanceof HTMLElement)) return;
     if (!event.currentTarget.classList.contains("live-editing-overlay")) return;
+    const isLineBreak =
+      event.inputType === "insertParagraph" || event.inputType === "insertLineBreak";
     const isDeletion =
       event.inputType === "deleteContentBackward" || event.inputType === "deleteContentForward";
-    if (!isDeletion) return;
+    if (!isLineBreak && !isDeletion) return;
 
     const editorSelection = getEditorSelection(event.currentTarget);
     if (editorSelection && editorSelection.start !== editorSelection.end) {
       event.preventDefault();
-      replaceEditorSelection(editorSelection, "");
+      replaceEditorSelection(editorSelection, isLineBreak ? "\n" : "");
       return;
     }
 
@@ -2577,6 +2579,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const sourceSelection = element && getSourceSelection(element);
     if (!element || !sourceSelection) return;
     event.preventDefault();
+    if (isLineBreak) {
+      insertRenderedLineBreak(element, sourceSelection);
+      return;
+    }
     deleteRenderedContent(
       element,
       sourceSelection,
@@ -3005,15 +3011,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const value = element.textContent ?? "";
     if (event.key === "Enter") {
       event.preventDefault();
-      const before = value.slice(0, sourceSelection.start);
-      const after = value.slice(sourceSelection.end);
-      const marker = before.match(/^(\s*(?:[-*]\s+(?:\[[ xX]\]\s+)?|>\s+))/)?.[1] ?? "";
-      const continuation = marker && before.trim() !== marker.trim() ? marker : "";
-      const lines = [...markdownLines];
-      lines.splice(line, 1, before, `${continuation}${after}`);
-      updateMarkdown(lines.join("\n"));
-      liveLine = line + 1;
-      void tick().then(() => focusRenderedLine(line + 1, continuation.length));
+      insertRenderedLineBreak(element, sourceSelection);
     } else if (
       event.key === "Backspace" &&
       sourceSelection.start === 0 &&
@@ -3107,6 +3105,24 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${liveLine}"]`) ??
       undefined
     );
+  }
+
+  function insertRenderedLineBreak(
+    element: HTMLElement,
+    sourceSelection: { start: number; end: number },
+  ): void {
+    const line = liveLineIndex(element);
+    if (line === undefined) return;
+    const value = element.textContent ?? "";
+    const before = value.slice(0, sourceSelection.start);
+    const after = value.slice(sourceSelection.end);
+    const marker = before.match(/^(\s*(?:[-*]\s+(?:\[[ xX]\]\s+)?|>\s+))/)?.[1] ?? "";
+    const continuation = marker && before.trim() !== marker.trim() ? marker : "";
+    const lines = [...markdownLines];
+    lines.splice(line, 1, before, `${continuation}${after}`);
+    updateMarkdown(lines.join("\n"));
+    liveLine = line + 1;
+    void tick().then(() => focusRenderedLine(line + 1, continuation.length));
   }
 
   function deleteRenderedContent(
