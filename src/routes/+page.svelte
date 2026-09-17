@@ -134,7 +134,7 @@
 		onPlacePane={page.placePane}
 		onReload={() => location.reload()}
 		onMarkdownChange={page.updateMarkdown}
-		onEditorBeforeInput={page.captureEditorState}
+		onEditorBeforeInput={page.handleEditorBeforeInput}
 		onEditorCopy={page.handleEditorCopy}
 		onEditorCut={page.handleEditorCut}
 		onEditorPaste={page.handleEditorPaste}

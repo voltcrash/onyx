@@ -58,7 +58,7 @@
 		onPlacePane: (pane: 'output' | 'rendered', edge: PaneEdge) => void;
 		onReload: () => void;
 		onMarkdownChange: (value: string) => void;
-		onEditorBeforeInput: () => void;
+		onEditorBeforeInput: (event: InputEvent) => void;
 		onEditorCopy: (event: ClipboardEvent) => void;
 		onEditorCut: (event: ClipboardEvent) => void;
 		onEditorPaste: (event: ClipboardEvent) => void;
