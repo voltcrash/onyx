@@ -4,7 +4,8 @@
   min-height: 0;
   display: flex;
   overflow: hidden;
-  padding: 1px 4px 18px;
+  margin-inline: -7px;
+  padding: 1px 0 18px;
 }
 .palette {
   width: 100%;
