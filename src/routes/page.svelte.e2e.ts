@@ -700,13 +700,16 @@ test("searches note titles and Markdown content from the command palette", async
   await expect(
     page.locator(".notes-heading").getByRole("button", { name: "New note" }),
   ).toHaveCount(0);
+  await expect(
+    page.locator(".notes-heading").getByRole("button", { name: "Open the command palette" }),
+  ).toHaveCount(1);
   const filesPanel = page.locator(".files-panel");
   const childOrder = await filesPanel.evaluate((panel) =>
-    ["search-box", "file-toolbar", "note-list"].map((className) =>
+    ["file-toolbar", "note-list"].map((className) =>
       [...panel.children].findIndex((child) => child.classList.contains(className)),
     ),
   );
-  expect(childOrder).toEqual([0, 1, 2]);
+  expect(childOrder).toEqual([0, 1]);
 
   await page.getByRole("button", { name: "New file" }).click();
   await page.getByRole("textbox", { name: "File name" }).press("Enter");
