@@ -76,7 +76,7 @@
 		onFindReplace={page.replaceFind}
 		onFindReplaceAll={page.replaceAllFind}
 		onCloseFind={page.closeFind}
-		onOpenPalette={() => void page.openPalette()}
+		onOpenPalette={page.openPalette}
 		onClosePalette={page.closePalette}
 		onOpenSettings={() => page.openSettings('editor')}
 		onOpenStorageSettings={() => page.openSettings('storage')}
