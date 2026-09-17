@@ -2257,7 +2257,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       const archive = await createMarkdownZip(files);
       downloadBlob(archive, `onyx-markdown-${new Date().toISOString().slice(0, 10)}.zip`);
       transferState = "idle";
-      transferMessage = `Exported ${files.length} ${files.length === 1 ? "file" : "files"} to ZIP.`;
+      transferMessage = "";
     } catch (error) {
       showTransferError(error, "The ZIP archive could not be exported.");
     }
@@ -2290,7 +2290,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       const files = await createMarkdownExport(vault);
       await writeMarkdownFolder(directory, files);
       transferState = "idle";
-      transferMessage = `Exported ${files.length} ${files.length === 1 ? "file" : "files"} to the selected folder.`;
+      transferMessage = "";
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       showTransferError(error, "The Markdown folder could not be exported.");

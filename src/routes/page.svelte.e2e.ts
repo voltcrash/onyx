@@ -2152,7 +2152,7 @@ test("imports a Markdown folder and exports its structure and attachments as ZIP
   await page.getByRole("button", { name: "Download ZIP" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/^onyx-markdown-\d{4}-\d{2}-\d{2}\.zip$/);
-  await expect(page.getByText("Exported 3 files to ZIP.")).toBeVisible();
+  await expect(page.getByText("Exported 3 files to ZIP.")).toHaveCount(0);
 });
 
 test("restores a selected GitHub commit into the local vault", async ({ page }) => {
