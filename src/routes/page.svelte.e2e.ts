@@ -1391,6 +1391,42 @@ test.describe("mobile rendered typing", () => {
         .toBe(expected);
     }
   });
+  test("keeps settings sections usable on a phone-sized viewport", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Show the output pane" }).click();
+    await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+    await page.getByRole("button", { name: "Show notes sidebar" }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: /Settings/ });
+    await expect(dialog).toBeVisible();
+
+    const layout = await dialog.locator(".settings-body").evaluate((body) => {
+      const nav = body.querySelector<HTMLElement>(".settings-nav");
+      const panel = body.querySelector<HTMLElement>(".settings-panel");
+      if (!nav || !panel) throw new Error("Settings layout is incomplete");
+      const bodyRect = body.getBoundingClientRect();
+      const navRect = nav.getBoundingClientRect();
+      const panelRect = panel.getBoundingClientRect();
+      return {
+        bodyWidth: bodyRect.width,
+        navWidth: navRect.width,
+        panelWidth: panelRect.width,
+        panelX: panelRect.x,
+        bodyX: bodyRect.x,
+        panelY: panelRect.y,
+        navY: navRect.y,
+        navClientWidth: nav.clientWidth,
+        navScrollWidth: nav.scrollWidth,
+      };
+    });
+
+    expect(layout.navWidth).toBeCloseTo(layout.bodyWidth, 1);
+    expect(layout.panelWidth).toBeCloseTo(layout.bodyWidth, 1);
+    expect(layout.panelX).toBeCloseTo(layout.bodyX, 1);
+    expect(layout.panelY).toBeGreaterThan(layout.navY);
+    expect(layout.navScrollWidth).toBeGreaterThan(layout.navClientWidth);
+  });
 });
 
 test("supports standard editing shortcuts in the page pane", async ({ page }) => {

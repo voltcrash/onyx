@@ -1061,3 +1061,45 @@ kbd {
   background: var(--danger-solid);
   color: #fff;
 }
+
+@media (max-width: 700px) {
+  .theme-mode-options,
+  .theme-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .settings-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    height: min(76vh, 600px);
+  }
+  .settings-nav {
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    padding: 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .settings-nav button {
+    white-space: nowrap;
+  }
+  .settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .settings-section-heading {
+    display: block;
+  }
+  .settings-section-heading .settings-secondary {
+    margin-bottom: 12px;
+  }
+  .settings-row {
+    flex-wrap: wrap;
+  }
+  .restore-source {
+    grid-template-columns: 1fr 1fr;
+  }
+  .restore-source button {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+}
