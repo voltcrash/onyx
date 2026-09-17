@@ -271,7 +271,6 @@
 .files-panel {
   display: flex;
   flex-direction: column;
-  position: relative;
 }
 .find-panel {
   overflow-y: auto;

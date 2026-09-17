@@ -358,13 +358,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let markdownOutputModule: MarkdownOutputModule | undefined;
   let markdownOutputModulePromise: Promise<MarkdownOutputModule> | undefined;
   let markdownOutputModuleRevision = $state(0);
+  let commandPaletteStylesPromise: Promise<void> | undefined;
   let dialogStylesPromise: Promise<void> | undefined;
   let serviceWorkerTimer: number | undefined;
   let githubRestoreTimer: number | undefined;
   let outputViewRequest = 0;
   let settingsOpener: HTMLElement | undefined;
   let paletteOpener: HTMLElement | undefined;
-  let focusRestoreFrame: number | undefined;
   let unsubscribeVault: (() => void) | undefined;
   let remoteSyncRun: Promise<void> | undefined;
   let remoteSyncRequested = false;
@@ -1040,6 +1040,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }));
   }
 
+  function loadCommandPaletteStyles(): Promise<void> {
+    return (commandPaletteStylesPromise ??= loadLazyStylesModule().then((module) =>
+      module.loadCommandPaletteStyles(),
+    ));
+  }
+
   function loadDialogStyles(): Promise<void> {
     return (dialogStylesPromise ??= loadLazyStylesModule().then((module) =>
       module.loadDialogStyles(),
@@ -1321,12 +1327,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function restoreModalFocus(opener: HTMLElement | undefined): void {
-    if (focusRestoreFrame !== undefined) cancelAnimationFrame(focusRestoreFrame);
-    focusRestoreFrame = undefined;
     if (!opener) return;
-    focusRestoreFrame = requestAnimationFrame(() => {
-      focusRestoreFrame = undefined;
-      if (opener.isConnected && !paletteOpen && !settingsOpen) opener.focus();
+    requestAnimationFrame(() => {
+      if (opener.isConnected) opener.focus();
     });
   }
 
@@ -3634,8 +3637,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   async function openPalette(): Promise<void> {
-    if (focusRestoreFrame !== undefined) cancelAnimationFrame(focusRestoreFrame);
-    focusRestoreFrame = undefined;
     if (paletteOpen) {
       focusSearch();
       return;
@@ -3643,10 +3644,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!paletteOpen && document.activeElement instanceof HTMLElement) {
       paletteOpener = document.activeElement;
     }
+    paletteNotes = vault ? await vault.listNotes() : [];
+    await loadCommandPaletteStyles();
     sidebarCollapsed = false;
     if (window.innerWidth <= 900) sidebarOpen = true;
     paletteOpen = true;
-    paletteNotes = vault ? await vault.listNotes() : [];
   }
 
   function closePalette(): void {

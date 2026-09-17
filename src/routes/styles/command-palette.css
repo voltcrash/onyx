@@ -6,37 +6,6 @@
   overflow: hidden;
   padding: 1px 4px 18px;
 }
-.palette-panel.palette-inline {
-  position: absolute;
-  z-index: 30;
-  top: 0;
-  right: 4px;
-  left: 4px;
-  max-height: min(560px, calc(100dvh - 24px));
-  padding: 0;
-  border: 1px solid var(--line-hover);
-  border-radius: 8px;
-  background: var(--sidebar);
-  box-shadow: var(--shadow-panel);
-}
-.palette-inline .palette {
-  flex: 0 1 auto;
-  max-height: inherit;
-}
-.palette-inline .palette-search-box {
-  margin: 0;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 7px 7px 0 0;
-}
-.palette-inline .palette-list {
-  flex: 0 1 auto;
-  max-height: min(500px, calc(100dvh - 90px));
-  padding: 4px 5px 7px;
-}
-.palette-inline .palette-empty {
-  padding: 32px 16px;
-}
 .palette {
   width: 100%;
   flex: 1;

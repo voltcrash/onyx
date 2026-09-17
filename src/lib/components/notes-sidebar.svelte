@@ -9,7 +9,7 @@
 	import VaultSwitcher from './vault-switcher.svelte';
 	import FindReplace from './find-replace.svelte';
 	import type { GithubState, SaveState, TransferState } from './app-types';
-	import CommandPalette, { type PaletteControl, type PaletteItem } from './command-palette.svelte';
+	import type { PaletteControl, PaletteItem } from './command-palette.svelte';
 
 	interface Props {
 		vaults: VaultDescriptor[];
@@ -437,7 +437,11 @@
 
 <aside class="sidebar" aria-label="Notes">
 	<div class="notes-heading"><div class="notes-title"><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions"><button class="icon-button sidebar-toggle" aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeftClose size={19} /></button></div></div>
-	{#if findOpen}
+	{#if paletteOpen}
+		{#await import('$lib/components/command-palette.svelte') then { default: CommandPalette }}
+			<CommandPalette items={paletteItems} controls={paletteControls} query={searchQuery} loading={searchPending} bind:searchInput onQueryChange={onSearch} onClose={onClosePalette} />
+		{/await}
+	{:else if findOpen}
 		<FindReplace
 			query={findQuery}
 			replacement={findReplacement}
@@ -461,11 +465,7 @@
 		/>
 	{:else}
 		<div class="sidebar-panel files-panel">
-			{#if paletteOpen}
-				<CommandPalette embedded items={paletteItems} controls={paletteControls} query={searchQuery} loading={searchPending} bind:searchInput onQueryChange={onSearch} onClose={onClosePalette} />
-			{:else}
-				<button class="search-box search-palette-button search-palette-trigger" type="button" aria-label="Open the command palette" aria-haspopup="listbox" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Search notes and commands (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><Search size={15} aria-hidden="true" /><span>Search notes or commands…</span><kbd>{formatShortcut(shortcuts.commandPalette, primaryModifier).replaceAll(' ', '')}</kbd></button>
-			{/if}
+			<button class="search-box search-palette-button search-palette-trigger" type="button" aria-label="Open the command palette" aria-haspopup="listbox" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Search notes and commands (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><Search size={15} aria-hidden="true" /><span>Search notes or commands…</span><kbd>{formatShortcut(shortcuts.commandPalette, primaryModifier).replaceAll(' ', '')}</kbd></button>
 			<div class="file-toolbar">
 				<div class="result-count" aria-live="polite">{results.length} {results.length === 1 ? 'note' : 'notes'}</div>
 				<div class="file-actions" aria-label="File actions">

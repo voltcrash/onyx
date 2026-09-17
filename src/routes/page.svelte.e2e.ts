@@ -312,7 +312,9 @@ async function renderedSelectionDetails(page: Page) {
   });
 }
 
-test("opens the command palette inline and returns focus to the opener", async ({ page }) => {
+test("opens the command palette in the sidebar and returns focus to the opener", async ({
+  page,
+}) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
@@ -340,9 +342,6 @@ test("opens the command palette inline and returns focus to the opener", async (
   await expect(commandPalette).toHaveAttribute("role", "search");
   await expect(page.locator(".palette-backdrop")).toHaveCount(0);
   await expect(page.locator(".app")).not.toHaveAttribute("inert");
-  await expect(page.locator(".files-panel .file-toolbar")).toBeAttached();
-  await expect(page.locator(".files-panel .note-list")).toBeAttached();
-  await expect(page.getByText("Command palette", { exact: true })).toHaveCount(0);
   await expect(commandPalette.locator('input[role="combobox"]')).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(palette).toBeFocused();

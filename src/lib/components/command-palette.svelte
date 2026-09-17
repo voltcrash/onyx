@@ -34,19 +34,19 @@
 
 <script lang="ts">
 	import { LoaderCircle, Search, X } from '@lucide/svelte';
+	import { fly } from 'svelte/transition';
 
 	interface Props {
 		items: PaletteItem[];
 		controls?: PaletteControl[];
 		query: string;
-		embedded?: boolean;
 		loading?: boolean;
 		searchInput?: HTMLInputElement;
 		onQueryChange: (value: string) => void;
 		onClose: () => void;
 	}
 
-	let { items, controls = [], query, embedded = false, loading = false, searchInput = $bindable(), onQueryChange, onClose }: Props = $props();
+	let { items, controls = [], query, loading = false, searchInput = $bindable(), onQueryChange, onClose }: Props = $props();
 
 	let activeIndex = $state(0);
 	let list: HTMLElement | undefined = $state();
@@ -184,14 +184,12 @@
 	}
 </script>
 
-	<section id="command-palette" class="palette-panel" class:palette-inline={embedded} role="search" aria-label={embedded ? 'Search notes and commands' : 'Command palette'} aria-busy={loading}>
+	<section id="command-palette" class="palette-panel" role="search" aria-label="Command palette" aria-busy={loading} transition:fly={{ y: -7, duration: 170 }}>
 	<div class="palette">
-		{#if !embedded}
-			<div class="palette-heading">
-				<div class="palette-title"><Search size={16} /><div><strong id="command-palette-title">Command palette</strong><span id="command-palette-description">Search notes or run a command</span></div></div>
-				<button class="icon-button palette-close" type="button" aria-label="Close command palette" title="Close command palette (Esc)" onclick={onClose}><X size={17} /></button>
-			</div>
-		{/if}
+		<div class="palette-heading">
+			<div class="palette-title"><Search size={16} /><div><strong id="command-palette-title">Command palette</strong><span id="command-palette-description">Search notes or run a command</span></div></div>
+			<button class="icon-button palette-close" type="button" aria-label="Close command palette" title="Close command palette (Esc)" onclick={onClose}><X size={17} /></button>
+		</div>
 
 		<label class="search-box palette-search-box">
 			<span class="visually-hidden">Search notes and commands</span>
@@ -203,8 +201,8 @@
 				role="combobox"
 				aria-expanded="true"
 				aria-controls="palette-list"
-				aria-labelledby={embedded ? undefined : 'command-palette-title'}
-				aria-describedby={embedded ? 'palette-result-count' : 'command-palette-description palette-result-count'}
+				aria-labelledby="command-palette-title"
+				aria-describedby="command-palette-description palette-result-count"
 				aria-activedescendant={matches[activeIndex] ? `palette-${matches[activeIndex].id}` : undefined}
 				aria-label="Search notes and commands"
 				placeholder="Search notes or commands…"
