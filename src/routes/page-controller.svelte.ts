@@ -358,7 +358,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let markdownOutputModule: MarkdownOutputModule | undefined;
   let markdownOutputModulePromise: Promise<MarkdownOutputModule> | undefined;
   let markdownOutputModuleRevision = $state(0);
-  let commandPaletteStylesPromise: Promise<void> | undefined;
   let dialogStylesPromise: Promise<void> | undefined;
   let serviceWorkerTimer: number | undefined;
   let githubRestoreTimer: number | undefined;
@@ -1038,12 +1037,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       void loadMarkdownModule().catch(() => undefined);
       return module;
     }));
-  }
-
-  function loadCommandPaletteStyles(): Promise<void> {
-    return (commandPaletteStylesPromise ??= loadLazyStylesModule().then((module) =>
-      module.loadCommandPaletteStyles(),
-    ));
   }
 
   function loadDialogStyles(): Promise<void> {
@@ -3644,11 +3637,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!paletteOpen && document.activeElement instanceof HTMLElement) {
       paletteOpener = document.activeElement;
     }
-    paletteNotes = vault ? await vault.listNotes() : [];
-    await loadCommandPaletteStyles();
     sidebarCollapsed = false;
     if (window.innerWidth <= 900) sidebarOpen = true;
     paletteOpen = true;
+    paletteNotes = vault ? await vault.listNotes() : [];
   }
 
   function closePalette(): void {

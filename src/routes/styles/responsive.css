@@ -31,9 +31,6 @@
     z-index: 15;
     background: var(--scrim);
   }
-  .sidebar-open.palette-open::after {
-    display: none;
-  }
   .workspace {
     grid-column: 1;
   }

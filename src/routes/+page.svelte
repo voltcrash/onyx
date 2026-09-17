@@ -12,7 +12,7 @@
 	<meta name="description" content="A fast, local-first Markdown editor with full-text search that works offline." />
 </svelte:head>
 
-<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:palette-open={page.paletteOpen} inert={page.settingsOpen || page.restoreModalOpen}>
+<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} inert={page.settingsOpen || page.restoreModalOpen}>
 	<NotesSidebar
 		vaults={page.vaults}
 		activeVaultId={page.activeVaultId}
