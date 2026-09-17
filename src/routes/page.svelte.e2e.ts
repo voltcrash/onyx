@@ -1290,6 +1290,90 @@ test.describe("mobile rendered typing", () => {
       await expect(page.locator('[data-live-line="1"]')).toHaveText("b");
     }
   });
+
+  test("continues every Markdown list marker after a mobile Enter", async ({ page }) => {
+    await page.goto("/");
+
+    for (const source of [
+      "- item",
+      "+ item",
+      "* item",
+      "1. first",
+      "1) first",
+      "  12. first",
+      "> quote",
+    ]) {
+      await page.getByRole("button", { name: "Show the output pane" }).click();
+      const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+      await expect(markdown).toBeEnabled();
+      await markdown.fill(source);
+      await page.getByRole("button", { name: "Show the page pane" }).click();
+      await expect(page.getByRole("textbox", { name: "Page editor" })).toBeVisible();
+      await setRenderedSelection(page, 0, source.length);
+      await page.evaluate(() => {
+        const overlay = document.querySelector<HTMLElement>(".live-editing-overlay");
+        if (!overlay) throw new Error("The rendered editor is not available");
+        const event = new InputEvent("beforeinput", {
+          bubbles: true,
+          cancelable: true,
+          inputType: "insertParagraph",
+        });
+        overlay.dispatchEvent(event);
+        if (!event.defaultPrevented) throw new Error("The list break input was not handled");
+      });
+      await page.getByRole("textbox", { name: "Markdown line 2" }).pressSequentially("next");
+
+      const marker = source.match(/^(\s*(?:[-+*]|\d+[.)])\s+)/)?.[1];
+      const expectedMarker = marker
+        ? /^\s*\d+[.)]\s+/.test(marker)
+          ? `${marker.replace(/\d+/, (value) => String(Number(value) + 1))}`
+          : marker
+        : "> ";
+      await expect
+        .poll(() => page.locator('textarea[aria-label="Markdown editor"]').inputValue())
+        .toBe(`${source}\n${expectedMarker}next`);
+    }
+  });
+
+  test("keeps mobile typing aligned inside formatted and blank lines", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Show the output pane" }).click();
+    const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+    await expect(markdown).toBeEnabled();
+    await markdown.fill("This is **bold** text.\n\nA final line.");
+    await page.getByRole("button", { name: "Show the page pane" }).click();
+    await expect(page.getByRole("textbox", { name: "Page editor" })).toBeVisible();
+
+    await setRenderedSelection(page, 0, "This is **bo".length);
+    await page.keyboard.type("X");
+    await expect
+      .poll(() => page.locator('textarea[aria-label="Markdown editor"]').inputValue())
+      .toBe("This is **boXld** text.\n\nA final line.");
+
+    await setRenderedSelection(page, 1, 0);
+    await page.keyboard.type("Inserted on the blank line");
+    await expect
+      .poll(() => page.locator('textarea[aria-label="Markdown editor"]').inputValue())
+      .toBe("This is **boXld** text.\nInserted on the blank line\nA final line.");
+  });
+
+  test("repeats mobile Backspace inside formatted text", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Show the output pane" }).click();
+    const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+    await expect(markdown).toBeEnabled();
+    await markdown.fill("This is **bold** text.");
+    await page.getByRole("button", { name: "Show the page pane" }).click();
+    await expect(page.getByRole("textbox", { name: "Page editor" })).toBeVisible();
+
+    await setRenderedSelection(page, 0, "This is **bold".length);
+    for (const expected of ["This is **bol** text.", "This is **bo** text."]) {
+      await page.keyboard.press("Backspace");
+      await expect
+        .poll(() => page.locator('textarea[aria-label="Markdown editor"]').inputValue())
+        .toBe(expected);
+    }
+  });
 });
 
 test("supports standard editing shortcuts in the page pane", async ({ page }) => {

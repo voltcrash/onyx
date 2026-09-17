@@ -3116,8 +3116,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const value = element.textContent ?? "";
     const before = value.slice(0, sourceSelection.start);
     const after = value.slice(sourceSelection.end);
-    const marker = before.match(/^(\s*(?:[-*]\s+(?:\[[ xX]\]\s+)?|>\s+))/)?.[1] ?? "";
-    const continuation = marker && before.trim() !== marker.trim() ? marker : "";
+    const marker =
+      before.match(/^(\s*(?:(?:[-+*])\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|>\s+))/)?.[1] ?? "";
+    const hasContent = marker.length > 0 && before.slice(marker.length).trim().length > 0;
+    const orderedMarker = marker.match(/^(\s*)(\d+)([.)])(\s+)$/);
+    const continuation = hasContent
+      ? orderedMarker
+        ? `${orderedMarker[1]}${Number(orderedMarker[2]) + 1}${orderedMarker[3]}${orderedMarker[4]}`
+        : marker
+      : "";
     const lines = [...markdownLines];
     lines.splice(line, 1, before, `${continuation}${after}`);
     updateMarkdown(lines.join("\n"));
