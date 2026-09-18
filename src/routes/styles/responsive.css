@@ -21,8 +21,25 @@
     transform: translateX(-105%);
     transition: transform 0.22s ease;
   }
-  .sidebar-open .sidebar {
+  .sidebar-right .sidebar,
+  .sidebar-right.sidebar-collapsed .sidebar {
+    inset: 0 0 0 auto;
+    transform: translateX(105%);
+  }
+  .sidebar-open .sidebar,
+  .sidebar-right.sidebar-open .sidebar {
     transform: translateX(0);
+  }
+  .sidebar-right .workspace > .storage-notice,
+  .sidebar-right .workspace > .storage-error {
+    padding-right: 54px;
+    padding-left: 18px;
+  }
+  .sidebar-right .output-switcher {
+    right: 60px;
+  }
+  .sidebar-right .rendered-switcher {
+    margin-right: 60px;
   }
   .sidebar-open::after {
     content: "";

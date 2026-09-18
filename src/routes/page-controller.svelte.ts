@@ -29,6 +29,7 @@ import {
   Pilcrow,
   PanelLeft,
   PanelLeftClose,
+  PanelRight,
   Lock,
   PanelRightClose,
   Printer,
@@ -156,6 +157,10 @@ function loadLazyStylesModule(): Promise<LazyStylesModule> {
 
 type EditorSurface = "source" | "rendered";
 type SidebarState = { collapsed: boolean; open: boolean };
+type SidebarSide = "left" | "right";
+
+const SIDEBAR_DRAG_HOLD_MS = 300;
+const SIDEBAR_DRAG_SLOP_PX = 6;
 
 interface EditorSelection {
   start: number;
@@ -345,6 +350,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let paletteNotes = $state<NoteMetadata[]>([]);
   let recentNoteIds = $state<string[]>([]);
   let sidebarCollapsed = $state(false);
+  let sidebarSide = $state<SidebarSide>("left");
+  let sidebarDropSide = $state<SidebarSide | undefined>();
   let shortcuts = $state<KeyboardShortcuts>(structuredClone(defaultKeyboardShortcuts));
   let primaryModifier = $state<PrimaryModifier>("meta");
   let undoStack: EditorHistoryEntry[] = [];
@@ -765,6 +772,24 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       run: () => toggleSidebar(),
     },
     {
+      id: "sidebar-left",
+      group: "View",
+      label: "Sidebar position: Left",
+      icon: PanelLeft,
+      keywords: "panel side position dock move",
+      disabled: sidebarSide === "left",
+      run: () => setSidebarSide("left"),
+    },
+    {
+      id: "sidebar-right",
+      group: "View",
+      label: "Sidebar position: Right",
+      icon: PanelRight,
+      keywords: "panel side position dock move",
+      disabled: sidebarSide === "right",
+      run: () => setSidebarSide("right"),
+    },
+    {
       id: "theme-light",
       group: "Themes",
       label: "Use light mode",
@@ -1143,6 +1168,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       applyPanePreferences();
     };
     narrowQuery?.addEventListener("change", onViewportChange);
+    sidebarSide = readLocalStorage("onyx:sidebar-side") === "right" ? "right" : "left";
     const storedSplit = Number(readLocalStorage("onyx:split-ratio"));
     if (Number.isFinite(storedSplit)) splitRatio = clampSplitRatio(storedSplit);
     const storedContentWidth = Number(readLocalStorage("onyx:content-width"));
@@ -1192,7 +1218,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
     document.addEventListener("visibilitychange", onVisibilityChange);
+    document.addEventListener("selectionchange", keepRenderedCaretOutOfPrefix);
     return () => {
+      document.removeEventListener("selectionchange", keepRenderedCaretOutOfPrefix);
       window.removeEventListener("beforeunload", onBeforeUnload);
       window.removeEventListener("keydown", onKeydown);
       window.removeEventListener("online", onOnline);
@@ -2645,6 +2673,30 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     return Number.isInteger(value) && value >= 0 ? value : undefined;
   }
 
+  // Length of the hidden markdown marker (bullet, checkbox, heading, quote) that starts a line.
+  function hiddenPrefixLength(line: number): number {
+    const value = markdownLines[line] ?? "";
+    if (liveCodeLines[line] || tableLineKind(line)) return 0;
+    const match =
+      value.match(/^\s*[-+*]\s+\[[ xX]\]\s+/) ??
+      value.match(/^\s*(?:[-+*]|\d+[.)])\s+/) ??
+      value.match(/^#{1,6}\s+/) ??
+      value.match(/^>\s?/);
+    return match?.[0].length ?? 0;
+  }
+
+  function keepRenderedCaretOutOfPrefix(): void {
+    const selection = window.getSelection();
+    if (!selection?.isCollapsed || !liveEditorContainer) return;
+    const element = liveLineElement(selection.anchorNode);
+    if (!element || !liveEditorContainer.contains(element)) return;
+    const line = liveLineIndex(element);
+    if (line === undefined) return;
+    const prefix = hiddenPrefixLength(line);
+    const offset = textOffsetAt(element, selection.anchorNode!, selection.anchorOffset);
+    if (offset !== undefined && offset < prefix) setRenderedSelection(element, prefix, prefix);
+  }
+
   function markdownLineOffset(line: number): number {
     return markdownLines.slice(0, line).reduce((total, value) => total + value.length + 1, 0);
   }
@@ -3023,9 +3075,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       insertRenderedLineBreak(element, sourceSelection);
     } else if (
       event.key === "Backspace" &&
-      sourceSelection.start === 0 &&
-      sourceSelection.end === 0 &&
-      line > 0
+      sourceSelection.start === sourceSelection.end &&
+      sourceSelection.start <= hiddenPrefixLength(line) &&
+      (line > 0 || hiddenPrefixLength(line) > 0)
     ) {
       event.preventDefault();
       deleteRenderedContent(element, sourceSelection, "backward");
@@ -3039,8 +3091,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       deleteRenderedContent(element, sourceSelection, "forward");
     } else if (
       event.key === "ArrowLeft" &&
-      sourceSelection.start === 0 &&
-      sourceSelection.end === 0 &&
+      sourceSelection.start === sourceSelection.end &&
+      sourceSelection.start <= hiddenPrefixLength(line) &&
       line > 0 &&
       !event.shiftKey &&
       !event.altKey &&
@@ -3159,6 +3211,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         },
         "",
       );
+      return;
+    }
+    const prefix = hiddenPrefixLength(line);
+    if (direction === "backward" && prefix > 0 && sourceSelection.start <= prefix) {
+      const task = value.match(/^(\s*[-+*]\s+)\[[ xX]\]\s+/);
+      const kept = task ? task[1] : "";
+      const lines = [...markdownLines];
+      lines[line] = `${kept}${value.slice(prefix)}`;
+      updateMarkdown(lines.join("\n"));
+      void tick().then(() => focusRenderedLine(line, kept.length));
       return;
     }
     if (direction === "backward" && sourceSelection.start === 0) {
@@ -3628,6 +3690,69 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   function toggleSidebar(): void {
     if (window.innerWidth <= 900) sidebarOpen = !sidebarOpen;
     else sidebarCollapsed = !sidebarCollapsed;
+  }
+
+  function setSidebarSide(side: SidebarSide): void {
+    sidebarSide = side;
+    writeLocalStorage("onyx:sidebar-side", side);
+  }
+
+  /** Holding a sidebar toggle picks it up; releasing it over either half of the window docks the sidebar there. */
+  function startSidebarDrag(event: PointerEvent): void {
+    if (event.button !== 0 || !event.isPrimary) return;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    let dragging = false;
+    const holdTimer = window.setTimeout(() => {
+      dragging = true;
+      sidebarDropSide = sidebarSide;
+    }, SIDEBAR_DRAG_HOLD_MS);
+    const onMove = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== event.pointerId) return;
+      if (dragging) {
+        moveEvent.preventDefault();
+        sidebarDropSide = moveEvent.clientX > window.innerWidth / 2 ? "right" : "left";
+      } else if (
+        Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) > SIDEBAR_DRAG_SLOP_PX
+      ) {
+        finish();
+      }
+    };
+    const onUp = (upEvent: PointerEvent) => {
+      if (upEvent.pointerId !== event.pointerId) return;
+      if (dragging && sidebarDropSide) {
+        setSidebarSide(sidebarDropSide);
+        // The release would otherwise land as a click and toggle the sidebar.
+        window.addEventListener("click", swallowClick, { capture: true, once: true });
+        window.setTimeout(
+          () => window.removeEventListener("click", swallowClick, { capture: true }),
+          0,
+        );
+      }
+      finish();
+    };
+    const onCancel = (cancelEvent: PointerEvent) => {
+      if (cancelEvent.pointerId === event.pointerId) finish();
+    };
+    const onContextMenu = (menuEvent: Event) => {
+      if (dragging) menuEvent.preventDefault();
+    };
+    function swallowClick(clickEvent: Event): void {
+      clickEvent.preventDefault();
+      clickEvent.stopPropagation();
+    }
+    function finish(): void {
+      window.clearTimeout(holdTimer);
+      sidebarDropSide = undefined;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      window.removeEventListener("contextmenu", onContextMenu);
+    }
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    window.addEventListener("contextmenu", onContextMenu);
   }
 
   function setTheme(preference: ThemePreference): void {
@@ -4205,6 +4330,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     set sidebarCollapsed(value: boolean) {
       sidebarCollapsed = value;
     },
+    get sidebarSide() {
+      return sidebarSide;
+    },
+    get sidebarDropSide() {
+      return sidebarDropSide;
+    },
     get vault() {
       return vault;
     },
@@ -4293,6 +4424,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     openVault,
     dismissStorageNotice,
     toggleSidebar,
+    setSidebarSide,
+    startSidebarDrag,
     insertSyntax,
     prefixLine,
     setSplitRatio,

@@ -43,6 +43,7 @@
 		onRetryStorage: () => void;
 		onDismissStorageNotice: () => void;
 		onToggleSidebar: () => void;
+		onSidebarDragStart: (event: PointerEvent) => void;
 		splitRatio: number;
 		contentWidth: number;
 		onToggleOutputPane: () => void;
@@ -74,7 +75,7 @@
 	let {
 		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, outputView, plainText, plainTextBlocks, htmlSource, htmlSourceBlocks, highlightedHtmlSourceLines, renderedBlockLines, renderedReadOnly, markdown, markdownLines, findOpen, findQuery, findMatches, activeFindMatch, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
-		editor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar,
+		editor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
 		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onOutputViewChange, onCopy, onDownload, onToggleRenderedPane, onToggleRenderedReadOnly, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onSourceFocus, onLiveLineFocus, onRenderedInput,
 		onRenderedLineKeydown, renderEditableLine, liveLineKind, liveCodeLanguage
 	}: Props = $props();
@@ -229,8 +230,19 @@
 			}
 		});
 
-		const contentWidth = renderedContent.getBoundingClientRect().width;
-		liveLineRects = rects.map((rect) => rect ?? { top: 0, left: 0, width: contentWidth, height: 0 });
+		const contentRect = renderedContent.getBoundingClientRect();
+		// An empty note renders no blocks, so give its lines a clickable height to type into.
+		const fallback: LiveLineRect = renderedBlocks.length
+			? { top: 0, left: 0, width: contentRect.width, height: 0 }
+			: {
+					top: contentRect.top - containerRect.top,
+					left: contentRect.left - containerRect.left,
+					width: contentRect.width,
+					height: parseFloat(getComputedStyle(renderedContent).lineHeight) || renderedContent.offsetHeight || 30,
+				};
+		liveLineRects = rects.map(
+			(rect, index) => rect ?? (renderedBlocks.length ? fallback : { ...fallback, top: fallback.top + index * fallback.height }),
+		);
 	}
 
 	function liveLineStyle(index: number): string | undefined {
@@ -559,7 +571,7 @@
 <svelte:window onkeydown={cancelPaneDrag} />
 
 <main class="workspace">
-	<button class="collapsed-sidebar-toggle" aria-label="Show notes sidebar" title={`Show sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button>
+	<button class="collapsed-sidebar-toggle" onpointerdown={onSidebarDragStart} aria-label="Show notes sidebar" title={`Show sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button>
 	{#if storageNotice}
 		<div class="storage-notice" role="status"><HardDrive size={16} /><span>{storageNotice}</span><button class="storage-dismiss" aria-label="Dismiss storage warning" title="Dismiss" onclick={onDismissStorageNotice}><X size={14} /></button></div>
 	{/if}
