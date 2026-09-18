@@ -2447,3 +2447,28 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
   );
   await expect(page.getByText("Restored 1 note and 1 attachment from GitHub.")).toBeVisible();
 });
+
+test("switches repositories by swiping horizontally on the sidebar", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  await page.locator(".vault-trigger").click();
+  await page.getByRole("menuitem", { name: "New repository" }).click();
+  const dots = page.getByRole("tablist", { name: /Repositories/ }).getByRole("tab");
+  await expect(dots).toHaveCount(2);
+  await expect(dots.nth(1)).toHaveAttribute("aria-selected", "true");
+
+  const sidebar = page.locator(".sidebar .note-list");
+  await sidebar.hover();
+  await page.mouse.wheel(-120, 0);
+  await expect(dots.nth(0)).toHaveAttribute("aria-selected", "true");
+
+  // Vertical scrolling must not switch repositories.
+  await page.waitForTimeout(250);
+  await page.mouse.wheel(0, 120);
+  await page.waitForTimeout(250);
+  await expect(dots.nth(0)).toHaveAttribute("aria-selected", "true");
+
+  await page.mouse.wheel(120, 0);
+  await expect(dots.nth(1)).toHaveAttribute("aria-selected", "true");
+});

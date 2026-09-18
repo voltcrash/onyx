@@ -440,6 +440,76 @@
 		contextAction(() => onDeleteFile(menu.id));
 	}
 
+	const SWIPE_WHEEL_THRESHOLD = 60;
+	const SWIPE_TOUCH_THRESHOLD = 50;
+	const SWIPE_GESTURE_IDLE_MS = 180;
+	let sidebarElement = $state<HTMLElement>();
+	let swipePanel = $state<HTMLElement>();
+	let wheelDistance = 0;
+	let wheelLocked = false;
+	let wheelIdleTimer: ReturnType<typeof setTimeout> | undefined;
+	let touchStart: { x: number; y: number } | undefined;
+
+	function isSwipeExempt(target: EventTarget | null): boolean {
+		return target instanceof Element && Boolean(target.closest('input, textarea, select, [contenteditable], [role="menu"], .file-context-menu'));
+	}
+
+	function switchVaultBy(step: 1 | -1): void {
+		if (transferState === 'working' || vaults.length < 2) return;
+		const index = vaults.findIndex((vault) => vault.id === activeVaultId);
+		const next = vaults[index + step];
+		if (!next) return;
+		onSelectVault(next.id);
+		if (!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+			swipePanel?.animate(
+				[{ transform: `translateX(${step * 28}px)`, opacity: 0 }, { transform: 'translateX(0)', opacity: 1 }],
+				{ duration: 220, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
+			);
+		}
+	}
+
+	function handleSidebarWheel(event: WheelEvent): void {
+		if (Math.abs(event.deltaX) <= Math.abs(event.deltaY) || isSwipeExempt(event.target)) return;
+		event.preventDefault();
+		// One trackpad swipe emits a stream of wheel events plus inertia; switch once per stream.
+		clearTimeout(wheelIdleTimer);
+		wheelIdleTimer = setTimeout(() => {
+			wheelDistance = 0;
+			wheelLocked = false;
+		}, SWIPE_GESTURE_IDLE_MS);
+		if (wheelLocked) return;
+		wheelDistance += event.deltaX;
+		if (Math.abs(wheelDistance) < SWIPE_WHEEL_THRESHOLD) return;
+		wheelLocked = true;
+		switchVaultBy(wheelDistance > 0 ? 1 : -1);
+	}
+
+	// Svelte registers onwheel as passive; preventDefault is needed to stop browser history swipes.
+	$effect(() => {
+		const element = sidebarElement;
+		if (!element) return;
+		element.addEventListener('wheel', handleSidebarWheel, { passive: false });
+		return () => {
+			element.removeEventListener('wheel', handleSidebarWheel);
+			clearTimeout(wheelIdleTimer);
+		};
+	});
+
+	function handleSidebarTouchStart(event: TouchEvent): void {
+		touchStart = event.touches.length === 1 && !isSwipeExempt(event.target) ? { x: event.touches[0].clientX, y: event.touches[0].clientY } : undefined;
+	}
+
+	function handleSidebarTouchEnd(event: TouchEvent): void {
+		const start = touchStart;
+		touchStart = undefined;
+		const touch = event.changedTouches[0];
+		if (!start || !touch) return;
+		const dx = touch.clientX - start.x;
+		const dy = touch.clientY - start.y;
+		if (Math.abs(dx) < SWIPE_TOUCH_THRESHOLD || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+		switchVaultBy(dx < 0 ? 1 : -1);
+	}
+
 	function handleWindowKeydown(event: KeyboardEvent): void {
 		if (event.key === 'Escape') {
 			if (contextMenu) closeContextMenu();
@@ -456,7 +526,7 @@
 	<button role="menuitemradio" aria-checked={sidebarSide === 'right'} onclick={() => contextSetSidebarSide('right')}><PanelRight size={15} /><span>Sidebar on the right</span></button>
 {/snippet}
 
-<aside class="sidebar" aria-label="Notes" oncontextmenu={openSidebarContextMenu}>
+<aside class="sidebar" aria-label="Notes" oncontextmenu={openSidebarContextMenu} bind:this={sidebarElement} ontouchstart={handleSidebarTouchStart} ontouchend={handleSidebarTouchEnd} ontouchcancel={() => (touchStart = undefined)}>
 	<div class="notes-heading"><div class="notes-title"><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions"><button class="icon-button search-palette-button" type="button" aria-label="Open the command palette" aria-haspopup="listbox" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Search notes and commands (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><Search size={19} aria-hidden="true" /></button><button class="icon-button sidebar-toggle" onpointerdown={onSidebarDragStart} aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button></div></div>
 	{#if paletteOpen}
 		<CommandPalette items={paletteItems} controls={paletteControls} query={searchQuery} loading={searchPending} bind:searchInput onQueryChange={onSearch} onClose={onClosePalette} />
@@ -483,7 +553,7 @@
 			onClose={onCloseFind}
 		/>
 	{:else}
-		<div class="sidebar-panel files-panel">
+		<div class="sidebar-panel files-panel" bind:this={swipePanel}>
 			<div class="file-toolbar">
 				<div class="result-count" aria-live="polite">{results.length} {results.length === 1 ? 'note' : 'notes'}</div>
 				<div class="file-actions" aria-label="File actions">
@@ -557,6 +627,13 @@
 				<div><span>Reading time</span><strong>{readingMinutes} min</strong></div>
 				<div><span>Status</span><strong>{saveState === 'loading' ? 'Opening' : saveState === 'error' ? 'Save failed' : 'Saved locally'}</strong></div>
 			</section>
+		</div>
+	{/if}
+	{#if vaults.length > 1}
+		<div class="vault-dots" role="tablist" aria-label="Repositories (swipe the sidebar to switch)">
+			{#each vaults as vault (vault.id)}
+				<button role="tab" aria-selected={vault.id === activeVaultId} aria-label={vault.name} title={vault.name} class:active={vault.id === activeVaultId} disabled={transferState === 'working'} onclick={() => { if (vault.id !== activeVaultId) onSelectVault(vault.id); }}></button>
+			{/each}
 		</div>
 	{/if}
 	<div class="sidebar-footer">
