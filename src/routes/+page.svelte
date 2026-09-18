@@ -69,6 +69,8 @@
 		onDeleteFile={(id) => void page.deleteFile(id)}
 		onDeleteFolder={(path) => void page.deleteFolder(path)}
 		onCopyFilePath={(path) => void page.copyFilePath(path)}
+		onCopyFileAs={(id, format) => void page.copyNoteAs(id, format)}
+		onExportFileAs={(id, format) => void page.exportNoteAs(id, format)}
 		onSearch={page.queueSearch}
 		onFindQueryChange={page.setFindQuery}
 		onFindReplacementChange={page.setFindReplacement}
@@ -97,12 +99,6 @@
 		renderedPaneVisible={page.renderedPaneVisible}
 		paneLayout={page.paneLayout}
 		paneOrder={page.paneOrder}
-		outputView={page.outputView}
-		plainText={page.plainText}
-		plainTextBlocks={page.plainTextBlocks}
-		htmlSource={page.htmlSource}
-		htmlSourceBlocks={page.htmlSourceBlocks}
-		highlightedHtmlSourceLines={page.highlightedHtmlSourceLines}
 		renderedBlockLines={page.liveRenderedBlockLines}
 		renderedReadOnly={page.renderedReadOnly}
 		markdown={page.markdown}
@@ -129,9 +125,8 @@
 		onToggleOutputPane={page.toggleOutputPane}
 		resolvedTheme={page.resolvedTheme}
 		colorTheme={page.colorTheme}
-		onOutputViewChange={page.setOutputView}
-		onCopy={() => void page.copyOutput()}
-		onDownload={page.downloadOutput}
+		onCopy={() => void page.copyNoteAs(page.activeNoteId, 'markdown')}
+		onDownload={() => void page.exportNoteAs(page.activeNoteId, 'markdown')}
 		onToggleRenderedPane={page.toggleRenderedPane}
 		onToggleRenderedReadOnly={() => page.toggleRenderedReadOnly()}
 		onResize={page.setSplitRatio}

@@ -769,6 +769,21 @@
   background: var(--danger-bg);
   color: var(--danger);
 }
+.file-context-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.file-context-submenu {
+  position: absolute;
+  top: -5px;
+  left: 100%;
+  min-width: 140px;
+}
+.sidebar-right .file-context-submenu {
+  right: 100%;
+  left: auto;
+}
 .file-context-divider {
   margin: 4px 2px;
   border-top: 1px solid var(--line-soft);

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { ChevronDown, ChevronRight, Copy, FilePlus2, FileText, Folder, FolderPlus, HardDrive, LoaderCircle, Lock, LockOpen, LogOut, PanelLeft, PanelRight, Pencil, Plus, Search, Settings, Trash2, Type } from '@lucide/svelte';
+	import { ChevronDown, ChevronRight, Copy, Download, FilePlus2, FileText, Folder, FolderPlus, HardDrive, LoaderCircle, Lock, LockOpen, LogOut, PanelLeft, PanelRight, Pencil, Plus, Search, Settings, Trash2, Type } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
 	import type { GithubUser } from '$lib/github';
 	import type { VaultDescriptor } from '$lib/storage/registry';
@@ -10,6 +10,7 @@
 	import FindReplace from './find-replace.svelte';
 	import CommandPalette, { type PaletteControl, type PaletteItem } from './command-palette.svelte';
 	import type { GithubState, SaveState, TransferState } from './app-types';
+	import { noteFormats, type NoteFormat } from './note-formats';
 
 	interface Props {
 		vaults: VaultDescriptor[];
@@ -67,6 +68,8 @@
 		onDeleteFile: (id: string) => void;
 		onDeleteFolder: (path: string) => void;
 		onCopyFilePath: (path: string) => void;
+		onCopyFileAs: (id: string, format: Exclude<NoteFormat, 'pdf'>) => void;
+		onExportFileAs: (id: string, format: NoteFormat) => void;
 		onSearch: (value: string) => void;
 		onFindQueryChange: (value: string) => void;
 		onFindReplacementChange: (value: string) => void;
@@ -91,7 +94,7 @@
 	let {
 		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, searchQuery, findOpen, findQuery, findReplacement, findMatchCase, findWholeWord, findMatchCount, activeFindMatch, findCanEdit, notePage, notePageCount, saveState, notesLoaded, paletteOpen, searchPending, paletteItems, settingsOpen,
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, wordCount, readingMinutes, contentWidth,
-		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSidebarDragStart, sidebarSide, onSidebarSideChange, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, onCopyFilePath, onSearch,
+		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSidebarDragStart, sidebarSide, onSidebarSideChange, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, onCopyFilePath, onCopyFileAs, onExportFileAs, onSearch,
 		onFindQueryChange, onFindReplacementChange, onFindMatchCaseChange, onFindWholeWordChange, onFindPrevious, onFindNext, onFindReplace, onFindReplaceAll, onCloseFind,
 		onOpenPalette, onClosePalette, onOpenSettings, onOpenStorageSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage,
 		onContentWidthChange
@@ -131,6 +134,7 @@
 
 	let collapsedFolders = $state<Set<string>>(new Set());
 	let contextMenu = $state<ContextMenu>();
+	let contextSubmenu = $state<'export' | 'copy'>();
 	let naming = $state<NamingState>();
 	let draftName = $state('');
 	let namingInput = $state<HTMLInputElement>();
@@ -252,6 +256,7 @@
 
 	function closeContextMenu(): void {
 		contextMenu = undefined;
+		contextSubmenu = undefined;
 	}
 
 	async function beginNaming(state: NamingState): Promise<void> {
@@ -392,6 +397,18 @@
 		action();
 	}
 
+	function contextExportAs(format: NoteFormat): void {
+		const menu = contextMenu;
+		if (menu?.kind !== 'file') return;
+		contextAction(() => onExportFileAs(menu.id, format));
+	}
+
+	function contextCopyAs(format: NoteFormat): void {
+		const menu = contextMenu;
+		if (menu?.kind !== 'file' || format === 'pdf') return;
+		contextAction(() => onCopyFileAs(menu.id, format));
+	}
+
 	function contextCreateFile(): void {
 		const menu = contextMenu;
 		if (!menu) return;
@@ -454,6 +471,21 @@
 {#snippet sidebarPositionItems()}
 	<button role="menuitemradio" aria-checked={sidebarSide === 'left'} onclick={() => contextSetSidebarSide('left')}><PanelLeft size={15} /><span>Sidebar on the left</span></button>
 	<button role="menuitemradio" aria-checked={sidebarSide === 'right'} onclick={() => contextSetSidebarSide('right')}><PanelRight size={15} /><span>Sidebar on the right</span></button>
+{/snippet}
+
+{#snippet formatSubmenu(kind: 'export' | 'copy', label: string, formats: typeof noteFormats)}
+	<div class="file-context-group" role="none" onmouseenter={() => (contextSubmenu = kind)} onmouseleave={() => (contextSubmenu = undefined)}>
+		<button role="menuitem" aria-haspopup="menu" aria-expanded={contextSubmenu === kind} disabled={transferState === 'working'} onclick={() => (contextSubmenu = contextSubmenu === kind ? undefined : kind)}>
+			{#if kind === 'export'}<Download size={15} />{:else}<Copy size={15} />{/if}<span>{label}</span><ChevronRight size={14} />
+		</button>
+		{#if contextSubmenu === kind}
+			<div class="file-context-menu file-context-submenu" role="menu" aria-label={label}>
+				{#each formats as format (format.id)}
+					<button role="menuitem" onclick={() => (kind === 'export' ? contextExportAs(format.id) : contextCopyAs(format.id))}><span>{format.label}</span></button>
+				{/each}
+			</div>
+		{/if}
+	</div>
 {/snippet}
 
 <aside class="sidebar" aria-label="Notes" oncontextmenu={openSidebarContextMenu}>
@@ -539,6 +571,9 @@
 						<button role="menuitem" disabled={transferState === 'working'} onclick={contextOpenFile}><FileText size={15} /><span>Open</span></button>
 						<button role="menuitem" disabled={transferState === 'working'} onclick={contextRenameFile}><Pencil size={15} /><span>Rename</span></button>
 						<button role="menuitem" onclick={contextCopyPath}><Copy size={15} /><span>Copy relative path</span></button>
+						<div class="file-context-divider"></div>
+						{@render formatSubmenu('export', 'Export as', noteFormats)}
+						{@render formatSubmenu('copy', 'Copy as', noteFormats.filter((format) => format.copyable))}
 						<div class="file-context-divider"></div>
 						<button role="menuitem" class="danger" disabled={transferState === 'working'} onclick={contextDeleteFile}><Trash2 size={15} /><span>Delete</span></button>
 					{/if}
