@@ -364,6 +364,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let outputViewRequest = 0;
   let settingsOpener: HTMLElement | undefined;
   let paletteOpener: HTMLElement | undefined;
+  let paletteSidebarState: { collapsed: boolean; open: boolean } | undefined;
   let unsubscribeVault: (() => void) | undefined;
   let remoteSyncRun: Promise<void> | undefined;
   let remoteSyncRequested = false;
@@ -3624,7 +3625,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function togglePalette(): void {
     if (paletteOpen) {
+      const previousSidebarState = paletteSidebarState;
       closePalette();
+      if (previousSidebarState) {
+        sidebarCollapsed = previousSidebarState.collapsed;
+        sidebarOpen = previousSidebarState.open;
+      }
       return;
     }
     openPalette();
@@ -3638,6 +3644,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!paletteOpen && document.activeElement instanceof HTMLElement) {
       paletteOpener = document.activeElement;
     }
+    paletteSidebarState = { collapsed: sidebarCollapsed, open: sidebarOpen };
     sidebarCollapsed = false;
     if (window.innerWidth <= 900) sidebarOpen = true;
     paletteOpen = true;
@@ -3652,6 +3659,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function closePalette(): void {
     paletteOpen = false;
+    paletteSidebarState = undefined;
     resetPaletteSearch();
     const opener = paletteOpener;
     paletteOpener = undefined;
