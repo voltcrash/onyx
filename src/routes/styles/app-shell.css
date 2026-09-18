@@ -1,6 +1,6 @@
 .app {
   display: grid;
-  grid-template-columns: 238px minmax(0, 1fr);
+  grid-template-columns: 250px minmax(0, 1fr);
   height: 100dvh;
   background: var(--paper);
 }
