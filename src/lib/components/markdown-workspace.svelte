@@ -230,8 +230,19 @@
 			}
 		});
 
-		const contentWidth = renderedContent.getBoundingClientRect().width;
-		liveLineRects = rects.map((rect) => rect ?? { top: 0, left: 0, width: contentWidth, height: 0 });
+		const contentRect = renderedContent.getBoundingClientRect();
+		// An empty note renders no blocks, so give its lines a clickable height to type into.
+		const fallback: LiveLineRect = renderedBlocks.length
+			? { top: 0, left: 0, width: contentRect.width, height: 0 }
+			: {
+					top: contentRect.top - containerRect.top,
+					left: contentRect.left - containerRect.left,
+					width: contentRect.width,
+					height: parseFloat(getComputedStyle(renderedContent).lineHeight) || renderedContent.offsetHeight || 30,
+				};
+		liveLineRects = rects.map(
+			(rect, index) => rect ?? (renderedBlocks.length ? fallback : { ...fallback, top: fallback.top + index * fallback.height }),
+		);
 	}
 
 	function liveLineStyle(index: number): string | undefined {
