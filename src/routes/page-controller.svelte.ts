@@ -1218,7 +1218,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
     document.addEventListener("visibilitychange", onVisibilityChange);
+    document.addEventListener("selectionchange", keepRenderedCaretOutOfPrefix);
     return () => {
+      document.removeEventListener("selectionchange", keepRenderedCaretOutOfPrefix);
       window.removeEventListener("beforeunload", onBeforeUnload);
       window.removeEventListener("keydown", onKeydown);
       window.removeEventListener("online", onOnline);
@@ -2671,6 +2673,30 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     return Number.isInteger(value) && value >= 0 ? value : undefined;
   }
 
+  // Length of the hidden markdown marker (bullet, checkbox, heading, quote) that starts a line.
+  function hiddenPrefixLength(line: number): number {
+    const value = markdownLines[line] ?? "";
+    if (liveCodeLines[line] || tableLineKind(line)) return 0;
+    const match =
+      value.match(/^\s*[-+*]\s+\[[ xX]\]\s+/) ??
+      value.match(/^\s*(?:[-+*]|\d+[.)])\s+/) ??
+      value.match(/^#{1,6}\s+/) ??
+      value.match(/^>\s?/);
+    return match?.[0].length ?? 0;
+  }
+
+  function keepRenderedCaretOutOfPrefix(): void {
+    const selection = window.getSelection();
+    if (!selection?.isCollapsed || !liveEditorContainer) return;
+    const element = liveLineElement(selection.anchorNode);
+    if (!element || !liveEditorContainer.contains(element)) return;
+    const line = liveLineIndex(element);
+    if (line === undefined) return;
+    const prefix = hiddenPrefixLength(line);
+    const offset = textOffsetAt(element, selection.anchorNode!, selection.anchorOffset);
+    if (offset !== undefined && offset < prefix) setRenderedSelection(element, prefix, prefix);
+  }
+
   function markdownLineOffset(line: number): number {
     return markdownLines.slice(0, line).reduce((total, value) => total + value.length + 1, 0);
   }
@@ -3049,9 +3075,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       insertRenderedLineBreak(element, sourceSelection);
     } else if (
       event.key === "Backspace" &&
-      sourceSelection.start === 0 &&
-      sourceSelection.end === 0 &&
-      line > 0
+      sourceSelection.start === sourceSelection.end &&
+      sourceSelection.start <= hiddenPrefixLength(line) &&
+      (line > 0 || hiddenPrefixLength(line) > 0)
     ) {
       event.preventDefault();
       deleteRenderedContent(element, sourceSelection, "backward");
@@ -3065,8 +3091,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       deleteRenderedContent(element, sourceSelection, "forward");
     } else if (
       event.key === "ArrowLeft" &&
-      sourceSelection.start === 0 &&
-      sourceSelection.end === 0 &&
+      sourceSelection.start === sourceSelection.end &&
+      sourceSelection.start <= hiddenPrefixLength(line) &&
       line > 0 &&
       !event.shiftKey &&
       !event.altKey &&
@@ -3185,6 +3211,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         },
         "",
       );
+      return;
+    }
+    const prefix = hiddenPrefixLength(line);
+    if (direction === "backward" && prefix > 0 && sourceSelection.start <= prefix) {
+      const task = value.match(/^(\s*[-+*]\s+)\[[ xX]\]\s+/);
+      const kept = task ? task[1] : "";
+      const lines = [...markdownLines];
+      lines[line] = `${kept}${value.slice(prefix)}`;
+      updateMarkdown(lines.join("\n"));
+      void tick().then(() => focusRenderedLine(line, kept.length));
       return;
     }
     if (direction === "backward" && sourceSelection.start === 0) {
