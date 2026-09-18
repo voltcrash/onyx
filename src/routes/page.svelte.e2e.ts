@@ -2447,3 +2447,19 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
   );
   await expect(page.getByText("Restored 1 note and 1 attachment from GitHub.")).toBeVisible();
 });
+
+test("toggles task checkboxes by clicking them in the page pane", async ({ page }) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+  await markdown.fill("```\n- [ ] code\n```\n\n- [ ] first\n- [x] second");
+
+  await page.locator('.live-editing-overlay [data-live-line="4"] .live-task-check').click();
+  await expect(markdown).toHaveValue("```\n- [ ] code\n```\n\n- [x] first\n- [x] second");
+
+  await page.locator(".rendered-mode-toggle").click();
+  const boxes = page.locator(".preview-pane article.prose .task-list-item input");
+  await boxes.nth(1).click({ force: true });
+  await expect(markdown).toHaveValue("```\n- [ ] code\n```\n\n- [x] first\n- [ ] second");
+  await expect(boxes.nth(1)).not.toBeChecked();
+});

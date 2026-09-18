@@ -62,7 +62,9 @@ import {
 } from "$lib/markdown-lite";
 import {
   resolveLocalAttachmentUrl,
+  taskLineIndex,
   titleFromMarkdown,
+  toggleTaskAtLine,
   type LocalAttachmentUrl,
 } from "$lib/markdown-utils";
 import {
@@ -2443,6 +2445,48 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     previewMarkdown = value;
   }
 
+  function toggleTaskLine(lineIndex: number): void {
+    const value = toggleTaskAtLine(markdown, lineIndex);
+    if (value === markdown) return;
+    updateMarkdown(value);
+    updatePreviewImmediately(value);
+  }
+
+  // Rendered checkboxes are disabled, so hits are matched against their box instead of the click target.
+  function handleRenderedTaskClick(event: MouseEvent): void {
+    if (event.button !== 0 || saveState === "loading" || transferState === "working") return;
+    const target = event.target instanceof Element ? event.target : undefined;
+    const liveCheck = target?.closest(".live-task-check");
+    if (liveCheck) {
+      const line = Number(liveCheck.closest<HTMLElement>("[data-live-line]")?.dataset.liveLine);
+      if (!Number.isInteger(line)) return;
+      event.preventDefault();
+      toggleTaskLine(line);
+      return;
+    }
+    const article = event.currentTarget instanceof Element ? event.currentTarget : undefined;
+    const box = target
+      ?.closest("li.task-list-item")
+      ?.querySelector(":scope > input[type=checkbox], :scope > p > input[type=checkbox]");
+    if (!article || !box) return;
+    const rect = box.getBoundingClientRect();
+    const slop = 4;
+    if (
+      event.clientX < rect.left - slop ||
+      event.clientX > rect.right + slop ||
+      event.clientY < rect.top - slop ||
+      event.clientY > rect.bottom + slop
+    )
+      return;
+    const line = taskLineIndex(
+      markdown,
+      [...article.querySelectorAll("li.task-list-item input[type=checkbox]")].indexOf(box),
+    );
+    if (line === undefined) return;
+    event.preventDefault();
+    toggleTaskLine(line);
+  }
+
   function clampSplitRatio(value: number): number {
     return Math.min(80, Math.max(20, value));
   }
@@ -4451,6 +4495,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     updateRenderedInput,
     handleRenderedLineKeydown,
     activateLiveLine,
+    handleRenderedTaskClick,
     renderEditableLine,
     liveLineKind,
     liveCodeLanguage,
