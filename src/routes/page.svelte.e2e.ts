@@ -367,6 +367,72 @@ test("toggles the command palette from the keyboard and restores a collapsed sid
   await expect(page.locator(".app")).toHaveClass(/sidebar-collapsed/);
 });
 
+test("moves the sidebar to the right by holding and dragging its toggle", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  const app = page.locator(".app");
+  const toggle = page.getByRole("button", { name: "Hide notes sidebar" });
+  const box = await toggle.boundingBox();
+  if (!box) throw new Error("sidebar toggle has no box");
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error("no viewport");
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await expect(page.locator(".sidebar-drop-target")).toHaveAttribute("data-side", "left");
+  await page.mouse.move(viewport.width - 40, viewport.height / 2, { steps: 5 });
+  await expect(page.locator(".sidebar-drop-target")).toHaveAttribute("data-side", "right");
+  await page.mouse.up();
+
+  await expect(app).toHaveClass(/sidebar-right/);
+  await expect(app).not.toHaveClass(/sidebar-collapsed/);
+  await expect(page.locator(".sidebar-drop-target")).toHaveCount(0);
+
+  await page.reload();
+  await expect(app).toHaveClass(/sidebar-right/);
+});
+
+test("chooses the sidebar position from its context menu", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  const app = page.locator(".app");
+
+  await page.locator(".sidebar-footer").click({ button: "right", position: { x: 2, y: 2 } });
+  await page.getByRole("menuitemradio", { name: "Sidebar on the right" }).click();
+  await expect(app).toHaveClass(/sidebar-right/);
+  await expect(page.getByRole("menu")).toHaveCount(0);
+
+  const noteList = page.locator(".note-list");
+  const listBox = await noteList.boundingBox();
+  if (!listBox) throw new Error("note list has no box");
+  await noteList.click({ button: "right", position: { x: 20, y: listBox.height - 4 } });
+  await expect(page.getByRole("menuitemradio", { name: "Sidebar on the right" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await page.getByRole("menuitemradio", { name: "Sidebar on the left" }).click();
+  await expect(app).not.toHaveClass(/sidebar-right/);
+});
+
+test("chooses the sidebar position from the command palette", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  const app = page.locator(".app");
+
+  await editor.focus();
+  await page.keyboard.press("ControlOrMeta+K");
+  await page.keyboard.type("sidebar position right");
+  await page.keyboard.press("Enter");
+  await expect(app).toHaveClass(/sidebar-right/);
+
+  await editor.focus();
+  await page.keyboard.press("ControlOrMeta+K");
+  await page.keyboard.type("sidebar position left");
+  await page.keyboard.press("Enter");
+  await expect(app).not.toHaveClass(/sidebar-right/);
+});
+
 test("adjusts content width from the command palette", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();

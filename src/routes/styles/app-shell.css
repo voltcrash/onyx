@@ -1043,3 +1043,48 @@
   text-decoration: underline;
   white-space: nowrap;
 }
+.app.sidebar-right {
+  grid-template-columns: minmax(0, 1fr) 258px;
+}
+.app.sidebar-right.sidebar-collapsed {
+  grid-template-columns: minmax(0, 1fr) 0;
+}
+.sidebar-right .sidebar {
+  grid-column: 2;
+  border-right: 0;
+  border-left: 1px solid var(--line);
+}
+.sidebar-right .workspace {
+  grid-column: 1;
+}
+.sidebar-toggle,
+.collapsed-sidebar-toggle {
+  touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+.sidebar-dragging,
+.sidebar-dragging * {
+  cursor: grabbing !important;
+}
+.sidebar-drop-target {
+  position: fixed;
+  inset: 8px auto 8px 8px;
+  z-index: 40;
+  width: 258px;
+  border: 2px dashed var(--accent-quiet);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-bg-strong) 55%, transparent);
+  pointer-events: none;
+  transition:
+    left 0.18s ease,
+    right 0.18s ease;
+}
+.sidebar-drop-target[data-side="right"] {
+  right: 8px;
+  left: auto;
+}
+.file-context-menu button[aria-checked="true"] {
+  color: var(--ink);
+  font-weight: 600;
+}
