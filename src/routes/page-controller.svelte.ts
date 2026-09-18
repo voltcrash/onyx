@@ -155,6 +155,7 @@ function loadLazyStylesModule(): Promise<LazyStylesModule> {
 }
 
 type EditorSurface = "source" | "rendered";
+type SidebarState = { collapsed: boolean; open: boolean };
 
 interface EditorSelection {
   start: number;
@@ -308,6 +309,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let findInput: HTMLInputElement | undefined = $state();
   let findReplaceInput: HTMLInputElement | undefined = $state();
   let findOpener: HTMLElement | undefined = $state();
+  let findSidebarState: SidebarState | undefined;
   let findNavigationSequence = 0;
   let sidebarOpen = $state(false);
   let storageError = $state("");
@@ -364,6 +366,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let outputViewRequest = 0;
   let settingsOpener: HTMLElement | undefined;
   let paletteOpener: HTMLElement | undefined;
+  let paletteSidebarState: SidebarState | undefined;
   let unsubscribeVault: (() => void) | undefined;
   let remoteSyncRun: Promise<void> | undefined;
   let remoteSyncRequested = false;
@@ -3420,6 +3423,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     queueFindNavigation();
   }
 
+  function toggleFind(): void {
+    if (findOpen) {
+      closeFind();
+      return;
+    }
+    openFind();
+  }
+
   function openFind(): void {
     if (findOpen) {
       requestAnimationFrame(() => {
@@ -3434,6 +3445,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       findQuery = markdown.slice(selection.start, selection.end);
     }
     findMatchIndex = findQuery ? 0 : -1;
+    findSidebarState = { collapsed: sidebarCollapsed, open: sidebarOpen };
     sidebarCollapsed = false;
     if (window.innerWidth <= 900) sidebarOpen = true;
     findOpen = true;
@@ -3448,8 +3460,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function closeFind(): void {
     if (!findOpen) return;
+    const previousSidebarState = findSidebarState;
+    findSidebarState = undefined;
     findOpen = false;
     findNavigationSequence += 1;
+    if (previousSidebarState) {
+      sidebarCollapsed = previousSidebarState.collapsed;
+      sidebarOpen = previousSidebarState.open;
+    }
     const opener = findOpener;
     findOpener = undefined;
     restoreModalFocus(opener);
@@ -3542,7 +3560,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     event.preventDefault();
 
     if (action === "commandPalette") togglePalette();
-    else if (action === "findInNote") openFind();
+    else if (action === "findInNote") toggleFind();
     else if (action === "saveNote" && transferState !== "working") void saveDraft();
     else if (action === "newNote" && transferState !== "working") void createNote();
     else if (action === "searchNotes" || action === "focusSearch") focusSearch();
@@ -3624,7 +3642,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function togglePalette(): void {
     if (paletteOpen) {
+      const previousSidebarState = paletteSidebarState;
       closePalette();
+      if (previousSidebarState) {
+        sidebarCollapsed = previousSidebarState.collapsed;
+        sidebarOpen = previousSidebarState.open;
+      }
       return;
     }
     openPalette();
@@ -3638,6 +3661,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!paletteOpen && document.activeElement instanceof HTMLElement) {
       paletteOpener = document.activeElement;
     }
+    paletteSidebarState = { collapsed: sidebarCollapsed, open: sidebarOpen };
     sidebarCollapsed = false;
     if (window.innerWidth <= 900) sidebarOpen = true;
     paletteOpen = true;
@@ -3652,6 +3676,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function closePalette(): void {
     paletteOpen = false;
+    paletteSidebarState = undefined;
     resetPaletteSearch();
     const opener = paletteOpener;
     paletteOpener = undefined;
