@@ -414,6 +414,25 @@ test("chooses the sidebar position from its context menu", async ({ page }) => {
   await expect(app).not.toHaveClass(/sidebar-right/);
 });
 
+test("chooses the sidebar position from the command palette", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  const app = page.locator(".app");
+
+  await editor.focus();
+  await page.keyboard.press("ControlOrMeta+K");
+  await page.keyboard.type("sidebar position right");
+  await page.keyboard.press("Enter");
+  await expect(app).toHaveClass(/sidebar-right/);
+
+  await editor.focus();
+  await page.keyboard.press("ControlOrMeta+K");
+  await page.keyboard.type("sidebar position left");
+  await page.keyboard.press("Enter");
+  await expect(app).not.toHaveClass(/sidebar-right/);
+});
+
 test("adjusts content width from the command palette", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
