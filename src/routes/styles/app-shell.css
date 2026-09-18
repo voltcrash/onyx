@@ -1,6 +1,6 @@
 .app {
   display: grid;
-  grid-template-columns: 238px minmax(0, 1fr);
+  grid-template-columns: 258px minmax(0, 1fr);
   height: 100dvh;
   background: var(--paper);
 }
@@ -611,6 +611,7 @@
 .sidebar .note-list {
   flex: 1;
   min-height: 0;
+  margin-inline: -7px;
   overflow-y: auto;
   scrollbar-width: thin;
 }
