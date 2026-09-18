@@ -367,6 +367,31 @@ test("toggles the command palette from the keyboard and restores a collapsed sid
   await expect(page.locator(".app")).toHaveClass(/sidebar-collapsed/);
 });
 
+test("moves the sidebar to the right by holding and dragging its toggle", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  const app = page.locator(".app");
+  const toggle = page.getByRole("button", { name: "Hide notes sidebar" });
+  const box = await toggle.boundingBox();
+  if (!box) throw new Error("sidebar toggle has no box");
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error("no viewport");
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await expect(page.locator(".sidebar-drop-target")).toHaveAttribute("data-side", "left");
+  await page.mouse.move(viewport.width - 40, viewport.height / 2, { steps: 5 });
+  await expect(page.locator(".sidebar-drop-target")).toHaveAttribute("data-side", "right");
+  await page.mouse.up();
+
+  await expect(app).toHaveClass(/sidebar-right/);
+  await expect(app).not.toHaveClass(/sidebar-collapsed/);
+  await expect(page.locator(".sidebar-drop-target")).toHaveCount(0);
+
+  await page.reload();
+  await expect(app).toHaveClass(/sidebar-right/);
+});
+
 test("adjusts content width from the command palette", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();

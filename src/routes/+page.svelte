@@ -12,7 +12,7 @@
 	<meta name="description" content="A fast, local-first Markdown editor with full-text search that works offline." />
 </svelte:head>
 
-<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:palette-open={page.paletteOpen} inert={page.settingsOpen || page.restoreModalOpen}>
+<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:palette-open={page.paletteOpen} inert={page.settingsOpen || page.restoreModalOpen}>
 	<NotesSidebar
 		vaults={page.vaults}
 		activeVaultId={page.activeVaultId}
@@ -53,6 +53,7 @@
 		bind:findReplaceInput={page.findReplaceInput}
 		bind:noteList={page.noteList}
 		onToggleSidebar={page.toggleSidebar}
+		onSidebarDragStart={page.startSidebarDrag}
 		onSelectVault={(id) => void page.selectVault(id)}
 		onCreateVault={() => void page.createVault()}
 		onRenameVault={page.renameVault}
@@ -120,6 +121,7 @@
 		onRetryStorage={() => void (page.vault ? page.saveDraft() : page.openVault())}
 		onDismissStorageNotice={page.dismissStorageNotice}
 		onToggleSidebar={page.toggleSidebar}
+		onSidebarDragStart={page.startSidebarDrag}
 		splitRatio={page.splitRatio}
 		contentWidth={page.contentWidth}
 		onToggleOutputPane={page.toggleOutputPane}
@@ -147,6 +149,7 @@
 		liveLineKind={page.liveLineKind}
 		liveCodeLanguage={page.liveCodeLanguage}
 	/>
+	{#if page.sidebarDropSide}<div class="sidebar-drop-target" data-side={page.sidebarDropSide} aria-hidden="true"></div>{/if}
 </div>
 
 <div class="print-document paper-surface" aria-hidden="true"><article class="prose">{@html page.renderedMarkdown}</article></div>
