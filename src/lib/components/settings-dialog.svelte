@@ -70,7 +70,7 @@
 	}: Props = $props();
 
 	const sections: Array<{ id: SettingsSection; label: string }> = [
-		{ id: 'editor', label: 'Editor' },
+		{ id: 'editor', label: 'Fonts' },
 		{ id: 'themes', label: 'Themes' },
 		{ id: 'shortcuts', label: 'Keyboard shortcuts' },
 		{ id: 'github', label: 'Backup & sync' },
@@ -302,7 +302,7 @@
 
 				{#if section === 'editor'}
 					<div class="settings-section-heading">
-						<div><h3>Editor</h3><p class="settings-hint">Set the typefaces your notes are written in</p></div>
+						<div><h3>Fonts</h3><p class="settings-hint">Set the typefaces your notes are written in</p></div>
 						{#if !fontsAreDefault}<button class="settings-secondary" onclick={onResetFonts}>Restore default fonts</button>{/if}
 					</div>
 
