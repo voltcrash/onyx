@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { ChevronDown, ChevronRight, Copy, FilePlus2, FileText, Folder, FolderPlus, HardDrive, LoaderCircle, Lock, LockOpen, LogOut, PanelLeft, Pencil, Plus, Search, Settings, Trash2, Type } from '@lucide/svelte';
+	import { ChevronDown, ChevronRight, Copy, FilePlus2, FileText, Folder, FolderPlus, HardDrive, LoaderCircle, Lock, LockOpen, LogOut, PanelLeft, PanelRight, Pencil, Plus, Search, Settings, Trash2, Type } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
 	import type { GithubUser } from '$lib/github';
 	import type { VaultDescriptor } from '$lib/storage/registry';
@@ -51,6 +51,9 @@
 		findReplaceInput?: HTMLInputElement;
 		noteList?: HTMLElement;
 		onToggleSidebar: () => void;
+		onSidebarDragStart: (event: PointerEvent) => void;
+		sidebarSide: 'left' | 'right';
+		onSidebarSideChange: (side: 'left' | 'right') => void;
 		onSelectVault: (id: string) => void;
 		onCreateVault: () => void;
 		onRenameVault: (id: string, name: string) => void;
@@ -88,7 +91,7 @@
 	let {
 		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, searchQuery, findOpen, findQuery, findReplacement, findMatchCase, findWholeWord, findMatchCount, activeFindMatch, findCanEdit, notePage, notePageCount, saveState, notesLoaded, paletteOpen, searchPending, paletteItems, settingsOpen,
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, wordCount, readingMinutes, contentWidth,
-		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, onCopyFilePath, onSearch,
+		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSidebarDragStart, sidebarSide, onSidebarSideChange, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, onCopyFilePath, onSearch,
 		onFindQueryChange, onFindReplacementChange, onFindMatchCaseChange, onFindWholeWordChange, onFindPrevious, onFindNext, onFindReplace, onFindReplaceAll, onCloseFind,
 		onOpenPalette, onClosePalette, onOpenSettings, onOpenStorageSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage,
 		onContentWidthChange
@@ -114,6 +117,7 @@
 		| { kind: 'file'; key: string; path: string; label: string; depth: number; result: VaultSearchResult };
 	type ContextMenu =
 		| { kind: 'root'; x: number; y: number }
+		| { kind: 'sidebar'; x: number; y: number }
 		| { kind: 'folder'; path: string; x: number; y: number }
 		| { kind: 'file'; id: string; path: string; x: number; y: number };
 	type NamingState =
@@ -220,6 +224,18 @@
 	function openRootContextMenu(event: MouseEvent): void {
 		event.preventDefault();
 		contextMenu = { kind: 'root', ...menuPosition(event) };
+	}
+
+	function openSidebarContextMenu(event: MouseEvent): void {
+		if (event.defaultPrevented) return;
+		const target = event.target as Element | null;
+		if (target?.closest('button, a, input, textarea, select, [contenteditable], [role="menu"], [role="listbox"]')) return;
+		event.preventDefault();
+		contextMenu = { kind: 'sidebar', ...menuPosition(event) };
+	}
+
+	function contextSetSidebarSide(side: 'left' | 'right'): void {
+		contextAction(() => onSidebarSideChange(side));
 	}
 
 	function openFolderContextMenu(event: MouseEvent, path: string): void {
@@ -435,8 +451,13 @@
 
 <svelte:window onkeydown={handleWindowKeydown} />
 
-<aside class="sidebar" aria-label="Notes">
-	<div class="notes-heading"><div class="notes-title"><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions"><button class="icon-button search-palette-button" type="button" aria-label="Open the command palette" aria-haspopup="listbox" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Search notes and commands (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><Search size={19} aria-hidden="true" /></button><button class="icon-button sidebar-toggle" aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button></div></div>
+{#snippet sidebarPositionItems()}
+	<button role="menuitemradio" aria-checked={sidebarSide === 'left'} onclick={() => contextSetSidebarSide('left')}><PanelLeft size={15} /><span>Sidebar on the left</span></button>
+	<button role="menuitemradio" aria-checked={sidebarSide === 'right'} onclick={() => contextSetSidebarSide('right')}><PanelRight size={15} /><span>Sidebar on the right</span></button>
+{/snippet}
+
+<aside class="sidebar" aria-label="Notes" oncontextmenu={openSidebarContextMenu}>
+	<div class="notes-heading"><div class="notes-title"><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions"><button class="icon-button search-palette-button" type="button" aria-label="Open the command palette" aria-haspopup="listbox" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Search notes and commands (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><Search size={19} aria-hidden="true" /></button><button class="icon-button sidebar-toggle" onpointerdown={onSidebarDragStart} aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button></div></div>
 	{#if paletteOpen}
 		<CommandPalette items={paletteItems} controls={paletteControls} query={searchQuery} loading={searchPending} bind:searchInput onQueryChange={onSearch} onClose={onClosePalette} />
 	{:else if findOpen}
@@ -499,8 +520,10 @@
 			</nav>
 			{#if contextMenu}
 				<button class="file-context-backdrop" aria-label="Close file menu" onclick={closeContextMenu}></button>
-				<div class="file-context-menu" role="menu" aria-label="File actions" style={`top: ${contextMenu.y}px; left: ${contextMenu.x}px`}>
-					{#if contextMenu.kind === 'root' || contextMenu.kind === 'folder'}
+				<div class="file-context-menu" role="menu" aria-label={contextMenu.kind === 'sidebar' ? 'Sidebar actions' : 'File actions'} style={`top: ${contextMenu.y}px; left: ${contextMenu.x}px`}>
+					{#if contextMenu.kind === 'sidebar'}
+						{@render sidebarPositionItems()}
+					{:else if contextMenu.kind === 'root' || contextMenu.kind === 'folder'}
 						<button role="menuitem" disabled={transferState === 'working'} onclick={contextCreateFile}><FilePlus2 size={15} /><span>New file</span></button>
 						<button role="menuitem" disabled={transferState === 'working'} onclick={contextCreateFolder}><FolderPlus size={15} /><span>New folder</span></button>
 						{#if contextMenu.kind === 'folder'}
@@ -508,6 +531,9 @@
 							<button role="menuitem" disabled={transferState === 'working'} onclick={contextRenameFolder}><Pencil size={15} /><span>Rename</span></button>
 							<button role="menuitem" onclick={contextCopyPath}><Copy size={15} /><span>Copy relative path</span></button>
 							<button role="menuitem" class="danger" disabled={transferState === 'working'} onclick={contextDeleteFolder}><Trash2 size={15} /><span>Delete</span></button>
+						{:else}
+							<div class="file-context-divider"></div>
+							{@render sidebarPositionItems()}
 						{/if}
 					{:else}
 						<button role="menuitem" disabled={transferState === 'working'} onclick={contextOpenFile}><FileText size={15} /><span>Open</span></button>
