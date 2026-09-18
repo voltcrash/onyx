@@ -54,6 +54,8 @@
 		bind:noteList={page.noteList}
 		onToggleSidebar={page.toggleSidebar}
 		onSidebarDragStart={page.startSidebarDrag}
+		sidebarSide={page.sidebarSide}
+		onSidebarSideChange={page.setSidebarSide}
 		onSelectVault={(id) => void page.selectVault(id)}
 		onCreateVault={() => void page.createVault()}
 		onRenameVault={page.renameVault}

@@ -1084,3 +1084,7 @@
   right: 8px;
   left: auto;
 }
+.file-context-menu button[aria-checked="true"] {
+  color: var(--ink);
+  font-weight: 600;
+}
