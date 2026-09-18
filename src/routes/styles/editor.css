@@ -1523,3 +1523,19 @@
   color: transparent;
   background: color-mix(in srgb, var(--selection) 50%, transparent);
 }
+.sidebar-right .workspace > .collapsed-sidebar-toggle {
+  right: 12px;
+  left: auto;
+}
+.sidebar-right.sidebar-collapsed .workspace > .storage-notice,
+.sidebar-right.sidebar-collapsed .workspace > .storage-error {
+  padding-right: 54px;
+  padding-left: 18px;
+}
+/* Keeps the view switcher clear of the floating sidebar toggle in the top-right corner. */
+.sidebar-right.sidebar-collapsed .output-switcher {
+  right: 60px;
+}
+.sidebar-right.sidebar-collapsed .rendered-switcher {
+  margin-right: 60px;
+}

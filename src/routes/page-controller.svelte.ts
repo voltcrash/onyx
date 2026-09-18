@@ -29,6 +29,7 @@ import {
   Pilcrow,
   PanelLeft,
   PanelLeftClose,
+  PanelRight,
   Lock,
   PanelRightClose,
   Printer,
@@ -156,6 +157,10 @@ function loadLazyStylesModule(): Promise<LazyStylesModule> {
 
 type EditorSurface = "source" | "rendered";
 type SidebarState = { collapsed: boolean; open: boolean };
+type SidebarSide = "left" | "right";
+
+const SIDEBAR_DRAG_HOLD_MS = 300;
+const SIDEBAR_DRAG_SLOP_PX = 6;
 
 interface EditorSelection {
   start: number;
@@ -345,6 +350,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let paletteNotes = $state<NoteMetadata[]>([]);
   let recentNoteIds = $state<string[]>([]);
   let sidebarCollapsed = $state(false);
+  let sidebarSide = $state<SidebarSide>("left");
+  let sidebarDropSide = $state<SidebarSide | undefined>();
   let shortcuts = $state<KeyboardShortcuts>(structuredClone(defaultKeyboardShortcuts));
   let primaryModifier = $state<PrimaryModifier>("meta");
   let undoStack: EditorHistoryEntry[] = [];
@@ -765,6 +772,24 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       run: () => toggleSidebar(),
     },
     {
+      id: "sidebar-left",
+      group: "View",
+      label: "Sidebar position: Left",
+      icon: PanelLeft,
+      keywords: "panel side position dock move",
+      disabled: sidebarSide === "left",
+      run: () => setSidebarSide("left"),
+    },
+    {
+      id: "sidebar-right",
+      group: "View",
+      label: "Sidebar position: Right",
+      icon: PanelRight,
+      keywords: "panel side position dock move",
+      disabled: sidebarSide === "right",
+      run: () => setSidebarSide("right"),
+    },
+    {
       id: "theme-light",
       group: "Themes",
       label: "Use light mode",
@@ -1143,6 +1168,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       applyPanePreferences();
     };
     narrowQuery?.addEventListener("change", onViewportChange);
+    sidebarSide = readLocalStorage("onyx:sidebar-side") === "right" ? "right" : "left";
     const storedSplit = Number(readLocalStorage("onyx:split-ratio"));
     if (Number.isFinite(storedSplit)) splitRatio = clampSplitRatio(storedSplit);
     const storedContentWidth = Number(readLocalStorage("onyx:content-width"));
@@ -3630,6 +3656,69 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     else sidebarCollapsed = !sidebarCollapsed;
   }
 
+  function setSidebarSide(side: SidebarSide): void {
+    sidebarSide = side;
+    writeLocalStorage("onyx:sidebar-side", side);
+  }
+
+  /** Holding a sidebar toggle picks it up; releasing it over either half of the window docks the sidebar there. */
+  function startSidebarDrag(event: PointerEvent): void {
+    if (event.button !== 0 || !event.isPrimary) return;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    let dragging = false;
+    const holdTimer = window.setTimeout(() => {
+      dragging = true;
+      sidebarDropSide = sidebarSide;
+    }, SIDEBAR_DRAG_HOLD_MS);
+    const onMove = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== event.pointerId) return;
+      if (dragging) {
+        moveEvent.preventDefault();
+        sidebarDropSide = moveEvent.clientX > window.innerWidth / 2 ? "right" : "left";
+      } else if (
+        Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) > SIDEBAR_DRAG_SLOP_PX
+      ) {
+        finish();
+      }
+    };
+    const onUp = (upEvent: PointerEvent) => {
+      if (upEvent.pointerId !== event.pointerId) return;
+      if (dragging && sidebarDropSide) {
+        setSidebarSide(sidebarDropSide);
+        // The release would otherwise land as a click and toggle the sidebar.
+        window.addEventListener("click", swallowClick, { capture: true, once: true });
+        window.setTimeout(
+          () => window.removeEventListener("click", swallowClick, { capture: true }),
+          0,
+        );
+      }
+      finish();
+    };
+    const onCancel = (cancelEvent: PointerEvent) => {
+      if (cancelEvent.pointerId === event.pointerId) finish();
+    };
+    const onContextMenu = (menuEvent: Event) => {
+      if (dragging) menuEvent.preventDefault();
+    };
+    function swallowClick(clickEvent: Event): void {
+      clickEvent.preventDefault();
+      clickEvent.stopPropagation();
+    }
+    function finish(): void {
+      window.clearTimeout(holdTimer);
+      sidebarDropSide = undefined;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      window.removeEventListener("contextmenu", onContextMenu);
+    }
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    window.addEventListener("contextmenu", onContextMenu);
+  }
+
   function setTheme(preference: ThemePreference): void {
     theme = preference;
     resolvedTheme = applyTheme(preference);
@@ -4205,6 +4294,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     set sidebarCollapsed(value: boolean) {
       sidebarCollapsed = value;
     },
+    get sidebarSide() {
+      return sidebarSide;
+    },
+    get sidebarDropSide() {
+      return sidebarDropSide;
+    },
     get vault() {
       return vault;
     },
@@ -4293,6 +4388,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     openVault,
     dismissStorageNotice,
     toggleSidebar,
+    setSidebarSide,
+    startSidebarDrag,
     insertSyntax,
     prefixLine,
     setSplitRatio,
