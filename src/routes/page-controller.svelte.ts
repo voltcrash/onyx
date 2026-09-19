@@ -58,7 +58,7 @@ import type {
   SaveState,
   TransferState,
 } from "$lib/components/app-types";
-import { isOutputView, type OutputView } from "$lib/components/output-views";
+import { noteFormats, type NoteFormat } from "$lib/components/note-formats";
 import type { SettingsSection } from "$lib/components/settings-types";
 import {
   codeLanguageLabel as liteCodeLanguageLabel,
@@ -136,11 +136,6 @@ import {
   type ResolvedTheme,
   type ThemePreference,
 } from "$lib/theme";
-import {
-  HTML_SOURCE_SEPARATOR,
-  PLAIN_TEXT_SEPARATOR,
-  joinTextBlocks,
-} from "$lib/markdown-output-types";
 import { findTextMatches, type FindMatch } from "$lib/find-replace";
 import { outputFileName } from "$lib/output-utils";
 import type { MarkdownTransferFile } from "$lib/markdown-transfer";
@@ -154,6 +149,46 @@ const DEFERRED_STARTUP_DELAY_MS = 8_000;
 const NARROW_VIEWPORT = "(max-width: 900px)";
 const EDITOR_HISTORY_LIMIT = 200;
 const MARKDOWN_EXTENSION = ".md";
+
+const noteFormatPaletteNames: Record<NoteFormat, string> = {
+  markdown: "Markdown",
+  html: "HTML",
+  text: "plain text",
+  "rich-text": "rich text",
+  pdf: "PDF",
+};
+
+const noteFormatPaletteKeywords: Record<NoteFormat, string> = {
+  markdown: "markdown md source",
+  html: "html web page source",
+  text: "plain text txt",
+  "rich-text": "rtf rich text formatted word document email paste",
+  pdf: "pdf paper print",
+};
+
+const noteFormatExportLabels: Record<NoteFormat, string> = {
+  markdown: "Download this note as Markdown",
+  html: "Download this note as HTML",
+  text: "Download this note as plain text",
+  "rich-text": "Download this note as rich text",
+  pdf: "Save this note as a PDF",
+};
+
+const noteFormatExportIds: Record<NoteFormat, string> = {
+  markdown: "download-markdown",
+  html: "download-html",
+  text: "download-text",
+  "rich-text": "download-rtf",
+  pdf: "save-pdf",
+};
+
+const noteFormatExportIcons = {
+  markdown: FileText,
+  html: Code2,
+  text: Type,
+  "rich-text": Pilcrow,
+  pdf: Printer,
+};
 
 type GithubModule = typeof import("$lib/github");
 type LazyStylesModule = typeof import("$lib/lazy-styles");
@@ -303,7 +338,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let renderedPaneVisible = $state(true);
   let renderedReadOnly = $state(false);
   let scrollSync = $state(true);
-  let outputView = $state<OutputView>("markdown");
   let paneLayout = $state<PaneLayout>("columns");
   let paneOrder = $state<PaneOrder>("rendered-first");
   let splitRatio = $state(50);
@@ -385,13 +419,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let markdownModule: MarkdownModule | undefined;
   let markdownModulePromise: Promise<MarkdownModule> | undefined;
   let markdownModuleRevision = $state(0);
-  let markdownOutputModule: MarkdownOutputModule | undefined;
   let markdownOutputModulePromise: Promise<MarkdownOutputModule> | undefined;
-  let markdownOutputModuleRevision = $state(0);
   let dialogStylesPromise: Promise<void> | undefined;
   let serviceWorkerTimer: number | undefined;
   let githubRestoreTimer: number | undefined;
-  let outputViewRequest = 0;
   let settingsOpener: HTMLElement | undefined;
   let paletteOpener: HTMLElement | undefined;
   let paletteSidebarState: SidebarState | undefined;
@@ -423,20 +454,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   const liveRenderedBlockLines = $derived(
     liveRenderedBlocks.filter((block) => block.element).map((block) => block.lines),
   );
-  const plainTextBlocks = $derived.by(() => {
-    void markdownOutputModuleRevision;
-    return markdownOutputModule?.plainTextBlocks(markdown) ?? [];
-  });
-  const plainText = $derived(joinTextBlocks(plainTextBlocks, PLAIN_TEXT_SEPARATOR));
-  const htmlSourceBlocks = $derived.by(() => {
-    void markdownOutputModuleRevision;
-    return markdownOutputModule?.formatHtmlBlocks(renderedBlocks) ?? [];
-  });
-  const htmlSource = $derived(joinTextBlocks(htmlSourceBlocks, HTML_SOURCE_SEPARATOR));
-  const highlightedHtmlSourceLines = $derived.by(() => {
-    void markdownModuleRevision;
-    return htmlSource ? highlightCodeLinesForPage(htmlSource, "html") : [];
-  });
   const noteTitle = $derived(titleFromMarkdown(markdown));
   const markdownLines = $derived(markdown.split("\n"));
   const findMatches = $derived.by(() =>
@@ -582,6 +599,36 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       ),
     ];
   });
+
+  function noteTransferPaletteItems() {
+    return noteFormats.flatMap((format) => {
+      const name = noteFormatPaletteNames[format.id];
+      const keywords = noteFormatPaletteKeywords[format.id];
+      const items = [];
+      if (format.id !== "pdf" && format.copyable) {
+        const copyFormat = format.id as Exclude<NoteFormat, "pdf">;
+        items.push({
+          id: `copy-${copyFormat}`,
+          group: "Transfer",
+          label: `Copy this note as ${name}`,
+          icon: Copy,
+          keywords: `clipboard ${keywords}`,
+          disabled: !hasContent,
+          run: () => void copyNoteAs(activeNoteId, copyFormat),
+        });
+      }
+      items.push({
+        id: noteFormatExportIds[format.id],
+        group: "Transfer",
+        label: noteFormatExportLabels[format.id],
+        icon: noteFormatExportIcons[format.id],
+        keywords: `export ${keywords} save`,
+        disabled: !hasContent,
+        run: () => void exportNoteAs(activeNoteId, format.id),
+      });
+      return items;
+    });
+  }
 
   const paletteItems = $derived([
     ...paletteNoteItems,
@@ -916,87 +963,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       keywords: "save files write",
       run: () => void exportFolder(),
     },
-    {
-      id: "copy-markdown",
-      group: "Transfer",
-      label: "Copy this note as Markdown",
-      icon: Copy,
-      keywords: "clipboard markdown md source",
-      disabled: !hasContent,
-      run: () => void copyMarkdown(),
-    },
-    {
-      id: "download-markdown",
-      group: "Transfer",
-      label: "Download this note as Markdown",
-      icon: FileText,
-      keywords: "export markdown md save",
-      disabled: !hasContent,
-      run: () => downloadMarkdown(),
-    },
-    {
-      id: "copy-text",
-      group: "Transfer",
-      label: "Copy this note as plain text",
-      icon: Copy,
-      keywords: "clipboard plain text txt",
-      disabled: !hasContent,
-      run: () => void copyText(),
-    },
-    {
-      id: "download-text",
-      group: "Transfer",
-      label: "Download this note as plain text",
-      icon: Type,
-      keywords: "export plain text txt save",
-      disabled: !hasContent,
-      run: () => downloadText(),
-    },
-    {
-      id: "copy-rich-text",
-      group: "Transfer",
-      label: "Copy this note as rich text",
-      icon: Copy,
-      keywords: "clipboard formatted rich text document email paste",
-      disabled: !hasContent,
-      run: () => void copyRichText(),
-    },
-    {
-      id: "download-rtf",
-      group: "Transfer",
-      label: "Download this note as rich text",
-      icon: Pilcrow,
-      keywords: "export rtf rich text word document save",
-      disabled: !hasContent,
-      run: () => downloadRtf(),
-    },
-    {
-      id: "copy-html",
-      group: "Transfer",
-      label: "Copy this note as HTML",
-      icon: Copy,
-      keywords: "clipboard html web source",
-      disabled: !hasContent,
-      run: () => void copyHtml(),
-    },
-    {
-      id: "download-html",
-      group: "Transfer",
-      label: "Download this note as HTML",
-      icon: Code2,
-      keywords: "export html web page save",
-      disabled: !hasContent,
-      run: () => downloadHtml(),
-    },
-    {
-      id: "save-pdf",
-      group: "Transfer",
-      label: "Save this note as a PDF",
-      icon: Printer,
-      keywords: "print export pdf paper",
-      disabled: !hasContent,
-      run: () => savePdf(),
-    },
+    ...noteTransferPaletteItems(),
     {
       id: "export-zip",
       group: "Transfer",
@@ -1118,8 +1085,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function loadMarkdownOutputModule(): Promise<MarkdownOutputModule> {
     return (markdownOutputModulePromise ??= import("$lib/markdown-output").then((module) => {
-      markdownOutputModule = module;
-      markdownOutputModuleRevision += 1;
       void loadMarkdownModule().catch(() => undefined);
       return module;
     }));
@@ -1242,9 +1207,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       applyColorTheme(colorTheme);
     }
     applyStoredFontChoices();
-    if (outputView !== "markdown" && outputView !== "pdf") {
-      void loadMarkdownOutputModule().catch(() => undefined);
-    }
     const stopThemeWatch = watchSystemTheme(() => {
       if (theme === "system") resolvedTheme = applyTheme(theme);
     });
@@ -2270,56 +2232,71 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     window.print();
   }
 
-  async function copyMarkdown(): Promise<void> {
-    await copyToClipboard(() => navigator.clipboard.writeText(markdown));
+  type NoteSource = { markdown: string; title: string };
+
+  function activeNoteSource(): NoteSource {
+    return { markdown, title: noteTitle };
   }
 
-  function downloadMarkdown(): void {
+  async function noteSource(id: string): Promise<NoteSource | undefined> {
+    if (id === activeNoteId) return activeNoteSource();
+    const note = await vault?.getNote(id);
+    return note && { markdown: note.markdown, title: titleFromMarkdown(note.markdown) };
+  }
+
+  async function copyMarkdown(source = activeNoteSource()): Promise<void> {
+    await navigator.clipboard.writeText(source.markdown);
+  }
+
+  function downloadMarkdown(source = activeNoteSource()): void {
     downloadBlob(
-      new Blob([markdown.endsWith("\n") ? markdown : `${markdown}\n`], { type: "text/markdown" }),
-      outputFileName(noteTitle, "md"),
+      new Blob([source.markdown.endsWith("\n") ? source.markdown : `${source.markdown}\n`], {
+        type: "text/markdown",
+      }),
+      outputFileName(source.title, "md"),
     );
   }
 
-  async function copyText(): Promise<void> {
-    await copyToClipboard(async () => {
-      const output = await loadMarkdownOutputModule();
-      await navigator.clipboard.writeText(output.markdownToPlainText(markdown));
-    });
+  async function copyText(source = activeNoteSource()): Promise<void> {
+    const output = await loadMarkdownOutputModule();
+    await navigator.clipboard.writeText(output.markdownToPlainText(source.markdown));
   }
 
-  async function downloadText(): Promise<void> {
+  async function downloadText(source = activeNoteSource()): Promise<void> {
     const output = await loadMarkdownOutputModule();
     downloadBlob(
-      new Blob([`${output.markdownToPlainText(markdown)}\n`], { type: "text/plain" }),
-      outputFileName(noteTitle, "txt"),
+      new Blob([`${output.markdownToPlainText(source.markdown)}\n`], { type: "text/plain" }),
+      outputFileName(source.title, "txt"),
     );
   }
 
-  async function copyRichText(): Promise<void> {
-    await copyToClipboard(async () => {
-      const [html, output] = await Promise.all([exportedHtml(), loadMarkdownOutputModule()]);
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          "text/html": new Blob([html], { type: "text/html" }),
-          "text/plain": new Blob([output.markdownToPlainText(markdown)], { type: "text/plain" }),
+  async function copyRichText(source = activeNoteSource()): Promise<void> {
+    const [html, output] = await Promise.all([
+      exportedHtml(source.markdown),
+      loadMarkdownOutputModule(),
+    ]);
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([output.markdownToPlainText(source.markdown)], {
+          type: "text/plain",
         }),
-      ]);
-    });
+      }),
+    ]);
   }
 
-  async function downloadRtf(): Promise<void> {
+  async function downloadRtf(source = activeNoteSource()): Promise<void> {
     const output = await loadMarkdownOutputModule();
     downloadBlob(
-      new Blob([output.markdownToRtf(markdown)], { type: "application/rtf" }),
-      outputFileName(noteTitle, "rtf"),
+      new Blob([output.markdownToRtf(source.markdown)], { type: "application/rtf" }),
+      outputFileName(source.title, "rtf"),
     );
   }
 
   // Exports keep the note's own attachment paths, because in-app blob URLs die with the tab.
-  async function exportedHtml(): Promise<string> {
+  async function exportedHtml(source: string): Promise<string> {
     const markdownModule = await loadMarkdownModule();
-    return markdownModule.renderMarkdown(markdown, undefined, { remoteImages: "allow" });
+    return markdownModule.renderMarkdown(source, undefined, { remoteImages: "allow" });
   }
 
   async function copyToClipboard(write: () => Promise<void>): Promise<void> {
@@ -2332,43 +2309,58 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
   }
 
-  async function copyHtml(): Promise<void> {
-    await copyToClipboard(async () => {
-      const [html, output] = await Promise.all([exportedHtml(), loadMarkdownOutputModule()]);
-      await navigator.clipboard.writeText(output.formatHtmlSource(html));
-    });
+  async function copyHtml(source = activeNoteSource()): Promise<void> {
+    const [html, output] = await Promise.all([
+      exportedHtml(source.markdown),
+      loadMarkdownOutputModule(),
+    ]);
+    await navigator.clipboard.writeText(output.formatHtmlSource(html));
   }
 
-  async function downloadHtml(): Promise<void> {
-    const [body, output] = await Promise.all([exportedHtml(), loadMarkdownOutputModule()]);
+  async function downloadHtml(source = activeNoteSource()): Promise<void> {
+    const [body, output] = await Promise.all([
+      exportedHtml(source.markdown),
+      loadMarkdownOutputModule(),
+    ]);
     const html = output.createHtmlDocument({
-      title: noteTitle,
+      title: source.title,
       body: output.formatHtmlSource(body),
     });
-    downloadBlob(new Blob([html], { type: "text/html" }), outputFileName(noteTitle, "html"));
+    downloadBlob(new Blob([html], { type: "text/html" }), outputFileName(source.title, "html"));
   }
 
-  // The PDF view has nothing to copy, so it has no copy handler.
-  const outputCopy: Partial<Record<OutputView, () => Promise<void>>> = {
+  const noteCopiers: Record<Exclude<NoteFormat, "pdf">, (source: NoteSource) => Promise<void>> = {
     markdown: copyMarkdown,
     text: copyText,
     "rich-text": copyRichText,
     html: copyHtml,
   };
-  const outputDownload: Record<OutputView, () => void | Promise<void>> = {
+  const noteExporters: Record<
+    Exclude<NoteFormat, "pdf">,
+    (source: NoteSource) => void | Promise<void>
+  > = {
     markdown: downloadMarkdown,
     text: downloadText,
     "rich-text": downloadRtf,
     html: downloadHtml,
-    pdf: savePdf,
   };
 
-  async function copyOutput(): Promise<void> {
-    await outputCopy[outputView]?.();
+  async function copyNoteAs(id: string, format: Exclude<NoteFormat, "pdf">): Promise<void> {
+    await copyToClipboard(async () => {
+      const source = await noteSource(id);
+      if (source) await noteCopiers[format](source);
+    });
   }
 
-  function downloadOutput(): void {
-    void outputDownload[outputView]();
+  // Printing works from the rendered page, so another note is opened first.
+  async function exportNoteAs(id: string, format: NoteFormat): Promise<void> {
+    if (format === "pdf") {
+      if (id !== activeNoteId) await selectNote(id);
+      if (id === activeNoteId) await savePdf();
+      return;
+    }
+    const source = await noteSource(id);
+    if (source) await noteExporters[format](source);
   }
 
   async function exportZip(): Promise<void> {
@@ -2604,27 +2596,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     saveSplitRatio();
   }
 
-  function setOutputView(view: OutputView): void {
-    const request = ++outputViewRequest;
-    if (view === "markdown" || view === "pdf") {
-      outputView = view;
-      writeLocalStorage("onyx:output-view", view);
-      return;
-    }
-    void Promise.all([loadMarkdownOutputModule(), loadMarkdownModule()]).then(
-      () => {
-        if (request !== outputViewRequest) return;
-        outputView = view;
-        writeLocalStorage("onyx:output-view", view);
-      },
-      () => {
-        if (request !== outputViewRequest) return;
-        outputView = view;
-        writeLocalStorage("onyx:output-view", view);
-      },
-    );
-  }
-
   function togglePaneLayout(): void {
     if (singlePaneMode) return;
     paneLayout = paneLayout === "columns" ? "rows" : "columns";
@@ -2641,8 +2612,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function applyPanePreferences(): void {
-    const storedOutputView = readLocalStorage("onyx:output-view");
-    outputView = isOutputView(storedOutputView) ? storedOutputView : "markdown";
     paneLayout = readLocalStorage("onyx:pane-layout") === "rows" ? "rows" : "columns";
     paneOrder =
       readLocalStorage("onyx:pane-order") === "source-first" ? "source-first" : "rendered-first";
@@ -2923,11 +2892,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function restoreEditorSelection(selection: EditorSelection): void {
     if (selection.surface === "source") {
-      if (!editor) {
-        setOutputView("markdown");
-        void tick().then(() => restoreEditorSelection(selection));
-        return;
-      }
+      if (!editor) return;
       requestAnimationFrame(() => {
         editor?.focus();
         editor?.setSelectionRange(
@@ -3696,10 +3661,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   // Formatting edits the Markdown source, so another output view is switched back first.
   async function ensureMarkdownView(): Promise<boolean> {
-    if (editor || isRenderedEditingActive()) return true;
-    setOutputView("markdown");
-    await tick();
-    return Boolean(editor);
+    return Boolean(editor || isRenderedEditingActive());
   }
 
   async function insertSyntax(before: string, after = before, placeholder = "text"): Promise<void> {
@@ -3815,7 +3777,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
     if (singlePaneMode && !outputPaneVisible) showOnlyPane("source");
     if (!editor) {
-      if (outputView !== "markdown") setOutputView("markdown");
       void tick().then(() => focusFindMatch(index, sequence));
       return;
     }
@@ -4638,9 +4599,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get renderedReadOnly() {
       return renderedReadOnly;
     },
-    get outputView() {
-      return outputView;
-    },
     get paneLayout() {
       return effectivePaneLayout;
     },
@@ -4688,21 +4646,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     },
     get liveRenderedBlockLines() {
       return liveRenderedBlockLines;
-    },
-    get plainTextBlocks() {
-      return plainTextBlocks;
-    },
-    get htmlSourceBlocks() {
-      return htmlSourceBlocks;
-    },
-    get plainText() {
-      return plainText;
-    },
-    get htmlSource() {
-      return htmlSource;
-    },
-    get highlightedHtmlSourceLines() {
-      return highlightedHtmlSourceLines;
     },
     get paletteItems() {
       return paletteItems;
@@ -4846,9 +4789,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     swapPanes,
     togglePaneLayout,
     placePane,
-    setOutputView,
-    copyOutput,
-    downloadOutput,
+    copyNoteAs,
+    exportNoteAs,
     toggleRenderedReadOnly,
     toggleScrollSync,
     focusSourceEditor,

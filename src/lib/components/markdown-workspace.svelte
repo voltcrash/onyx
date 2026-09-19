@@ -1,14 +1,12 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import { Copy, Download, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, Lock, LockOpen, Moon, PanelLeft, PencilLine, Sun, X } from '@lucide/svelte';
-	import { HTML_SOURCE_SEPARATOR, PLAIN_TEXT_SEPARATOR, type TextBlock } from '$lib/markdown-output-types';
 	import { highlightFindMatches, type FindMatch } from '$lib/find-replace';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
 	import type { ColorTheme, ResolvedTheme } from '$lib/theme';
 	import type { SourceLines } from '$lib/markdown-lite';
-	import { elementAnchors, scrollAnchors, syncedScrollTop, textAnchors, textareaAnchors, type ScrollAnchor } from '$lib/scroll-sync';
+	import { elementAnchors, scrollAnchors, syncedScrollTop, textareaAnchors, type ScrollAnchor } from '$lib/scroll-sync';
 	import type { PaneEdge, PaneLayout, PaneOrder, SaveState, TransferState } from './app-types';
-	import { outputViews, type OutputView } from './output-views';
 
 	interface Props {
 		storageNotice: string;
@@ -17,12 +15,6 @@
 		renderedPaneVisible: boolean;
 		paneLayout: PaneLayout;
 		paneOrder: PaneOrder;
-		outputView: OutputView;
-		plainText: string;
-		plainTextBlocks: TextBlock[];
-		htmlSource: string;
-		htmlSourceBlocks: TextBlock[];
-		highlightedHtmlSourceLines: string[];
 		renderedBlockLines: (SourceLines | undefined)[];
 		renderedReadOnly: boolean;
 		scrollSync: boolean;
@@ -50,7 +42,6 @@
 		onToggleOutputPane: () => void;
 		resolvedTheme: ResolvedTheme;
 		colorTheme: ColorTheme;
-		onOutputViewChange: (view: OutputView) => void;
 		onCopy: () => void;
 		onDownload: () => void;
 		onToggleRenderedPane: () => void;
@@ -77,10 +68,10 @@
 	}
 
 	let {
-		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, outputView, plainText, plainTextBlocks, htmlSource, htmlSourceBlocks, highlightedHtmlSourceLines, renderedBlockLines, renderedReadOnly, scrollSync, markdown, markdownLines, findOpen, findQuery, findMatches, activeFindMatch, liveLine,
+		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedReadOnly, scrollSync, markdown, markdownLines, findOpen, findQuery, findMatches, activeFindMatch, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
-		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onOutputViewChange, onCopy, onDownload, onToggleRenderedPane, onToggleRenderedReadOnly, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onSourceFocus, onLiveLineFocus, onRenderedInput,
+		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onCopy, onDownload, onToggleRenderedPane, onToggleRenderedReadOnly, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onSourceFocus, onLiveLineFocus, onRenderedInput,
 		onRenderedLineKeydown, onRenderedTaskClick, renderEditableLine, liveLineKind, liveCodeLanguage
 	}: Props = $props();
 
@@ -98,14 +89,13 @@
 	let toggleSecondPane = $derived(swapped ? onToggleOutputPane : onToggleRenderedPane);
 	let towardsStart = $derived(stacked ? ChevronUp : ChevronLeft);
 	let towardsEnd = $derived(stacked ? ChevronDown : ChevronRight);
-	let activeView = $derived(outputViews.find((view) => view.id === outputView) ?? outputViews[0]);
 	let outputTheme = $state<ResolvedTheme>();
 	let activeOutputTheme = $derived(outputTheme ?? resolvedTheme);
 	type LiveLineRect = { top: number; left: number; width: number; height: number };
 	let liveLineRects = $state<LiveLineRect[]>([]);
 	let sourceScrollTop = $state(0);
 	let sourceScrollLeft = $state(0);
-	let sourceFindActive = $derived(findOpen && outputView === 'markdown' && Boolean(findQuery));
+	let sourceFindActive = $derived(findOpen && Boolean(findQuery));
 	let sourceFindMarkup = $derived(
 		sourceFindActive ? highlightFindMatches(markdown, findMatches, activeFindMatch) : '',
 	);
@@ -323,11 +313,6 @@
 		onResizeEnd();
 	}
 
-	function lineNumberWidth(lineCount: number): string {
-		const digits = Math.max(1, String(lineCount).length);
-		return `${Math.max(3, digits + 1.25)}ch`;
-	}
-
 	type Pane = 'output' | 'rendered';
 	const DRAG_THRESHOLD = 5;
 	const MOVE_EASING = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
@@ -453,10 +438,6 @@
 				: proseAnchors(scroller);
 		} else if (scroller instanceof HTMLTextAreaElement) {
 			points = textareaAnchors(scroller);
-		} else if (outputView === 'text') {
-			points = textAnchors(scroller, plainTextBlocks, PLAIN_TEXT_SEPARATOR);
-		} else if (outputView === 'html') {
-			points = textAnchors(scroller, htmlSourceBlocks, HTML_SOURCE_SEPARATOR);
 		} else {
 			points = proseAnchors(scroller);
 		}
@@ -549,12 +530,6 @@
 		queueScrollSync(pane, true);
 	}
 
-	// A pane whose contents were just swapped out follows the other one.
-	$effect(() => {
-		void outputView;
-		tick().then(() => queueScrollSync('rendered'));
-	});
-
 	$effect(() => {
 		if (!scrollSync) stopGlide();
 		else tick().then(() => queueScrollSync(leadingPane()));
@@ -645,9 +620,7 @@
 		<div bind:this={outputPaneElement} class="output-pane" class:dragged={drag?.moving && drag.pane === 'output'} data-output-theme={activeOutputTheme} data-color-theme={colorTheme} style={drag?.moving && drag.pane === 'output' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined}>
 			<div class="output-switcher">
 				<div class="output-views" role="tablist" aria-label="Output view">
-					{#each outputViews as view (view.id)}
-						<button role="tab" class:active={outputView === view.id} aria-selected={outputView === view.id} title={view.description} onclick={() => onOutputViewChange(view.id)}><b class="output-format" aria-hidden="true">{view.format}</b><span>{view.label}</span></button>
-					{/each}
+					<button role="tab" class="active" aria-selected="true" title="Write and edit the Markdown source"><b class="output-format" aria-hidden="true">MD</b><span>Markdown</span></button>
 				</div>
 				<div class="output-actions">
 					<button class="output-action" onclick={toggleOutputTheme} aria-label={activeOutputTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title={activeOutputTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
@@ -658,39 +631,15 @@
 						{/if}
 						<span>{activeOutputTheme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
 					</button>
-					<button class="output-action" onclick={onCopy} disabled={!hasContent || !activeView.copyTitle} title={activeView.copyTitle ?? 'There is nothing to copy from the PDF view'}><Copy size={14} /><span>Copy</span></button>
-					<button class="output-action" onclick={onDownload} disabled={!hasContent} title={activeView.downloadTitle}><Download size={14} /><span>{activeView.downloadLabel}</span></button>
+					<button class="output-action" onclick={onCopy} disabled={!hasContent} title="Copy this note as Markdown"><Copy size={14} /><span>Copy</span></button>
+					<button class="output-action" onclick={onDownload} disabled={!hasContent} title="Download this note as a Markdown file"><Download size={14} /><span>Download</span></button>
 				</div>
 			</div>
 			<div class="output-body" bind:this={outputBody} onscrollcapture={(event) => handlePaneScroll(event, 'output')} onloadcapture={() => queueScrollSync(leadingPane())}>
-				{#if outputView === 'text'}
-					<pre class="output-code output-text" aria-label="Plain text">{plainText}</pre>
-				{:else if outputView === 'rich-text'}
-					<div class="rich-text-preview" aria-label="Rich text">
-						{#if hasContent}
-							<article class="prose">{@html renderedMarkdown}</article>
-						{:else}
-							<div class="preview-empty"><PencilLine size={26} /><strong>Nothing to copy yet</strong><span>Write something and it shows up here formatted.</span></div>
-						{/if}
-					</div>
-				{:else if outputView === 'html'}
-					<pre class="output-code output-html" style={`--line-number-width: ${lineNumberWidth(highlightedHtmlSourceLines.length)}`} aria-label="Generated HTML"><code class="hljs">{#each highlightedHtmlSourceLines as line, index}<span class="output-code-line" data-line={index + 1}>{@html line}</span>{#if index < highlightedHtmlSourceLines.length - 1}{'\n'}{/if}{/each}</code></pre>
-				{:else if outputView === 'pdf'}
-					<div class="pdf-preview paper-surface">
-						<div class="pdf-sheet paper-surface" aria-label="PDF preview">
-							{#if hasContent}
-								<article class="prose">{@html renderedMarkdown}</article>
-							{:else}
-								<div class="preview-empty"><PencilLine size={26} /><strong>Nothing to print yet</strong><span>Write something and this page fills up.</span></div>
-							{/if}
-						</div>
-					</div>
-				{:else}
 					<textarea bind:this={editor} class:find-highlights-active={sourceFindActive} value={markdown} onfocus={onSourceFocus} onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} ondragover={onEditorDragOver} ondrop={onEditorDrop} oninput={(event) => onMarkdownChange(event.currentTarget.value)} onscroll={syncSourceFindLayer} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
 					{#if sourceFindActive}
 						<div class="source-find-layer" aria-hidden="true"><div style={`transform: translate(${-sourceScrollLeft}px, ${-sourceScrollTop}px)`}>{@html sourceFindMarkup}</div></div>
 					{/if}
-				{/if}
 			</div>
 		</div>
 		<div class="pane-divider">

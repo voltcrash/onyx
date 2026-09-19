@@ -43,74 +43,6 @@ test("aligns the page mode toggle with the output switcher", async ({ page }) =>
   );
 });
 
-test("orders output views by file format", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
-
-  await openOutputSwitcher(page);
-  await expect(page.locator(".output-views .output-format")).toHaveText([
-    "MD",
-    "HTML",
-    "TXT",
-    "RTF",
-    "PDF",
-  ]);
-});
-
-test("matches the PDF view to the selected mode by default", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
-
-  const outputPane = page.locator(".output-pane");
-  const pdfTab = page.getByRole("tab", { name: "PDF", exact: true });
-  const pdfPreview = page.locator(".pdf-preview");
-  const pdfSheet = page.locator(".pdf-sheet");
-
-  for (const mode of ["dark", "light"] as const) {
-    await page.evaluate((nextMode) => localStorage.setItem("onyx-theme", nextMode), mode);
-    await page.reload();
-    await expect(outputPane).toBeVisible();
-    await expect(outputPane).toHaveAttribute("data-output-theme", mode);
-
-    await openOutputSwitcher(page);
-    await pdfTab.click();
-    await expect(pdfPreview).toHaveCSS(
-      "background-color",
-      await outputPane.evaluate((element) => getComputedStyle(element).backgroundColor),
-    );
-    await expect(pdfSheet).toHaveCSS(
-      "color",
-      await outputPane.evaluate((element) => getComputedStyle(element).color),
-    );
-  }
-});
-
-test("keeps every output view on the same pane background", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
-
-  const expectedBackground = await page
-    .locator(".preview-pane")
-    .evaluate((pane) => getComputedStyle(pane).backgroundColor);
-  const views = [
-    ["Markdown", ".output-body"],
-    ["Plain text", ".output-text"],
-    ["Rich text", ".rich-text-preview"],
-    ["HTML", ".output-html"],
-    ["PDF", ".pdf-preview"],
-  ] as const;
-
-  for (const [view, selector] of views) {
-    await openOutputSwitcher(page);
-    await page.getByRole("tab", { name: view, exact: true }).click();
-    await expect
-      .poll(() =>
-        page.locator(selector).evaluate((element) => getComputedStyle(element).backgroundColor),
-      )
-      .toBe(expectedBackground);
-  }
-});
-
 test("toggles the color mode from the output toolbar", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
@@ -488,6 +420,44 @@ test("offers formatting actions from the command palette", async ({ page }) => {
   await expect(page.locator(".sidebar-switcher")).toHaveCount(0);
   await expect(page.locator(".formatting-tools")).toHaveCount(0);
   await expect(page.getByText(/words? · \d+ min/)).toBeVisible();
+});
+
+test("offers note transfer actions from the command palette", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill("# Palette export\n\nA note to copy.");
+  await page.evaluate(() => {
+    const state = window as typeof window & { onyxCopied?: string };
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: async (text: string) => void (state.onyxCopied = text) },
+    });
+  });
+
+  await page.getByRole("button", { name: "Open the command palette" }).click();
+  for (const label of [
+    "Copy this note as Markdown",
+    "Download this note as Markdown",
+    "Copy this note as plain text",
+    "Download this note as plain text",
+    "Copy this note as rich text",
+    "Download this note as rich text",
+    "Copy this note as HTML",
+    "Download this note as HTML",
+    "Save this note as a PDF",
+  ]) {
+    await expect(page.getByRole("option", { name: label, exact: true })).toBeVisible();
+  }
+
+  await page.getByRole("option", { name: "Copy this note as plain text", exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as typeof window & { onyxCopied?: string }).onyxCopied))
+    .toBe("Palette export\n\nA note to copy.");
+
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Open the command palette" }).click();
+  await page.getByRole("option", { name: "Download this note as HTML", exact: true }).click();
+  expect((await download).suggestedFilename()).toBe("palette-export.html");
 });
 
 test("opens every settings section from the command palette", async ({ page }) => {
@@ -1750,33 +1720,26 @@ test("scrolls each pane to the part of the note shown in the other one", async (
   await markdown.fill(sections.join("\n\n"));
   await expect(page.locator(".preview-pane")).toContainText("Marker-29");
 
-  const views = ["Markdown", "Plain text", "Rich text", "HTML", "PDF"];
   for (const readOnly of [false, true]) {
     if (readOnly) {
       await toggleRenderedReadOnly(page);
       await expect(page.locator(".preview-pane article.prose")).toBeVisible();
     }
-    for (const [index, view] of views.entries()) {
-      await openOutputSwitcher(page);
-      await page.getByRole("tab", { name: view }).click();
-      for (const [from, marker] of [
-        ["rendered", `Marker-${7 + index * 3}`],
-        ["output", `Marker-${24 - index * 2}`],
-      ] as const) {
-        const other = from === "output" ? "rendered" : "output";
-        await markerOffsets(page, from, marker);
-        await expect
-          .poll(async () => Math.abs((await markerOffsets(page, null, marker))[other]), {
-            message: `${view} ${readOnly ? "read-only" : "editable"}: ${other} follows ${from} to ${marker}`,
-          })
-          .toBeLessThan(40);
-      }
+    for (const [from, marker] of [
+      ["rendered", "Marker-7"],
+      ["output", "Marker-24"],
+    ] as const) {
+      const other = from === "output" ? "rendered" : "output";
+      await markerOffsets(page, from, marker);
+      await expect
+        .poll(async () => Math.abs((await markerOffsets(page, null, marker))[other]), {
+          message: `${readOnly ? "read-only" : "editable"}: ${other} follows ${from} to ${marker}`,
+        })
+        .toBeLessThan(40);
     }
   }
 
   // Typing at the end keeps the editor on the caret, and the page follows it down.
-  await openOutputSwitcher(page);
-  await page.getByRole("tab", { name: "Markdown" }).click();
   await markdown.focus();
   await page.keyboard.press("ControlOrMeta+End");
   await page.keyboard.type("\n\nThe last word.");
@@ -1859,12 +1822,6 @@ test("moves a pane by dragging its grip beside the divider or with the arrow key
     ),
   );
   expect(await gripOffset("Move the page pane")).toBeGreaterThan(14);
-
-  await openOutputSwitcher(page);
-
-  await page.getByRole("tab", { name: "HTML" }).click();
-  await expect(page.getByRole("tab", { name: "HTML" })).toHaveAttribute("aria-selected", "true");
-  await expect(shell).not.toHaveClass(/panes-swapped/);
 });
 
 test("copies and downloads the Markdown source from the output pane", async ({ page }) => {
@@ -1893,9 +1850,14 @@ test("copies and downloads the Markdown source from the output pane", async ({ p
   expect((await download).suggestedFilename()).toBe("packing-list.md");
 });
 
-test("shows the note as plain text in the output pane, copies and downloads it", async ({
-  page,
-}) => {
+// Other formats live in the file menu, under "Export as" and "Copy as".
+async function useFileMenu(page: Page, submenu: "Export as" | "Copy as", format: string) {
+  await page.locator(".file.active").click({ button: "right" });
+  await page.getByRole("menuitem", { name: submenu }).hover();
+  await page.getByRole("menu", { name: submenu }).getByRole("menuitem", { name: format }).click();
+}
+
+test("copies and exports a note as plain text from the file menu", async ({ page }) => {
   await page.goto("/");
   const markdown = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(markdown).toBeEnabled();
@@ -1907,29 +1869,17 @@ test("shows the note as plain text in the output pane, copies and downloads it",
     });
   });
 
-  await openOutputSwitcher(page);
-
-  await page.getByRole("tab", { name: "Plain text" }).click();
-  const expected = "Grocery list\n\n- Fresh bread\n- Oats (https://example.com/oats)";
-  await expect(page.getByLabel("Plain text")).toHaveText(expected);
-
-  await openOutputSwitcher(page);
-
-  await page.getByRole("button", { name: "Copy" }).click();
+  await useFileMenu(page, "Copy as", "Plain text");
   await expect
     .poll(() => page.evaluate(() => (window as typeof window & { onyxCopied?: string }).onyxCopied))
-    .toBe(expected);
-  await expect(page.getByText("Copied this note as plain text.")).toHaveCount(0);
+    .toBe("Grocery list\n\n- Fresh bread\n- Oats (https://example.com/oats)");
 
   const download = page.waitForEvent("download");
-  await openOutputSwitcher(page);
-  await page.getByRole("button", { name: "Download" }).click();
+  await useFileMenu(page, "Export as", "Plain text");
   expect((await download).suggestedFilename()).toBe("grocery-list.txt");
 });
 
-test("shows the formatted note in the output pane, copies it as rich text and downloads RTF", async ({
-  page,
-}) => {
+test("copies a note as rich text and exports RTF from the file menu", async ({ page }) => {
   await page.goto("/");
   const markdown = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(markdown).toBeEnabled();
@@ -1949,16 +1899,7 @@ test("shows the formatted note in the output pane, copies it as rich text and do
     });
   });
 
-  await openOutputSwitcher(page);
-
-  await page.getByRole("tab", { name: "Rich text" }).click();
-  const preview = page.getByLabel("Rich text");
-  await expect(preview.locator("h1")).toHaveText("Meeting notes");
-  await expect(preview.locator("strong")).toHaveText("Friday");
-
-  await openOutputSwitcher(page);
-
-  await page.getByRole("button", { name: "Copy" }).click();
+  await useFileMenu(page, "Copy as", "Rich text");
   await expect
     .poll(() =>
       page.evaluate(
@@ -1971,12 +1912,11 @@ test("shows the formatted note in the output pane, copies it as rich text and do
     });
 
   const download = page.waitForEvent("download");
-  await openOutputSwitcher(page);
-  await page.getByRole("button", { name: "Download" }).click();
+  await useFileMenu(page, "Export as", "Rich text");
   expect((await download).suggestedFilename()).toBe("meeting-notes.rtf");
 });
 
-test("shows the generated HTML in the output pane, copies and downloads it", async ({ page }) => {
+test("copies and exports a note as HTML from the file menu", async ({ page }) => {
   await page.goto("/");
   const markdown = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(markdown).toBeEnabled();
@@ -1988,68 +1928,17 @@ test("shows the generated HTML in the output pane, copies and downloads it", asy
     });
   });
 
-  await openOutputSwitcher(page);
-
-  await page.getByRole("tab", { name: "HTML" }).click();
-  const html = page.locator(".output-code");
-  await expect(html).toContainText('<h1 id="user-content-release-notes">');
-  await expect(html).toContainText("<strong>");
-  await expect(html.locator("code.hljs")).toBeVisible();
-  await expect(html).toHaveCSS(
-    "background-color",
-    await page.locator(".preview-pane").evaluate((pane) => getComputedStyle(pane).backgroundColor),
-  );
-  await expect(html.locator(".hljs-tag")).toHaveCount(6);
-  await expect(html.locator(".hljs-name").first()).toHaveText("h1");
-  const expectedSyntaxColor = await page.evaluate(() => {
-    const probe = document.createElement("span");
-    probe.style.color = "var(--output-syntax-tag)";
-    document.querySelector(".output-pane")?.append(probe);
-    const color = getComputedStyle(probe).color;
-    probe.remove();
-    return color;
-  });
-  await expect(html.locator(".hljs-name").first()).toHaveCSS("color", expectedSyntaxColor);
-  await expect(html.locator(".output-code-line")).toHaveCount(6);
-  await expect(html.locator(".output-code-line").first()).toHaveAttribute("data-line", "1");
-  await expect(html.locator(".output-code-line").last()).toHaveAttribute("data-line", "6");
-
-  await openOutputSwitcher(page);
-
-  await page.getByRole("button", { name: "Copy" }).click();
+  await useFileMenu(page, "Copy as", "HTML");
   await expect
     .poll(() => page.evaluate(() => (window as typeof window & { onyxCopied?: string }).onyxCopied))
     .toContain("<strong>today</strong>");
-  await expect(page.getByText("Copied this note as HTML.")).toHaveCount(0);
 
   const download = page.waitForEvent("download");
-  await openOutputSwitcher(page);
-  await page.getByRole("button", { name: "Download" }).click();
+  await useFileMenu(page, "Export as", "HTML");
   expect((await download).suggestedFilename()).toBe("release-notes.html");
-
-  await openOutputSwitcher(page);
-
-  await page.getByRole("tab", { name: "Markdown" }).click();
-  await expect(markdown).toHaveValue(/Release notes/);
 });
 
-test("keeps the HTML line-number gutter aligned when it reaches two digits", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
-
-  await openOutputSwitcher(page);
-  await page.getByRole("tab", { name: "HTML" }).click();
-
-  const gutterWidths = await page
-    .locator(".output-code-line")
-    .evaluateAll((lines) =>
-      lines.slice(7, 10).map((line) => getComputedStyle(line, "::before").width),
-    );
-  expect(gutterWidths).toEqual([gutterWidths[0], gutterWidths[0], gutterWidths[0]]);
-});
-
-test("previews the printed page and prints it from the output pane", async ({ page }) => {
-  await page.emulateMedia({ colorScheme: "dark" });
+test("prints a note as PDF from the file menu", async ({ page }) => {
   await page.goto("/");
   const markdown = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(markdown).toBeEnabled();
@@ -2061,30 +1950,14 @@ test("previews the printed page and prints it from the output pane", async ({ pa
     };
   });
 
-  await openOutputSwitcher(page);
+  await page.locator(".file.active").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Copy as" }).hover();
+  await expect(
+    page.getByRole("menu", { name: "Copy as" }).getByRole("menuitem", { name: "PDF" }),
+  ).toHaveCount(0);
+  await page.keyboard.press("Escape");
 
-  await page.getByRole("tab", { name: "PDF" }).click();
-  const sheet = page.locator(".pdf-sheet");
-  await expect(sheet.locator("h1")).toHaveText("Field report");
-  await expect(page.locator(".pdf-preview")).toHaveCSS(
-    "background-color",
-    await sheet.evaluate((element) => getComputedStyle(element).backgroundColor),
-  );
-  const previewBounds = await page.locator(".pdf-preview").boundingBox();
-  const sheetBounds = await sheet.boundingBox();
-  expect(previewBounds).not.toBeNull();
-  expect(sheetBounds).not.toBeNull();
-  expect(sheetBounds).toMatchObject({
-    x: previewBounds!.x,
-    y: previewBounds!.y,
-    width: previewBounds!.width,
-    height: previewBounds!.height,
-  });
-  await expect(page.getByRole("button", { name: "Copy" })).toBeDisabled();
-
-  await openOutputSwitcher(page);
-
-  await page.getByRole("button", { name: "Save as PDF" }).click();
+  await useFileMenu(page, "Export as", "PDF");
   await expect
     .poll(() =>
       page.evaluate(() => (window as typeof window & { onyxPrinted?: boolean }).onyxPrinted),
