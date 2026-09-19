@@ -112,6 +112,7 @@
   cursor: not-allowed;
 }
 .sidebar {
+  overscroll-behavior-x: none;
   grid-row: 1 / -1;
   grid-column: 1;
   display: flex;
@@ -772,6 +773,39 @@
 .file-context-divider {
   margin: 4px 2px;
   border-top: 1px solid var(--line-soft);
+}
+.vault-dots {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 4px 4px;
+}
+.vault-dots button {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.vault-dots button::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line-soft);
+  transition:
+    background 150ms,
+    transform 150ms;
+}
+.vault-dots button:hover::after {
+  background: var(--faint);
+}
+.vault-dots button.active::after {
+  background: var(--faint);
+  transform: scale(1.25);
 }
 .sidebar-footer {
   display: flex;
