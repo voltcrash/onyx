@@ -706,7 +706,7 @@
 			{/if}
 		</div>
 	{/if}
-	{#if vaults.length > 1}
+	{#if vaults.length > 1 && !paletteOpen}
 		<div class="vault-dots" role="tablist" aria-label="Repositories (swipe the sidebar to switch)">
 			{#each vaults as vault (vault.id)}
 				<button role="tab" aria-selected={vault.id === activeVaultId} aria-label={vault.name} title={vault.name} class:active={vault.id === activeVaultId} disabled={transferState === 'working'} onclick={() => { if (vault.id !== activeVaultId) onSelectVault(vault.id); }}></button>
