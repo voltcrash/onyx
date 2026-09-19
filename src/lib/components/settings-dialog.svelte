@@ -44,6 +44,8 @@
 		onColorThemeChange: (theme: ColorTheme) => void;
 		onFontChange: (role: FontRole, id: string) => void;
 		onResetFonts: () => void;
+		scrollSync: boolean;
+		onToggleScrollSync: () => void;
 		onShortcutChange: (action: ShortcutAction, shortcut: KeyboardShortcut | null) => void;
 		onResetShortcuts: () => void;
 		onClose: () => void;
@@ -65,12 +67,12 @@
 	let {
 		vault, vaultName, suggestedRepositoryName, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
 		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, fonts, shortcuts, primaryModifier,
-		section = $bindable('editor'), onThemeChange, onColorThemeChange, onFontChange, onResetFonts, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
+		section = $bindable('editor'), onThemeChange, onColorThemeChange, onFontChange, onResetFonts, scrollSync, onToggleScrollSync, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onPrepareVaultDeletion, onDeleteVault
 	}: Props = $props();
 
 	const sections: Array<{ id: SettingsSection; label: string }> = [
-		{ id: 'editor', label: 'Editor' },
+		{ id: 'editor', label: 'Fonts' },
 		{ id: 'themes', label: 'Themes' },
 		{ id: 'shortcuts', label: 'Keyboard shortcuts' },
 		{ id: 'github', label: 'Backup & sync' },
@@ -302,7 +304,7 @@
 
 				{#if section === 'editor'}
 					<div class="settings-section-heading">
-						<div><h3>Editor</h3><p class="settings-hint">Set the typefaces your notes are written in</p></div>
+						<div><h3>Fonts</h3><p class="settings-hint">Set the typefaces your notes are written in</p></div>
 						{#if !fontsAreDefault}<button class="settings-secondary" onclick={onResetFonts}>Restore default fonts</button>{/if}
 					</div>
 
@@ -329,6 +331,11 @@
 							</select>
 						</div>
 					{/each}
+					<h4 class="settings-subheading">Scrolling</h4>
+					<label class="settings-toggle">
+						<input type="checkbox" checked={scrollSync} onchange={onToggleScrollSync} />
+						<span><strong>Sync scrolling between panes</strong><small>Scrolling the page or the output keeps the other pane at the same part of the note.</small></span>
+					</label>
 				{:else if section === 'themes'}
 					<h3>Themes</h3>
 					<p class="settings-hint">Choose how Onyx looks in this browser.</p>
