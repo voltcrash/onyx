@@ -422,6 +422,44 @@ test("offers formatting actions from the command palette", async ({ page }) => {
   await expect(page.getByText("Document", { exact: true })).toBeVisible();
 });
 
+test("offers note transfer actions from the command palette", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill("# Palette export\n\nA note to copy.");
+  await page.evaluate(() => {
+    const state = window as typeof window & { onyxCopied?: string };
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: async (text: string) => void (state.onyxCopied = text) },
+    });
+  });
+
+  await page.getByRole("button", { name: "Open the command palette" }).click();
+  for (const label of [
+    "Copy this note as Markdown",
+    "Download this note as Markdown",
+    "Copy this note as plain text",
+    "Download this note as plain text",
+    "Copy this note as rich text",
+    "Download this note as rich text",
+    "Copy this note as HTML",
+    "Download this note as HTML",
+    "Save this note as a PDF",
+  ]) {
+    await expect(page.getByRole("option", { name: label, exact: true })).toBeVisible();
+  }
+
+  await page.getByRole("option", { name: "Copy this note as plain text", exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as typeof window & { onyxCopied?: string }).onyxCopied))
+    .toBe("Palette export\n\nA note to copy.");
+
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Open the command palette" }).click();
+  await page.getByRole("option", { name: "Download this note as HTML", exact: true }).click();
+  expect((await download).suggestedFilename()).toBe("palette-export.html");
+});
+
 test("opens every settings section from the command palette", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();

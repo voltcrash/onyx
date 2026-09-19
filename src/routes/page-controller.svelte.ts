@@ -53,7 +53,7 @@ import type {
   SaveState,
   TransferState,
 } from "$lib/components/app-types";
-import type { NoteFormat } from "$lib/components/note-formats";
+import { noteFormats, type NoteFormat } from "$lib/components/note-formats";
 import type { SettingsSection } from "$lib/components/settings-types";
 import {
   codeLanguageLabel as liteCodeLanguageLabel,
@@ -133,6 +133,46 @@ const DEFERRED_STARTUP_DELAY_MS = 8_000;
 const NARROW_VIEWPORT = "(max-width: 900px)";
 const EDITOR_HISTORY_LIMIT = 200;
 const MARKDOWN_EXTENSION = ".md";
+
+const noteFormatPaletteNames: Record<NoteFormat, string> = {
+  markdown: "Markdown",
+  html: "HTML",
+  text: "plain text",
+  "rich-text": "rich text",
+  pdf: "PDF",
+};
+
+const noteFormatPaletteKeywords: Record<NoteFormat, string> = {
+  markdown: "markdown md source",
+  html: "html web page source",
+  text: "plain text txt",
+  "rich-text": "rtf rich text formatted word document email paste",
+  pdf: "pdf paper print",
+};
+
+const noteFormatExportLabels: Record<NoteFormat, string> = {
+  markdown: "Download this note as Markdown",
+  html: "Download this note as HTML",
+  text: "Download this note as plain text",
+  "rich-text": "Download this note as rich text",
+  pdf: "Save this note as a PDF",
+};
+
+const noteFormatExportIds: Record<NoteFormat, string> = {
+  markdown: "download-markdown",
+  html: "download-html",
+  text: "download-text",
+  "rich-text": "download-rtf",
+  pdf: "save-pdf",
+};
+
+const noteFormatExportIcons = {
+  markdown: FileText,
+  html: Code2,
+  text: Type,
+  "rich-text": Pilcrow,
+  pdf: Printer,
+};
 
 type GithubModule = typeof import("$lib/github");
 type LazyStylesModule = typeof import("$lib/lazy-styles");
@@ -539,6 +579,36 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     ];
   });
 
+  function noteTransferPaletteItems() {
+    return noteFormats.flatMap((format) => {
+      const name = noteFormatPaletteNames[format.id];
+      const keywords = noteFormatPaletteKeywords[format.id];
+      const items = [];
+      if (format.id !== "pdf" && format.copyable) {
+        const copyFormat = format.id as Exclude<NoteFormat, "pdf">;
+        items.push({
+          id: `copy-${copyFormat}`,
+          group: "Transfer",
+          label: `Copy this note as ${name}`,
+          icon: Copy,
+          keywords: `clipboard ${keywords}`,
+          disabled: !hasContent,
+          run: () => void copyNoteAs(activeNoteId, copyFormat),
+        });
+      }
+      items.push({
+        id: noteFormatExportIds[format.id],
+        group: "Transfer",
+        label: noteFormatExportLabels[format.id],
+        icon: noteFormatExportIcons[format.id],
+        keywords: `export ${keywords} save`,
+        disabled: !hasContent,
+        run: () => void exportNoteAs(activeNoteId, format.id),
+      });
+      return items;
+    });
+  }
+
   const paletteItems = $derived([
     ...paletteNoteItems,
     {
@@ -835,87 +905,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       keywords: "save files write",
       run: () => void exportFolder(),
     },
-    {
-      id: "copy-markdown",
-      group: "Transfer",
-      label: "Copy this note as Markdown",
-      icon: Copy,
-      keywords: "clipboard markdown md source",
-      disabled: !hasContent,
-      run: () => void copyNoteAs(activeNoteId, "markdown"),
-    },
-    {
-      id: "download-markdown",
-      group: "Transfer",
-      label: "Download this note as Markdown",
-      icon: FileText,
-      keywords: "export markdown md save",
-      disabled: !hasContent,
-      run: () => downloadMarkdown(),
-    },
-    {
-      id: "copy-text",
-      group: "Transfer",
-      label: "Copy this note as plain text",
-      icon: Copy,
-      keywords: "clipboard plain text txt",
-      disabled: !hasContent,
-      run: () => void copyNoteAs(activeNoteId, "text"),
-    },
-    {
-      id: "download-text",
-      group: "Transfer",
-      label: "Download this note as plain text",
-      icon: Type,
-      keywords: "export plain text txt save",
-      disabled: !hasContent,
-      run: () => downloadText(),
-    },
-    {
-      id: "copy-rich-text",
-      group: "Transfer",
-      label: "Copy this note as rich text",
-      icon: Copy,
-      keywords: "clipboard formatted rich text document email paste",
-      disabled: !hasContent,
-      run: () => void copyNoteAs(activeNoteId, "rich-text"),
-    },
-    {
-      id: "download-rtf",
-      group: "Transfer",
-      label: "Download this note as rich text",
-      icon: Pilcrow,
-      keywords: "export rtf rich text word document save",
-      disabled: !hasContent,
-      run: () => downloadRtf(),
-    },
-    {
-      id: "copy-html",
-      group: "Transfer",
-      label: "Copy this note as HTML",
-      icon: Copy,
-      keywords: "clipboard html web source",
-      disabled: !hasContent,
-      run: () => void copyNoteAs(activeNoteId, "html"),
-    },
-    {
-      id: "download-html",
-      group: "Transfer",
-      label: "Download this note as HTML",
-      icon: Code2,
-      keywords: "export html web page save",
-      disabled: !hasContent,
-      run: () => downloadHtml(),
-    },
-    {
-      id: "save-pdf",
-      group: "Transfer",
-      label: "Save this note as a PDF",
-      icon: Printer,
-      keywords: "print export pdf paper",
-      disabled: !hasContent,
-      run: () => savePdf(),
-    },
+    ...noteTransferPaletteItems(),
     {
       id: "export-zip",
       group: "Transfer",
