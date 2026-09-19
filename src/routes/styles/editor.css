@@ -1259,6 +1259,17 @@
   border-radius: 1px;
   background: var(--ink);
   pointer-events: none;
+  animation: rendered-caret-blink 1s steps(2, start) infinite;
+}
+@keyframes rendered-caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
 }
 .live-editor.prose .live-editing-overlay .live-editable-line.code-content {
   font-family: var(--font-code) !important;

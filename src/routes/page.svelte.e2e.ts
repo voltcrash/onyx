@@ -748,10 +748,15 @@ test("keeps the rendered editor active when creating a new note", async ({ page 
     .poll(() =>
       page.locator('[data-live-line="0"]').evaluate((element) => {
         const style = getComputedStyle(element, "::after");
-        return { content: style.content, height: style.height, width: style.width };
+        return {
+          animation: style.animationName,
+          content: style.content,
+          height: style.height,
+          width: style.width,
+        };
       }),
     )
-    .toMatchObject({ content: '""' });
+    .toMatchObject({ animation: "rendered-caret-blink", content: '""' });
   await expect
     .poll(() =>
       page.locator('[data-live-line="0"]').evaluate((element) => {
@@ -760,6 +765,15 @@ test("keeps the rendered editor active when creating a new note", async ({ page 
       }),
     )
     .toBe(true);
+
+  await page.getByRole("textbox", { name: "Markdown editor" }).click();
+  await expect
+    .poll(() =>
+      page
+        .locator('[data-live-line="0"]')
+        .evaluate((element) => getComputedStyle(element, "::after").content),
+    )
+    .toBe("none");
 });
 
 test("toggles sidebar find and replace with the platform shortcut", async ({ page }) => {
