@@ -68,6 +68,7 @@
 		onLiveLineFocus: (line: number) => void;
 		onRenderedInput: (event: Event) => void;
 		onRenderedLineKeydown: (event: KeyboardEvent) => void;
+		onRenderedTaskClick: (event: MouseEvent) => void;
 		renderEditableLine: (line: string, index: number) => string;
 		liveLineKind: (line: string, index: number) => string;
 		liveCodeLanguage: (index: number) => string;
@@ -78,7 +79,7 @@
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
 		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onOutputViewChange, onCopy, onDownload, onToggleRenderedPane, onToggleRenderedReadOnly, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onSourceFocus, onLiveLineFocus, onRenderedInput,
-		onRenderedLineKeydown, renderEditableLine, liveLineKind, liveCodeLanguage
+		onRenderedLineKeydown, onRenderedTaskClick, renderEditableLine, liveLineKind, liveCodeLanguage
 	}: Props = $props();
 
 	let shell = $state<HTMLElement>();
@@ -716,14 +717,15 @@
 			</div>
 			{#if renderedReadOnly}
 				{#if hasContent}
-					<article class="prose">{@html renderedMarkdown}</article>
+					<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+					<article class="prose" onclick={onRenderedTaskClick}>{@html renderedMarkdown}</article>
 				{:else}
 					<div class="preview-empty"><PencilLine size={26} /><strong>Nothing here yet</strong><span>Start writing in the other pane, or unlock this one to begin.</span></div>
 				{/if}
 			{:else}
 				<div class="live-editor prose" bind:this={liveEditorContainer} aria-label="Page editor">
 					<div class="live-rendered-content" aria-hidden="true">{@html renderedMarkdown}</div>
-					<div class="live-editing-overlay" contenteditable={saveState !== 'loading' && transferState !== 'working'} role="textbox" tabindex="-1" aria-label="Page editor" aria-multiline="true" spellcheck="true" onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} oninput={(event) => onRenderedInput(event as unknown as InputEvent)} onkeydown={onRenderedLineKeydown}>
+					<div class="live-editing-overlay" contenteditable={saveState !== 'loading' && transferState !== 'working'} role="textbox" tabindex="-1" aria-label="Page editor" aria-multiline="true" spellcheck="true" onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} oninput={(event) => onRenderedInput(event as unknown as InputEvent)} onkeydown={onRenderedLineKeydown} onmousedown={onRenderedTaskClick}>
 						{#each markdownLines as line, index}
 							<div class="live-editable-line {liveLineKind(line, index)}" class:active={index === liveLine} style={liveLineStyle(index)} role="textbox" tabindex="0" aria-label={`Markdown line ${index + 1}`} aria-multiline="false" data-live-line={index} data-code-language={liveCodeLanguage(index) || undefined} onfocus={() => onLiveLineFocus(index)}>{@html renderEditableLine(line, index)}</div>
 						{/each}

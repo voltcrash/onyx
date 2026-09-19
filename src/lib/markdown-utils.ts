@@ -87,3 +87,36 @@ function dirname(path: string): string {
 function basename(path: string): string {
   return path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
 }
+
+const TASK_MARKER = /^((?:\s*>)*\s*(?:[-+*]|\d{1,9}[.)])\s+\[)([ xX])(\](?=\s|$))/;
+
+export function toggleTaskAtLine(value: string, lineIndex: number): string {
+  const lines = value.split("\n");
+  const line = lines[lineIndex];
+  const match = line?.match(TASK_MARKER);
+  if (!line || !match) return value;
+  lines[lineIndex] =
+    `${match[1]}${match[2] === " " ? "x" : " "}${line.slice(match[1]!.length + 1)}`;
+  return lines.join("\n");
+}
+
+// Maps the nth rendered checkbox back to its source line, skipping fenced code.
+export function taskLineIndex(value: string, taskIndex: number): number | undefined {
+  let fence: string | undefined;
+  let seen = 0;
+  const lines = value.split("\n");
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    const opener = line.match(/^(?:\s*>)*\s*(`{3,}|~{3,})/)?.[1];
+    if (fence) {
+      if (opener && opener[0] === fence[0] && opener.length >= fence.length) fence = undefined;
+      continue;
+    }
+    if (opener) {
+      fence = opener;
+      continue;
+    }
+    if (TASK_MARKER.test(line) && seen++ === taskIndex) return index;
+  }
+  return undefined;
+}
