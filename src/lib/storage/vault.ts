@@ -5,10 +5,11 @@ import {
   type SearchPosting,
 } from "./database.js";
 import { detectBrowserStorageSupport } from "../browser-storage.js";
-import { titleFromMarkdown } from "../markdown-utils.js";
+import { normalizeAttachmentFolder, titleFromMarkdown } from "../markdown-utils.js";
 import { VaultCoordination } from "./coordination.js";
 import { MirroredVaultFilesystem, VaultFilesystem } from "./filesystem.js";
 import type {
+  AddAttachmentInput,
   AttachmentMetadata,
   BackupOperation,
   FolderMetadata,
@@ -504,13 +505,103 @@ export class Vault {
     return this.#withLock(() => this.#database.getAttachments(noteId));
   }
 
-  async moveAttachmentSourcePaths(noteId: string, from: string, to: string): Promise<void> {
+  /** Stores a file for a note under `folder`, renaming it if that vault path is already taken. */
+  async addAttachment(input: AddAttachmentInput): Promise<AttachmentMetadata> {
+    return this.#withLock(async () => {
+      if (!(await this.#database.getNote(input.noteId))) {
+        throw new Error("Save the note before adding attachments to it");
+      }
+      const taken = new Set(
+        (await this.#database.getAttachments()).flatMap((attachment) =>
+          attachment.sourcePath ? [attachment.sourcePath.toLocaleLowerCase()] : [],
+        ),
+      );
+      const folder = normalizeAttachmentFolder(input.folder);
+      if (!folder) throw new Error("The attachment folder name is invalid");
+      const name = uniqueAttachmentName(sanitizeAttachmentName(input.name), (candidate) =>
+        taken.has(`${folder}/${candidate}`.toLocaleLowerCase()),
+      );
+      const id = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const attachment: AttachmentMetadata = {
+        id,
+        noteId: input.noteId,
+        name,
+        path: `attachments/${input.noteId}/${id}`,
+        type: input.contents.type || "application/octet-stream",
+        size: input.contents.size,
+        createdAt: now,
+        updatedAt: now,
+        sourcePath: folder ? `${folder}/${name}` : name,
+      };
+      await this.#filesystem.write(attachment.path, input.contents);
+      try {
+        await this.#database.putAttachment(attachment, {
+          id: crypto.randomUUID(),
+          kind: "attachment:upsert",
+          entityId: id,
+          noteId: input.noteId,
+          path: attachment.path,
+          revision: 1,
+          createdAt: now,
+        });
+      } catch (error) {
+        await this.#filesystem.remove(attachment.path, { ignoreMissing: true }).catch(() => {});
+        throw error;
+      }
+      this.#publish({ kind: "note", noteId: input.noteId });
+      return attachment;
+    });
+  }
+
+  /** Moves every attachment stored under the vault folder `from` into `to`. */
+  async moveAttachmentFolder(from: string, to: string): Promise<AttachmentMetadata[]> {
+    return this.#withLock(async () => {
+      if (!from || from === to) return [];
+      const attachments = await this.#database.getAttachments();
+      const now = new Date().toISOString();
+      const moved = attachments.flatMap((attachment) => {
+        const sourcePath = attachment.sourcePath;
+        if (!sourcePath || sourcePath === from || !isPathWithin(sourcePath, from)) return [];
+        return [
+          { ...attachment, sourcePath: moveSourcePath(sourcePath, from, to), updatedAt: now },
+        ];
+      });
+      const occupied = new Set(
+        attachments
+          .filter((attachment) => !moved.some((candidate) => candidate.id === attachment.id))
+          .flatMap((attachment) =>
+            attachment.sourcePath ? [attachment.sourcePath.toLocaleLowerCase()] : [],
+          ),
+      );
+      const movedPaths = new Set<string>();
+      for (const attachment of moved) {
+        const sourcePath = attachment.sourcePath?.toLocaleLowerCase();
+        if (!sourcePath || occupied.has(sourcePath) || movedPaths.has(sourcePath)) {
+          throw new Error("The attachments folder contains a file with the same name");
+        }
+        movedPaths.add(sourcePath);
+      }
+      await this.#database.updateAttachments(moved);
+      if (moved.length) this.#publish({ kind: "vault" });
+      return moved;
+    });
+  }
+
+  /** Moves a note's attachments with it, except those kept in the shared `pinnedFolder`. */
+  async moveAttachmentSourcePaths(
+    noteId: string,
+    from: string,
+    to: string,
+    pinnedFolder?: string,
+  ): Promise<void> {
     await this.#withLock(async () => {
       const attachments = await this.#database.getAttachments(noteId);
       const now = new Date().toISOString();
       const moved = attachments.map((attachment) => {
         const sourcePath = attachment.sourcePath;
         if (!sourcePath || !isPathWithin(sourcePath, from)) return attachment;
+        if (pinnedFolder && isPathWithin(sourcePath, pinnedFolder)) return attachment;
         return {
           ...attachment,
           sourcePath: moveSourcePath(sourcePath, from, to),
@@ -928,6 +1019,30 @@ function restoreOperation(
     revision: 1,
     createdAt: restoredAt,
   };
+}
+
+function sanitizeAttachmentName(name: string): string {
+  let cleaned = name
+    .replace(/[\\/]/g, "-")
+    .replace(/[<>:"|?*#%\p{Cc}]/gu, "-")
+    .trim()
+    .replace(/^\.+/, "")
+    .replace(/[. ]+$/u, "");
+  if (/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu.test(cleaned)) {
+    cleaned = `file-${cleaned}`;
+  }
+  return cleaned || "file";
+}
+
+function uniqueAttachmentName(name: string, taken: (candidate: string) => boolean): string {
+  if (!taken(name)) return name;
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const extension = dot > 0 ? name.slice(dot) : "";
+  for (let index = 1; ; index += 1) {
+    const candidate = `${stem}-${index}${extension}`;
+    if (!taken(candidate)) return candidate;
+  }
 }
 
 function assertBrowser(): void {

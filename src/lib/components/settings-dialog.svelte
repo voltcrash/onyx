@@ -37,6 +37,10 @@
 		resolvedTheme: ResolvedTheme;
 		colorTheme: ColorTheme;
 		fonts: FontChoices;
+		attachmentFolder: string;
+		attachmentsHidden: boolean;
+		onAttachmentsHiddenChange: (hidden: boolean) => void;
+		onRenameAttachmentFolder: (name: string) => Promise<boolean>;
 		shortcuts: KeyboardShortcuts;
 		primaryModifier: PrimaryModifier;
 		section?: SettingsSection;
@@ -44,6 +48,8 @@
 		onColorThemeChange: (theme: ColorTheme) => void;
 		onFontChange: (role: FontRole, id: string) => void;
 		onResetFonts: () => void;
+		scrollSync: boolean;
+		onToggleScrollSync: () => void;
 		onShortcutChange: (action: ShortcutAction, shortcut: KeyboardShortcut | null) => void;
 		onResetShortcuts: () => void;
 		onClose: () => void;
@@ -64,13 +70,29 @@
 
 	let {
 		vault, vaultName, suggestedRepositoryName, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
-		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, fonts, shortcuts, primaryModifier,
+		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, fonts, attachmentFolder, attachmentsHidden, onAttachmentsHiddenChange, onRenameAttachmentFolder, scrollSync, onToggleScrollSync, shortcuts, primaryModifier,
 		section = $bindable('editor'), onThemeChange, onColorThemeChange, onFontChange, onResetFonts, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onPrepareVaultDeletion, onDeleteVault
 	}: Props = $props();
 
+	let attachmentFolderDraft = $state(untrack(() => attachmentFolder));
+	let renamingAttachmentFolder = $state(false);
+
+	$effect(() => {
+		attachmentFolderDraft = attachmentFolder;
+	});
+
+	async function renameAttachmentFolder(): Promise<void> {
+		renamingAttachmentFolder = true;
+		try {
+			if (!(await onRenameAttachmentFolder(attachmentFolderDraft))) attachmentFolderDraft = attachmentFolder;
+		} finally {
+			renamingAttachmentFolder = false;
+		}
+	}
+
 	const sections: Array<{ id: SettingsSection; label: string }> = [
-		{ id: 'editor', label: 'Editor' },
+		{ id: 'editor', label: 'Fonts' },
 		{ id: 'themes', label: 'Themes' },
 		{ id: 'shortcuts', label: 'Keyboard shortcuts' },
 		{ id: 'github', label: 'Backup & sync' },
@@ -302,7 +324,7 @@
 
 				{#if section === 'editor'}
 					<div class="settings-section-heading">
-						<div><h3>Editor</h3><p class="settings-hint">Set the typefaces your notes are written in</p></div>
+						<div><h3>Fonts</h3><p class="settings-hint">Set the typefaces your notes are written in</p></div>
 						{#if !fontsAreDefault}<button class="settings-secondary" onclick={onResetFonts}>Restore default fonts</button>{/if}
 					</div>
 
@@ -329,6 +351,26 @@
 							</select>
 						</div>
 					{/each}
+					<h4 class="theme-section-title">Attachments</h4>
+					<p class="settings-hint">Pasted and dropped images and files are saved to this vault folder and linked with GitHub-style Markdown. Renaming it updates the links in your notes.</p>
+					<div class="settings-field">
+						<label for="settings-attachment-folder">Folder</label>
+						<form class="settings-row" onsubmit={(event) => { event.preventDefault(); void renameAttachmentFolder(); }}>
+							<input id="settings-attachment-folder" bind:value={attachmentFolderDraft} autocomplete="off" spellcheck="false" placeholder="attachments" />
+							<button class="settings-secondary" type="submit" disabled={renamingAttachmentFolder || !attachmentFolderDraft.trim() || attachmentFolderDraft.trim() === attachmentFolder}>
+								{#if renamingAttachmentFolder}<LoaderCircle class="spin" size={14} />{/if}Rename
+							</button>
+						</form>
+					</div>
+					<label class="settings-toggle">
+						<input type="checkbox" checked={attachmentsHidden} onchange={(event) => onAttachmentsHiddenChange(event.currentTarget.checked)} />
+						<span>Hide the attachments folder in the sidebar</span>
+					</label>
+					<h4 class="settings-subheading">Scrolling</h4>
+					<label class="settings-toggle">
+						<input type="checkbox" checked={scrollSync} onchange={onToggleScrollSync} />
+						<span><strong>Sync scrolling between panes</strong><small>Scrolling the page or the output keeps the other pane at the same part of the note.</small></span>
+					</label>
 				{:else if section === 'themes'}
 					<h3>Themes</h3>
 					<p class="settings-hint">Choose how Onyx looks in this browser.</p>

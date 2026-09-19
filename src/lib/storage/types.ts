@@ -45,6 +45,13 @@ export interface ImportNoteInput {
   title: string;
 }
 
+export interface AddAttachmentInput {
+  contents: Blob;
+  folder: string;
+  name: string;
+  noteId: VaultId;
+}
+
 export interface AttachmentMetadata {
   id: VaultId;
   noteId: VaultId;

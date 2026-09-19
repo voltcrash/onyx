@@ -20,6 +20,10 @@
 		results={page.results}
 		visibleResults={page.visibleResults}
 		folders={page.folders}
+		attachments={page.vaultAttachments}
+		attachmentFolder={page.attachmentFolder}
+		attachmentsHidden={page.attachmentsHidden}
+		onOpenAttachment={(id) => void page.openAttachment(id)}
 		searchQuery={page.searchQuery}
 		findOpen={page.findOpen}
 		findQuery={page.findQuery}
@@ -85,7 +89,6 @@
 		onClosePalette={page.closePalette}
 		onOpenSettings={() => page.openSettings('editor')}
 		onOpenStorageSettings={() => page.openSettings('storage')}
-		onDisconnectGithub={() => void page.disconnectGitHub()}
 		onMoveNoteFocus={page.moveNoteFocus}
 		onSelectNote={(id) => void page.selectNote(id)}
 		onChangePage={page.changeNotePage}
@@ -101,6 +104,7 @@
 		paneOrder={page.paneOrder}
 		renderedBlockLines={page.liveRenderedBlockLines}
 		renderedReadOnly={page.renderedReadOnly}
+		scrollSync={page.scrollSync}
 		markdown={page.markdown}
 		markdownLines={page.markdownLines}
 		findOpen={page.findOpen}
@@ -136,10 +140,13 @@
 		onEditorCopy={page.handleEditorCopy}
 		onEditorCut={page.handleEditorCut}
 		onEditorPaste={page.handleEditorPaste}
+		onEditorDragOver={page.handleEditorDragOver}
+		onEditorDrop={page.handleEditorDrop}
 		onSourceFocus={page.focusSourceEditor}
 		onLiveLineFocus={page.focusLiveLine}
 		onRenderedInput={page.updateRenderedInput}
 		onRenderedLineKeydown={page.handleRenderedLineKeydown}
+		onRenderedTaskClick={page.handleRenderedTaskClick}
 		renderEditableLine={page.renderEditableLine}
 		liveLineKind={page.liveLineKind}
 		liveCodeLanguage={page.liveCodeLanguage}
@@ -176,12 +183,18 @@
 			resolvedTheme={page.resolvedTheme}
 			colorTheme={page.colorTheme}
 			fonts={page.fonts}
+			attachmentFolder={page.attachmentFolder}
+			attachmentsHidden={page.attachmentsHidden}
+			onAttachmentsHiddenChange={page.setAttachmentsHidden}
+			onRenameAttachmentFolder={page.renameAttachmentFolder}
 			shortcuts={page.shortcuts}
 			primaryModifier={page.primaryModifier}
 			onThemeChange={page.setTheme}
 			onColorThemeChange={page.setColorTheme}
 			onFontChange={page.setFont}
 			onResetFonts={page.resetFonts}
+			scrollSync={page.scrollSync}
+			onToggleScrollSync={page.toggleScrollSync}
 			onShortcutChange={page.setShortcut}
 			onResetShortcuts={page.resetShortcuts}
 			bind:section={page.settingsSection}
@@ -204,6 +217,7 @@
 {/if}
 
 <input class="transfer-input" bind:this={page.folderInput} type="file" webkitdirectory multiple onchange={(event) => void page.importFolder(event.currentTarget.files)} />
+<input class="transfer-input" bind:this={page.attachmentInput} type="file" multiple onchange={(event) => void page.attachSelectedFiles(event.currentTarget.files)} />
 <input class="transfer-input" bind:this={page.zipInput} type="file" accept=".zip,application/zip" onchange={(event) => void page.importZip(event.currentTarget.files)} />
 
 {#if page.restoreModalOpen}

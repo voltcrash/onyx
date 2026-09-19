@@ -17,6 +17,7 @@
 		paneOrder: PaneOrder;
 		renderedBlockLines: (SourceLines | undefined)[];
 		renderedReadOnly: boolean;
+		scrollSync: boolean;
 		markdown: string;
 		markdownLines: string[];
 		findOpen: boolean;
@@ -52,21 +53,24 @@
 		onEditorCopy: (event: ClipboardEvent) => void;
 		onEditorCut: (event: ClipboardEvent) => void;
 		onEditorPaste: (event: ClipboardEvent) => void;
+		onEditorDragOver: (event: DragEvent) => void;
+		onEditorDrop: (event: DragEvent) => void;
 		onSourceFocus: () => void;
 		onLiveLineFocus: (line: number) => void;
 		onRenderedInput: (event: Event) => void;
 		onRenderedLineKeydown: (event: KeyboardEvent) => void;
+		onRenderedTaskClick: (event: MouseEvent) => void;
 		renderEditableLine: (line: string, index: number) => string;
 		liveLineKind: (line: string, index: number) => string;
 		liveCodeLanguage: (index: number) => string;
 	}
 
 	let {
-		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedReadOnly, markdown, markdownLines, findOpen, findQuery, findMatches, activeFindMatch, liveLine,
+		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedReadOnly, scrollSync, markdown, markdownLines, findOpen, findQuery, findMatches, activeFindMatch, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
-		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onToggleRenderedPane, onToggleRenderedReadOnly, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onSourceFocus, onLiveLineFocus, onRenderedInput,
-		onRenderedLineKeydown, renderEditableLine, liveLineKind, liveCodeLanguage
+		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onToggleRenderedPane, onToggleRenderedReadOnly, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onSourceFocus, onLiveLineFocus, onRenderedInput,
+		onRenderedLineKeydown, onRenderedTaskClick, renderEditableLine, liveLineKind, liveCodeLanguage
 	}: Props = $props();
 
 	let shell = $state<HTMLElement>();
@@ -432,26 +436,72 @@
 		return scrollAnchors(points, markdownLines.length, scroller.scrollHeight);
 	}
 
-	function syncScroll(from: Pane): void {
-		const to: Pane = from === 'output' ? 'rendered' : 'output';
-		const source = scrollerOf(from);
-		const target = scrollerOf(to);
-		if (!bothPanesVisible || !source || !target) return;
-		const top = syncedScrollTop(
-			{ anchors: paneAnchors(from, source), scrollTop: source.scrollTop, scrollHeight: source.scrollHeight, clientHeight: source.clientHeight },
-			{ anchors: paneAnchors(to, target), scrollHeight: target.scrollHeight, clientHeight: target.clientHeight }
-		);
-		if (Math.abs(target.scrollTop - top) < 1) return;
+	// The following pane eases toward where it should be rather than jumping there every frame.
+	const GLIDE_EASING = 0.3;
+	let glide: { target: HTMLElement; top: number } | undefined;
+	let glideFrame = 0;
+
+	function stopGlide(): void {
+		cancelAnimationFrame(glideFrame);
+		glideFrame = 0;
+		glide = undefined;
+	}
+
+	function setSyncedTop(target: HTMLElement, top: number): void {
 		target.scrollTo({ top, behavior: 'instant' });
 		// Browsers round the offset, so the echo is recognised by the value they settled on.
 		syncedTops.set(target, target.scrollTop);
 	}
 
-	function queueScrollSync(from: Pane): void {
+	function stepGlide(): void {
+		glideFrame = 0;
+		if (!glide) return;
+		const { target, top } = glide;
+		const distance = top - target.scrollTop;
+		if (Math.abs(distance) < 1) {
+			setSyncedTop(target, top);
+			glide = undefined;
+			return;
+		}
+		const before = target.scrollTop;
+		const step = distance * GLIDE_EASING;
+		setSyncedTop(target, before + Math.sign(step) * Math.max(Math.abs(step), 1));
+		// A pane pinned at its end cannot move any further.
+		if (target.scrollTop === before) {
+			glide = undefined;
+			return;
+		}
+		glideFrame = requestAnimationFrame(stepGlide);
+	}
+
+	function syncScroll(from: Pane, smooth: boolean): void {
+		const to: Pane = from === 'output' ? 'rendered' : 'output';
+		const source = scrollerOf(from);
+		const target = scrollerOf(to);
+		if (!scrollSync || !bothPanesVisible || !source || !target) return;
+		const top = syncedScrollTop(
+			{ anchors: paneAnchors(from, source), scrollTop: source.scrollTop, scrollHeight: source.scrollHeight, clientHeight: source.clientHeight },
+			{ anchors: paneAnchors(to, target), scrollHeight: target.scrollHeight, clientHeight: target.clientHeight }
+		);
+		if (smooth && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+			glide = { target, top };
+			glideFrame ||= requestAnimationFrame(stepGlide);
+			return;
+		}
+		stopGlide();
+		if (Math.abs(target.scrollTop - top) < 1) return;
+		setSyncedTop(target, top);
+	}
+
+	let smoothSync = false;
+
+	function queueScrollSync(from: Pane, smooth = false): void {
+		if (from !== scrollDriver) stopGlide();
 		scrollDriver = from;
+		smoothSync = smooth;
 		syncFrame ||= requestAnimationFrame(() => {
 			syncFrame = 0;
-			syncScroll(scrollDriver);
+			syncScroll(scrollDriver, smoothSync);
 		});
 	}
 
@@ -468,8 +518,14 @@
 		const synced = syncedTops.get(scroller);
 		syncedTops.delete(scroller);
 		if (synced !== undefined && Math.abs(scroller.scrollTop - synced) <= 1) return;
-		queueScrollSync(pane);
+		if (glide?.target === scroller) stopGlide();
+		queueScrollSync(pane, true);
 	}
+
+	$effect(() => {
+		if (!scrollSync) stopGlide();
+		else tick().then(() => queueScrollSync(leadingPane()));
+	});
 
 	$effect(() => {
 		void renderedReadOnly;
@@ -520,6 +576,7 @@
 			observer.disconnect();
 			cancelAnimationFrame(syncFrame);
 			syncFrame = 0;
+			stopGlide();
 		};
 	});
 
@@ -554,7 +611,7 @@
 	<section bind:this={shell} class="editor-shell" class:output-hidden={!outputPaneVisible} class:rendered-hidden={!renderedPaneVisible} class:panes-stacked={stacked} class:panes-swapped={swapped} class:first-hidden={!firstPaneVisible} class:second-hidden={!secondPaneVisible} class:resizing class:pane-moving={drag?.moving} style={`--split: ${splitRatio}%; --content-width: ${contentWidth}px`}>
 		<div bind:this={outputPaneElement} class="output-pane" class:dragged={drag?.moving && drag.pane === 'output'} data-output-theme={resolvedTheme} data-color-theme={colorTheme} style={drag?.moving && drag.pane === 'output' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined}>
 			<div class="output-body" bind:this={outputBody} onscrollcapture={(event) => handlePaneScroll(event, 'output')} onloadcapture={() => queueScrollSync(leadingPane())}>
-					<textarea bind:this={editor} class:find-highlights-active={sourceFindActive} value={markdown} onfocus={onSourceFocus} onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} oninput={(event) => onMarkdownChange(event.currentTarget.value)} onscroll={syncSourceFindLayer} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
+					<textarea bind:this={editor} class:find-highlights-active={sourceFindActive} value={markdown} onfocus={onSourceFocus} onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} ondragover={onEditorDragOver} ondrop={onEditorDrop} oninput={(event) => onMarkdownChange(event.currentTarget.value)} onscroll={syncSourceFindLayer} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
 					{#if sourceFindActive}
 						<div class="source-find-layer" aria-hidden="true"><div style={`transform: translate(${-sourceScrollLeft}px, ${-sourceScrollTop}px)`}>{@html sourceFindMarkup}</div></div>
 					{/if}
@@ -586,14 +643,15 @@
 			</div>
 			{#if renderedReadOnly}
 				{#if hasContent}
-					<article class="prose">{@html renderedMarkdown}</article>
+					<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+					<article class="prose" onclick={onRenderedTaskClick}>{@html renderedMarkdown}</article>
 				{:else}
 					<div class="preview-empty"><PencilLine size={26} /><strong>Nothing here yet</strong><span>Start writing in the other pane, or unlock this one to begin.</span></div>
 				{/if}
 			{:else}
 				<div class="live-editor prose" bind:this={liveEditorContainer} aria-label="Page editor">
 					<div class="live-rendered-content" aria-hidden="true">{@html renderedMarkdown}</div>
-					<div class="live-editing-overlay" contenteditable={saveState !== 'loading' && transferState !== 'working'} role="textbox" tabindex="-1" aria-label="Page editor" aria-multiline="true" spellcheck="true" onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} oninput={(event) => onRenderedInput(event as unknown as InputEvent)} onkeydown={onRenderedLineKeydown}>
+					<div class="live-editing-overlay" contenteditable={saveState !== 'loading' && transferState !== 'working'} role="textbox" tabindex="-1" aria-label="Page editor" aria-multiline="true" spellcheck="true" onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} ondragover={onEditorDragOver} ondrop={onEditorDrop} oninput={(event) => onRenderedInput(event as unknown as InputEvent)} onkeydown={onRenderedLineKeydown} onmousedown={onRenderedTaskClick}>
 						{#each markdownLines as line, index}
 							<div class="live-editable-line {liveLineKind(line, index)}" class:active={index === liveLine} style={liveLineStyle(index)} role="textbox" tabindex="0" aria-label={`Markdown line ${index + 1}`} aria-multiline="false" data-live-line={index} data-code-language={liveCodeLanguage(index) || undefined} onfocus={() => onLiveLineFocus(index)}>{@html renderEditableLine(line, index)}</div>
 						{/each}
