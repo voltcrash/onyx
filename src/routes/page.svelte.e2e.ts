@@ -450,7 +450,7 @@ test("adjusts content width from the command palette", async ({ page }) => {
 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("slider", { name: "Content width" })).toHaveCount(0);
-  await expect(page.getByText("Document", { exact: true })).toBeVisible();
+  await expect(page.getByText(/words · \d+ min/)).toBeVisible();
 });
 
 test("offers formatting actions from the command palette", async ({ page }) => {
@@ -487,7 +487,7 @@ test("offers formatting actions from the command palette", async ({ page }) => {
   await expect(page.getByRole("tab", { name: "Tools" })).toHaveCount(0);
   await expect(page.locator(".sidebar-switcher")).toHaveCount(0);
   await expect(page.locator(".formatting-tools")).toHaveCount(0);
-  await expect(page.getByText("Document", { exact: true })).toBeVisible();
+  await expect(page.getByText(/words · \d+ min/)).toBeVisible();
 });
 
 test("opens every settings section from the command palette", async ({ page }) => {

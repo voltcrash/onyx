@@ -212,7 +212,15 @@
 	let treeRows = $derived(buildTreeRows());
 
 	const docStatusLabel = $derived(
-		saveState === 'loading' ? 'Opening…' : saveState === 'error' ? 'Save failed' : githubState === 'connected' ? 'Synced' : 'Saved locally',
+		saveState === 'loading'
+			? 'Opening…'
+			: saveState === 'error'
+				? 'Save failed'
+				: githubState === 'connected' && githubUser
+					? `@${githubUser.login}`
+					: githubState === 'connected'
+						? 'Synced'
+						: 'Saved locally',
 	);
 	const docStatusTone = $derived(saveState === 'error' || githubState === 'error' ? 'error' : saveState === 'loading' ? 'busy' : 'ok');
 
@@ -640,7 +648,7 @@
 			data-tone={docStatusTone}
 			class:offline={!isOnline}
 			title={githubState === 'connected' && githubUser ? `Synced as @${githubUser.login}` : githubMessage || 'Notes are saved on this device'}
-			aria-label={`${wordCount} words, ${readingMinutes} minute reading time, ${docStatusLabel}. Open storage settings.`}
+			aria-label={`${wordCount} words, ${readingMinutes} minute reading time, ${docStatusLabel}. Open local storage settings.`}
 			onclick={onOpenStorageSettings}
 		><span class="doc-status-text">{wordCount} {wordCount === 1 ? 'word' : 'words'} · {readingMinutes} min · {docStatusLabel}</span><i class="doc-status-dot" aria-hidden="true"></i></button>
 		<button class="icon-button" aria-label="Settings" aria-haspopup="dialog" aria-expanded={settingsOpen} aria-controls="settings-dialog" title="Settings" onclick={onOpenSettings}><Settings size={18} /></button>
