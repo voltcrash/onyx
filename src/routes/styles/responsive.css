@@ -83,6 +83,51 @@
     transform: translate(calc(-100% - 14px), -50%);
   }
 }
+/*
+ * Mobile browsers only collapse their toolbars when the document scrolls, so on touch
+ * layouts the note grows to its full height and the page scrolls instead of the pane.
+ */
+@media (max-width: 900px) and (pointer: coarse) {
+  body {
+    overflow: visible;
+  }
+  .app,
+  .app.sidebar-collapsed {
+    height: auto;
+    min-height: 100dvh;
+  }
+  .workspace > .collapsed-sidebar-toggle {
+    position: fixed;
+  }
+  .output-switcher {
+    position: sticky;
+    align-self: flex-end;
+    margin: 8px 18px -36px 0;
+  }
+  .pane-divider {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100dvh;
+    /*
+     * Sticky positioning forms a stacking context, which would trap the pane
+     * handles below the page content. Keep the divider above it so the handles
+     * stay clickable while the page scrolls.
+     */
+    z-index: 5;
+  }
+  .output-body > textarea {
+    field-sizing: content;
+    overflow: hidden;
+  }
+  .live-editor,
+  .output-code,
+  .rich-text-preview,
+  .pdf-preview,
+  .preview-pane {
+    overflow-y: visible;
+  }
+}
 @media (max-width: 700px) {
   .doc-status > span,
   .github-account > span {
