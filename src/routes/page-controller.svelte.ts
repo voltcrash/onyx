@@ -2566,6 +2566,23 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     toggleTaskLine(line);
   }
 
+  function handleRenderedPaneMouseDown(event: MouseEvent): void {
+    if (
+      event.button !== 0 ||
+      renderedReadOnly ||
+      saveState === "loading" ||
+      transferState === "working"
+    )
+      return;
+    const target = event.target instanceof Node ? event.target : null;
+    if (target instanceof Element && target.closest("button, input, a, select, textarea")) return;
+    if (liveLineElement(target)) return;
+    const line = liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${liveLine}"]`);
+    if (!line) return;
+    event.preventDefault();
+    activateLiveLine(liveLine);
+  }
+
   function clampSplitRatio(value: number): number {
     return Math.min(80, Math.max(20, value));
   }
@@ -4821,6 +4838,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     updateMarkdown,
     updateRenderedInput,
     handleRenderedLineKeydown,
+    handleRenderedPaneMouseDown,
     activateLiveLine,
     handleRenderedTaskClick,
     renderEditableLine,

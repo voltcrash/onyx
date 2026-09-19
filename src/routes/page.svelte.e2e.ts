@@ -766,6 +766,19 @@ test("keeps the rendered editor active when creating a new note", async ({ page 
     )
     .toBe(true);
 
+  const renderedPane = page.locator(".preview-pane");
+  for (let click = 0; click < 2; click += 1) {
+    await renderedPane.click({ position: { x: 100, y: 200 } });
+    await expect
+      .poll(() =>
+        page.locator('[data-live-line="0"]').evaluate((element) => {
+          const style = getComputedStyle(element, "::after");
+          return { animation: style.animationName, content: style.content };
+        }),
+      )
+      .toMatchObject({ animation: "rendered-caret-blink", content: '""' });
+  }
+
   await page.getByRole("textbox", { name: "Markdown editor" }).click();
   await expect
     .poll(() =>

@@ -59,6 +59,7 @@
 		onLiveLineFocus: (line: number) => void;
 		onRenderedInput: (event: Event) => void;
 		onRenderedLineKeydown: (event: KeyboardEvent) => void;
+		onRenderedPaneMouseDown: (event: MouseEvent) => void;
 		onRenderedTaskClick: (event: MouseEvent) => void;
 		renderEditableLine: (line: string, index: number) => string;
 		liveLineKind: (line: string, index: number) => string;
@@ -70,7 +71,7 @@
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
 		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onToggleRenderedPane, onToggleRenderedReadOnly, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onSourceFocus, onLiveLineFocus, onRenderedInput,
-		onRenderedLineKeydown, onRenderedTaskClick, renderEditableLine, liveLineKind, liveCodeLanguage
+		onRenderedLineKeydown, onRenderedPaneMouseDown, onRenderedTaskClick, renderEditableLine, liveLineKind, liveCodeLanguage
 	}: Props = $props();
 
 	let shell = $state<HTMLElement>();
@@ -720,7 +721,8 @@
 				<button class="pane-handle pane-handle-end" title={label} aria-label={label} aria-expanded={secondPaneVisible} onclick={toggleSecondPane}><Icon size={15} /></button>
 			{/if}
 		</div>
-		<div bind:this={renderedPaneElement} class="preview-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div bind:this={renderedPaneElement} class="preview-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} onmousedown={onRenderedPaneMouseDown} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
 			<div class="rendered-switcher">
 				<button class="rendered-mode-toggle" class:active={renderedReadOnly} type="button" aria-pressed={renderedReadOnly} onclick={() => onToggleRenderedReadOnly()} aria-label={renderedReadOnly ? 'Enable page editing' : 'Turn on read-only'} title={renderedReadOnly ? 'Enable page editing' : 'Turn on read-only'}>
 					{#if renderedReadOnly}<Lock size={14} />{:else}<LockOpen size={14} />{/if}
