@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { ChevronDown, ChevronRight, Copy, FilePlus2, FileText, Folder, FolderPlus, HardDrive, LoaderCircle, Lock, LockOpen, LogOut, PanelLeft, PanelRight, Pencil, Plus, Search, Settings, Trash2, Type } from '@lucide/svelte';
+	import { ChevronDown, ChevronRight, Copy, FilePlus2, FileText, Folder, FolderPlus, Image, Paperclip, HardDrive, LoaderCircle, Lock, LockOpen, LogOut, PanelLeft, PanelRight, Pencil, Plus, Search, Settings, Trash2, Type } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
 	import type { GithubUser } from '$lib/github';
 	import type { VaultDescriptor } from '$lib/storage/registry';
-	import type { FolderMetadata, VaultSearchResult } from '$lib/storage/types';
+	import type { AttachmentMetadata, FolderMetadata, VaultSearchResult } from '$lib/storage/types';
 	import GithubIcon from './github-icon.svelte';
 	import VaultSwitcher from './vault-switcher.svelte';
 	import FindReplace from './find-replace.svelte';
@@ -18,6 +18,10 @@
 		results: VaultSearchResult[];
 		visibleResults: VaultSearchResult[];
 		folders: FolderMetadata[];
+		attachments: AttachmentMetadata[];
+		attachmentFolder: string;
+		attachmentsHidden: boolean;
+		onOpenAttachment: (id: string) => void;
 		searchQuery: string;
 		findOpen: boolean;
 		findQuery: string;
@@ -89,7 +93,7 @@
 	}
 
 	let {
-		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, searchQuery, findOpen, findQuery, findReplacement, findMatchCase, findWholeWord, findMatchCount, activeFindMatch, findCanEdit, notePage, notePageCount, saveState, notesLoaded, paletteOpen, searchPending, paletteItems, settingsOpen,
+		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, attachments, attachmentFolder, attachmentsHidden, onOpenAttachment, searchQuery, findOpen, findQuery, findReplacement, findMatchCase, findWholeWord, findMatchCount, activeFindMatch, findCanEdit, notePage, notePageCount, saveState, notesLoaded, paletteOpen, searchPending, paletteItems, settingsOpen,
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, wordCount, readingMinutes, contentWidth,
 		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSidebarDragStart, sidebarSide, onSidebarSideChange, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, onCopyFilePath, onSearch,
 		onFindQueryChange, onFindReplacementChange, onFindMatchCaseChange, onFindWholeWordChange, onFindPrevious, onFindNext, onFindReplace, onFindReplaceAll, onCloseFind,
@@ -113,7 +117,8 @@
 		},
 	]);
 	type TreeRow =
-		| { kind: 'folder'; key: string; path: string; label: string; depth: number; expanded: boolean; hasChildren: boolean }
+		| { kind: 'folder'; key: string; path: string; label: string; depth: number; expanded: boolean; hasChildren: boolean; attachments: boolean }
+		| { kind: 'attachment'; key: string; path: string; label: string; depth: number; attachment: AttachmentMetadata }
 		| { kind: 'file'; key: string; path: string; label: string; depth: number; result: VaultSearchResult };
 	type ContextMenu =
 		| { kind: 'root'; x: number; y: number }
@@ -165,6 +170,10 @@
 		return result.note.title || basename(notePath(result)).replace(/\.(?:md|markdown)$/i, '') || 'Untitled';
 	}
 
+	function isAttachmentPath(path: string): boolean {
+		return path === attachmentFolder || path.startsWith(`${attachmentFolder}/`);
+	}
+
 	function folderLabel(path: string): string {
 		return basename(path) || path;
 	}
@@ -180,6 +189,19 @@
 			}
 		};
 		for (const folder of folders) addFolder(folder.path);
+		const attachmentsByFolder = new Map<string, AttachmentMetadata[]>();
+		// Search narrows the tree to matching notes, so attachments only show beside an unfiltered list.
+		if (!attachmentsHidden && !searchQuery.trim()) {
+			for (const attachment of attachments) {
+				const path = attachment.sourcePath;
+				if (!path || !isAttachmentPath(path)) continue;
+				const folder = parentPath(path);
+				addFolder(folder);
+				const owned = attachmentsByFolder.get(folder) ?? [];
+				owned.push(attachment);
+				attachmentsByFolder.set(folder, owned);
+			}
+		}
 		for (const result of visibleResults) {
 			const folder = noteFolder(result);
 			if (folder) addFolder(folder);
@@ -194,9 +216,9 @@
 				.filter((path) => parentPath(path) === parent)
 				.sort((left, right) => folderLabel(left).localeCompare(folderLabel(right), undefined, { sensitivity: 'base' }));
 			for (const path of childFolders) {
-				const hasChildren = [...folderPaths].some((candidate) => parentPath(candidate) === path) || Boolean(notesByFolder.get(path)?.length);
+				const hasChildren = [...folderPaths].some((candidate) => parentPath(candidate) === path) || Boolean(notesByFolder.get(path)?.length) || Boolean(attachmentsByFolder.get(path)?.length);
 				const expanded = !collapsedFolders.has(path);
-				rows.push({ kind: 'folder', key: `folder:${path}`, path, label: folderLabel(path), depth, expanded, hasChildren });
+				rows.push({ kind: 'folder', key: `folder:${path}`, path, label: folderLabel(path), depth, expanded, hasChildren, attachments: isAttachmentPath(path) });
 				if (expanded) visit(path, depth + 1);
 			}
 			const childNotes = (notesByFolder.get(parent) ?? []).toSorted((left, right) =>
@@ -204,6 +226,12 @@
 			);
 			for (const result of childNotes) {
 				rows.push({ kind: 'file', key: `file:${result.note.id}`, path: notePath(result), label: noteLabel(result), depth, result });
+			}
+			const childAttachments = (attachmentsByFolder.get(parent) ?? []).toSorted((left, right) =>
+				left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }),
+			);
+			for (const attachment of childAttachments) {
+				rows.push({ kind: 'attachment', key: `attachment:${attachment.id}`, path: attachment.sourcePath ?? attachment.name, label: basename(attachment.sourcePath ?? attachment.name), depth, attachment });
 			}
 		};
 		visit('', 0);
@@ -506,7 +534,15 @@
 					{/if}
 				{:else}
 					{#each treeRows as row (row.key)}
-						{#if row.kind === 'folder'}
+						{#if row.kind === 'folder' && row.attachments}
+							<button class="file-tree-row folder-row attachment-folder-row" data-folder-path={row.path} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Attachments — rename or hide this folder in Settings → Editor" onclick={() => toggleFolder(row.path)} oncontextmenu={(event) => event.preventDefault()}>
+								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Paperclip size={16} /><span class="file-tree-name">{row.label}</span>
+							</button>
+						{:else if row.kind === 'attachment'}
+							<button class="file file-tree-row attachment-row" data-attachment-path={row.path} style={`--tree-depth: ${row.depth}`} title={`Open ${row.label}`} onclick={() => onOpenAttachment(row.attachment.id)}>
+								{#if row.attachment.type.startsWith('image/')}<Image size={16} />{:else}<Paperclip size={16} />{/if}<span><strong>{row.label}</strong></span>
+							</button>
+						{:else if row.kind === 'folder'}
 							<button class="file-tree-row folder-row" class:drop-target={dropTargetPath === row.path} class:dragging={draggedEntry?.kind === 'folder' && draggedEntry.path === row.path} data-folder-path={row.path} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Drag to move folder" draggable="true" disabled={transferState === 'working'} onclick={() => toggleFolder(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)} ondragstart={(event) => startDrag(event, { kind: 'folder', path: row.path })} ondragend={endDrag} ondragover={(event) => keepDropTarget(event, row.path)} ondragleave={(event) => clearDropTarget(event, row.path)} ondrop={(event) => dropOnFolder(event, row.path)}>
 								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Folder size={16} /><span class="file-tree-name">{row.label}</span>
 							</button>

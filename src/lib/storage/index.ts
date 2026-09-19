@@ -14,6 +14,7 @@ export {
   type VaultRegistry,
 } from "./registry.js";
 export type {
+  AddAttachmentInput,
   AttachmentMetadata,
   BackupOperation,
   BackupOperationKind,

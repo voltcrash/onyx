@@ -63,6 +63,8 @@
 		onEditorCopy: (event: ClipboardEvent) => void;
 		onEditorCut: (event: ClipboardEvent) => void;
 		onEditorPaste: (event: ClipboardEvent) => void;
+		onEditorDragOver: (event: DragEvent) => void;
+		onEditorDrop: (event: DragEvent) => void;
 		onSourceFocus: () => void;
 		onLiveLineFocus: (line: number) => void;
 		onRenderedInput: (event: Event) => void;
@@ -76,7 +78,7 @@
 		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, outputView, plainText, plainTextBlocks, htmlSource, htmlSourceBlocks, highlightedHtmlSourceLines, renderedBlockLines, renderedReadOnly, markdown, markdownLines, findOpen, findQuery, findMatches, activeFindMatch, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
-		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onOutputViewChange, onCopy, onDownload, onToggleRenderedPane, onToggleRenderedReadOnly, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onSourceFocus, onLiveLineFocus, onRenderedInput,
+		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onOutputViewChange, onCopy, onDownload, onToggleRenderedPane, onToggleRenderedReadOnly, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onSourceFocus, onLiveLineFocus, onRenderedInput,
 		onRenderedLineKeydown, renderEditableLine, liveLineKind, liveCodeLanguage
 	}: Props = $props();
 
@@ -629,7 +631,7 @@
 						</div>
 					</div>
 				{:else}
-					<textarea bind:this={editor} class:find-highlights-active={sourceFindActive} value={markdown} onfocus={onSourceFocus} onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} oninput={(event) => onMarkdownChange(event.currentTarget.value)} onscroll={syncSourceFindLayer} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
+					<textarea bind:this={editor} class:find-highlights-active={sourceFindActive} value={markdown} onfocus={onSourceFocus} onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} ondragover={onEditorDragOver} ondrop={onEditorDrop} oninput={(event) => onMarkdownChange(event.currentTarget.value)} onscroll={syncSourceFindLayer} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
 					{#if sourceFindActive}
 						<div class="source-find-layer" aria-hidden="true"><div style={`transform: translate(${-sourceScrollLeft}px, ${-sourceScrollTop}px)`}>{@html sourceFindMarkup}</div></div>
 					{/if}
@@ -669,7 +671,7 @@
 			{:else}
 				<div class="live-editor prose" bind:this={liveEditorContainer} aria-label="Page editor">
 					<div class="live-rendered-content" aria-hidden="true">{@html renderedMarkdown}</div>
-					<div class="live-editing-overlay" contenteditable={saveState !== 'loading' && transferState !== 'working'} role="textbox" tabindex="-1" aria-label="Page editor" aria-multiline="true" spellcheck="true" onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} oninput={(event) => onRenderedInput(event as unknown as InputEvent)} onkeydown={onRenderedLineKeydown}>
+					<div class="live-editing-overlay" contenteditable={saveState !== 'loading' && transferState !== 'working'} role="textbox" tabindex="-1" aria-label="Page editor" aria-multiline="true" spellcheck="true" onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} ondragover={onEditorDragOver} ondrop={onEditorDrop} oninput={(event) => onRenderedInput(event as unknown as InputEvent)} onkeydown={onRenderedLineKeydown}>
 						{#each markdownLines as line, index}
 							<div class="live-editable-line {liveLineKind(line, index)}" class:active={index === liveLine} style={liveLineStyle(index)} role="textbox" tabindex="0" aria-label={`Markdown line ${index + 1}`} aria-multiline="false" data-live-line={index} data-code-language={liveCodeLanguage(index) || undefined} onfocus={() => onLiveLineFocus(index)}>{@html renderEditableLine(line, index)}</div>
 						{/each}

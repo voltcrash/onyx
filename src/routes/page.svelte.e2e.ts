@@ -2447,3 +2447,74 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
   );
   await expect(page.getByText("Restored 1 note and 1 attachment from GitHub.")).toBeVisible();
 });
+
+test("stores pasted images in the attachments folder with GitHub-style links", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill("# Photos\n\n");
+  await page.evaluate(() => {
+    const bytes = Uint8Array.from(
+      atob(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=",
+      ),
+      (character) => character.charCodeAt(0),
+    );
+    const clipboardItem = {
+      types: ["image/png"],
+      getType: async () => new Blob([bytes], { type: "image/png" }),
+    };
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { read: async () => [clipboardItem], readText: async () => "" },
+    });
+  });
+  await editor.press("ControlOrMeta+V");
+
+  await expect(editor).toHaveValue(
+    /!\[image-\d{8}-\d{6}\.png\]\(attachments\/image-\d{8}-\d{6}\.png\)$/,
+  );
+  await expect(page.locator(".preview-pane img[src^='blob:']")).toHaveCount(1);
+  await expect(page.locator(".attachment-folder-row")).toHaveText("attachments");
+  await editor.press("ControlOrMeta+S");
+  await expect(page.getByText("Unsaved", { exact: true })).toBeHidden();
+  await expect(page.getByText("Saving…", { exact: true })).toBeHidden();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        async () =>
+          new Promise<string[]>((resolve, reject) => {
+            const request = indexedDB.open("onyx-vault");
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => {
+              const database = request.result;
+              const read = database
+                .transaction("noteContents", "readonly")
+                .objectStore("noteContents")
+                .getAll();
+              read.onerror = () => reject(read.error);
+              read.onsuccess = () => {
+                database.close();
+                resolve(read.result.map((record: { markdown: string }) => record.markdown));
+              };
+            };
+          }),
+      ),
+    )
+    .toEqual(expect.arrayContaining([expect.stringContaining("# Photos")]));
+
+  await page.reload();
+  await expect(editor).toBeEnabled();
+  await expect(editor).toHaveValue(
+    /!\[image-\d{8}-\d{6}\.png\]\(attachments\/image-\d{8}-\d{6}\.png\)$/,
+  );
+  await expect(page.locator(".attachment-folder-row")).toHaveText("attachments");
+
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByLabel("Folder", { exact: true }).fill("media");
+  await page.getByRole("button", { name: "Rename" }).click();
+  await expect(editor).toHaveValue(/\]\(media\/image-\d{8}-\d{6}\.png\)$/);
+  await page.getByLabel("Hide the attachments folder in the sidebar").check();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".attachment-folder-row")).toHaveCount(0);
+});

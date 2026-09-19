@@ -2,6 +2,10 @@ import {
   ArrowLeftRight,
   Bold,
   Braces,
+  Eye,
+  EyeOff,
+  FolderPen,
+  ImagePlus,
   CloudDownload,
   Code2,
   Columns2,
@@ -61,7 +65,11 @@ import {
   renderMarkdownBlocks as renderLiteMarkdownBlocks,
 } from "$lib/markdown-lite";
 import {
+  attachmentMarkdown,
+  DEFAULT_ATTACHMENT_FOLDER,
+  normalizeAttachmentFolder,
   resolveLocalAttachmentUrl,
+  rewriteLocalLinks,
   titleFromMarkdown,
   type LocalAttachmentUrl,
 } from "$lib/markdown-utils";
@@ -108,7 +116,12 @@ import {
   type VaultSearchResult,
 } from "$lib/storage/index";
 import type { GithubBackupCommit, GithubUser } from "$lib/github";
-import type { FolderMetadata, GithubBackupState, NoteMetadata } from "$lib/storage/types";
+import type {
+  AttachmentMetadata,
+  FolderMetadata,
+  GithubBackupState,
+  NoteMetadata,
+} from "$lib/storage/types";
 import {
   applyColorTheme,
   applyTheme,
@@ -342,6 +355,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let transferState = $state<TransferState>("idle");
   let folderInput: HTMLInputElement | undefined = $state();
   let zipInput: HTMLInputElement | undefined = $state();
+  let attachmentInput: HTMLInputElement | undefined = $state();
+  let attachmentFolder = $state(DEFAULT_ATTACHMENT_FOLDER);
+  let attachmentsHidden = $state(false);
+  let vaultAttachments = $state<AttachmentMetadata[]>([]);
   let theme = $state<ThemePreference>("system");
   let resolvedTheme = $state<ResolvedTheme>("light");
   let colorTheme = $state<ColorTheme>("ember");
@@ -584,6 +601,34 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       keywords: "write store",
       disabled: saveState === "saving" || transferState === "working",
       run: () => void saveDraft(),
+    },
+    {
+      id: "attach-file",
+      group: "Actions",
+      label: "Add image or file",
+      icon: ImagePlus,
+      keywords: "attach attachment photo picture image upload insert file",
+      aliases: ["insert image", "add photo"],
+      disabled: transferState === "working" || !activeNoteId,
+      run: () => attachmentInput?.click(),
+    },
+    {
+      id: "toggle-attachments-folder",
+      group: "View",
+      label: attachmentsHidden ? "Show attachments folder" : "Hide attachments folder",
+      hint: attachmentFolder,
+      icon: attachmentsHidden ? Eye : EyeOff,
+      keywords: "attachments images files folder sidebar hide show toggle",
+      run: () => setAttachmentsHidden(!attachmentsHidden),
+    },
+    {
+      id: "rename-attachments-folder",
+      group: "Actions",
+      label: "Rename attachments folder",
+      hint: attachmentFolder,
+      icon: FolderPen,
+      keywords: "attachments images files folder rename move settings",
+      run: () => void openSettings("editor"),
     },
     {
       id: "find-in-note",
@@ -1425,6 +1470,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     notePage = 0;
     results = [];
     folders = [];
+    vaultAttachments = [];
     paletteNotes = [];
     activeNoteId = "";
     noteRevision = 0;
@@ -1564,6 +1610,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       folders = await vault.listFolders();
       searchQuery = "";
       await loadNote(notes[0].id);
+      vaultAttachments = await vault.listAttachments();
       await runSearch("");
       restoreModalOpen = false;
       restoreState = "idle";
@@ -1596,6 +1643,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     saveState = "loading";
     notesLoaded = false;
     try {
+      readAttachmentPreferences();
       vault = await Vault.open(activeVault ? vaultOptions(activeVault) : {});
       appendNativeDirectoryNotice();
       unsubscribeVault?.();
@@ -1613,6 +1661,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         notes = [firstNote];
       }
       await loadNote(notes[0].id);
+      vaultAttachments = await vault.listAttachments();
       await runSearch("");
       if (searchQuery.trim()) await runSearch(searchQuery);
       githubBackup = await vault.getGithubBackupState();
@@ -1728,10 +1777,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       !markdownModule && needsFullMarkdownParser(note.markdown)
         ? loadMarkdownModule().catch(() => undefined)
         : undefined;
+    const folder = attachmentFolder;
     const attachments = await Promise.all(
-      (await currentVault.listAttachments(note.id)).map((attachment) =>
-        currentVault.getAttachment(attachment.id),
-      ),
+      (await currentVault.listAttachments())
+        .filter(
+          (attachment) =>
+            attachment.noteId === note.id ||
+            (attachment.sourcePath !== undefined && isPathWithin(attachment.sourcePath, folder)),
+        )
+        .map((attachment) => currentVault.getAttachment(attachment.id)),
     );
     if (fullMarkdownParser) await fullMarkdownParser;
     const nextUrls = attachments.flatMap((attachment): LocalAttachmentUrl[] =>
@@ -1740,7 +1794,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
             {
               name: attachment.metadata.name,
               sourcePath: attachment.metadata.sourcePath,
-              url: URL.createObjectURL(attachment.file),
+              url: URL.createObjectURL(
+                safeAttachmentBlob(attachment.file, attachment.metadata.type),
+              ),
             },
           ]
         : [],
@@ -1800,6 +1856,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       }
       await runSearch(searchQuery);
       paletteNotes = notes;
+      vaultAttachments = await vault.listAttachments();
       githubBackup = await vault.getGithubBackupState();
       pendingBackupCount = (await vault.getPendingBackupOperations()).length;
     }
@@ -1838,6 +1895,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!vault) return [];
     const notes = await vault.listNotes();
     folders = await vault.listFolders();
+    vaultAttachments = await vault.listAttachments();
     paletteNotes = notes;
     await runSearch(searchQuery);
     return notes;
@@ -1972,11 +2030,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       const saved = await vault.saveNote({
         id: note.id,
         title: note.title,
-        markdown: note.markdown,
+        markdown: rewriteLocalLinks(note.markdown, currentPath, nextPath, pinnedAttachmentLinks),
         sourcePath: nextPath,
         expectedRevision: note.revision,
       });
-      await vault.moveAttachmentSourcePaths(note.id, parentPath(currentPath), parentPath(nextPath));
+      await vault.moveAttachmentSourcePaths(
+        note.id,
+        parentPath(currentPath),
+        parentPath(nextPath),
+        attachmentFolder,
+      );
       if (activeNoteId === noteId) await loadNote(saved.id);
       storageError = "";
       await refreshFileTree();
@@ -2045,14 +2108,20 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     );
     for (const { note, markdown: noteMarkdown } of fullNotes) {
       const sourcePath = noteFilePath(note);
+      const nextSourcePath = movePath(sourcePath, path, nextPath);
       await vault.saveNote({
         id: note.id,
         title: note.title,
-        markdown: noteMarkdown,
-        sourcePath: movePath(sourcePath, path, nextPath),
+        markdown: rewriteLocalLinks(
+          noteMarkdown,
+          sourcePath,
+          nextSourcePath,
+          pinnedAttachmentLinks,
+        ),
+        sourcePath: nextSourcePath,
         expectedRevision: note.revision,
       });
-      await vault.moveAttachmentSourcePaths(note.id, path, nextPath);
+      await vault.moveAttachmentSourcePaths(note.id, path, nextPath, attachmentFolder);
     }
     await vault.saveFolders(nextFolders);
     folders = nextFolders;
@@ -2889,13 +2958,41 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   function pasteEditorSelection(): boolean {
     const selection = getEditorSelection();
     const clipboard = navigator.clipboard;
-    if (!selection || !clipboard || typeof clipboard.readText !== "function") return false;
+    if (!selection || !clipboard) return false;
     rememberEditorState(selection);
-    void Promise.resolve(clipboard.readText())
-      .then((text) => replaceEditorSelection(selection, text))
-      .catch(() => {
+    const pasteText = () => {
+      if (typeof clipboard.readText !== "function")
+        throw new Error("Clipboard text is unavailable");
+      return Promise.resolve(clipboard.readText()).then((text) =>
+        replaceEditorSelection(selection, text),
+      );
+    };
+    if (typeof clipboard.read === "function") {
+      void clipboard
+        .read()
+        .then(async (items) => {
+          const files = await clipboardFiles(items);
+          if (files.length) {
+            await attachFiles(files, selection);
+            return;
+          }
+          const textItem = items.find((item) => item.types.includes("text/plain"));
+          if (textItem) {
+            replaceEditorSelection(selection, await (await textItem.getType("text/plain")).text());
+            return;
+          }
+          await pasteText();
+        })
+        .catch(() => {
+          void pasteText().catch(() => {
+            transferState = "error";
+          });
+        });
+    } else {
+      void pasteText().catch(() => {
         transferState = "error";
       });
+    }
     return true;
   }
 
@@ -2949,12 +3046,240 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function handleEditorPaste(event: ClipboardEvent): void {
     if (!isEditorTarget(event.currentTarget)) return;
+    const files = transferFiles(event.clipboardData);
+    if (files.length) {
+      const selection = getEditorSelection(event.currentTarget);
+      if (!selection) return;
+      event.preventDefault();
+      void attachFiles(files, selection);
+      return;
+    }
     const text = event.clipboardData?.getData("text/plain");
     if (text === undefined) return;
     const selection = getEditorSelection(event.currentTarget);
     if (!selection) return;
     event.preventDefault();
     replaceEditorSelection(selection, text);
+  }
+
+  function handleEditorDragOver(event: DragEvent): void {
+    if (!event.dataTransfer?.types.includes("Files") || !activeNoteId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleEditorDrop(event: DragEvent): void {
+    const files = transferFiles(event.dataTransfer);
+    if (!files.length || !isEditorTarget(event.currentTarget)) return;
+    event.preventDefault();
+    const selection = dropSelection(event) ?? getEditorSelection(event.currentTarget);
+    if (selection) void attachFiles(files, selection);
+  }
+
+  function transferFiles(transfer: DataTransfer | null | undefined): File[] {
+    if (!transfer) return [];
+    if (transfer.files.length) return [...transfer.files];
+    return [...transfer.items]
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+  }
+
+  async function clipboardFiles(items: ClipboardItems): Promise<File[]> {
+    const files: File[] = [];
+    for (const item of items) {
+      const type = item.types.find((candidate) => !candidate.startsWith("text/"));
+      if (!type) continue;
+      try {
+        const contents = await item.getType(type);
+        const extension = type.split("/", 2)[1]?.replace(/\+.*$/, "") || "bin";
+        files.push(
+          new File([contents], `${type.startsWith("image/") ? "image" : "file"}.${extension}`, {
+            type,
+          }),
+        );
+      } catch {
+        // Clipboard entries can disappear between the permission check and the read.
+      }
+    }
+    return files;
+  }
+
+  function dropSelection(event: DragEvent): EditorSelection | undefined {
+    if (!(event.currentTarget instanceof HTMLTextAreaElement) || !editor) return;
+    // Textareas expose no caret-from-point API, so drops land at the current selection.
+    return { start: editor.selectionStart, end: editor.selectionEnd, surface: "source" };
+  }
+
+  async function attachFiles(files: File[], selection?: EditorSelection): Promise<void> {
+    if (!vault || !activeNoteId || files.length === 0 || transferState === "working") return;
+    const currentVault = vault;
+    const noteId = activeNoteId;
+    const target = selection ??
+      getEditorSelection() ?? {
+        start: markdown.length,
+        end: markdown.length,
+        surface: "source" as const,
+      };
+    try {
+      const snippets: string[] = [];
+      const urls: LocalAttachmentUrl[] = [];
+      for (const file of files) {
+        const attachment = await currentVault.addAttachment({
+          contents: file,
+          folder: attachmentFolder,
+          name: attachmentFileName(file),
+          noteId,
+        });
+        urls.push({
+          name: attachment.name,
+          sourcePath: attachment.sourcePath,
+          url: URL.createObjectURL(safeAttachmentBlob(file, attachment.type)),
+        });
+        snippets.push(
+          attachmentMarkdown(
+            attachment.name,
+            attachment.sourcePath ?? attachment.name,
+            activeNoteSourcePath,
+            attachment.type,
+          ),
+        );
+      }
+      if (activeNoteId !== noteId) {
+        for (const url of urls) URL.revokeObjectURL(url.url);
+        return;
+      }
+      localAttachmentUrls = [...localAttachmentUrls, ...urls];
+      const start = Math.min(target.start, target.end, markdown.length);
+      const before = markdown.slice(0, start);
+      const separator = before && !before.endsWith("\n") && snippets.length > 1 ? "\n" : "";
+      replaceEditorSelection(
+        { ...target, start, end: Math.min(Math.max(target.start, target.end), markdown.length) },
+        `${separator}${snippets.join("\n")}`,
+      );
+      vaultAttachments = await currentVault.listAttachments();
+      pendingBackupCount = (await currentVault.getPendingBackupOperations()).length;
+      storageError = "";
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "The file could not be attached.";
+    }
+  }
+
+  function attachmentFileName(file: File): string {
+    if (file.name && file.name !== "image.png") return file.name;
+    const extension = file.type.split("/")[1]?.replace(/\+.*$/, "") || "png";
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-");
+    return `${file.type.startsWith("image/") ? "image" : "file"}-${stamp}.${extension}`;
+  }
+
+  async function attachSelectedFiles(list: FileList | null): Promise<void> {
+    const files = [...(list ?? [])];
+    if (attachmentInput) attachmentInput.value = "";
+    await attachFiles(files);
+  }
+
+  function attachmentPreferenceKey(name: string): string {
+    return `onyx:${name}:${activeVaultId || "default"}`;
+  }
+
+  function readAttachmentPreferences(): void {
+    attachmentFolder =
+      normalizeAttachmentFolder(
+        readLocalStorage(attachmentPreferenceKey("attachment-folder")) ?? "",
+      ) ?? DEFAULT_ATTACHMENT_FOLDER;
+    attachmentsHidden = readLocalStorage(attachmentPreferenceKey("attachments-hidden")) === "true";
+  }
+
+  function setAttachmentsHidden(hidden: boolean): void {
+    attachmentsHidden = hidden;
+    writeLocalStorage(attachmentPreferenceKey("attachments-hidden"), String(hidden));
+  }
+
+  async function renameAttachmentFolder(requested: string): Promise<boolean> {
+    const next = normalizeAttachmentFolder(requested);
+    if (!next) {
+      storageError =
+        'Choose a folder name without . or .. segments or the characters < > : " | ? * # %.';
+      return false;
+    }
+    const previous = attachmentFolder;
+    if (next === previous) return true;
+    if (!vault) return false;
+    if (transferState === "working" || !(await settleDraft())) return false;
+    const currentVault = vault;
+    try {
+      const notes = await currentVault.listNotes();
+      if (
+        notes.some((note) => isPathWithin(noteFilePath(note), next)) ||
+        folders.some((folder) => isPathWithin(folder.path, next))
+      ) {
+        throw new Error(`“${next}” already holds notes. Choose another name for attachments.`);
+      }
+      const moved = await currentVault.moveAttachmentFolder(previous, next);
+      const movedPaths = new Map(
+        moved.map((attachment) => [
+          movePath(attachment.sourcePath ?? "", next, previous),
+          attachment.sourcePath ?? "",
+        ]),
+      );
+      if (movedPaths.size) {
+        for (const metadata of notes) {
+          const note = await currentVault.getNote(metadata.id);
+          if (!note) continue;
+          const path = noteFilePath(note);
+          const rewritten = rewriteLocalLinks(note.markdown, path, path, (target) =>
+            movedPaths.get(target),
+          );
+          if (rewritten === note.markdown) continue;
+          await currentVault.saveNote({
+            id: note.id,
+            title: note.title,
+            markdown: rewritten,
+            expectedRevision: note.revision,
+          });
+        }
+      }
+      attachmentFolder = next;
+      writeLocalStorage(attachmentPreferenceKey("attachment-folder"), next);
+      if (activeNoteId) await loadNote(activeNoteId);
+      await refreshFileTree();
+      pendingBackupCount = (await currentVault.getPendingBackupOperations()).length;
+      storageError = "";
+      return true;
+    } catch (error) {
+      storageError =
+        error instanceof Error ? error.message : "The attachments folder could not be renamed.";
+      return false;
+    }
+  }
+
+  async function openAttachment(id: string): Promise<void> {
+    const attachment = await vault?.getAttachment(id);
+    if (!attachment) return;
+    const url = URL.createObjectURL(safeAttachmentBlob(attachment.file, attachment.metadata.type));
+    if (
+      attachment.metadata.type.startsWith("image/") &&
+      attachment.metadata.type !== "image/svg+xml"
+    ) {
+      window.open(url, "_blank", "noopener,noreferrer");
+    } else {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = attachment.metadata.name;
+      link.rel = "noopener";
+      link.click();
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
+  function safeAttachmentBlob(file: File, type: string): Blob {
+    return type.startsWith("image/")
+      ? new Blob([file], { type })
+      : new Blob([file], { type: "application/octet-stream" });
+  }
+
+  function pinnedAttachmentLinks(path: string): string | undefined {
+    return isPathWithin(path, attachmentFolder) ? path : undefined;
   }
 
   function setFont(role: FontRole, id: string): void {
@@ -4381,6 +4706,21 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     set folderInput(value: HTMLInputElement | undefined) {
       folderInput = value;
     },
+    get attachmentInput() {
+      return attachmentInput;
+    },
+    set attachmentInput(value: HTMLInputElement | undefined) {
+      attachmentInput = value;
+    },
+    get attachmentFolder() {
+      return attachmentFolder;
+    },
+    get attachmentsHidden() {
+      return attachmentsHidden;
+    },
+    get vaultAttachments() {
+      return vaultAttachments;
+    },
     get zipInput() {
       return zipInput;
     },
@@ -4447,6 +4787,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     handleEditorCopy,
     handleEditorCut,
     handleEditorPaste,
+    handleEditorDragOver,
+    handleEditorDrop,
+    attachSelectedFiles,
+    setAttachmentsHidden,
+    renameAttachmentFolder,
+    openAttachment,
     updateMarkdown,
     updateRenderedInput,
     handleRenderedLineKeydown,

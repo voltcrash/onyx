@@ -37,6 +37,10 @@
 		resolvedTheme: ResolvedTheme;
 		colorTheme: ColorTheme;
 		fonts: FontChoices;
+		attachmentFolder: string;
+		attachmentsHidden: boolean;
+		onAttachmentsHiddenChange: (hidden: boolean) => void;
+		onRenameAttachmentFolder: (name: string) => Promise<boolean>;
 		shortcuts: KeyboardShortcuts;
 		primaryModifier: PrimaryModifier;
 		section?: SettingsSection;
@@ -64,10 +68,26 @@
 
 	let {
 		vault, vaultName, suggestedRepositoryName, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
-		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, fonts, shortcuts, primaryModifier,
+		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, fonts, attachmentFolder, attachmentsHidden, onAttachmentsHiddenChange, onRenameAttachmentFolder, shortcuts, primaryModifier,
 		section = $bindable('editor'), onThemeChange, onColorThemeChange, onFontChange, onResetFonts, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onPrepareVaultDeletion, onDeleteVault
 	}: Props = $props();
+
+	let attachmentFolderDraft = $state(untrack(() => attachmentFolder));
+	let renamingAttachmentFolder = $state(false);
+
+	$effect(() => {
+		attachmentFolderDraft = attachmentFolder;
+	});
+
+	async function renameAttachmentFolder(): Promise<void> {
+		renamingAttachmentFolder = true;
+		try {
+			if (!(await onRenameAttachmentFolder(attachmentFolderDraft))) attachmentFolderDraft = attachmentFolder;
+		} finally {
+			renamingAttachmentFolder = false;
+		}
+	}
 
 	const sections: Array<{ id: SettingsSection; label: string }> = [
 		{ id: 'editor', label: 'Editor' },
@@ -329,6 +349,22 @@
 							</select>
 						</div>
 					{/each}
+
+					<h4 class="theme-section-title">Attachments</h4>
+					<p class="settings-hint">Pasted and dropped images and files are saved to this vault folder and linked with GitHub-style Markdown. Renaming it updates the links in your notes.</p>
+					<div class="settings-field">
+						<label for="settings-attachment-folder">Folder</label>
+						<form class="settings-row" onsubmit={(event) => { event.preventDefault(); void renameAttachmentFolder(); }}>
+							<input id="settings-attachment-folder" bind:value={attachmentFolderDraft} autocomplete="off" spellcheck="false" placeholder="attachments" />
+							<button class="settings-secondary" type="submit" disabled={renamingAttachmentFolder || !attachmentFolderDraft.trim() || attachmentFolderDraft.trim() === attachmentFolder}>
+								{#if renamingAttachmentFolder}<LoaderCircle class="spin" size={14} />{/if}Rename
+							</button>
+						</form>
+					</div>
+					<label class="settings-toggle">
+						<input type="checkbox" checked={attachmentsHidden} onchange={(event) => onAttachmentsHiddenChange(event.currentTarget.checked)} />
+						<span>Hide the attachments folder in the sidebar</span>
+					</label>
 				{:else if section === 'themes'}
 					<h3>Themes</h3>
 					<p class="settings-hint">Choose how Onyx looks in this browser.</p>
