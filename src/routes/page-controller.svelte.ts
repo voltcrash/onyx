@@ -1898,7 +1898,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       searchQuery = "";
       await loadNote(note.id);
       await refreshFileTree();
-      requestAnimationFrame(() => editor?.focus());
+      requestAnimationFrame(() => {
+        if (renderedPaneVisible && !renderedReadOnly) {
+          activateLiveLine(0);
+        } else {
+          editor?.focus();
+        }
+      });
     } catch (error) {
       storageError = error instanceof Error ? error.message : "A new note could not be created.";
       saveState = "error";

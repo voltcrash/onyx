@@ -1247,6 +1247,19 @@
 .live-editor.prose .live-editing-overlay .live-editable-line::before {
   content: none !important;
 }
+.live-editor.prose
+  .live-editing-overlay:focus-within
+  .live-editable-line.active:has(> br:only-child)::after {
+  content: "";
+  position: absolute;
+  top: 15%;
+  left: 0;
+  width: 2px;
+  height: 70%;
+  border-radius: 1px;
+  background: var(--ink);
+  pointer-events: none;
+}
 .live-editor.prose .live-editing-overlay .live-editable-line.code-content {
   font-family: var(--font-code) !important;
 }

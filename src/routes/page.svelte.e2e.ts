@@ -724,6 +724,44 @@ test("searches note titles and Markdown content from the command palette", async
   );
 });
 
+test("keeps the rendered editor active when creating a new note", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await expect(page.locator(".rendered-mode-toggle")).toHaveAttribute("aria-pressed", "false");
+
+  await page.getByRole("button", { name: "New file" }).click();
+  await page.getByRole("textbox", { name: "File name" }).press("Enter");
+
+  await expect(page.getByRole("button", { name: "Untitled", exact: true })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+  await expect
+    .poll(() => renderedSelectionDetails(page))
+    .toMatchObject({
+      anchorLine: "0",
+      focusLine: "0",
+      start: 0,
+      end: 0,
+    });
+  await expect
+    .poll(() =>
+      page.locator('[data-live-line="0"]').evaluate((element) => {
+        const style = getComputedStyle(element, "::after");
+        return { content: style.content, height: style.height, width: style.width };
+      }),
+    )
+    .toMatchObject({ content: '""' });
+  await expect
+    .poll(() =>
+      page.locator('[data-live-line="0"]').evaluate((element) => {
+        const height = Number.parseFloat(getComputedStyle(element, "::after").height);
+        return height > 0;
+      }),
+    )
+    .toBe(true);
+});
+
 test("toggles sidebar find and replace with the platform shortcut", async ({ page }) => {
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
