@@ -950,7 +950,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     {
       id: "settings",
       group: "Settings",
-      label: "Editor settings",
+      label: "Font settings",
       icon: Settings,
       keywords: "preferences options writing fonts typeface",
       aliases: ["preferences", "configuration"],
