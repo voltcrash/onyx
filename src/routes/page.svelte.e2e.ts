@@ -495,7 +495,7 @@ test("opens every settings section from the command palette", async ({ page }) =
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
   const settingsCommands = [
-    ["settings", "Editor settings", "Editor"],
+    ["settings", "Font settings", "Fonts"],
     ["settings-themes", "Theme settings", "Themes"],
     ["shortcuts", "Keyboard shortcuts", "Keyboard shortcuts"],
     ["settings-github", "GitHub backup & sync settings", "Backup & sync"],
@@ -549,17 +549,17 @@ test("offers additional color themes and persists the selection", async ({ page 
   await expect(page.locator("html")).toHaveAttribute("data-color-theme", "solarized");
 });
 
-test("opens general settings on Editor and the storage shortcut on Storage choices", async ({
+test("opens general settings on Fonts and the storage shortcut on Storage choices", async ({
   page,
 }) => {
   await page.goto("/");
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Editor", exact: true })).toHaveAttribute(
+  await expect(page.getByRole("button", { name: "Fonts", exact: true })).toHaveAttribute(
     "aria-current",
     "page",
   );
-  await expect(page.getByRole("heading", { name: "Editor", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Fonts", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Restore default fonts" })).toHaveCount(0);
 
   await page.locator("#font-heading").selectOption("inter");
