@@ -116,6 +116,78 @@
 			.every((cell) => /^:?-{3,}:?$/.test(cell.trim()));
 	}
 
+	function editableLineText(index: number): string | undefined {
+		const line = liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${index}"]`);
+		if (!line) return;
+		const copy = line.cloneNode(true) as HTMLElement;
+		copy.querySelectorAll('.md-syntax').forEach((syntax) => syntax.remove());
+		return copy.textContent ?? '';
+	}
+
+	function textPointAt(root: HTMLElement, offset: number): { node: Node; offset: number } {
+		const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+		let remaining = Math.max(0, offset);
+		let node = walker.nextNode();
+		while (node) {
+			const length = node.textContent?.length ?? 0;
+			if (remaining <= length) return { node, offset: remaining };
+			remaining -= length;
+			node = walker.nextNode();
+		}
+		return { node: root, offset: root.childNodes.length };
+	}
+
+	function measureRenderedLineRects(
+		block: HTMLElement,
+		start: number,
+		end: number,
+		containerRect: DOMRect,
+	): Array<LiveLineRect | undefined> | undefined {
+		if (end - start < 2) return;
+		const blockText = block.textContent ?? '';
+		const blockRect = block.getBoundingClientRect();
+		const measured: Array<LiveLineRect | undefined> = Array.from({ length: end - start });
+		let searchStart = 0;
+
+		if (liveLine < start || liveLine >= end) return;
+		for (let index = start; index <= liveLine; index += 1) {
+			const lineText = editableLineText(index);
+			if (lineText === undefined) return;
+			let textStart = blockText.indexOf(lineText, searchStart);
+			let textLength = lineText.length;
+			if (textStart < 0) {
+				const trimmed = lineText.trim();
+				textStart = trimmed ? blockText.indexOf(trimmed, searchStart) : searchStart;
+				textLength = trimmed.length;
+			}
+			if (textStart < 0) return;
+
+			const line = liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${index}"]`);
+			if (!line) return;
+			const range = document.createRange();
+			const startPoint = textPointAt(block, textStart);
+			const endPoint = textPointAt(block, textStart + textLength);
+			range.setStart(startPoint.node, startPoint.offset);
+			range.setEnd(endPoint.node, endPoint.offset);
+			const textRect = range.getClientRects()[0] ?? range.getBoundingClientRect();
+			if (!textRect.height) return;
+			const lineHeight = parseFloat(getComputedStyle(line).lineHeight) || textRect.height;
+			const hitHeight = blockRect.height / (end - start);
+			measured[index - start] = {
+				top:
+					textRect.top -
+					containerRect.top -
+					(hitHeight >= lineHeight ? Math.max(0, (lineHeight - textRect.height) / 2) : 0),
+				left: textRect.left - containerRect.left,
+				width: Math.max(0, blockRect.right - textRect.left),
+				height: hitHeight,
+			};
+			searchStart = textStart + textLength;
+		}
+
+		return measured;
+	}
+
 	function measureLiveLines(): void {
 		const container = liveEditorContainer;
 		if (!container || renderedReadOnly) {
@@ -207,6 +279,20 @@
 					rects[index] = { top: top + contentIndex * contentHeight, left, width, height: contentHeight };
 					contentIndex += 1;
 				});
+				return;
+			}
+
+			const renderedLineRects = measureRenderedLineRects(block, start, end, containerRect);
+			if (renderedLineRects) {
+				const lineHeight = blockHeight / (end - start);
+				for (let offset = 0; offset < end - start; offset += 1) {
+					rects[start + offset] = renderedLineRects[offset] ?? {
+						top: top + offset * lineHeight,
+						left,
+						width,
+						height: lineHeight,
+					};
+				}
 				return;
 			}
 

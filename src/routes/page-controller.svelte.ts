@@ -352,6 +352,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let searchPending = $state(false);
   let previewTimer: number | undefined = $state();
   let searchSequence = 0;
+  let renderedInputSequence = 0;
   let editor: HTMLTextAreaElement | undefined = $state();
   let liveEditorContainer: HTMLDivElement | undefined = $state();
   let liveLine = $state(0);
@@ -3355,6 +3356,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const line = liveLineIndex(element);
     if (line === undefined) return;
     liveLine = line;
+    const inputSequence = ++renderedInputSequence;
 
     const pending = pendingEditorState;
     const captured =
@@ -3379,7 +3381,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         updateMarkdown(nextMarkdown);
         const nextPosition = markdownPosition(nextOffset);
         liveLine = nextPosition.line;
-        void tick().then(() => focusRenderedLine(nextPosition.line, nextPosition.position));
+        void tick().then(() => {
+          if (inputSequence !== renderedInputSequence) return;
+          focusRenderedLine(nextPosition.line, nextPosition.position);
+        });
         return;
       }
     }
@@ -3389,9 +3394,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const nextLine = line + replacement.length - 1;
     liveLine = nextLine;
     updateMarkdown(lines.join("\n"));
-    void tick().then(() =>
-      focusRenderedLine(nextLine, replacement.length > 1 ? replacement.at(-1)?.length : position),
-    );
+    void tick().then(() => {
+      if (inputSequence !== renderedInputSequence) return;
+      focusRenderedLine(nextLine, replacement.length > 1 ? replacement.at(-1)?.length : position);
+    });
   }
 
   function handleRenderedLineKeydown(event: KeyboardEvent): void {

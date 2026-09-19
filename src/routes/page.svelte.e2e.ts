@@ -1201,6 +1201,62 @@ test("keeps the rendered caret usable through typing and line boundaries", async
   await expect(markdown).toHaveValue("a\nXb");
 });
 
+test("keeps the rendered caret beside typed text in a multi-line paragraph", async ({ page }) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+
+  await markdown.fill("first line\nsecond line\nthird line");
+  await setRenderedSelection(page, 1, "second line".length);
+  await page.keyboard.type("X");
+  await expect(markdown).toHaveValue("first line\nsecond lineX\nthird line");
+
+  const geometry = await page.evaluate(() => {
+    const rendered = document.querySelector<HTMLElement>(".live-rendered-content");
+    const selection = window.getSelection();
+    if (!rendered || !selection || selection.rangeCount === 0) {
+      throw new Error("The rendered caret is not available");
+    }
+    const visibleText = "second lineX";
+    const content = rendered.textContent ?? "";
+    const start = content.indexOf(visibleText);
+    if (start < 0) throw new Error("The rendered text is not available");
+    const pointAt = (offset: number): { node: Node; offset: number } => {
+      const walker = document.createTreeWalker(rendered, NodeFilter.SHOW_TEXT);
+      let remaining = offset;
+      let node = walker.nextNode();
+      while (node) {
+        const length = node.textContent?.length ?? 0;
+        if (remaining <= length) return { node, offset: remaining };
+        remaining -= length;
+        node = walker.nextNode();
+      }
+      return { node: rendered, offset: rendered.childNodes.length };
+    };
+    const visibleRange = document.createRange();
+    const visiblePoint = pointAt(start + visibleText.length);
+    visibleRange.setStart(visiblePoint.node, visiblePoint.offset);
+    visibleRange.collapse(true);
+    const caret = selection.getRangeAt(0).getBoundingClientRect();
+    const visibleCaret = visibleRange.getBoundingClientRect();
+    return { caret: { x: caret.x, y: caret.y }, visible: { x: visibleCaret.x, y: visibleCaret.y } };
+  });
+  expect(Math.abs(geometry.caret.x - geometry.visible.x)).toBeLessThan(3);
+  expect(Math.abs(geometry.caret.y - geometry.visible.y)).toBeLessThan(3);
+});
+
+test("keeps rapid rendered typing after the current caret", async ({ page }) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+
+  await markdown.fill("abcdef");
+  await setRenderedSelection(page, 0, 3);
+  await page.keyboard.type("XYZ", { delay: 0 });
+
+  await expect(markdown).toHaveValue("abcXYZdef");
+});
+
 test.describe("mobile rendered typing", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
