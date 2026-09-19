@@ -87,7 +87,6 @@
 		onClosePalette={page.closePalette}
 		onOpenSettings={() => page.openSettings('editor')}
 		onOpenStorageSettings={() => page.openSettings('storage')}
-		onDisconnectGithub={() => void page.disconnectGitHub()}
 		onMoveNoteFocus={page.moveNoteFocus}
 		onSelectNote={(id) => void page.selectNote(id)}
 		onChangePage={page.changeNotePage}
@@ -109,6 +108,7 @@
 		highlightedHtmlSourceLines={page.highlightedHtmlSourceLines}
 		renderedBlockLines={page.liveRenderedBlockLines}
 		renderedReadOnly={page.renderedReadOnly}
+		scrollSync={page.scrollSync}
 		markdown={page.markdown}
 		markdownLines={page.markdownLines}
 		findOpen={page.findOpen}
@@ -153,6 +153,7 @@
 		onLiveLineFocus={page.focusLiveLine}
 		onRenderedInput={page.updateRenderedInput}
 		onRenderedLineKeydown={page.handleRenderedLineKeydown}
+		onRenderedTaskClick={page.handleRenderedTaskClick}
 		renderEditableLine={page.renderEditableLine}
 		liveLineKind={page.liveLineKind}
 		liveCodeLanguage={page.liveCodeLanguage}
@@ -199,6 +200,8 @@
 			onColorThemeChange={page.setColorTheme}
 			onFontChange={page.setFont}
 			onResetFonts={page.resetFonts}
+			scrollSync={page.scrollSync}
+			onToggleScrollSync={page.toggleScrollSync}
 			onShortcutChange={page.setShortcut}
 			onResetShortcuts={page.resetShortcuts}
 			bind:section={page.settingsSection}

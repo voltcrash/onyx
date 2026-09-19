@@ -35,6 +35,7 @@ import {
   PanelLeftClose,
   PanelRight,
   Lock,
+  ArrowDownUp,
   PanelRightClose,
   Printer,
   Rows2,
@@ -70,7 +71,9 @@ import {
   normalizeAttachmentFolder,
   resolveLocalAttachmentUrl,
   rewriteLocalLinks,
+  taskLineIndex,
   titleFromMarkdown,
+  toggleTaskAtLine,
   type LocalAttachmentUrl,
 } from "$lib/markdown-utils";
 import {
@@ -299,6 +302,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let outputPaneVisible = $state(true);
   let renderedPaneVisible = $state(true);
   let renderedReadOnly = $state(false);
+  let scrollSync = $state(true);
   let outputView = $state<OutputView>("markdown");
   let paneLayout = $state<PaneLayout>("columns");
   let paneOrder = $state<PaneOrder>("rendered-first");
@@ -808,6 +812,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       run: () => toggleRenderedReadOnly(),
     },
     {
+      id: "toggle-scroll-sync",
+      group: "View",
+      label: scrollSync ? "Turn off synced scrolling" : "Turn on synced scrolling",
+      icon: ArrowDownUp,
+      keywords: "auto scroll sync link panes follow output rendered",
+      disabled: singlePaneMode,
+      run: () => toggleScrollSync(),
+    },
+    {
       id: "toggle-sidebar",
       group: "View",
       label: sidebarCollapsed ? "Show the notes sidebar" : "Hide the notes sidebar",
@@ -995,7 +1008,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     {
       id: "settings",
       group: "Settings",
-      label: "Editor settings",
+      label: "Font settings",
       icon: Settings,
       keywords: "preferences options writing fonts typeface",
       aliases: ["preferences", "configuration"],
@@ -2512,6 +2525,48 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     previewMarkdown = value;
   }
 
+  function toggleTaskLine(lineIndex: number): void {
+    const value = toggleTaskAtLine(markdown, lineIndex);
+    if (value === markdown) return;
+    updateMarkdown(value);
+    updatePreviewImmediately(value);
+  }
+
+  // Rendered checkboxes are disabled, so hits are matched against their box instead of the click target.
+  function handleRenderedTaskClick(event: MouseEvent): void {
+    if (event.button !== 0 || saveState === "loading" || transferState === "working") return;
+    const target = event.target instanceof Element ? event.target : undefined;
+    const liveCheck = target?.closest(".live-task-check");
+    if (liveCheck) {
+      const line = Number(liveCheck.closest<HTMLElement>("[data-live-line]")?.dataset.liveLine);
+      if (!Number.isInteger(line)) return;
+      event.preventDefault();
+      toggleTaskLine(line);
+      return;
+    }
+    const article = event.currentTarget instanceof Element ? event.currentTarget : undefined;
+    const box = target
+      ?.closest("li.task-list-item")
+      ?.querySelector(":scope > input[type=checkbox], :scope > p > input[type=checkbox]");
+    if (!article || !box) return;
+    const rect = box.getBoundingClientRect();
+    const slop = 4;
+    if (
+      event.clientX < rect.left - slop ||
+      event.clientX > rect.right + slop ||
+      event.clientY < rect.top - slop ||
+      event.clientY > rect.bottom + slop
+    )
+      return;
+    const line = taskLineIndex(
+      markdown,
+      [...article.querySelectorAll("li.task-list-item input[type=checkbox]")].indexOf(box),
+    );
+    if (line === undefined) return;
+    event.preventDefault();
+    toggleTaskLine(line);
+  }
+
   function clampSplitRatio(value: number): number {
     return Math.min(80, Math.max(20, value));
   }
@@ -2595,6 +2650,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const storedRenderedPane = readLocalStorage("onyx:rendered-pane-visible");
     const storedReadOnly = readLocalStorage("onyx:rendered-read-only");
     renderedReadOnly = storedReadOnly === "true";
+    scrollSync = readLocalStorage("onyx:scroll-sync") !== "false";
     if (singlePaneMode) {
       showOnlyPane(storedRenderedPane === "false" ? "source" : "rendered");
       return;
@@ -2625,6 +2681,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     renderedPaneVisible = !renderedPaneVisible;
     writeLocalStorage("onyx:rendered-pane-visible", String(renderedPaneVisible));
     if (!renderedPaneVisible && outputPaneVisible) editingSurface = "source";
+  }
+
+  function toggleScrollSync(): void {
+    scrollSync = !scrollSync;
+    writeLocalStorage("onyx:scroll-sync", String(scrollSync));
   }
 
   function toggleRenderedReadOnly(): void {
@@ -3766,10 +3827,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const lineHeight = Number.parseFloat(getComputedStyle(target).lineHeight) || 24;
     const paddingTop = Number.parseFloat(getComputedStyle(target).paddingTop) || 0;
     const targetTop = paddingTop + line * lineHeight;
-    target.scrollTop = Math.max(
-      0,
-      Math.min(target.scrollHeight - target.clientHeight, targetTop - target.clientHeight / 2),
-    );
+    if (target.scrollHeight > target.clientHeight) {
+      target.scrollTop = Math.max(
+        0,
+        Math.min(target.scrollHeight - target.clientHeight, targetTop - target.clientHeight / 2),
+      );
+    } else {
+      // On touch layouts the textarea grows with its text and the page scrolls instead.
+      const top = target.getBoundingClientRect().top + window.scrollY + targetTop;
+      window.scrollTo({ top: Math.max(0, top - window.innerHeight / 2) });
+    }
     keepFindInputFocused();
   }
 
@@ -4565,6 +4632,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get renderedPaneVisible() {
       return renderedPaneVisible;
     },
+    get scrollSync() {
+      return scrollSync;
+    },
     get renderedReadOnly() {
       return renderedReadOnly;
     },
@@ -4780,6 +4850,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     copyOutput,
     downloadOutput,
     toggleRenderedReadOnly,
+    toggleScrollSync,
     focusSourceEditor,
     focusLiveLine,
     captureEditorState,
@@ -4797,6 +4868,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     updateRenderedInput,
     handleRenderedLineKeydown,
     activateLiveLine,
+    handleRenderedTaskClick,
     renderEditableLine,
     liveLineKind,
     liveCodeLanguage,

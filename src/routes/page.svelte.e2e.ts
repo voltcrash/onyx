@@ -450,7 +450,7 @@ test("adjusts content width from the command palette", async ({ page }) => {
 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("slider", { name: "Content width" })).toHaveCount(0);
-  await expect(page.getByText("Document", { exact: true })).toBeVisible();
+  await expect(page.getByText(/words? · \d+ min/)).toBeVisible();
 });
 
 test("offers formatting actions from the command palette", async ({ page }) => {
@@ -487,7 +487,7 @@ test("offers formatting actions from the command palette", async ({ page }) => {
   await expect(page.getByRole("tab", { name: "Tools" })).toHaveCount(0);
   await expect(page.locator(".sidebar-switcher")).toHaveCount(0);
   await expect(page.locator(".formatting-tools")).toHaveCount(0);
-  await expect(page.getByText("Document", { exact: true })).toBeVisible();
+  await expect(page.getByText(/words? · \d+ min/)).toBeVisible();
 });
 
 test("opens every settings section from the command palette", async ({ page }) => {
@@ -495,7 +495,7 @@ test("opens every settings section from the command palette", async ({ page }) =
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
   const settingsCommands = [
-    ["settings", "Editor settings", "Editor"],
+    ["settings", "Font settings", "Fonts"],
     ["settings-themes", "Theme settings", "Themes"],
     ["shortcuts", "Keyboard shortcuts", "Keyboard shortcuts"],
     ["settings-github", "GitHub backup & sync settings", "Backup & sync"],
@@ -549,17 +549,17 @@ test("offers additional color themes and persists the selection", async ({ page 
   await expect(page.locator("html")).toHaveAttribute("data-color-theme", "solarized");
 });
 
-test("opens general settings on Editor and the storage shortcut on Storage choices", async ({
+test("opens general settings on Fonts and the storage shortcut on Storage choices", async ({
   page,
 }) => {
   await page.goto("/");
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Editor", exact: true })).toHaveAttribute(
+  await expect(page.getByRole("button", { name: "Fonts", exact: true })).toHaveAttribute(
     "aria-current",
     "page",
   );
-  await expect(page.getByRole("heading", { name: "Editor", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Fonts", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Restore default fonts" })).toHaveCount(0);
 
   await page.locator("#font-heading").selectOption("inter");
@@ -2517,4 +2517,45 @@ test("stores pasted images in the attachments folder with GitHub-style links", a
   await page.getByLabel("Hide the attachments folder in the sidebar").check();
   await page.keyboard.press("Escape");
   await expect(page.locator(".attachment-folder-row")).toHaveCount(0);
+});
+
+test("switches repositories by swiping horizontally on the sidebar", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  await page.locator(".vault-trigger").click();
+  await page.getByRole("menuitem", { name: "New repository" }).click();
+  const dots = page.getByRole("tablist", { name: /Repositories/ }).getByRole("tab");
+  await expect(dots).toHaveCount(2);
+  await expect(dots.nth(1)).toHaveAttribute("aria-selected", "true");
+
+  const sidebar = page.locator(".sidebar .note-list");
+  await sidebar.hover();
+  await page.mouse.wheel(-120, 0);
+  await expect(dots.nth(0)).toHaveAttribute("aria-selected", "true");
+
+  // Vertical scrolling must not switch repositories.
+  await page.waitForTimeout(250);
+  await page.mouse.wheel(0, 120);
+  await page.waitForTimeout(250);
+  await expect(dots.nth(0)).toHaveAttribute("aria-selected", "true");
+
+  await page.mouse.wheel(120, 0);
+  await expect(dots.nth(1)).toHaveAttribute("aria-selected", "true");
+});
+
+test("toggles task checkboxes by clicking them in the page pane", async ({ page }) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+  await markdown.fill("```\n- [ ] code\n```\n\n- [ ] first\n- [x] second");
+
+  await page.locator('.live-editing-overlay [data-live-line="4"] .live-task-check').click();
+  await expect(markdown).toHaveValue("```\n- [ ] code\n```\n\n- [x] first\n- [x] second");
+
+  await page.locator(".rendered-mode-toggle").click();
+  const boxes = page.locator(".preview-pane article.prose .task-list-item input");
+  await boxes.nth(1).click({ force: true });
+  await expect(markdown).toHaveValue("```\n- [ ] code\n```\n\n- [x] first\n- [ ] second");
+  await expect(boxes.nth(1)).not.toBeChecked();
 });
