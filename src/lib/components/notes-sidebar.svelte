@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { ChevronDown, ChevronRight, Copy, FilePlus2, FileText, Folder, FolderPlus, HardDrive, LoaderCircle, Lock, LockOpen, LogOut, PanelLeft, PanelRight, Pencil, Plus, Search, Settings, Trash2, Type } from '@lucide/svelte';
+	import { ChevronDown, ChevronRight, Copy, FilePlus2, FileText, Folder, FolderPlus, LoaderCircle, Lock, LockOpen, PanelLeft, PanelRight, Pencil, Plus, Search, Settings, Trash2, Type } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
 	import type { GithubUser } from '$lib/github';
 	import type { VaultDescriptor } from '$lib/storage/registry';
@@ -81,7 +81,6 @@
 		onClosePalette: () => void;
 		onOpenSettings: () => void;
 		onOpenStorageSettings: () => void;
-		onDisconnectGithub: () => void;
 		onMoveNoteFocus: (event: KeyboardEvent) => void;
 		onSelectNote: (id: string) => void;
 		onChangePage: (page: number) => void;
@@ -93,7 +92,7 @@
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, wordCount, readingMinutes, contentWidth,
 		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSidebarDragStart, sidebarSide, onSidebarSideChange, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, onCopyFilePath, onSearch,
 		onFindQueryChange, onFindReplacementChange, onFindMatchCaseChange, onFindWholeWordChange, onFindPrevious, onFindNext, onFindReplace, onFindReplaceAll, onCloseFind,
-		onOpenPalette, onClosePalette, onOpenSettings, onOpenStorageSettings, onDisconnectGithub, onMoveNoteFocus, onSelectNote, onChangePage,
+		onOpenPalette, onClosePalette, onOpenSettings, onOpenStorageSettings, onMoveNoteFocus, onSelectNote, onChangePage,
 		onContentWidthChange
 	}: Props = $props();
 
@@ -211,6 +210,11 @@
 	}
 
 	let treeRows = $derived(buildTreeRows());
+
+	const docStatusLabel = $derived(
+		saveState === 'loading' ? 'Opening…' : saveState === 'error' ? 'Save failed' : githubState === 'connected' ? 'Synced' : 'Saved locally',
+	);
+	const docStatusTone = $derived(saveState === 'error' || githubState === 'error' ? 'error' : saveState === 'loading' ? 'busy' : 'ok');
 
 	function menuPosition(event: MouseEvent): { x: number; y: number } {
 		const width = 210;
@@ -621,12 +625,6 @@
 					<button disabled={notePage === notePageCount - 1} onclick={() => onChangePage(notePage + 1)}>Next</button>
 				</div>
 			{/if}
-			<section class="document-details">
-				<h2>Document</h2>
-				<div><span>Words</span><strong>{wordCount}</strong></div>
-				<div><span>Reading time</span><strong>{readingMinutes} min</strong></div>
-				<div><span>Status</span><strong>{saveState === 'loading' ? 'Opening' : saveState === 'error' ? 'Save failed' : 'Saved locally'}</strong></div>
-			</section>
 		</div>
 	{/if}
 	{#if vaults.length > 1}
@@ -637,11 +635,14 @@
 		</div>
 	{/if}
 	<div class="sidebar-footer">
-		{#if githubState === 'connected' && githubUser}
-			<div class="github-account" class:offline={!isOnline} title={isOnline ? `GitHub sync enabled as ${githubUser.login}` : `Signed in as ${githubUser.login}; sync is paused offline`}><span class="github-avatar" aria-hidden="true">{githubUser.login.slice(0, 1)}</span><span class="github-login">@{githubUser.login}</span><button aria-label="Turn off GitHub sync" title={isOnline ? 'Turn off GitHub sync' : 'GitHub sync is unavailable offline'} disabled={!isOnline} onclick={onDisconnectGithub}><LogOut size={14} /></button></div>
-		{:else}
-			<button class="github-connect" class:error={githubState === 'error'} title={githubMessage || 'Notes are saved on this device'} aria-label="Open local storage settings" onclick={onOpenStorageSettings}><HardDrive size={16} /><span>Saved locally</span></button>
-		{/if}
+		<button
+			class="doc-status"
+			data-tone={docStatusTone}
+			class:offline={!isOnline}
+			title={githubState === 'connected' && githubUser ? `Synced as @${githubUser.login}` : githubMessage || 'Notes are saved on this device'}
+			aria-label={`${wordCount} words, ${readingMinutes} minute reading time, ${docStatusLabel}. Open storage settings.`}
+			onclick={onOpenStorageSettings}
+		><span class="doc-status-text">{wordCount} {wordCount === 1 ? 'word' : 'words'} · {readingMinutes} min · {docStatusLabel}</span><i class="doc-status-dot" aria-hidden="true"></i></button>
 		<button class="icon-button" aria-label="Settings" aria-haspopup="dialog" aria-expanded={settingsOpen} aria-controls="settings-dialog" title="Settings" onclick={onOpenSettings}><Settings size={18} /></button>
 	</div>
 </aside>
