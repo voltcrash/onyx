@@ -386,6 +386,25 @@ kbd {
   align-items: center;
   gap: 8px;
 }
+.settings-row input {
+  flex: 1;
+  min-width: 0;
+}
+.settings-row button {
+  flex: none;
+}
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+.settings-toggle input {
+  accent-color: var(--accent);
+}
 .settings-row .repository-field {
   flex: 1;
   height: 36px;
@@ -1102,4 +1121,35 @@ kbd {
     grid-column: 1 / -1;
     justify-content: center;
   }
+}
+.settings-subheading {
+  margin: 22px 0 10px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+.settings-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  cursor: pointer;
+}
+.settings-toggle input {
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.settings-toggle span {
+  display: grid;
+  gap: 2px;
+}
+.settings-toggle strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.settings-toggle small {
+  color: var(--ink-soft);
+  font-size: 12px;
 }

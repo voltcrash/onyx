@@ -194,6 +194,28 @@ export class VaultDatabase {
     }
   }
 
+  async putAttachment(attachment: AttachmentMetadata, operation: BackupOperation): Promise<void> {
+    const transaction = this.#database.transaction(
+      ["attachments", "backupQueue", "settings"],
+      "readwrite",
+    );
+    const complete = transactionDone(transaction);
+    try {
+      transaction.objectStore("attachments").put(attachment);
+      transaction.objectStore("backupQueue").put(operation);
+      await advanceVaultVersion(transaction);
+      await complete;
+    } catch (error) {
+      try {
+        transaction.abort();
+      } catch {
+        // The transaction may already have completed or aborted.
+      }
+      await complete.catch(() => undefined);
+      throw error;
+    }
+  }
+
   getSearchDocuments(): Promise<SearchDocument[]> {
     return this.#getAll<SearchDocument>("searchDocuments");
   }

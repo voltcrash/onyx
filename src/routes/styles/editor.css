@@ -1400,3 +1400,10 @@
 .sidebar-right.sidebar-collapsed .rendered-switcher {
   margin-right: 60px;
 }
+/* Disabled checkboxes swallow clicks; let them reach the list item, where they are hit-tested. */
+.preview-pane .prose .task-list-item input {
+  pointer-events: none;
+}
+.live-editor.prose .live-task-check {
+  cursor: pointer;
+}
