@@ -20,6 +20,10 @@
 		results={page.results}
 		visibleResults={page.visibleResults}
 		folders={page.folders}
+		attachments={page.vaultAttachments}
+		attachmentFolder={page.attachmentFolder}
+		attachmentsHidden={page.attachmentsHidden}
+		onOpenAttachment={(id) => void page.openAttachment(id)}
 		searchQuery={page.searchQuery}
 		findOpen={page.findOpen}
 		findQuery={page.findQuery}
@@ -143,6 +147,8 @@
 		onEditorCopy={page.handleEditorCopy}
 		onEditorCut={page.handleEditorCut}
 		onEditorPaste={page.handleEditorPaste}
+		onEditorDragOver={page.handleEditorDragOver}
+		onEditorDrop={page.handleEditorDrop}
 		onSourceFocus={page.focusSourceEditor}
 		onLiveLineFocus={page.focusLiveLine}
 		onRenderedInput={page.updateRenderedInput}
@@ -184,6 +190,10 @@
 			resolvedTheme={page.resolvedTheme}
 			colorTheme={page.colorTheme}
 			fonts={page.fonts}
+			attachmentFolder={page.attachmentFolder}
+			attachmentsHidden={page.attachmentsHidden}
+			onAttachmentsHiddenChange={page.setAttachmentsHidden}
+			onRenameAttachmentFolder={page.renameAttachmentFolder}
 			shortcuts={page.shortcuts}
 			primaryModifier={page.primaryModifier}
 			onThemeChange={page.setTheme}
@@ -214,6 +224,7 @@
 {/if}
 
 <input class="transfer-input" bind:this={page.folderInput} type="file" webkitdirectory multiple onchange={(event) => void page.importFolder(event.currentTarget.files)} />
+<input class="transfer-input" bind:this={page.attachmentInput} type="file" multiple onchange={(event) => void page.attachSelectedFiles(event.currentTarget.files)} />
 <input class="transfer-input" bind:this={page.zipInput} type="file" accept=".zip,application/zip" onchange={(event) => void page.importZip(event.currentTarget.files)} />
 
 {#if page.restoreModalOpen}

@@ -386,6 +386,25 @@ kbd {
   align-items: center;
   gap: 8px;
 }
+.settings-row input {
+  flex: 1;
+  min-width: 0;
+}
+.settings-row button {
+  flex: none;
+}
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+.settings-toggle input {
+  accent-color: var(--accent);
+}
 .settings-row .repository-field {
   flex: 1;
   height: 36px;
