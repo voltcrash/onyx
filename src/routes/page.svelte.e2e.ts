@@ -1,74 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 import themeCatalog from "../lib/theme-catalog.json" with { type: "json" };
 
-// The output switcher shows only the current view until it is hovered.
-async function openOutputSwitcher(page: Page): Promise<void> {
-  await page.locator(".output-switcher").hover();
-}
-
 async function toggleRenderedReadOnly(page: Page): Promise<void> {
   await page.locator(".rendered-switcher .rendered-mode-toggle").click();
 }
 
-test("aligns the page mode toggle with the output switcher", async ({ page }) => {
+test("does not render an output toolbar", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
-
-  const previewPane = page.locator(".preview-pane");
-  const renderedSwitcher = page.locator(".rendered-switcher");
-  const outputPane = page.locator(".output-pane");
-  const outputSwitcher = page.locator(".output-switcher");
-  const [previewBounds, renderedBounds, outputPaneBounds, outputBounds] = await Promise.all([
-    previewPane.boundingBox(),
-    renderedSwitcher.boundingBox(),
-    outputPane.boundingBox(),
-    outputSwitcher.boundingBox(),
-  ]);
-
-  expect(previewBounds).not.toBeNull();
-  expect(renderedBounds).not.toBeNull();
-  expect(outputPaneBounds).not.toBeNull();
-  expect(outputBounds).not.toBeNull();
-  expect(
-    Math.abs(renderedBounds!.y - previewBounds!.y - (outputBounds!.y - outputPaneBounds!.y)),
-  ).toBeLessThan(1);
-  expect(
-    Math.abs(
-      renderedBounds!.x + renderedBounds!.width - (previewBounds!.x + previewBounds!.width - 18),
-    ),
-  ).toBeLessThan(1);
-  await expect(previewPane.locator(".rendered-mode-toggle")).toHaveAttribute(
-    "aria-label",
-    "Turn on read-only",
-  );
-});
-
-test("toggles the color mode from the output toolbar", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
-
-  const globalTheme = await page.locator("html").getAttribute("data-theme");
-  const outputPane = page.locator(".output-pane");
-  const initialOutputTheme = await outputPane.getAttribute("data-output-theme");
-  const switchToOtherMode = page.getByRole("button", {
-    name: initialOutputTheme === "dark" ? "Switch to light mode" : "Switch to dark mode",
-  });
-  await openOutputSwitcher(page);
-  await expect(switchToOtherMode).toBeVisible();
-  await switchToOtherMode.click();
-  await expect(outputPane).toHaveAttribute(
-    "data-output-theme",
-    initialOutputTheme === "dark" ? "light" : "dark",
-  );
-  await expect(page.locator("html")).toHaveAttribute("data-theme", globalTheme!);
-
-  await openOutputSwitcher(page);
-  await page
-    .getByRole("button", {
-      name: initialOutputTheme === "dark" ? "Switch to dark mode" : "Switch to light mode",
-    })
-    .click();
-  await expect(outputPane).toHaveAttribute("data-output-theme", initialOutputTheme!);
+  await expect(page.locator(".output-switcher")).toHaveCount(0);
 });
 
 async function blockNextVaultWrite(page: Page): Promise<void> {
@@ -1824,7 +1764,7 @@ test("moves a pane by dragging its grip beside the divider or with the arrow key
   expect(await gripOffset("Move the page pane")).toBeGreaterThan(14);
 });
 
-test("copies and downloads the Markdown source from the output pane", async ({ page }) => {
+test("copies and downloads the Markdown source from the file menu", async ({ page }) => {
   await page.goto("/");
   const markdown = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(markdown).toBeEnabled();
@@ -1836,17 +1776,14 @@ test("copies and downloads the Markdown source from the output pane", async ({ p
     });
   });
 
-  await openOutputSwitcher(page);
-
-  await page.getByRole("button", { name: "Copy" }).click();
+  await useFileMenu(page, "Copy as", "Markdown");
   await expect
     .poll(() => page.evaluate(() => (window as typeof window & { onyxCopied?: string }).onyxCopied))
     .toBe("# Packing list\n\n- **Passport**");
   await expect(page.getByText("Copied this note as Markdown.")).toHaveCount(0);
 
   const download = page.waitForEvent("download");
-  await openOutputSwitcher(page);
-  await page.getByRole("button", { name: "Download" }).click();
+  await useFileMenu(page, "Export as", "Markdown");
   expect((await download).suggestedFilename()).toBe("packing-list.md");
 });
 

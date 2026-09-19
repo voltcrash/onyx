@@ -129,8 +129,6 @@
 		onToggleOutputPane={page.toggleOutputPane}
 		resolvedTheme={page.resolvedTheme}
 		colorTheme={page.colorTheme}
-		onCopy={() => void page.copyNoteAs(page.activeNoteId, 'markdown')}
-		onDownload={() => void page.exportNoteAs(page.activeNoteId, 'markdown')}
 		onToggleRenderedPane={page.toggleRenderedPane}
 		onToggleRenderedReadOnly={() => page.toggleRenderedReadOnly()}
 		onResize={page.setSplitRatio}

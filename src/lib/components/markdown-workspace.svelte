@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { Copy, Download, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, Lock, LockOpen, Moon, PanelLeft, PencilLine, Sun, X } from '@lucide/svelte';
+	import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, Lock, LockOpen, PanelLeft, PencilLine, X } from '@lucide/svelte';
 	import { highlightFindMatches, type FindMatch } from '$lib/find-replace';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
 	import type { ColorTheme, ResolvedTheme } from '$lib/theme';
@@ -42,8 +42,6 @@
 		onToggleOutputPane: () => void;
 		resolvedTheme: ResolvedTheme;
 		colorTheme: ColorTheme;
-		onCopy: () => void;
-		onDownload: () => void;
 		onToggleRenderedPane: () => void;
 		onToggleRenderedReadOnly: () => void;
 		onResize: (ratio: number) => void;
@@ -71,7 +69,7 @@
 		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedReadOnly, scrollSync, markdown, markdownLines, findOpen, findQuery, findMatches, activeFindMatch, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
-		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onCopy, onDownload, onToggleRenderedPane, onToggleRenderedReadOnly, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onSourceFocus, onLiveLineFocus, onRenderedInput,
+		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onToggleRenderedPane, onToggleRenderedReadOnly, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onSourceFocus, onLiveLineFocus, onRenderedInput,
 		onRenderedLineKeydown, onRenderedTaskClick, renderEditableLine, liveLineKind, liveCodeLanguage
 	}: Props = $props();
 
@@ -89,8 +87,6 @@
 	let toggleSecondPane = $derived(swapped ? onToggleOutputPane : onToggleRenderedPane);
 	let towardsStart = $derived(stacked ? ChevronUp : ChevronLeft);
 	let towardsEnd = $derived(stacked ? ChevronDown : ChevronRight);
-	let outputTheme = $state<ResolvedTheme>();
-	let activeOutputTheme = $derived(outputTheme ?? resolvedTheme);
 	type LiveLineRect = { top: number; left: number; width: number; height: number };
 	let liveLineRects = $state<LiveLineRect[]>([]);
 	let sourceScrollTop = $state(0);
@@ -105,10 +101,6 @@
 		if (!target) return;
 		sourceScrollTop = target.scrollTop;
 		sourceScrollLeft = target.scrollLeft;
-	}
-
-	function toggleOutputTheme(): void {
-		outputTheme = activeOutputTheme === 'dark' ? 'light' : 'dark';
 	}
 
 	function isFenceLine(line: string): boolean {
@@ -617,24 +609,7 @@
 	{/if}
 
 	<section bind:this={shell} class="editor-shell" class:output-hidden={!outputPaneVisible} class:rendered-hidden={!renderedPaneVisible} class:panes-stacked={stacked} class:panes-swapped={swapped} class:first-hidden={!firstPaneVisible} class:second-hidden={!secondPaneVisible} class:resizing class:pane-moving={drag?.moving} style={`--split: ${splitRatio}%; --content-width: ${contentWidth}px`}>
-		<div bind:this={outputPaneElement} class="output-pane" class:dragged={drag?.moving && drag.pane === 'output'} data-output-theme={activeOutputTheme} data-color-theme={colorTheme} style={drag?.moving && drag.pane === 'output' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined}>
-			<div class="output-switcher">
-				<div class="output-views" role="tablist" aria-label="Output view">
-					<button role="tab" class="active" aria-selected="true" title="Write and edit the Markdown source"><b class="output-format" aria-hidden="true">MD</b><span>Markdown</span></button>
-				</div>
-				<div class="output-actions">
-					<button class="output-action" onclick={toggleOutputTheme} aria-label={activeOutputTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title={activeOutputTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
-						{#if activeOutputTheme === 'dark'}
-							<Sun size={14} />
-						{:else}
-							<Moon size={14} />
-						{/if}
-						<span>{activeOutputTheme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
-					</button>
-					<button class="output-action" onclick={onCopy} disabled={!hasContent} title="Copy this note as Markdown"><Copy size={14} /><span>Copy</span></button>
-					<button class="output-action" onclick={onDownload} disabled={!hasContent} title="Download this note as a Markdown file"><Download size={14} /><span>Download</span></button>
-				</div>
-			</div>
+		<div bind:this={outputPaneElement} class="output-pane" class:dragged={drag?.moving && drag.pane === 'output'} data-output-theme={resolvedTheme} data-color-theme={colorTheme} style={drag?.moving && drag.pane === 'output' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined}>
 			<div class="output-body" bind:this={outputBody} onscrollcapture={(event) => handlePaneScroll(event, 'output')} onloadcapture={() => queueScrollSync(leadingPane())}>
 					<textarea bind:this={editor} class:find-highlights-active={sourceFindActive} value={markdown} onfocus={onSourceFocus} onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} ondragover={onEditorDragOver} ondrop={onEditorDrop} oninput={(event) => onMarkdownChange(event.currentTarget.value)} onscroll={syncSourceFindLayer} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
 					{#if sourceFindActive}
