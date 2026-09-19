@@ -31,6 +31,7 @@ import {
   PanelLeftClose,
   PanelRight,
   Lock,
+  ArrowDownUp,
   PanelRightClose,
   Printer,
   Rows2,
@@ -286,6 +287,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let outputPaneVisible = $state(true);
   let renderedPaneVisible = $state(true);
   let renderedReadOnly = $state(false);
+  let scrollSync = $state(true);
   let outputView = $state<OutputView>("markdown");
   let paneLayout = $state<PaneLayout>("columns");
   let paneOrder = $state<PaneOrder>("rendered-first");
@@ -761,6 +763,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       keywords: "lock unlock edit read only page",
       disabled: !renderedPaneVisible,
       run: () => toggleRenderedReadOnly(),
+    },
+    {
+      id: "toggle-scroll-sync",
+      group: "View",
+      label: scrollSync ? "Turn off synced scrolling" : "Turn on synced scrolling",
+      icon: ArrowDownUp,
+      keywords: "auto scroll sync link panes follow output rendered",
+      disabled: singlePaneMode,
+      run: () => toggleScrollSync(),
     },
     {
       id: "toggle-sidebar",
@@ -2526,6 +2537,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const storedRenderedPane = readLocalStorage("onyx:rendered-pane-visible");
     const storedReadOnly = readLocalStorage("onyx:rendered-read-only");
     renderedReadOnly = storedReadOnly === "true";
+    scrollSync = readLocalStorage("onyx:scroll-sync") !== "false";
     if (singlePaneMode) {
       showOnlyPane(storedRenderedPane === "false" ? "source" : "rendered");
       return;
@@ -2556,6 +2568,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     renderedPaneVisible = !renderedPaneVisible;
     writeLocalStorage("onyx:rendered-pane-visible", String(renderedPaneVisible));
     if (!renderedPaneVisible && outputPaneVisible) editingSurface = "source";
+  }
+
+  function toggleScrollSync(): void {
+    scrollSync = !scrollSync;
+    writeLocalStorage("onyx:scroll-sync", String(scrollSync));
   }
 
   function toggleRenderedReadOnly(): void {
@@ -4246,6 +4263,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get renderedPaneVisible() {
       return renderedPaneVisible;
     },
+    get scrollSync() {
+      return scrollSync;
+    },
     get renderedReadOnly() {
       return renderedReadOnly;
     },
@@ -4446,6 +4466,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     copyOutput,
     downloadOutput,
     toggleRenderedReadOnly,
+    toggleScrollSync,
     focusSourceEditor,
     focusLiveLine,
     captureEditorState,

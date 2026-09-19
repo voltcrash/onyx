@@ -25,6 +25,7 @@
 		highlightedHtmlSourceLines: string[];
 		renderedBlockLines: (SourceLines | undefined)[];
 		renderedReadOnly: boolean;
+		scrollSync: boolean;
 		markdown: string;
 		markdownLines: string[];
 		findOpen: boolean;
@@ -73,7 +74,7 @@
 	}
 
 	let {
-		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, outputView, plainText, plainTextBlocks, htmlSource, htmlSourceBlocks, highlightedHtmlSourceLines, renderedBlockLines, renderedReadOnly, markdown, markdownLines, findOpen, findQuery, findMatches, activeFindMatch, liveLine,
+		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, outputView, plainText, plainTextBlocks, htmlSource, htmlSourceBlocks, highlightedHtmlSourceLines, renderedBlockLines, renderedReadOnly, scrollSync, markdown, markdownLines, findOpen, findQuery, findMatches, activeFindMatch, liveLine,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
 		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onOutputViewChange, onCopy, onDownload, onToggleRenderedPane, onToggleRenderedReadOnly, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onSourceFocus, onLiveLineFocus, onRenderedInput,
@@ -459,26 +460,72 @@
 		return scrollAnchors(points, markdownLines.length, scroller.scrollHeight);
 	}
 
-	function syncScroll(from: Pane): void {
-		const to: Pane = from === 'output' ? 'rendered' : 'output';
-		const source = scrollerOf(from);
-		const target = scrollerOf(to);
-		if (!bothPanesVisible || !source || !target) return;
-		const top = syncedScrollTop(
-			{ anchors: paneAnchors(from, source), scrollTop: source.scrollTop, scrollHeight: source.scrollHeight, clientHeight: source.clientHeight },
-			{ anchors: paneAnchors(to, target), scrollHeight: target.scrollHeight, clientHeight: target.clientHeight }
-		);
-		if (Math.abs(target.scrollTop - top) < 1) return;
+	// The following pane eases toward where it should be rather than jumping there every frame.
+	const GLIDE_EASING = 0.3;
+	let glide: { target: HTMLElement; top: number } | undefined;
+	let glideFrame = 0;
+
+	function stopGlide(): void {
+		cancelAnimationFrame(glideFrame);
+		glideFrame = 0;
+		glide = undefined;
+	}
+
+	function setSyncedTop(target: HTMLElement, top: number): void {
 		target.scrollTo({ top, behavior: 'instant' });
 		// Browsers round the offset, so the echo is recognised by the value they settled on.
 		syncedTops.set(target, target.scrollTop);
 	}
 
-	function queueScrollSync(from: Pane): void {
+	function stepGlide(): void {
+		glideFrame = 0;
+		if (!glide) return;
+		const { target, top } = glide;
+		const distance = top - target.scrollTop;
+		if (Math.abs(distance) < 1) {
+			setSyncedTop(target, top);
+			glide = undefined;
+			return;
+		}
+		const before = target.scrollTop;
+		const step = distance * GLIDE_EASING;
+		setSyncedTop(target, before + Math.sign(step) * Math.max(Math.abs(step), 1));
+		// A pane pinned at its end cannot move any further.
+		if (target.scrollTop === before) {
+			glide = undefined;
+			return;
+		}
+		glideFrame = requestAnimationFrame(stepGlide);
+	}
+
+	function syncScroll(from: Pane, smooth: boolean): void {
+		const to: Pane = from === 'output' ? 'rendered' : 'output';
+		const source = scrollerOf(from);
+		const target = scrollerOf(to);
+		if (!scrollSync || !bothPanesVisible || !source || !target) return;
+		const top = syncedScrollTop(
+			{ anchors: paneAnchors(from, source), scrollTop: source.scrollTop, scrollHeight: source.scrollHeight, clientHeight: source.clientHeight },
+			{ anchors: paneAnchors(to, target), scrollHeight: target.scrollHeight, clientHeight: target.clientHeight }
+		);
+		if (smooth && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+			glide = { target, top };
+			glideFrame ||= requestAnimationFrame(stepGlide);
+			return;
+		}
+		stopGlide();
+		if (Math.abs(target.scrollTop - top) < 1) return;
+		setSyncedTop(target, top);
+	}
+
+	let smoothSync = false;
+
+	function queueScrollSync(from: Pane, smooth = false): void {
+		if (from !== scrollDriver) stopGlide();
 		scrollDriver = from;
+		smoothSync = smooth;
 		syncFrame ||= requestAnimationFrame(() => {
 			syncFrame = 0;
-			syncScroll(scrollDriver);
+			syncScroll(scrollDriver, smoothSync);
 		});
 	}
 
@@ -495,13 +542,19 @@
 		const synced = syncedTops.get(scroller);
 		syncedTops.delete(scroller);
 		if (synced !== undefined && Math.abs(scroller.scrollTop - synced) <= 1) return;
-		queueScrollSync(pane);
+		if (glide?.target === scroller) stopGlide();
+		queueScrollSync(pane, true);
 	}
 
 	// A pane whose contents were just swapped out follows the other one.
 	$effect(() => {
 		void outputView;
 		tick().then(() => queueScrollSync('rendered'));
+	});
+
+	$effect(() => {
+		if (!scrollSync) stopGlide();
+		else tick().then(() => queueScrollSync(leadingPane()));
 	});
 
 	$effect(() => {
@@ -553,6 +606,7 @@
 			observer.disconnect();
 			cancelAnimationFrame(syncFrame);
 			syncFrame = 0;
+			stopGlide();
 		};
 	});
 

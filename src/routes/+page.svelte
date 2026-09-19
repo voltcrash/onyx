@@ -104,6 +104,7 @@
 		highlightedHtmlSourceLines={page.highlightedHtmlSourceLines}
 		renderedBlockLines={page.liveRenderedBlockLines}
 		renderedReadOnly={page.renderedReadOnly}
+		scrollSync={page.scrollSync}
 		markdown={page.markdown}
 		markdownLines={page.markdownLines}
 		findOpen={page.findOpen}
@@ -188,6 +189,8 @@
 			onColorThemeChange={page.setColorTheme}
 			onFontChange={page.setFont}
 			onResetFonts={page.resetFonts}
+			scrollSync={page.scrollSync}
+			onToggleScrollSync={page.toggleScrollSync}
 			onShortcutChange={page.setShortcut}
 			onResetShortcuts={page.resetShortcuts}
 			bind:section={page.settingsSection}
