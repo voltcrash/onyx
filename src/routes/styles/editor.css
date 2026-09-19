@@ -1249,7 +1249,7 @@
 }
 .live-editor.prose
   .live-editing-overlay:focus-within
-  .live-editable-line.active:has(> br:only-child)::after {
+  .live-editable-line.active:has(> br:last-child)::after {
   content: "";
   position: absolute;
   top: 15%;
@@ -1260,6 +1260,22 @@
   background: var(--ink);
   pointer-events: none;
   animation: rendered-caret-blink 1s steps(2, start) infinite;
+}
+/* Empty list items keep their marker, so the caret sits where the text would start. */
+.live-editor.prose
+  .live-editing-overlay:focus-within
+  .live-editable-line.active.list-line:has(> br:last-child)::after {
+  left: 24px;
+}
+.live-editor.prose
+  .live-editing-overlay:focus-within
+  .live-editable-line.active.list-line:has(.live-task-check):has(> br:last-child)::after {
+  left: 30px;
+}
+.live-editor.prose
+  .live-editing-overlay:focus-within
+  .live-editable-line.active.quote-line:has(> br:last-child)::after {
+  left: 19px;
 }
 @keyframes rendered-caret-blink {
   0%,

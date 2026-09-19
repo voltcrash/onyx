@@ -304,18 +304,54 @@
 		});
 
 		const contentRect = renderedContent.getBoundingClientRect();
+		const contentLeft = contentRect.left - containerRect.left;
+		const contentTop = contentRect.top - containerRect.top;
+		const contentBottom = contentRect.bottom - containerRect.top;
 		// An empty note renders no blocks, so give its lines a clickable height to type into.
-		const fallback: LiveLineRect = renderedBlocks.length
-			? { top: 0, left: 0, width: contentRect.width, height: 0 }
-			: {
-					top: contentRect.top - containerRect.top,
-					left: contentRect.left - containerRect.left,
+		const emptyFallback: LiveLineRect = {
+			top: contentTop,
+			left: contentLeft,
+			width: contentRect.width,
+			height: parseFloat(getComputedStyle(renderedContent).lineHeight) || renderedContent.offsetHeight || 30,
+		};
+		if (!renderedBlocks.length) {
+			liveLineRects = rects.map(
+				(rect, index) => rect ?? { ...emptyFallback, top: emptyFallback.top + index * emptyFallback.height },
+			);
+			return;
+		}
+		// Blank lines belong to no rendered block. Place them in the gap between the
+		// surrounding blocks instead of stacking them at the top, so the caret stays
+		// where the blank was left.
+		liveLineRects = rects.map((rect, index) => {
+			if (rect) return rect;
+			let previous: LiveLineRect | undefined;
+			for (let candidate = index - 1; candidate >= 0; candidate -= 1) {
+				if (rects[candidate]) {
+					previous = rects[candidate];
+					break;
+				}
+			}
+			if (previous) {
+				return {
+					top: previous.top + previous.height,
+					left: contentLeft,
 					width: contentRect.width,
-					height: parseFloat(getComputedStyle(renderedContent).lineHeight) || renderedContent.offsetHeight || 30,
+					height: 0,
 				};
-		liveLineRects = rects.map(
-			(rect, index) => rect ?? (renderedBlocks.length ? fallback : { ...fallback, top: fallback.top + index * fallback.height }),
-		);
+			}
+			for (let candidate = index + 1; candidate < rects.length; candidate += 1) {
+				if (rects[candidate]) {
+					return {
+						top: rects[candidate]!.top,
+						left: contentLeft,
+						width: contentRect.width,
+						height: 0,
+					};
+				}
+			}
+			return { top: contentBottom, left: contentLeft, width: contentRect.width, height: 0 };
+		});
 	}
 
 	function liveLineStyle(index: number): string | undefined {

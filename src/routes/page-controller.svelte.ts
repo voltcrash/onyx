@@ -2868,15 +2868,44 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
   }
 
+  function isHiddenSyntaxNode(node: Node | null): boolean {
+    const element = node instanceof HTMLElement ? node : node?.parentElement;
+    return Boolean(element?.closest?.(".md-syntax"));
+  }
+
   function textPointAt(element: HTMLElement, offset: number): { node: Node; offset: number } {
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const nodes: Text[] = [];
+    let current = walker.nextNode();
+    while (current) {
+      nodes.push(current as Text);
+      current = walker.nextNode();
+    }
     let remaining = Math.max(0, offset);
-    let node = walker.nextNode();
-    while (node) {
+    for (let index = 0; index < nodes.length; index += 1) {
+      const node = nodes[index]!;
       const length = node.textContent?.length ?? 0;
-      if (remaining <= length) return { node, offset: remaining };
+      if (remaining <= length) {
+        // Markdown markers render with zero size, so a caret at the end of a hidden
+        // run has no height. Prefer the start of the next visible run, which is the
+        // same logical offset with a visible caret.
+        if (isHiddenSyntaxNode(node) && remaining === length) {
+          for (let candidate = index + 1; candidate < nodes.length; candidate += 1) {
+            if (!isHiddenSyntaxNode(nodes[candidate]!)) {
+              return { node: nodes[candidate]!, offset: 0 };
+            }
+          }
+        }
+        if (isHiddenSyntaxNode(node) && remaining < length) {
+          for (let candidate = index + 1; candidate < nodes.length; candidate += 1) {
+            if (!isHiddenSyntaxNode(nodes[candidate]!)) {
+              return { node: nodes[candidate]!, offset: 0 };
+            }
+          }
+        }
+        return { node, offset: remaining };
+      }
       remaining -= length;
-      node = walker.nextNode();
     }
     return { node: element, offset: 0 };
   }
@@ -4328,22 +4357,26 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!line) return "<br>";
     const heading = line.match(/^(#{1,6}\s+)(.*)$/);
     if (heading) {
-      return `<span class="md-syntax">${escapeHtml(heading[1])}</span>${editableInlineMarkdown(heading[2])}`;
+      const content = editableInlineMarkdown(heading[2]);
+      return `<span class="md-syntax">${escapeHtml(heading[1])}</span>${content || "<br>"}`;
     }
     const task = line.match(/^(\s*[-+*]\s+)(\[([ xX])\]\s+)(.*)$/);
     if (task) {
-      return `<span class="md-syntax">${escapeHtml(task[1])}</span><span class="live-task-check ${task[3] !== " " ? "done" : ""}"></span><span class="md-syntax">${escapeHtml(task[2])}</span>${editableInlineMarkdown(task[4])}`;
+      const content = editableInlineMarkdown(task[4]);
+      return `<span class="md-syntax">${escapeHtml(task[1])}</span><span class="live-task-check ${task[3] !== " " ? "done" : ""}"></span><span class="md-syntax">${escapeHtml(task[2])}</span>${content || "<br>"}`;
     }
     const list = line.match(/^(\s*([-+*]|\d+[.)])\s+)(.*)$/);
     if (list) {
       const ordered = /^\d/.test(list[2]!.trim());
-      return `<span class="md-syntax">${escapeHtml(list[1])}</span><span class="live-list-marker${ordered ? " ordered" : ""}"${ordered ? ` data-marker="${escapeHtml(list[2]!)}"` : ""}></span>${editableInlineMarkdown(list[3])}`;
+      const content = editableInlineMarkdown(list[3]);
+      return `<span class="md-syntax">${escapeHtml(list[1])}</span><span class="live-list-marker${ordered ? " ordered" : ""}"${ordered ? ` data-marker="${escapeHtml(list[2]!)}"` : ""}></span>${content || "<br>"}`;
     }
     const quote = line.match(/^(>\s?)(.*)$/);
     if (quote) {
-      return `<span class="md-syntax">${escapeHtml(quote[1])}</span>${editableInlineMarkdown(quote[2])}`;
+      const content = editableInlineMarkdown(quote[2]);
+      return `<span class="md-syntax">${escapeHtml(quote[1])}</span>${content || "<br>"}`;
     }
-    if (kind === "rule-line") return `<span class="md-syntax">${escapeHtml(line)}</span>`;
+    if (kind === "rule-line") return `<span class="md-syntax">${escapeHtml(line)}</span><br>`;
     return editableInlineMarkdown(line);
   }
 
