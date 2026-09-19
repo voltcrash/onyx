@@ -109,6 +109,12 @@
     top: 0;
     align-self: start;
     height: 100dvh;
+    /*
+     * Sticky positioning forms a stacking context, which would trap the pane
+     * handles below the page content. Keep the divider above it so the handles
+     * stay clickable while the page scrolls.
+     */
+    z-index: 5;
   }
   .output-body > textarea {
     field-sizing: content;
