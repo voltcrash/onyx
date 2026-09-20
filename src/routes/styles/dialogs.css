@@ -225,8 +225,8 @@ kbd {
   font-weight: 500;
   letter-spacing: -0.01em;
 }
-.settings-group-heading {
-  margin-top: 22px;
+.settings-panel h3.settings-group-heading {
+  margin: 28px 0 8px;
 }
 .settings-hint {
   display: flex;
