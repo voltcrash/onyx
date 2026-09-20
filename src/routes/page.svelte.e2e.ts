@@ -293,7 +293,7 @@ test("opens every settings section from the command palette", async ({ page }) =
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
   const settingsCommands = [
-    ["settings", "Font settings", "Fonts"],
+    ["settings", "Editor settings", "Editor"],
     ["settings-themes", "Theme settings", "Themes"],
     ["shortcuts", "Keyboard shortcuts", "Keyboard shortcuts"],
     ["settings-github", "GitHub backup & sync settings", "Backup & sync"],
@@ -347,19 +347,22 @@ test("offers additional color themes and persists the selection", async ({ page 
   await expect(page.locator("html")).toHaveAttribute("data-color-theme", "solarized");
 });
 
-test("opens general settings on Fonts and the storage shortcut on Storage choices", async ({
+test("opens general settings on Editor and the storage shortcut on Storage choices", async ({
   page,
 }) => {
   await page.goto("/");
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Fonts", exact: true })).toHaveAttribute(
+  await expect(page.getByRole("button", { name: "Editor", exact: true })).toHaveAttribute(
     "aria-current",
     "page",
   );
   await expect(page.getByRole("heading", { name: "Fonts", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Attachments", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Scrolling", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Restore default fonts" })).toHaveCount(0);
 
+  await page.locator("#font-heading-type").selectOption("sans-serif");
   await page.locator("#font-heading").selectOption("inter");
   await expect(page.getByRole("button", { name: "Restore default fonts" })).toBeVisible();
   await page.getByRole("button", { name: "Restore default fonts" }).click();
@@ -371,6 +374,70 @@ test("opens general settings on Fonts and the storage shortcut on Storage choice
     "aria-current",
     "page",
   );
+});
+
+test("applies every code font to nested code content", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+
+  const codeFonts = {
+    "geist-mono": "Geist Mono Variable",
+    "jetbrains-mono": "JetBrains Mono Variable",
+    "fira-code": "Fira Code Variable",
+    "source-code-pro": "Source Code Pro Variable",
+    "roboto-mono": "Roboto Mono Variable",
+    "cascadia-code": "Cascadia Code Variable",
+    "ubuntu-sans-mono": "Ubuntu Sans Mono Variable",
+    "google-sans-code": "Google Sans Code Variable",
+    inconsolata: "Inconsolata Variable",
+    "noto-sans-mono": "Noto Sans Mono Variable",
+  };
+
+  for (const [id, family] of Object.entries(codeFonts)) {
+    await page.locator("#font-code").selectOption(id);
+    await expect(page.locator(".type-specimen-code pre code")).toHaveCSS(
+      "font-family",
+      new RegExp(family),
+    );
+  }
+});
+
+test("filters typefaces by selected font type", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+
+  const headingType = page.locator("#font-heading-type");
+  const headingFont = page.locator("#font-heading");
+
+  await expect(headingType).toHaveValue("serif");
+  await expect(headingFont.locator("option")).toHaveCount(12);
+
+  await headingType.selectOption("sans-serif");
+  await expect(headingFont).toHaveValue("archivo");
+  await expect(headingFont.locator("option")).toHaveCount(15);
+  await headingFont.selectOption("manrope");
+  await expect(page.locator(".type-specimen h4")).toHaveCSS("font-family", /Manrope Variable/);
+
+  await headingType.selectOption("monospace");
+  await expect(headingFont).toHaveValue("cascadia-code");
+  await expect(headingFont.locator("option")).toHaveCount(11);
+  await headingFont.selectOption("jetbrains-mono");
+  await expect(page.locator(".type-specimen h4")).toHaveCSS(
+    "font-family",
+    /JetBrains Mono Variable/,
+  );
+
+  await headingType.selectOption("slab-serif");
+  await expect(headingFont).toHaveValue("arvo");
+  await expect(headingFont.locator("option")).toHaveCount(5);
+  await headingFont.selectOption("bitter");
+  await expect(page.locator(".type-specimen h4")).toHaveCSS("font-family", /Bitter Variable/);
+
+  await headingType.selectOption("rounded-sans");
+  await expect(headingFont).toHaveValue("comfortaa");
+  await expect(headingFont.locator("option")).toHaveCount(7);
+  await headingFont.selectOption("lexend");
+  await expect(page.locator(".type-specimen h4")).toHaveCSS("font-family", /Lexend Variable/);
 });
 
 test("persists edits made while an earlier save is still in flight", async ({ page }) => {

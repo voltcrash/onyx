@@ -225,6 +225,9 @@ kbd {
   font-weight: 500;
   letter-spacing: -0.01em;
 }
+.settings-panel h3.settings-group-heading {
+  margin: 28px 0 8px;
+}
 .settings-hint {
   display: flex;
   align-items: center;
@@ -655,6 +658,9 @@ kbd {
   font: 13px / 1.6 var(--font-code);
   white-space: pre;
 }
+.type-specimen-code pre code {
+  font: inherit;
+}
 .type-specimen-code-keyword {
   color: #e79ab6;
 }
@@ -685,6 +691,12 @@ kbd {
   color: var(--ink-soft);
   font-size: 12px;
   font-weight: 650;
+}
+.font-selects {
+  display: grid;
+  grid-template-columns: minmax(118px, 5fr) minmax(0, 8fr);
+  gap: 8px;
+  min-width: 0;
 }
 .font-role select {
   width: 100%;
