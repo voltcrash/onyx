@@ -2384,6 +2384,7 @@ test("stores pasted images in the attachments folder with GitHub-style links", a
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(editor).toBeEnabled();
   await editor.fill("# Photos\n\n");
+  await editor.focus();
   await page.evaluate(() => {
     const bytes = Uint8Array.from(
       atob(
@@ -2391,16 +2392,16 @@ test("stores pasted images in the attachments folder with GitHub-style links", a
       ),
       (character) => character.charCodeAt(0),
     );
-    const clipboardItem = {
-      types: ["image/png"],
-      getType: async () => new Blob([bytes], { type: "image/png" }),
-    };
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { read: async () => [clipboardItem], readText: async () => "" },
-    });
+    const file = new File([bytes], "image.png", { type: "image/png" });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    const target = document.querySelector(
+      'textarea[aria-label="Markdown editor"]',
+    ) as HTMLTextAreaElement;
+    target.dispatchEvent(
+      new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }),
+    );
   });
-  await editor.press("ControlOrMeta+V");
 
   await expect(editor).toHaveValue(
     /!\[image-\d{8}-\d{6}\.png\]\(attachments\/image-\d{8}-\d{6}\.png\)$/,

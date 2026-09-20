@@ -3095,47 +3095,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     return replaceEditorSelection(selection, "");
   }
 
-  function pasteEditorSelection(): boolean {
-    const selection = getEditorSelection();
-    const clipboard = navigator.clipboard;
-    if (!selection || !clipboard) return false;
-    rememberEditorState(selection);
-    const pasteText = () => {
-      if (typeof clipboard.readText !== "function")
-        throw new Error("Clipboard text is unavailable");
-      return Promise.resolve(clipboard.readText()).then((text) =>
-        replaceEditorSelection(selection, text),
-      );
-    };
-    if (typeof clipboard.read === "function") {
-      void clipboard
-        .read()
-        .then(async (items) => {
-          const files = await clipboardFiles(items);
-          if (files.length) {
-            await attachFiles(files, selection);
-            return;
-          }
-          const textItem = items.find((item) => item.types.includes("text/plain"));
-          if (textItem) {
-            replaceEditorSelection(selection, await (await textItem.getType("text/plain")).text());
-            return;
-          }
-          await pasteText();
-        })
-        .catch(() => {
-          void pasteText().catch(() => {
-            transferState = "error";
-          });
-        });
-    } else {
-      void pasteText().catch(() => {
-        transferState = "error";
-      });
-    }
-    return true;
-  }
-
   function selectAllEditorContent(target: EventTarget | null = document.activeElement): boolean {
     const surface = editorSurfaceForTarget(target);
     if (surface === "source" && editor) {
@@ -3223,26 +3182,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       .filter((item) => item.kind === "file")
       .map((item) => item.getAsFile())
       .filter((file): file is File => file !== null);
-  }
-
-  async function clipboardFiles(items: ClipboardItems): Promise<File[]> {
-    const files: File[] = [];
-    for (const item of items) {
-      const type = item.types.find((candidate) => !candidate.startsWith("text/"));
-      if (!type) continue;
-      try {
-        const contents = await item.getType(type);
-        const extension = type.split("/", 2)[1]?.replace(/\+.*$/, "") || "bin";
-        files.push(
-          new File([contents], `${type.startsWith("image/") ? "image" : "file"}.${extension}`, {
-            type,
-          }),
-        );
-      } catch {
-        // Clipboard entries can disappear between the permission check and the read.
-      }
-    }
-    return files;
   }
 
   function dropSelection(event: DragEvent): EditorSelection | undefined {
@@ -4064,6 +4003,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       shortcutMatchesEvent(shortcuts[candidate], event, primaryModifier),
     );
 
+    // Paste carries files in its ClipboardEvent, which the keydown cannot see.
+    // Let the browser fire the native paste so images land on the first press.
+    if (action === "paste" && isEditorTarget(event.target)) return;
+
     if (action && isEditorShortcutAction(action)) {
       if (!isEditorTarget(event.target)) return;
       if (runEditorShortcut(action, event.target)) event.preventDefault();
@@ -4115,7 +4058,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function isEditorShortcutAction(action: ShortcutAction): boolean {
-    return ["cutSelection", "copySelection", "paste", "undo", "redo", "selectAll"].includes(action);
+    return ["cutSelection", "copySelection", "undo", "redo", "selectAll"].includes(action);
   }
 
   function editorShortcutAlias(event: KeyboardEvent): ShortcutAction | undefined {
@@ -4124,7 +4067,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const key = event.key.toLowerCase();
     if (key === "x" && !event.shiftKey) return "cutSelection";
     if (key === "c" && !event.shiftKey) return "copySelection";
-    if (key === "v" && !event.shiftKey) return "paste";
     if (key === "a" && !event.shiftKey) return "selectAll";
     if (key === "z") return event.shiftKey ? "redo" : "undo";
     if (key === "y" && !event.shiftKey) return "redo";
@@ -4133,7 +4075,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   function runEditorShortcut(action: ShortcutAction, target: EventTarget | null): boolean {
     if (action === "cutSelection") return cutEditorSelection(target);
     if (action === "copySelection") return copyEditorSelection(target);
-    if (action === "paste") return pasteEditorSelection();
     if (action === "undo") return undo() || isEditorTarget(target);
     if (action === "redo") return redo() || isEditorTarget(target);
     if (action === "selectAll") return selectAllEditorContent(target);
