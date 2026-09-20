@@ -59,6 +59,7 @@
 		onLiveLineFocus: (line: number) => void;
 		onRenderedInput: (event: Event) => void;
 		onRenderedLineKeydown: (event: KeyboardEvent) => void;
+		onRenderedPaneMouseDown: (event: MouseEvent) => void;
 		onRenderedTaskClick: (event: MouseEvent) => void;
 		renderEditableLine: (line: string, index: number) => string;
 		liveLineKind: (line: string, index: number) => string;
@@ -70,7 +71,7 @@
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
 		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onToggleRenderedPane, onToggleRenderedReadOnly, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onSourceFocus, onLiveLineFocus, onRenderedInput,
-		onRenderedLineKeydown, onRenderedTaskClick, renderEditableLine, liveLineKind, liveCodeLanguage
+		onRenderedLineKeydown, onRenderedPaneMouseDown, onRenderedTaskClick, renderEditableLine, liveLineKind, liveCodeLanguage
 	}: Props = $props();
 
 	let shell = $state<HTMLElement>();
@@ -114,6 +115,78 @@
 			.slice(1, -1)
 			.split(/(?<!\\)\|/)
 			.every((cell) => /^:?-{3,}:?$/.test(cell.trim()));
+	}
+
+	function editableLineText(index: number): string | undefined {
+		const line = liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${index}"]`);
+		if (!line) return;
+		const copy = line.cloneNode(true) as HTMLElement;
+		copy.querySelectorAll('.md-syntax').forEach((syntax) => syntax.remove());
+		return copy.textContent ?? '';
+	}
+
+	function textPointAt(root: HTMLElement, offset: number): { node: Node; offset: number } {
+		const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+		let remaining = Math.max(0, offset);
+		let node = walker.nextNode();
+		while (node) {
+			const length = node.textContent?.length ?? 0;
+			if (remaining <= length) return { node, offset: remaining };
+			remaining -= length;
+			node = walker.nextNode();
+		}
+		return { node: root, offset: root.childNodes.length };
+	}
+
+	function measureRenderedLineRects(
+		block: HTMLElement,
+		start: number,
+		end: number,
+		containerRect: DOMRect,
+	): Array<LiveLineRect | undefined> | undefined {
+		if (end - start < 2) return;
+		const blockText = block.textContent ?? '';
+		const blockRect = block.getBoundingClientRect();
+		const measured: Array<LiveLineRect | undefined> = Array.from({ length: end - start });
+		let searchStart = 0;
+
+		if (liveLine < start || liveLine >= end) return;
+		for (let index = start; index <= liveLine; index += 1) {
+			const lineText = editableLineText(index);
+			if (lineText === undefined) return;
+			let textStart = blockText.indexOf(lineText, searchStart);
+			let textLength = lineText.length;
+			if (textStart < 0) {
+				const trimmed = lineText.trim();
+				textStart = trimmed ? blockText.indexOf(trimmed, searchStart) : searchStart;
+				textLength = trimmed.length;
+			}
+			if (textStart < 0) return;
+
+			const line = liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${index}"]`);
+			if (!line) return;
+			const range = document.createRange();
+			const startPoint = textPointAt(block, textStart);
+			const endPoint = textPointAt(block, textStart + textLength);
+			range.setStart(startPoint.node, startPoint.offset);
+			range.setEnd(endPoint.node, endPoint.offset);
+			const textRect = range.getClientRects()[0] ?? range.getBoundingClientRect();
+			if (!textRect.height) return;
+			const lineHeight = parseFloat(getComputedStyle(line).lineHeight) || textRect.height;
+			const hitHeight = blockRect.height / (end - start);
+			measured[index - start] = {
+				top:
+					textRect.top -
+					containerRect.top -
+					(hitHeight >= lineHeight ? Math.max(0, (lineHeight - textRect.height) / 2) : 0),
+				left: textRect.left - containerRect.left,
+				width: Math.max(0, blockRect.right - textRect.left),
+				height: hitHeight,
+			};
+			searchStart = textStart + textLength;
+		}
+
+		return measured;
 	}
 
 	function measureLiveLines(): void {
@@ -210,6 +283,20 @@
 				return;
 			}
 
+			const renderedLineRects = measureRenderedLineRects(block, start, end, containerRect);
+			if (renderedLineRects) {
+				const lineHeight = blockHeight / (end - start);
+				for (let offset = 0; offset < end - start; offset += 1) {
+					rects[start + offset] = renderedLineRects[offset] ?? {
+						top: top + offset * lineHeight,
+						left,
+						width,
+						height: lineHeight,
+					};
+				}
+				return;
+			}
+
 			const lineHeight = blockHeight / (end - start);
 			for (let index = start; index < end; index += 1) {
 				rects[index] = { top: top + (index - start) * lineHeight, left, width, height: lineHeight };
@@ -217,18 +304,54 @@
 		});
 
 		const contentRect = renderedContent.getBoundingClientRect();
+		const contentLeft = contentRect.left - containerRect.left;
+		const contentTop = contentRect.top - containerRect.top;
+		const contentBottom = contentRect.bottom - containerRect.top;
 		// An empty note renders no blocks, so give its lines a clickable height to type into.
-		const fallback: LiveLineRect = renderedBlocks.length
-			? { top: 0, left: 0, width: contentRect.width, height: 0 }
-			: {
-					top: contentRect.top - containerRect.top,
-					left: contentRect.left - containerRect.left,
+		const emptyFallback: LiveLineRect = {
+			top: contentTop,
+			left: contentLeft,
+			width: contentRect.width,
+			height: parseFloat(getComputedStyle(renderedContent).lineHeight) || renderedContent.offsetHeight || 30,
+		};
+		if (!renderedBlocks.length) {
+			liveLineRects = rects.map(
+				(rect, index) => rect ?? { ...emptyFallback, top: emptyFallback.top + index * emptyFallback.height },
+			);
+			return;
+		}
+		// Blank lines belong to no rendered block. Place them in the gap between the
+		// surrounding blocks instead of stacking them at the top, so the caret stays
+		// where the blank was left.
+		liveLineRects = rects.map((rect, index) => {
+			if (rect) return rect;
+			let previous: LiveLineRect | undefined;
+			for (let candidate = index - 1; candidate >= 0; candidate -= 1) {
+				if (rects[candidate]) {
+					previous = rects[candidate];
+					break;
+				}
+			}
+			if (previous) {
+				return {
+					top: previous.top + previous.height,
+					left: contentLeft,
 					width: contentRect.width,
-					height: parseFloat(getComputedStyle(renderedContent).lineHeight) || renderedContent.offsetHeight || 30,
+					height: 0,
 				};
-		liveLineRects = rects.map(
-			(rect, index) => rect ?? (renderedBlocks.length ? fallback : { ...fallback, top: fallback.top + index * fallback.height }),
-		);
+			}
+			for (let candidate = index + 1; candidate < rects.length; candidate += 1) {
+				if (rects[candidate]) {
+					return {
+						top: rects[candidate]!.top,
+						left: contentLeft,
+						width: contentRect.width,
+						height: 0,
+					};
+				}
+			}
+			return { top: contentBottom, left: contentLeft, width: contentRect.width, height: 0 };
+		});
 	}
 
 	function liveLineStyle(index: number): string | undefined {
@@ -634,7 +757,8 @@
 				<button class="pane-handle pane-handle-end" title={label} aria-label={label} aria-expanded={secondPaneVisible} onclick={toggleSecondPane}><Icon size={15} /></button>
 			{/if}
 		</div>
-		<div bind:this={renderedPaneElement} class="preview-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div bind:this={renderedPaneElement} class="preview-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} onmousedown={onRenderedPaneMouseDown} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
 			<div class="rendered-switcher">
 				<button class="rendered-mode-toggle" class:active={renderedReadOnly} type="button" aria-pressed={renderedReadOnly} onclick={() => onToggleRenderedReadOnly()} aria-label={renderedReadOnly ? 'Enable page editing' : 'Turn on read-only'} title={renderedReadOnly ? 'Enable page editing' : 'Turn on read-only'}>
 					{#if renderedReadOnly}<Lock size={14} />{:else}<LockOpen size={14} />{/if}

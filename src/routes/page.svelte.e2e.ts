@@ -724,6 +724,71 @@ test("searches note titles and Markdown content from the command palette", async
   );
 });
 
+test("keeps the rendered editor active when creating a new note", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await expect(page.locator(".rendered-mode-toggle")).toHaveAttribute("aria-pressed", "false");
+
+  await page.getByRole("button", { name: "New file" }).click();
+  await page.getByRole("textbox", { name: "File name" }).press("Enter");
+
+  await expect(page.getByRole("button", { name: "Untitled", exact: true })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+  await expect
+    .poll(() => renderedSelectionDetails(page))
+    .toMatchObject({
+      anchorLine: "0",
+      focusLine: "0",
+      start: 0,
+      end: 0,
+    });
+  await expect
+    .poll(() =>
+      page.locator('[data-live-line="0"]').evaluate((element) => {
+        const style = getComputedStyle(element, "::after");
+        return {
+          animation: style.animationName,
+          content: style.content,
+          height: style.height,
+          width: style.width,
+        };
+      }),
+    )
+    .toMatchObject({ animation: "rendered-caret-blink", content: '""' });
+  await expect
+    .poll(() =>
+      page.locator('[data-live-line="0"]').evaluate((element) => {
+        const height = Number.parseFloat(getComputedStyle(element, "::after").height);
+        return height > 0;
+      }),
+    )
+    .toBe(true);
+
+  const renderedPane = page.locator(".preview-pane");
+  for (let click = 0; click < 2; click += 1) {
+    await renderedPane.click({ position: { x: 100, y: 200 } });
+    await expect
+      .poll(() =>
+        page.locator('[data-live-line="0"]').evaluate((element) => {
+          const style = getComputedStyle(element, "::after");
+          return { animation: style.animationName, content: style.content };
+        }),
+      )
+      .toMatchObject({ animation: "rendered-caret-blink", content: '""' });
+  }
+
+  await page.getByRole("textbox", { name: "Markdown editor" }).click();
+  await expect
+    .poll(() =>
+      page
+        .locator('[data-live-line="0"]')
+        .evaluate((element) => getComputedStyle(element, "::after").content),
+    )
+    .toBe("none");
+});
+
 test("toggles sidebar find and replace with the platform shortcut", async ({ page }) => {
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
@@ -1199,6 +1264,62 @@ test("keeps the rendered caret usable through typing and line boundaries", async
   await page.keyboard.press("Enter");
   await page.keyboard.type("X");
   await expect(markdown).toHaveValue("a\nXb");
+});
+
+test("keeps the rendered caret beside typed text in a multi-line paragraph", async ({ page }) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+
+  await markdown.fill("first line\nsecond line\nthird line");
+  await setRenderedSelection(page, 1, "second line".length);
+  await page.keyboard.type("X");
+  await expect(markdown).toHaveValue("first line\nsecond lineX\nthird line");
+
+  const geometry = await page.evaluate(() => {
+    const rendered = document.querySelector<HTMLElement>(".live-rendered-content");
+    const selection = window.getSelection();
+    if (!rendered || !selection || selection.rangeCount === 0) {
+      throw new Error("The rendered caret is not available");
+    }
+    const visibleText = "second lineX";
+    const content = rendered.textContent ?? "";
+    const start = content.indexOf(visibleText);
+    if (start < 0) throw new Error("The rendered text is not available");
+    const pointAt = (offset: number): { node: Node; offset: number } => {
+      const walker = document.createTreeWalker(rendered, NodeFilter.SHOW_TEXT);
+      let remaining = offset;
+      let node = walker.nextNode();
+      while (node) {
+        const length = node.textContent?.length ?? 0;
+        if (remaining <= length) return { node, offset: remaining };
+        remaining -= length;
+        node = walker.nextNode();
+      }
+      return { node: rendered, offset: rendered.childNodes.length };
+    };
+    const visibleRange = document.createRange();
+    const visiblePoint = pointAt(start + visibleText.length);
+    visibleRange.setStart(visiblePoint.node, visiblePoint.offset);
+    visibleRange.collapse(true);
+    const caret = selection.getRangeAt(0).getBoundingClientRect();
+    const visibleCaret = visibleRange.getBoundingClientRect();
+    return { caret: { x: caret.x, y: caret.y }, visible: { x: visibleCaret.x, y: visibleCaret.y } };
+  });
+  expect(Math.abs(geometry.caret.x - geometry.visible.x)).toBeLessThan(3);
+  expect(Math.abs(geometry.caret.y - geometry.visible.y)).toBeLessThan(3);
+});
+
+test("keeps rapid rendered typing after the current caret", async ({ page }) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+
+  await markdown.fill("abcdef");
+  await setRenderedSelection(page, 0, 3);
+  await page.keyboard.type("XYZ", { delay: 0 });
+
+  await expect(markdown).toHaveValue("abcXYZdef");
 });
 
 test.describe("mobile rendered typing", () => {
