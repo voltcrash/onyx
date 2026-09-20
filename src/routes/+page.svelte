@@ -98,12 +98,11 @@
 	<MarkdownWorkspace
 		storageNotice={page.storageNotice}
 		storageError={page.storageError}
-		outputPaneVisible={page.outputPaneVisible}
+		sourcePaneVisible={page.sourcePaneVisible}
 		renderedPaneVisible={page.renderedPaneVisible}
 		paneLayout={page.paneLayout}
 		paneOrder={page.paneOrder}
-		renderedBlockLines={page.liveRenderedBlockLines}
-		renderedReadOnly={page.renderedReadOnly}
+		renderedBlockLines={page.renderedBlockLines}
 		scrollSync={page.scrollSync}
 		markdown={page.markdown}
 		markdownLines={page.markdownLines}
@@ -111,26 +110,23 @@
 		findQuery={page.findQuery}
 		findMatches={page.findMatches}
 		activeFindMatch={page.activeFindMatch}
-		liveLine={page.liveLine}
 		saveState={page.saveState}
 		transferState={page.transferState}
 		hasContent={page.hasContent}
-		renderedMarkdown={page.liveRenderedMarkdown}
+		renderedMarkdown={page.renderedMarkdown}
 		shortcuts={page.shortcuts}
 		primaryModifier={page.primaryModifier}
 		bind:editor={page.editor}
-		bind:liveEditorContainer={page.liveEditorContainer}
 		onRetryStorage={() => void (page.vault ? page.saveDraft() : page.openVault())}
 		onDismissStorageNotice={page.dismissStorageNotice}
 		onToggleSidebar={page.toggleSidebar}
 		onSidebarDragStart={page.startSidebarDrag}
 		splitRatio={page.splitRatio}
 		contentWidth={page.contentWidth}
-		onToggleOutputPane={page.toggleOutputPane}
+		onToggleSourcePane={page.toggleSourcePane}
 		resolvedTheme={page.resolvedTheme}
 		colorTheme={page.colorTheme}
 		onToggleRenderedPane={page.toggleRenderedPane}
-		onToggleRenderedReadOnly={() => page.toggleRenderedReadOnly()}
 		onResize={page.setSplitRatio}
 		onResizeEnd={page.saveSplitRatio}
 		onPlacePane={page.placePane}
@@ -142,15 +138,6 @@
 		onEditorPaste={page.handleEditorPaste}
 		onEditorDragOver={page.handleEditorDragOver}
 		onEditorDrop={page.handleEditorDrop}
-		onSourceFocus={page.focusSourceEditor}
-		onLiveLineFocus={page.focusLiveLine}
-		onRenderedInput={page.updateRenderedInput}
-		onRenderedLineKeydown={page.handleRenderedLineKeydown}
-		onRenderedPaneMouseDown={page.handleRenderedPaneMouseDown}
-		onRenderedTaskClick={page.handleRenderedTaskClick}
-		renderEditableLine={page.renderEditableLine}
-		liveLineKind={page.liveLineKind}
-		liveCodeLanguage={page.liveCodeLanguage}
 	/>
 	{#if page.sidebarDropSide}<div class="sidebar-drop-target" data-side={page.sidebarDropSide} aria-hidden="true"></div>{/if}
 </div>

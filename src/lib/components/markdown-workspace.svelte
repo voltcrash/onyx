@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, Lock, LockOpen, PanelLeft, PencilLine, X } from '@lucide/svelte';
+	import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, PanelLeft, PencilLine, X } from '@lucide/svelte';
 	import { highlightFindMatches, type FindMatch } from '$lib/find-replace';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
 	import type { ColorTheme, ResolvedTheme } from '$lib/theme';
@@ -11,12 +11,11 @@
 	interface Props {
 		storageNotice: string;
 		storageError: string;
-		outputPaneVisible: boolean;
+		sourcePaneVisible: boolean;
 		renderedPaneVisible: boolean;
 		paneLayout: PaneLayout;
 		paneOrder: PaneOrder;
 		renderedBlockLines: (SourceLines | undefined)[];
-		renderedReadOnly: boolean;
 		scrollSync: boolean;
 		markdown: string;
 		markdownLines: string[];
@@ -24,7 +23,6 @@
 		findQuery: string;
 		findMatches: FindMatch[];
 		activeFindMatch: number;
-		liveLine: number;
 		saveState: SaveState;
 		transferState: TransferState;
 		hasContent: boolean;
@@ -32,21 +30,19 @@
 		shortcuts: KeyboardShortcuts;
 		primaryModifier: PrimaryModifier;
 		editor?: HTMLTextAreaElement;
-		liveEditorContainer?: HTMLDivElement;
 		onRetryStorage: () => void;
 		onDismissStorageNotice: () => void;
 		onToggleSidebar: () => void;
 		onSidebarDragStart: (event: PointerEvent) => void;
 		splitRatio: number;
 		contentWidth: number;
-		onToggleOutputPane: () => void;
+		onToggleSourcePane: () => void;
 		resolvedTheme: ResolvedTheme;
 		colorTheme: ColorTheme;
 		onToggleRenderedPane: () => void;
-		onToggleRenderedReadOnly: () => void;
 		onResize: (ratio: number) => void;
 		onResizeEnd: () => void;
-		onPlacePane: (pane: 'output' | 'rendered', edge: PaneEdge) => void;
+		onPlacePane: (pane: 'source' | 'rendered', edge: PaneEdge) => void;
 		onReload: () => void;
 		onMarkdownChange: (value: string) => void;
 		onEditorBeforeInput: (event: InputEvent) => void;
@@ -55,41 +51,29 @@
 		onEditorPaste: (event: ClipboardEvent) => void;
 		onEditorDragOver: (event: DragEvent) => void;
 		onEditorDrop: (event: DragEvent) => void;
-		onSourceFocus: () => void;
-		onLiveLineFocus: (line: number) => void;
-		onRenderedInput: (event: Event) => void;
-		onRenderedLineKeydown: (event: KeyboardEvent) => void;
-		onRenderedPaneMouseDown: (event: MouseEvent) => void;
-		onRenderedTaskClick: (event: MouseEvent) => void;
-		renderEditableLine: (line: string, index: number) => string;
-		liveLineKind: (line: string, index: number) => string;
-		liveCodeLanguage: (index: number) => string;
 	}
 
 	let {
-		storageNotice, storageError, outputPaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedReadOnly, scrollSync, markdown, markdownLines, findOpen, findQuery, findMatches, activeFindMatch, liveLine,
+		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, scrollSync, markdown, markdownLines, findOpen, findQuery, findMatches, activeFindMatch,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
-		editor = $bindable(), liveEditorContainer = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
-		splitRatio, contentWidth, onToggleOutputPane, resolvedTheme, colorTheme, onToggleRenderedPane, onToggleRenderedReadOnly, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onSourceFocus, onLiveLineFocus, onRenderedInput,
-		onRenderedLineKeydown, onRenderedPaneMouseDown, onRenderedTaskClick, renderEditableLine, liveLineKind, liveCodeLanguage
+		editor = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
+		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop
 	}: Props = $props();
 
 	let shell = $state<HTMLElement>();
 	let resizing = $state(false);
-	let bothPanesVisible = $derived(outputPaneVisible && renderedPaneVisible);
+	let bothPanesVisible = $derived(sourcePaneVisible && renderedPaneVisible);
 	let stacked = $derived(paneLayout === 'rows');
 	let swapped = $derived(paneOrder === 'rendered-first');
 	// The divider handles follow the visual arrangement rather than a fixed pane.
-	let firstPane = $derived(swapped ? 'page' : 'output');
-	let secondPane = $derived(swapped ? 'output' : 'page');
-	let firstPaneVisible = $derived(swapped ? renderedPaneVisible : outputPaneVisible);
-	let secondPaneVisible = $derived(swapped ? outputPaneVisible : renderedPaneVisible);
-	let toggleFirstPane = $derived(swapped ? onToggleRenderedPane : onToggleOutputPane);
-	let toggleSecondPane = $derived(swapped ? onToggleOutputPane : onToggleRenderedPane);
+	let firstPane = $derived(swapped ? 'rendered' : 'source');
+	let secondPane = $derived(swapped ? 'source' : 'rendered');
+	let firstPaneVisible = $derived(swapped ? renderedPaneVisible : sourcePaneVisible);
+	let secondPaneVisible = $derived(swapped ? sourcePaneVisible : renderedPaneVisible);
+	let toggleFirstPane = $derived(swapped ? onToggleRenderedPane : onToggleSourcePane);
+	let toggleSecondPane = $derived(swapped ? onToggleSourcePane : onToggleRenderedPane);
 	let towardsStart = $derived(stacked ? ChevronUp : ChevronLeft);
 	let towardsEnd = $derived(stacked ? ChevronDown : ChevronRight);
-	type LiveLineRect = { top: number; left: number; width: number; height: number };
-	let liveLineRects = $state<LiveLineRect[]>([]);
 	let sourceScrollTop = $state(0);
 	let sourceScrollLeft = $state(0);
 	let sourceFindActive = $derived(findOpen && Boolean(findQuery));
@@ -102,287 +86,6 @@
 		if (!target) return;
 		sourceScrollTop = target.scrollTop;
 		sourceScrollLeft = target.scrollLeft;
-	}
-
-	function isFenceLine(line: string): boolean {
-		return /^\s*(?:`{3,}|~{3,})/.test(line);
-	}
-
-	function isTableSeparatorLine(line: string): boolean {
-		const trimmed = line.trim();
-		if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) return false;
-		return trimmed
-			.slice(1, -1)
-			.split(/(?<!\\)\|/)
-			.every((cell) => /^:?-{3,}:?$/.test(cell.trim()));
-	}
-
-	function editableLineText(index: number): string | undefined {
-		const line = liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${index}"]`);
-		if (!line) return;
-		const copy = line.cloneNode(true) as HTMLElement;
-		copy.querySelectorAll('.md-syntax').forEach((syntax) => syntax.remove());
-		return copy.textContent ?? '';
-	}
-
-	function textPointAt(root: HTMLElement, offset: number): { node: Node; offset: number } {
-		const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-		let remaining = Math.max(0, offset);
-		let node = walker.nextNode();
-		while (node) {
-			const length = node.textContent?.length ?? 0;
-			if (remaining <= length) return { node, offset: remaining };
-			remaining -= length;
-			node = walker.nextNode();
-		}
-		return { node: root, offset: root.childNodes.length };
-	}
-
-	function measureRenderedLineRects(
-		block: HTMLElement,
-		start: number,
-		end: number,
-		containerRect: DOMRect,
-	): Array<LiveLineRect | undefined> | undefined {
-		if (end - start < 2) return;
-		const blockText = block.textContent ?? '';
-		const blockRect = block.getBoundingClientRect();
-		const measured: Array<LiveLineRect | undefined> = Array.from({ length: end - start });
-		let searchStart = 0;
-
-		if (liveLine < start || liveLine >= end) return;
-		for (let index = start; index <= liveLine; index += 1) {
-			const lineText = editableLineText(index);
-			if (lineText === undefined) return;
-			let textStart = blockText.indexOf(lineText, searchStart);
-			let textLength = lineText.length;
-			if (textStart < 0) {
-				const trimmed = lineText.trim();
-				textStart = trimmed ? blockText.indexOf(trimmed, searchStart) : searchStart;
-				textLength = trimmed.length;
-			}
-			if (textStart < 0) return;
-
-			const line = liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${index}"]`);
-			if (!line) return;
-			const range = document.createRange();
-			const startPoint = textPointAt(block, textStart);
-			const endPoint = textPointAt(block, textStart + textLength);
-			range.setStart(startPoint.node, startPoint.offset);
-			range.setEnd(endPoint.node, endPoint.offset);
-			const textRect = range.getClientRects()[0] ?? range.getBoundingClientRect();
-			if (!textRect.height) return;
-			const lineHeight = parseFloat(getComputedStyle(line).lineHeight) || textRect.height;
-			const hitHeight = blockRect.height / (end - start);
-			measured[index - start] = {
-				top:
-					textRect.top -
-					containerRect.top -
-					(hitHeight >= lineHeight ? Math.max(0, (lineHeight - textRect.height) / 2) : 0),
-				left: textRect.left - containerRect.left,
-				width: Math.max(0, blockRect.right - textRect.left),
-				height: hitHeight,
-			};
-			searchStart = textStart + textLength;
-		}
-
-		return measured;
-	}
-
-	function measureLiveLines(): void {
-		const container = liveEditorContainer;
-		if (!container || renderedReadOnly) {
-			liveLineRects = [];
-			return;
-		}
-		const renderedContent = container.querySelector<HTMLElement>('.live-rendered-content');
-		if (!renderedContent) return;
-		const containerRect = container.getBoundingClientRect();
-		const rects: Array<LiveLineRect | undefined> = Array.from({ length: markdownLines.length });
-		const renderedBlocks = [...renderedContent.children] as HTMLElement[];
-
-		renderedBlocks.forEach((block, blockIndex) => {
-			const lines = renderedBlockLines[blockIndex];
-			if (!lines) return;
-			const start = Math.max(0, lines.start);
-			const end = Math.min(markdownLines.length, lines.end);
-			if (start >= end) return;
-			const blockRect = block.getBoundingClientRect();
-			const top = blockRect.top - containerRect.top;
-			const left = blockRect.left - containerRect.left;
-			const width = blockRect.width;
-			const blockHeight = blockRect.height;
-			const blockLines = markdownLines.slice(start, end);
-			const listItems = block.matches('ul, ol') ? [...block.querySelectorAll<HTMLElement>('li')] : [];
-			if (listItems.length === end - start) {
-				listItems.forEach((item, offset) => {
-					const itemRect = item.getBoundingClientRect();
-					rects[start + offset] = {
-						top: itemRect.top - containerRect.top,
-						left,
-						width,
-						height: itemRect.height,
-					};
-				});
-				return;
-			}
-			const tableRows = block.tagName === 'TABLE' ? [...block.querySelectorAll<HTMLElement>('tr')] : [];
-			if (tableRows.length) {
-				const tableColumnWidths = [...tableRows[0].children]
-					.filter((cell) => cell.matches('th, td'))
-					.map((cell) => cell.getBoundingClientRect().width);
-				let rowIndex = 0;
-				blockLines.forEach((line, offset) => {
-					const index = start + offset;
-					const row = tableRows[rowIndex];
-					if (isTableSeparatorLine(line)) {
-						const rowRect = row?.getBoundingClientRect();
-						rects[index] = {
-							top: rowRect ? rowRect.top - containerRect.top : blockRect.bottom - containerRect.top,
-							left: rowRect ? rowRect.left - containerRect.left : left,
-							width: rowRect?.width ?? width,
-							height: 0,
-						};
-						return;
-					}
-					if (!row) return;
-					const rowRect = row.getBoundingClientRect();
-					if (tableColumnWidths.length) {
-						const overlayRow = container.querySelector<HTMLElement>(
-							`[data-live-line="${index}"] .live-table-row`,
-						);
-						overlayRow?.style.setProperty(
-							'grid-template-columns',
-							tableColumnWidths.map((columnWidth) => `${columnWidth}px`).join(' '),
-						);
-					}
-					rects[index] = {
-						top: rowRect.top - containerRect.top,
-						left: rowRect.left - containerRect.left,
-						width: rowRect.width,
-						height: rowRect.height,
-					};
-					rowIndex += 1;
-				});
-				return;
-			}
-			const contentLines = block.tagName === 'PRE' ? blockLines.filter((line) => !isFenceLine(line)) : [];
-
-			if (contentLines.length) {
-				const contentHeight = blockHeight / contentLines.length;
-				let contentIndex = 0;
-				blockLines.forEach((line, offset) => {
-					const index = start + offset;
-					if (isFenceLine(line)) {
-						rects[index] = { top: offset === 0 ? top : top + blockHeight, left, width, height: 0 };
-						return;
-					}
-					rects[index] = { top: top + contentIndex * contentHeight, left, width, height: contentHeight };
-					contentIndex += 1;
-				});
-				return;
-			}
-
-			const renderedLineRects = measureRenderedLineRects(block, start, end, containerRect);
-			if (renderedLineRects) {
-				const lineHeight = blockHeight / (end - start);
-				for (let offset = 0; offset < end - start; offset += 1) {
-					rects[start + offset] = renderedLineRects[offset] ?? {
-						top: top + offset * lineHeight,
-						left,
-						width,
-						height: lineHeight,
-					};
-				}
-				return;
-			}
-
-			const lineHeight = blockHeight / (end - start);
-			for (let index = start; index < end; index += 1) {
-				rects[index] = { top: top + (index - start) * lineHeight, left, width, height: lineHeight };
-			}
-		});
-
-		const contentRect = renderedContent.getBoundingClientRect();
-		const contentLeft = contentRect.left - containerRect.left;
-		const contentTop = contentRect.top - containerRect.top;
-		const contentBottom = contentRect.bottom - containerRect.top;
-		// An empty note renders no blocks, so give its lines a clickable height to type into.
-		const emptyFallback: LiveLineRect = {
-			top: contentTop,
-			left: contentLeft,
-			width: contentRect.width,
-			height: parseFloat(getComputedStyle(renderedContent).lineHeight) || renderedContent.offsetHeight || 30,
-		};
-		if (!renderedBlocks.length) {
-			liveLineRects = rects.map(
-				(rect, index) => rect ?? { ...emptyFallback, top: emptyFallback.top + index * emptyFallback.height },
-			);
-			return;
-		}
-		// Blank lines belong to no rendered block. Place them in the gap between the
-		// surrounding blocks instead of stacking them at the top, so the caret stays
-		// where the blank was left.
-		liveLineRects = rects.map((rect, index) => {
-			if (rect) return rect;
-			let previous: LiveLineRect | undefined;
-			for (let candidate = index - 1; candidate >= 0; candidate -= 1) {
-				if (rects[candidate]) {
-					previous = rects[candidate];
-					break;
-				}
-			}
-			if (previous) {
-				return {
-					top: previous.top + previous.height,
-					left: contentLeft,
-					width: contentRect.width,
-					height: 0,
-				};
-			}
-			for (let candidate = index + 1; candidate < rects.length; candidate += 1) {
-				if (rects[candidate]) {
-					return {
-						top: rects[candidate]!.top,
-						left: contentLeft,
-						width: contentRect.width,
-						height: 0,
-					};
-				}
-			}
-			return { top: contentBottom, left: contentLeft, width: contentRect.width, height: 0 };
-		});
-	}
-
-	function liveLineStyle(index: number): string | undefined {
-		const rect = liveLineRects[index];
-		return rect
-			? `top: ${rect.top}px; left: ${rect.left}px; width: ${rect.width}px; height: ${rect.height}px`
-			: undefined;
-	}
-
-	function syncLiveSelectionDecorations(): void {
-		if (!liveEditorContainer || renderedReadOnly) return;
-		const selection = document.getSelection();
-		const range = selection && !selection.isCollapsed && selection.rangeCount > 0 ? selection.getRangeAt(0) : undefined;
-		const overlay = liveEditorContainer.querySelector<HTMLElement>('.live-editing-overlay');
-		const selectionInOverlay = Boolean(
-			range &&
-			overlay &&
-			overlay.contains(selection?.anchorNode ?? null) &&
-			overlay.contains(selection?.focusNode ?? null),
-		);
-		liveEditorContainer.querySelectorAll<HTMLElement>('[data-live-line]').forEach((line) => {
-			let selected = false;
-			if (selectionInOverlay && range) {
-				try {
-					selected = range.intersectsNode(line);
-				} catch {
-					selected = false;
-				}
-			}
-			line.classList.toggle('selection-active', selected);
-		});
 	}
 
 	function resizeTo(event: PointerEvent): void {
@@ -428,12 +131,12 @@
 		onResizeEnd();
 	}
 
-	type Pane = 'output' | 'rendered';
+	type Pane = 'source' | 'rendered';
 	const DRAG_THRESHOLD = 5;
 	const MOVE_EASING = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
 	const edgeKeys: Record<string, PaneEdge> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'top', ArrowDown: 'bottom' };
 
-	let outputPaneElement = $state<HTMLElement>();
+	let sourcePaneElement = $state<HTMLElement>();
 	let renderedPaneElement = $state<HTMLElement>();
 	let drag = $state<{ pane: Pane; pointerId: number; startX: number; startY: number; dx: number; dy: number; originX: number; originY: number; scale: number; edge: PaneEdge; moving: boolean }>();
 
@@ -463,7 +166,7 @@
 		if (!bothPanesVisible || event.button !== 0 || drag) return;
 		event.preventDefault();
 		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-		const bounds = (pane === 'output' ? outputPaneElement : renderedPaneElement)!.getBoundingClientRect();
+		const bounds = (pane === 'source' ? sourcePaneElement : renderedPaneElement)!.getBoundingClientRect();
 		// The pane shrinks around the grab point, so it stays under the pointer and uncovers the drop slots.
 		const scale = Math.min(0.7, 380 / bounds.width, 320 / bounds.height);
 		drag = { pane, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, dx: 0, dy: 0, originX: event.clientX - bounds.left, originY: event.clientY - bounds.top, scale, edge: paneEdge(pane), moving: false };
@@ -501,9 +204,9 @@
 
 	// Each pane glides from where it was drawn to its new track instead of jumping there.
 	async function movePane(pane: Pane, edge: PaneEdge): Promise<void> {
-		const panes = [outputPaneElement, renderedPaneElement].filter((element): element is HTMLElement => Boolean(element));
+		const panes = [sourcePaneElement, renderedPaneElement].filter((element): element is HTMLElement => Boolean(element));
 		const before = panes.map((element) => element.getBoundingClientRect());
-		const moved = pane === 'output' ? outputPaneElement : renderedPaneElement;
+		const moved = pane === 'source' ? sourcePaneElement : renderedPaneElement;
 		if (edge !== paneEdge(pane)) onPlacePane(pane, edge);
 		drag = undefined;
 		await tick();
@@ -527,14 +230,14 @@
 	}
 
 	// Scrolling either pane scrolls the other to the same part of the note.
-	let outputBody = $state<HTMLElement>();
+	let sourceBody = $state<HTMLElement>();
 	let scrollDriver: Pane = 'rendered';
 	let syncFrame = 0;
 	const syncedTops = new WeakMap<Element, number>();
 
 	function scrollerOf(pane: Pane): HTMLElement | undefined {
 		if (pane === 'rendered') return renderedPaneElement;
-		return (outputBody?.firstElementChild as HTMLElement | null) ?? undefined;
+		return (sourceBody?.firstElementChild as HTMLElement | null) ?? undefined;
 	}
 
 	function proseAnchors(scroller: HTMLElement): ScrollAnchor[] {
@@ -545,12 +248,7 @@
 	function paneAnchors(pane: Pane, scroller: HTMLElement): ScrollAnchor[] {
 		let points: ScrollAnchor[];
 		if (pane === 'rendered') {
-			points = !renderedReadOnly && liveEditorContainer
-				? elementAnchors(
-						scroller,
-						[...liveEditorContainer.querySelectorAll<HTMLElement>('[data-live-line]')].map((element, index) => [element, { start: index, end: index + 1 }]),
-					)
-				: proseAnchors(scroller);
+			points = proseAnchors(scroller);
 		} else if (scroller instanceof HTMLTextAreaElement) {
 			points = textareaAnchors(scroller);
 		} else {
@@ -598,7 +296,7 @@
 	}
 
 	function syncScroll(from: Pane, smooth: boolean): void {
-		const to: Pane = from === 'output' ? 'rendered' : 'output';
+		const to: Pane = from === 'source' ? 'rendered' : 'source';
 		const source = scrollerOf(from);
 		const target = scrollerOf(to);
 		if (!scrollSync || !bothPanesVisible || !source || !target) return;
@@ -628,9 +326,9 @@
 		});
 	}
 
-	// The pane being typed in keeps its place, and the other one catches up with it.
+	// The pane being edited keeps its place, and the other one catches up with it.
 	function leadingPane(): Pane {
-		if (outputPaneElement?.contains(document.activeElement)) return 'output';
+		if (sourcePaneElement?.contains(document.activeElement)) return 'source';
 		if (renderedPaneElement?.contains(document.activeElement)) return 'rendered';
 		return scrollDriver;
 	}
@@ -651,44 +349,13 @@
 	});
 
 	$effect(() => {
-		void renderedReadOnly;
-		tick().then(() => queueScrollSync('output'));
-	});
-
-	$effect(() => {
 		void [markdown, renderedMarkdown, bothPanesVisible, stacked, contentWidth];
 		tick().then(() => queueScrollSync(leadingPane()));
 	});
 
 	$effect(() => {
-		void [markdown, renderedMarkdown, renderedReadOnly, contentWidth, markdownLines.length];
-		if (renderedReadOnly || !liveEditorContainer) {
-			liveLineRects = [];
-			return;
-		}
-		measureLiveLines();
-		const frame = requestAnimationFrame(measureLiveLines);
-		return () => cancelAnimationFrame(frame);
-	});
-
-	$effect(() => {
-		if (!liveEditorContainer || renderedReadOnly) return;
-		const observer = new ResizeObserver(measureLiveLines);
-		observer.observe(liveEditorContainer);
-		return () => observer.disconnect();
-	});
-
-	$effect(() => {
 		void [sourceFindActive, sourceFindMarkup, editor];
 		void tick().then(() => syncSourceFindLayer());
-	});
-
-	$effect(() => {
-		if (!liveEditorContainer || renderedReadOnly) return;
-		const syncSelection = () => syncLiveSelectionDecorations();
-		document.addEventListener('selectionchange', syncSelection);
-		syncSelection();
-		return () => document.removeEventListener('selectionchange', syncSelection);
 	});
 
 	$effect(() => {
@@ -703,11 +370,10 @@
 		};
 	});
 
-	onMount(() => {
+		onMount(() => {
 		const fontSet = document.fonts;
 		if (!fontSet) return;
 		const refreshAfterFontLoad = () => {
-			measureLiveLines();
 			queueScrollSync(leadingPane());
 		};
 		fontSet.addEventListener('loadingdone', refreshAfterFontLoad);
@@ -731,10 +397,10 @@
 		</div>
 	{/if}
 
-	<section bind:this={shell} class="editor-shell" class:output-hidden={!outputPaneVisible} class:rendered-hidden={!renderedPaneVisible} class:panes-stacked={stacked} class:panes-swapped={swapped} class:first-hidden={!firstPaneVisible} class:second-hidden={!secondPaneVisible} class:resizing class:pane-moving={drag?.moving} style={`--split: ${splitRatio}%; --content-width: ${contentWidth}px`}>
-		<div bind:this={outputPaneElement} class="output-pane" class:dragged={drag?.moving && drag.pane === 'output'} data-output-theme={resolvedTheme} data-color-theme={colorTheme} style={drag?.moving && drag.pane === 'output' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined}>
-			<div class="output-body" bind:this={outputBody} onscrollcapture={(event) => handlePaneScroll(event, 'output')} onloadcapture={() => queueScrollSync(leadingPane())}>
-					<textarea bind:this={editor} class:find-highlights-active={sourceFindActive} value={markdown} onfocus={onSourceFocus} onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} ondragover={onEditorDragOver} ondrop={onEditorDrop} oninput={(event) => onMarkdownChange(event.currentTarget.value)} onscroll={syncSourceFindLayer} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
+	<section bind:this={shell} class="editor-shell" class:source-hidden={!sourcePaneVisible} class:rendered-hidden={!renderedPaneVisible} class:panes-stacked={stacked} class:panes-swapped={swapped} class:first-hidden={!firstPaneVisible} class:second-hidden={!secondPaneVisible} class:resizing class:pane-moving={drag?.moving} style={`--split: ${splitRatio}%; --content-width: ${contentWidth}px`}>
+		<div bind:this={sourcePaneElement} class="source-pane" class:dragged={drag?.moving && drag.pane === 'source'} data-source-theme={resolvedTheme} data-color-theme={colorTheme} style={drag?.moving && drag.pane === 'source' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined}>
+			<div class="source-body" bind:this={sourceBody} onscrollcapture={(event) => handlePaneScroll(event, 'source')} onloadcapture={() => queueScrollSync(leadingPane())}>
+					<textarea bind:this={editor} class:find-highlights-active={sourceFindActive} value={markdown} onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} ondragover={onEditorDragOver} ondrop={onEditorDrop} oninput={(event) => onMarkdownChange(event.currentTarget.value)} onscroll={syncSourceFindLayer} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
 					{#if sourceFindActive}
 						<div class="source-find-layer" aria-hidden="true"><div style={`transform: translate(${-sourceScrollLeft}px, ${-sourceScrollTop}px)`}>{@html sourceFindMarkup}</div></div>
 					{/if}
@@ -743,8 +409,8 @@
 		<div class="pane-divider">
 			<button type="button" class="pane-resize" class:enabled={bothPanesVisible} aria-label={`Resize the panes, the ${firstPane} pane takes ${Math.round(splitRatio)} percent`} title="Drag to resize, double-click to even out" tabindex={bothPanesVisible ? 0 : -1} onpointerdown={startResize} onpointermove={trackResize} onpointerup={endResize} onpointercancel={endResize} onkeydown={nudgeResize} ondblclick={resetSplit}></button>
 			{#if bothPanesVisible}
-				<button type="button" class="pane-grip" class:grip-start={!swapped} aria-label="Move the output pane" title="Drag to move this pane, or use the arrow keys" onpointerdown={(event) => startPaneDrag(event, 'output')} onpointermove={trackPaneDrag} onpointerup={endPaneDrag} onpointercancel={endPaneDrag} onkeydown={(event) => nudgePane(event, 'output')}></button>
-				<button type="button" class="pane-grip" class:grip-start={swapped} aria-label="Move the page pane" title="Drag to move this pane, or use the arrow keys" onpointerdown={(event) => startPaneDrag(event, 'rendered')} onpointermove={trackPaneDrag} onpointerup={endPaneDrag} onpointercancel={endPaneDrag} onkeydown={(event) => nudgePane(event, 'rendered')}></button>
+				<button type="button" class="pane-grip" class:grip-start={!swapped} aria-label="Move the source pane" title="Drag to move this pane, or use the arrow keys" onpointerdown={(event) => startPaneDrag(event, 'source')} onpointermove={trackPaneDrag} onpointerup={endPaneDrag} onpointercancel={endPaneDrag} onkeydown={(event) => nudgePane(event, 'source')}></button>
+				<button type="button" class="pane-grip" class:grip-start={swapped} aria-label="Move the rendered pane" title="Drag to move this pane, or use the arrow keys" onpointerdown={(event) => startPaneDrag(event, 'rendered')} onpointermove={trackPaneDrag} onpointerup={endPaneDrag} onpointercancel={endPaneDrag} onkeydown={(event) => nudgePane(event, 'rendered')}></button>
 			{/if}
 			{#if secondPaneVisible}
 				{@const label = `${firstPaneVisible ? 'Hide' : 'Show'} the ${firstPane} pane`}
@@ -757,32 +423,11 @@
 				<button class="pane-handle pane-handle-end" title={label} aria-label={label} aria-expanded={secondPaneVisible} onclick={toggleSecondPane}><Icon size={15} /></button>
 			{/if}
 		</div>
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div bind:this={renderedPaneElement} class="preview-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} onmousedown={onRenderedPaneMouseDown} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
-			<div class="rendered-switcher">
-				<button class="rendered-mode-toggle" class:active={renderedReadOnly} type="button" aria-pressed={renderedReadOnly} onclick={() => onToggleRenderedReadOnly()} aria-label={renderedReadOnly ? 'Enable page editing' : 'Turn on read-only'} title={renderedReadOnly ? 'Enable page editing' : 'Turn on read-only'}>
-					{#if renderedReadOnly}<Lock size={14} />{:else}<LockOpen size={14} />{/if}
-					<span>{renderedReadOnly ? 'Read only' : 'Editing'}</span>
-				</button>
-			</div>
-			{#if renderedReadOnly}
-				{#if hasContent}
-					<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-					<article class="prose" onclick={onRenderedTaskClick}>{@html renderedMarkdown}</article>
-				{:else}
-					<div class="preview-empty"><PencilLine size={26} /><strong>Nothing here yet</strong><span>Start writing in the other pane, or unlock this one to begin.</span></div>
-				{/if}
+		<div bind:this={renderedPaneElement} class="rendered-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
+			{#if hasContent}
+				<article class="prose">{@html renderedMarkdown}</article>
 			{:else}
-				<div class="live-editor prose" bind:this={liveEditorContainer} aria-label="Page editor">
-					<div class="live-rendered-content" aria-hidden="true">{@html renderedMarkdown}</div>
-					<div class="live-editing-overlay" contenteditable={saveState !== 'loading' && transferState !== 'working'} role="textbox" tabindex="-1" aria-label="Page editor" aria-multiline="true" spellcheck="true" onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} ondragover={onEditorDragOver} ondrop={onEditorDrop} oninput={(event) => onRenderedInput(event as unknown as InputEvent)} onkeydown={onRenderedLineKeydown} onmousedown={onRenderedTaskClick}>
-						{#each markdownLines as line, index}
-							{@const lineKind = liveLineKind(line, index)}
-							{@const isImage = lineKind.includes('image-line')}
-							<div class="live-editable-line {lineKind}" class:active={index === liveLine} style={liveLineStyle(index)} role="textbox" tabindex="0" aria-label={`Markdown line ${index + 1}`} aria-multiline="false" data-live-line={index} data-code-language={liveCodeLanguage(index) || undefined} contenteditable={isImage ? 'false' : undefined} spellcheck={isImage ? 'false' : undefined} onfocus={() => onLiveLineFocus(index)}>{@html renderEditableLine(line, index)}</div>
-						{/each}
-					</div>
-				</div>
+				<div class="preview-empty"><PencilLine size={26} /><strong>Nothing here yet</strong><span>Start writing in the source pane.</span></div>
 			{/if}
 		</div>
 		{#if dropSlot}

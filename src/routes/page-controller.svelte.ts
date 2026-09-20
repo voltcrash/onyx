@@ -60,20 +60,14 @@ import type {
 } from "$lib/components/app-types";
 import { noteFormats, type NoteFormat } from "$lib/components/note-formats";
 import type { SettingsSection } from "$lib/components/settings-types";
-import {
-  codeLanguageLabel as liteCodeLanguageLabel,
-  highlightCodeLines as liteHighlightCodeLines,
-  renderMarkdownBlocks as renderLiteMarkdownBlocks,
-} from "$lib/markdown-lite";
+import { renderMarkdownBlocks as renderLiteMarkdownBlocks } from "$lib/markdown-lite";
 import {
   attachmentMarkdown,
   DEFAULT_ATTACHMENT_FOLDER,
   normalizeAttachmentFolder,
   resolveLocalAttachmentUrl,
   rewriteLocalLinks,
-  taskLineIndex,
   titleFromMarkdown,
-  toggleTaskAtLine,
   type LocalAttachmentUrl,
 } from "$lib/markdown-utils";
 import {
@@ -206,7 +200,6 @@ function loadLazyStylesModule(): Promise<LazyStylesModule> {
   return (lazyStylesModulePromise ??= import("$lib/lazy-styles"));
 }
 
-type EditorSurface = "source" | "rendered";
 type SidebarState = { collapsed: boolean; open: boolean };
 type SidebarSide = "left" | "right";
 
@@ -216,7 +209,6 @@ const SIDEBAR_DRAG_SLOP_PX = 6;
 interface EditorSelection {
   start: number;
   end: number;
-  surface: EditorSurface;
 }
 
 interface EditorHistoryEntry {
@@ -316,7 +308,7 @@ Create as many notes as you need. Search checks every title and every word, whil
 
 Onyx starts in private browser storage (OPFS) without an account. In browsers that support choosing persistent folders, you can mirror this vault to one from **Settings → Storage choices**. GitHub sign-in is optional and only enables backup and cross-device restore.
 
-Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\` to save now, or \`${previewShortcut}\` to toggle preview. Press \`?\` for every shortcut.`;
+Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\` to save now, or \`${previewShortcut}\` to toggle the rendered pane. Press \`?\` for every shortcut.`;
   }
 
   const initialMarkdown = createInitialMarkdown("meta");
@@ -334,15 +326,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let notePage = $state(0);
   let searchQuery = $state("");
   let singlePaneMode = $state(false);
-  let outputPaneVisible = $state(true);
+  let sourcePaneVisible = $state(true);
   let renderedPaneVisible = $state(true);
-  let renderedReadOnly = $state(false);
   let scrollSync = $state(true);
   let paneLayout = $state<PaneLayout>("columns");
   let paneOrder = $state<PaneOrder>("rendered-first");
   let splitRatio = $state(50);
   let contentWidth = $state(DEFAULT_CONTENT_WIDTH);
-  let editingSurface: EditorSurface = "source";
   let saveState = $state<SaveState>("loading");
   let notesLoaded = $state(false);
   let saveTimer: number | undefined = $state();
@@ -352,10 +342,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let searchPending = $state(false);
   let previewTimer: number | undefined = $state();
   let searchSequence = 0;
-  let renderedInputSequence = 0;
   let editor: HTMLTextAreaElement | undefined = $state();
-  let liveEditorContainer: HTMLDivElement | undefined = $state();
-  let liveLine = $state(0);
   let searchInput: HTMLInputElement | undefined = $state();
   let findOpen = $state(false);
   let findQuery = $state("");
@@ -447,14 +434,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   const renderedBlockLines = $derived(
     renderedBlocks.filter((block) => block.element).map((block) => block.lines),
   );
-  const liveRenderedBlocks = $derived.by(() => {
-    void markdownModuleRevision;
-    return renderMarkdownBlocksForPage(markdown, resolveAttachmentUrl);
-  });
-  const liveRenderedMarkdown = $derived(liveRenderedBlocks.map((block) => block.html).join(""));
-  const liveRenderedBlockLines = $derived(
-    liveRenderedBlocks.filter((block) => block.element).map((block) => block.lines),
-  );
   const noteTitle = $derived(titleFromMarkdown(markdown));
   const markdownLines = $derived(markdown.split("\n"));
   const findMatches = $derived.by(() =>
@@ -467,63 +446,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     findMatches.length > 0 ? Math.min(Math.max(findMatchIndex, 0), findMatches.length - 1) : -1,
   );
   const findCanEdit = $derived(saveState !== "loading" && transferState !== "working");
-  const liveCodeLines = $derived.by(() => {
-    let fence = "";
-    return markdownLines.map((line) => {
-      const marker = line.match(/^\s*(`{3,}|~{3,})/)?.[1] ?? "";
-      const closesFence = Boolean(fence && marker.startsWith(fence));
-      const codeLine = Boolean(fence || marker);
-      if (!fence && marker) fence = marker;
-      else if (closesFence) fence = "";
-      return codeLine;
-    });
-  });
-  const liveCodeLanguages = $derived.by(() => {
-    let fence = "";
-    let language = "";
-    return markdownLines.map((line) => {
-      const match = line.match(/^\s*(`{3,}|~{3,})(.*)$/);
-      const marker = match?.[1] ?? "";
-      const info = match?.[2]?.trim().split(/\s+/)[0] ?? "";
-      const closesFence = Boolean(fence && marker.startsWith(fence));
-      const codeLine = Boolean(fence || marker);
-      const lineLanguage = fence ? language : info;
-      if (!fence && marker) {
-        fence = marker;
-        language = info;
-      } else if (closesFence) {
-        fence = "";
-        language = "";
-      }
-      return codeLine ? lineLanguage : "";
-    });
-  });
-  const liveCodeHighlights = $derived.by(() => {
-    void markdownModuleRevision;
-    const highlights = new Map<number, string>();
-    let start = -1;
-    let language = "";
-    const flush = (end: number): void => {
-      if (start < 0) return;
-      highlightCodeLinesForPage(markdownLines.slice(start, end).join("\n"), language).forEach(
-        (line, offset) => highlights.set(start + offset, line),
-      );
-      start = -1;
-    };
-
-    markdownLines.forEach((line, index) => {
-      if (liveCodeLines[index] && !isFenceLine(line)) {
-        if (start < 0) {
-          start = index;
-          language = liveCodeLanguages[index] ?? "";
-        }
-      } else {
-        flush(index);
-      }
-    });
-    flush(markdownLines.length);
-    return highlights;
-  });
   const notePageCount = $derived(Math.max(1, Math.ceil(results.length / NOTE_PAGE_SIZE)));
   const visibleResults = $derived(
     results.slice(notePage * NOTE_PAGE_SIZE, (notePage + 1) * NOTE_PAGE_SIZE),
@@ -698,7 +620,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       shortcut: shortcutLabel("bold"),
       icon: Bold,
       keywords: "strong emphasis format",
-      run: () => void insertSyntax("**", "**", "bold text"),
+      run: () => insertSyntax("**", "**", "bold text"),
     },
     {
       id: "italic",
@@ -707,7 +629,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       shortcut: shortcutLabel("italic"),
       icon: Italic,
       keywords: "emphasis slant format",
-      run: () => void insertSyntax("_", "_", "italic text"),
+      run: () => insertSyntax("_", "_", "italic text"),
     },
     {
       id: "strikethrough",
@@ -715,7 +637,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: "Strikethrough",
       icon: Strikethrough,
       keywords: "strike delete format",
-      run: () => void insertSyntax("~~", "~~", "struck text"),
+      run: () => insertSyntax("~~", "~~", "struck text"),
     },
     {
       id: "highlight",
@@ -723,7 +645,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: "Highlight",
       icon: Highlighter,
       keywords: "mark emphasize format",
-      run: () => void insertSyntax("==", "==", "highlighted text"),
+      run: () => insertSyntax("==", "==", "highlighted text"),
     },
     {
       id: "heading",
@@ -731,7 +653,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: "Heading",
       icon: Heading2,
       keywords: "title header format",
-      run: () => void prefixLine("## "),
+      run: () => prefixLine("## "),
     },
     {
       id: "bulleted-list",
@@ -739,7 +661,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: "Bulleted list",
       icon: List,
       keywords: "unordered list format",
-      run: () => void prefixLine("- "),
+      run: () => prefixLine("- "),
     },
     {
       id: "numbered-list",
@@ -747,7 +669,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: "Numbered list",
       icon: ListOrdered,
       keywords: "ordered list format",
-      run: () => void prefixLine("1. "),
+      run: () => prefixLine("1. "),
     },
     {
       id: "task-list",
@@ -755,7 +677,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: "Task list",
       icon: ListChecks,
       keywords: "checklist todo checkbox format",
-      run: () => void prefixLine("- [ ] "),
+      run: () => prefixLine("- [ ] "),
     },
     {
       id: "quote",
@@ -763,7 +685,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: "Quote",
       icon: Quote,
       keywords: "blockquote format",
-      run: () => void prefixLine("> "),
+      run: () => prefixLine("> "),
     },
     {
       id: "callout",
@@ -771,7 +693,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: "Callout",
       icon: MessageSquareWarning,
       keywords: "note admonition alert format",
-      run: () => void prefixLine("> [!NOTE]\n> "),
+      run: () => prefixLine("> [!NOTE]\n> "),
     },
     {
       id: "inline-code",
@@ -779,7 +701,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: "Inline code",
       icon: Code2,
       keywords: "code format",
-      run: () => void insertSyntax("`", "`", "code"),
+      run: () => insertSyntax("`", "`", "code"),
     },
     {
       id: "code-block",
@@ -787,7 +709,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: "Code block",
       icon: Braces,
       keywords: "fenced code format",
-      run: () => void insertSyntax("```\n", "\n```", "code block"),
+      run: () => insertSyntax("```\n", "\n```", "code block"),
     },
     {
       id: "link",
@@ -795,7 +717,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: "Link",
       icon: Link,
       keywords: "url hyperlink format",
-      run: () => void insertSyntax("[", "](https://)", "link text"),
+      run: () => insertSyntax("[", "](https://)", "link text"),
     },
     {
       id: "divider",
@@ -803,7 +725,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: "Divider",
       icon: Minus,
       keywords: "horizontal rule separator format",
-      run: () => void prefixLine("---\n"),
+      run: () => prefixLine("---\n"),
     },
     {
       id: "math",
@@ -811,25 +733,25 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       label: "Math",
       icon: Sigma,
       keywords: "equation latex formula format",
-      run: () => void insertSyntax("$$\n", "\n$$", "equation"),
+      run: () => insertSyntax("$$\n", "\n$$", "equation"),
     },
     {
-      id: "toggle-output-pane",
+      id: "toggle-source-pane",
       group: "View",
-      label: outputPaneVisible ? "Hide output pane" : "Show output pane",
+      label: sourcePaneVisible ? "Hide source pane" : "Show source pane",
       icon: PanelLeftClose,
-      keywords: "write markdown source output left pane",
-      disabled: !singlePaneMode && outputPaneVisible && !renderedPaneVisible,
-      run: () => toggleOutputPane(),
+      keywords: "write markdown source left pane",
+      disabled: !singlePaneMode && sourcePaneVisible && !renderedPaneVisible,
+      run: () => toggleSourcePane(),
     },
     {
       id: "toggle-rendered-pane",
       group: "View",
-      label: renderedPaneVisible ? "Hide page pane" : "Show page pane",
+      label: renderedPaneVisible ? "Hide rendered pane" : "Show rendered pane",
       shortcut: shortcutLabel("togglePreview"),
       icon: PanelRightClose,
-      keywords: "page preview right pane",
-      disabled: !singlePaneMode && renderedPaneVisible && !outputPaneVisible,
+      keywords: "rendered preview right pane",
+      disabled: !singlePaneMode && renderedPaneVisible && !sourcePaneVisible,
       run: () => toggleRenderedPane(),
     },
     {
@@ -851,20 +773,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       run: () => togglePaneLayout(),
     },
     {
-      id: "toggle-read-only",
-      group: "View",
-      label: renderedReadOnly ? "Enable page editing" : "Turn on read-only",
-      icon: Lock,
-      keywords: "lock unlock edit read only page",
-      disabled: !renderedPaneVisible,
-      run: () => toggleRenderedReadOnly(),
-    },
-    {
       id: "toggle-scroll-sync",
       group: "View",
       label: scrollSync ? "Turn off synced scrolling" : "Turn on synced scrolling",
       icon: ArrowDownUp,
-      keywords: "auto scroll sync link panes follow output rendered",
+      keywords: "auto scroll sync link panes follow source rendered",
       disabled: singlePaneMode,
       run: () => toggleScrollSync(),
     },
@@ -1107,17 +1020,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     );
   }
 
-  function highlightCodeLinesForPage(source: string, language: string): string[] {
-    return (
-      markdownModule?.highlightCodeLines(source, language) ??
-      liteHighlightCodeLines(source, language)
-    );
-  }
-
-  function codeLanguageLabelForPage(language: string): string {
-    return markdownModule?.codeLanguageLabel(language) ?? liteCodeLanguageLabel(language);
-  }
-
   function needsFullMarkdownParser(source: string): boolean {
     return (
       /(^|\n)\s*(?:---\s*$|`{3,}|~{3,}|\|.+\||>\s*\[![A-Z]+\]|<\/?[a-z])/im.test(source) ||
@@ -1239,9 +1141,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
     document.addEventListener("visibilitychange", onVisibilityChange);
-    document.addEventListener("selectionchange", keepRenderedCaretOutOfPrefix);
     return () => {
-      document.removeEventListener("selectionchange", keepRenderedCaretOutOfPrefix);
       window.removeEventListener("beforeunload", onBeforeUnload);
       window.removeEventListener("keydown", onKeydown);
       window.removeEventListener("online", onOnline);
@@ -1454,7 +1354,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     releaseLocalAttachmentUrls();
     markdown = "";
     lastSavedMarkdown = "";
-    liveLine = 0;
     updatePreviewImmediately("");
     saveState = "saved";
     storageError = "";
@@ -1898,13 +1797,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       searchQuery = "";
       await loadNote(note.id);
       await refreshFileTree();
-      requestAnimationFrame(() => {
-        if (renderedPaneVisible && !renderedReadOnly) {
-          activateLiveLine(0);
-        } else {
-          editor?.focus();
-        }
-      });
+      requestAnimationFrame(() => editor?.focus());
     } catch (error) {
       storageError = error instanceof Error ? error.message : "A new note could not be created.";
       saveState = "error";
@@ -2585,65 +2478,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     previewMarkdown = value;
   }
 
-  function toggleTaskLine(lineIndex: number): void {
-    const value = toggleTaskAtLine(markdown, lineIndex);
-    if (value === markdown) return;
-    updateMarkdown(value);
-    updatePreviewImmediately(value);
-  }
-
-  // Rendered checkboxes are disabled, so hits are matched against their box instead of the click target.
-  function handleRenderedTaskClick(event: MouseEvent): void {
-    if (event.button !== 0 || saveState === "loading" || transferState === "working") return;
-    const target = event.target instanceof Element ? event.target : undefined;
-    const liveCheck = target?.closest(".live-task-check");
-    if (liveCheck) {
-      const line = Number(liveCheck.closest<HTMLElement>("[data-live-line]")?.dataset.liveLine);
-      if (!Number.isInteger(line)) return;
-      event.preventDefault();
-      toggleTaskLine(line);
-      return;
-    }
-    const article = event.currentTarget instanceof Element ? event.currentTarget : undefined;
-    const box = target
-      ?.closest("li.task-list-item")
-      ?.querySelector(":scope > input[type=checkbox], :scope > p > input[type=checkbox]");
-    if (!article || !box) return;
-    const rect = box.getBoundingClientRect();
-    const slop = 4;
-    if (
-      event.clientX < rect.left - slop ||
-      event.clientX > rect.right + slop ||
-      event.clientY < rect.top - slop ||
-      event.clientY > rect.bottom + slop
-    )
-      return;
-    const line = taskLineIndex(
-      markdown,
-      [...article.querySelectorAll("li.task-list-item input[type=checkbox]")].indexOf(box),
-    );
-    if (line === undefined) return;
-    event.preventDefault();
-    toggleTaskLine(line);
-  }
-
-  function handleRenderedPaneMouseDown(event: MouseEvent): void {
-    if (
-      event.button !== 0 ||
-      renderedReadOnly ||
-      saveState === "loading" ||
-      transferState === "working"
-    )
-      return;
-    const target = event.target instanceof Node ? event.target : null;
-    if (target instanceof Element && target.closest("button, input, a, select, textarea")) return;
-    if (liveLineElement(target)) return;
-    const line = liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${liveLine}"]`);
-    if (!line) return;
-    event.preventDefault();
-    activateLiveLine(liveLine);
-  }
-
   function clampSplitRatio(value: number): number {
     return Math.min(80, Math.max(20, value));
   }
@@ -2667,9 +2501,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   // A single-pane viewport switches views instead of splitting, and leaves the stored split alone.
   function showOnlyPane(pane: "source" | "rendered"): void {
-    outputPaneVisible = pane === "source";
+    sourcePaneVisible = pane === "source";
     renderedPaneVisible = pane === "rendered";
-    editingSurface = pane === "source" || renderedReadOnly ? "source" : "rendered";
   }
 
   function swapPanes(): void {
@@ -2687,7 +2520,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     writeLocalStorage("onyx:pane-layout", paneLayout);
   }
 
-  function placePane(pane: "output" | "rendered", edge: PaneEdge): void {
+  function placePane(pane: "source" | "rendered", edge: PaneEdge): void {
     if (singlePaneMode) return;
     const layout: PaneLayout = edge === "left" || edge === "right" ? "columns" : "rows";
     const leads = edge === "left" || edge === "top";
@@ -2700,30 +2533,26 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     paneLayout = readLocalStorage("onyx:pane-layout") === "rows" ? "rows" : "columns";
     paneOrder =
       readLocalStorage("onyx:pane-order") === "source-first" ? "source-first" : "rendered-first";
-    const storedOutputPane = readLocalStorage("onyx:output-pane-visible");
+    const storedSourcePane = readLocalStorage("onyx:output-pane-visible");
     const storedRenderedPane = readLocalStorage("onyx:rendered-pane-visible");
-    const storedReadOnly = readLocalStorage("onyx:rendered-read-only");
-    renderedReadOnly = storedReadOnly === "true";
     scrollSync = readLocalStorage("onyx:scroll-sync") !== "false";
     if (singlePaneMode) {
       showOnlyPane(storedRenderedPane === "false" ? "source" : "rendered");
       return;
     }
-    outputPaneVisible = storedOutputPane !== "false";
+    sourcePaneVisible = storedSourcePane !== "false";
     renderedPaneVisible = storedRenderedPane !== "false";
-    if (!outputPaneVisible && !renderedPaneVisible) outputPaneVisible = true;
-    if (!outputPaneVisible && !renderedReadOnly) editingSurface = "rendered";
+    if (!sourcePaneVisible && !renderedPaneVisible) sourcePaneVisible = true;
   }
 
-  function toggleOutputPane(): void {
+  function toggleSourcePane(): void {
     if (singlePaneMode) {
-      showOnlyPane(outputPaneVisible ? "rendered" : "source");
+      showOnlyPane(sourcePaneVisible ? "rendered" : "source");
       return;
     }
-    if (outputPaneVisible && !renderedPaneVisible) return;
-    outputPaneVisible = !outputPaneVisible;
-    writeLocalStorage("onyx:output-pane-visible", String(outputPaneVisible));
-    if (!outputPaneVisible && renderedPaneVisible && !renderedReadOnly) editingSurface = "rendered";
+    if (sourcePaneVisible && !renderedPaneVisible) return;
+    sourcePaneVisible = !sourcePaneVisible;
+    writeLocalStorage("onyx:output-pane-visible", String(sourcePaneVisible));
   }
 
   function toggleRenderedPane(): void {
@@ -2731,42 +2560,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       showOnlyPane(renderedPaneVisible ? "source" : "rendered");
       return;
     }
-    if (renderedPaneVisible && !outputPaneVisible) return;
+    if (renderedPaneVisible && !sourcePaneVisible) return;
     renderedPaneVisible = !renderedPaneVisible;
     writeLocalStorage("onyx:rendered-pane-visible", String(renderedPaneVisible));
-    if (!renderedPaneVisible && outputPaneVisible) editingSurface = "source";
   }
 
   function toggleScrollSync(): void {
     scrollSync = !scrollSync;
     writeLocalStorage("onyx:scroll-sync", String(scrollSync));
-  }
-
-  function toggleRenderedReadOnly(): void {
-    renderedReadOnly = !renderedReadOnly;
-    writeLocalStorage("onyx:rendered-read-only", String(renderedReadOnly));
-    if (!renderedReadOnly) {
-      if (singlePaneMode) showOnlyPane("rendered");
-      renderedPaneVisible = true;
-      editingSurface = "rendered";
-      if (!singlePaneMode) writeLocalStorage("onyx:rendered-pane-visible", "true");
-      requestAnimationFrame(() => focusRenderedLine(liveLine));
-    }
-  }
-
-  function focusSourceEditor(): void {
-    editingSurface = "source";
-  }
-
-  function focusLiveLine(line: number): void {
-    editingSurface = "rendered";
-    liveLine = line;
-  }
-
-  function activateLiveLine(line: number, position?: number): void {
-    editingSurface = "rendered";
-    liveLine = line;
-    focusRenderedLine(line, position);
   }
 
   function resetEditorHistory(): void {
@@ -2782,248 +2583,31 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function handleEditorBeforeInput(event: InputEvent): void {
+    void event;
     captureEditorState();
-    if (!(event.currentTarget instanceof HTMLElement)) return;
-    if (!event.currentTarget.classList.contains("live-editing-overlay")) return;
-    const isLineBreak =
-      event.inputType === "insertParagraph" || event.inputType === "insertLineBreak";
-    const isDeletion =
-      event.inputType === "deleteContentBackward" || event.inputType === "deleteContentForward";
-    if (!isLineBreak && !isDeletion) return;
-
-    const editorSelection = getEditorSelection(event.currentTarget);
-    if (editorSelection && editorSelection.start !== editorSelection.end) {
-      event.preventDefault();
-      replaceEditorSelection(editorSelection, isLineBreak ? "\n" : "");
-      return;
-    }
-
-    const element = renderedLineForTarget(event.currentTarget);
-    const sourceSelection = element && getSourceSelection(element);
-    if (!element || !sourceSelection) return;
-    event.preventDefault();
-    if (isLineBreak) {
-      insertRenderedLineBreak(element, sourceSelection);
-      return;
-    }
-    deleteRenderedContent(
-      element,
-      sourceSelection,
-      event.inputType === "deleteContentBackward" ? "backward" : "forward",
-    );
-  }
-
-  function editorSurfaceForTarget(target: EventTarget | null): EditorSurface | undefined {
-    if (typeof document === "undefined") return;
-    const candidate =
-      target instanceof Node
-        ? target
-        : document.activeElement instanceof Node
-          ? document.activeElement
-          : undefined;
-    if (!candidate) return;
-    if (editor && (candidate === editor || editor.contains(candidate))) return "source";
-    const candidateElement =
-      candidate instanceof HTMLElement
-        ? candidate
-        : candidate.parentElement instanceof HTMLElement
-          ? candidate.parentElement
-          : undefined;
-    if (
-      liveEditorContainer &&
-      candidateElement &&
-      liveEditorContainer.contains(candidateElement) &&
-      (liveLineElement(candidateElement) || candidateElement.closest(".live-editing-overlay"))
-    )
-      return "rendered";
   }
 
   function isEditorTarget(target: EventTarget | null): boolean {
-    return editorSurfaceForTarget(target) !== undefined;
-  }
-
-  function liveLineElement(node: Node | null): HTMLElement | undefined {
-    const element =
-      node instanceof HTMLElement
-        ? node
-        : node?.parentElement instanceof HTMLElement
-          ? node.parentElement
-          : undefined;
-    return element?.closest<HTMLElement>("[data-live-line]") ?? undefined;
-  }
-
-  function liveLineIndex(element: HTMLElement): number | undefined {
-    const value = Number(element.dataset.liveLine);
-    return Number.isInteger(value) && value >= 0 ? value : undefined;
-  }
-
-  // Length of the hidden markdown marker (bullet, checkbox, heading, quote) that starts a line.
-  function hiddenPrefixLength(line: number): number {
-    const value = markdownLines[line] ?? "";
-    if (liveCodeLines[line] || tableLineKind(line)) return 0;
-    const match =
-      value.match(/^\s*[-+*]\s+\[[ xX]\]\s+/) ??
-      value.match(/^\s*(?:[-+*]|\d+[.)])\s+/) ??
-      value.match(/^#{1,6}\s+/) ??
-      value.match(/^>\s?/);
-    return match?.[0].length ?? 0;
-  }
-
-  function keepRenderedCaretOutOfPrefix(): void {
-    const selection = window.getSelection();
-    if (!selection?.isCollapsed || !liveEditorContainer) return;
-    const element = liveLineElement(selection.anchorNode);
-    if (!element || !liveEditorContainer.contains(element)) return;
-    const line = liveLineIndex(element);
-    if (line === undefined) return;
-    const prefix = hiddenPrefixLength(line);
-    const offset = textOffsetAt(element, selection.anchorNode!, selection.anchorOffset);
-    if (offset !== undefined && offset < prefix) setRenderedSelection(element, prefix, prefix);
-  }
-
-  function markdownLineOffset(line: number): number {
-    return markdownLines.slice(0, line).reduce((total, value) => total + value.length + 1, 0);
-  }
-
-  function textOffsetAt(element: HTMLElement, node: Node, offset: number): number | undefined {
-    if (node !== element && !element.contains(node)) return;
-    const range = document.createRange();
-    try {
-      range.selectNodeContents(element);
-      range.setEnd(node, offset);
-      return range.cloneContents().textContent?.length ?? 0;
-    } catch {
-      return;
-    }
-  }
-
-  function getRenderedSelection(): Omit<EditorSelection, "surface"> | undefined {
-    if (!liveEditorContainer) return;
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return;
-    const anchorElement = liveLineElement(selection.anchorNode);
-    const focusElement = liveLineElement(selection.focusNode);
-    const anchorLine = anchorElement && liveLineIndex(anchorElement);
-    const focusLine = focusElement && liveLineIndex(focusElement);
-    if (anchorLine === undefined || focusLine === undefined) return;
-    const anchorOffset =
-      anchorElement && textOffsetAt(anchorElement, selection.anchorNode!, selection.anchorOffset);
-    const focusOffset =
-      focusElement && textOffsetAt(focusElement, selection.focusNode!, selection.focusOffset);
-    if (anchorOffset === undefined || focusOffset === undefined) return;
-    const anchor = markdownLineOffset(anchorLine) + anchorOffset;
-    const focus = markdownLineOffset(focusLine) + focusOffset;
-    return { start: Math.min(anchor, focus), end: Math.max(anchor, focus) };
+    if (!editor) return false;
+    if (target === null) return editor === document.activeElement;
+    return target === editor || (target instanceof Node && editor.contains(target));
   }
 
   function getEditorSelection(
     target: EventTarget | null = document.activeElement,
   ): EditorSelection | undefined {
-    const surface = editorSurfaceForTarget(target);
-    if (surface === "source" && editor) {
-      return { start: editor.selectionStart, end: editor.selectionEnd, surface };
-    }
-    if (surface === "rendered") {
-      const selection = getRenderedSelection();
-      if (selection) return { ...selection, surface };
-    }
-  }
-
-  function isHiddenSyntaxNode(node: Node | null): boolean {
-    const element = node instanceof HTMLElement ? node : node?.parentElement;
-    return Boolean(element?.closest?.(".md-syntax"));
-  }
-
-  function textPointAt(element: HTMLElement, offset: number): { node: Node; offset: number } {
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-    const nodes: Text[] = [];
-    let current = walker.nextNode();
-    while (current) {
-      nodes.push(current as Text);
-      current = walker.nextNode();
-    }
-    let remaining = Math.max(0, offset);
-    for (let index = 0; index < nodes.length; index += 1) {
-      const node = nodes[index]!;
-      const length = node.textContent?.length ?? 0;
-      if (remaining <= length) {
-        // Markdown markers render with zero size, so a caret at the end of a hidden
-        // run has no height. Prefer the start of the next visible run, which is the
-        // same logical offset with a visible caret.
-        if (isHiddenSyntaxNode(node) && remaining === length) {
-          for (let candidate = index + 1; candidate < nodes.length; candidate += 1) {
-            if (!isHiddenSyntaxNode(nodes[candidate]!)) {
-              return { node: nodes[candidate]!, offset: 0 };
-            }
-          }
-        }
-        if (isHiddenSyntaxNode(node) && remaining < length) {
-          for (let candidate = index + 1; candidate < nodes.length; candidate += 1) {
-            if (!isHiddenSyntaxNode(nodes[candidate]!)) {
-              return { node: nodes[candidate]!, offset: 0 };
-            }
-          }
-        }
-        return { node, offset: remaining };
-      }
-      remaining -= length;
-    }
-    return { node: element, offset: 0 };
-  }
-
-  function markdownPosition(offset: number): { line: number; position: number } {
-    const target = Math.max(0, Math.min(markdown.length, offset));
-    let consumed = 0;
-    for (let line = 0; line < markdownLines.length; line += 1) {
-      const length = markdownLines[line]?.length ?? 0;
-      if (target <= consumed + length) return { line, position: target - consumed };
-      consumed += length + 1;
-    }
-    const line = Math.max(0, markdownLines.length - 1);
-    return { line, position: markdownLines[line]?.length ?? 0 };
-  }
-
-  function setRenderedGlobalSelection(start: number, end: number): void {
-    if (!liveEditorContainer) return;
-    const startPosition = markdownPosition(start);
-    const endPosition = markdownPosition(end);
-    const startElement = liveEditorContainer.querySelector<HTMLElement>(
-      `[data-live-line="${startPosition.line}"]`,
-    );
-    const endElement = liveEditorContainer.querySelector<HTMLElement>(
-      `[data-live-line="${endPosition.line}"]`,
-    );
-    if (!startElement || !endElement) return;
-    const startPoint = textPointAt(startElement, startPosition.position);
-    const endPoint = textPointAt(endElement, endPosition.position);
-    const range = document.createRange();
-    range.setStart(startPoint.node, startPoint.offset);
-    range.setEnd(endPoint.node, endPoint.offset);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
+    if (!editor || !isEditorTarget(target)) return;
+    return { start: editor.selectionStart, end: editor.selectionEnd };
   }
 
   function restoreEditorSelection(selection: EditorSelection): void {
-    if (selection.surface === "source") {
-      if (!editor) return;
-      requestAnimationFrame(() => {
-        editor?.focus();
-        editor?.setSelectionRange(
-          Math.min(selection.start, markdown.length),
-          Math.min(selection.end, markdown.length),
-        );
-      });
-      return;
-    }
-    const position = markdownPosition(selection.end);
-    liveLine = position.line;
-    void tick().then(() => {
-      if (!liveEditorContainer || renderedReadOnly) return;
-      focusRenderedLine(position.line, position.position);
-      if (selection.start !== selection.end) {
-        setRenderedGlobalSelection(selection.start, selection.end);
-      }
+    if (!editor) return;
+    requestAnimationFrame(() => {
+      editor?.focus();
+      editor?.setSelectionRange(
+        Math.min(selection.start, markdown.length),
+        Math.min(selection.end, markdown.length),
+      );
     });
   }
 
@@ -3065,11 +2649,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (start === end && replacement.length === 0) return false;
     rememberEditorState(selection);
     updateMarkdown(`${markdown.slice(0, start)}${replacement}${markdown.slice(end)}`);
-    restoreEditorSelection({
-      start: start + replacement.length,
-      end: start + replacement.length,
-      surface: selection.surface,
-    });
+    restoreEditorSelection({ start: start + replacement.length, end: start + replacement.length });
     return true;
   }
 
@@ -3096,25 +2676,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function selectAllEditorContent(target: EventTarget | null = document.activeElement): boolean {
-    const surface = editorSurfaceForTarget(target);
-    if (surface === "source" && editor) {
-      editor.focus();
-      editor.select();
-      editingSurface = "source";
-      return true;
-    }
-    if (surface !== "rendered" || !liveEditorContainer) return false;
-    const lines = [...liveEditorContainer.querySelectorAll<HTMLElement>("[data-live-line]")];
-    const first = lines[0];
-    const last = lines.at(-1);
-    if (!first || !last) return false;
-    const range = document.createRange();
-    range.setStart(first, 0);
-    range.setEnd(last, last.childNodes.length);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-    editingSurface = "rendered";
+    if (!editor || !isEditorTarget(target)) return false;
+    editor.focus();
+    editor.select();
     return true;
   }
 
@@ -3187,7 +2751,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   function dropSelection(event: DragEvent): EditorSelection | undefined {
     if (!(event.currentTarget instanceof HTMLTextAreaElement) || !editor) return;
     // Textareas expose no caret-from-point API, so drops land at the current selection.
-    return { start: editor.selectionStart, end: editor.selectionEnd, surface: "source" };
+    return { start: editor.selectionStart, end: editor.selectionEnd };
   }
 
   async function attachFiles(files: File[], selection?: EditorSelection): Promise<void> {
@@ -3198,7 +2762,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       getEditorSelection() ?? {
         start: markdown.length,
         end: markdown.length,
-        surface: "source" as const,
       };
     try {
       const snippets: string[] = [];
@@ -3398,288 +2961,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     writeKeyboardShortcuts(shortcuts);
   }
 
-  function updateRenderedInput(event: Event): void {
-    const browserSelection = window.getSelection();
-    const element =
-      liveLineElement(event.target instanceof Node ? event.target : null) ??
-      liveLineElement(browserSelection?.anchorNode ?? null) ??
-      liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${liveLine}"]`);
-    if (!element) return;
-    const line = liveLineIndex(element);
-    if (line === undefined) return;
-    liveLine = line;
-    const inputSequence = ++renderedInputSequence;
-
-    const pending = pendingEditorState;
-    const captured =
-      pending?.markdown === markdown && pending.selection?.surface === "rendered"
-        ? pending.selection
-        : undefined;
-    const position = getCaretOffset(element);
-    if (captured) {
-      const start = Math.min(captured.start, captured.end);
-      const end = Math.max(captured.start, captured.end);
-      const startPosition = markdownPosition(start);
-      const originalLine = markdownLines[startPosition.line] ?? "";
-      const prefix = originalLine.slice(0, startPosition.position);
-      if (
-        startPosition.line === line &&
-        position >= startPosition.position &&
-        element.textContent?.startsWith(prefix)
-      ) {
-        const replacement = (element.textContent ?? "").slice(startPosition.position, position);
-        const nextMarkdown = `${markdown.slice(0, start)}${replacement}${markdown.slice(end)}`;
-        const nextOffset = start + replacement.length;
-        updateMarkdown(nextMarkdown);
-        const nextPosition = markdownPosition(nextOffset);
-        liveLine = nextPosition.line;
-        void tick().then(() => {
-          if (inputSequence !== renderedInputSequence) return;
-          focusRenderedLine(nextPosition.line, nextPosition.position);
-        });
-        return;
-      }
-    }
-    const replacement = (element.textContent ?? "").split("\n");
-    const lines = [...markdownLines];
-    lines.splice(line, 1, ...replacement);
-    const nextLine = line + replacement.length - 1;
-    liveLine = nextLine;
-    updateMarkdown(lines.join("\n"));
-    void tick().then(() => {
-      if (inputSequence !== renderedInputSequence) return;
-      focusRenderedLine(nextLine, replacement.length > 1 ? replacement.at(-1)?.length : position);
-    });
-  }
-
-  function handleRenderedLineKeydown(event: KeyboardEvent): void {
-    const browserSelection = window.getSelection();
-    const element =
-      liveLineElement(event.target instanceof Node ? event.target : null) ??
-      liveLineElement(browserSelection?.anchorNode ?? null) ??
-      liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${liveLine}"]`);
-    if (!element) return;
-    const line = liveLineIndex(element);
-    if (line === undefined) return;
-    liveLine = line;
-
-    const editorSelection = getEditorSelection(event.currentTarget);
-    if (editorSelection && editorSelection.start !== editorSelection.end) {
-      if (event.key === "Backspace" || event.key === "Delete") {
-        event.preventDefault();
-        replaceEditorSelection(editorSelection, "");
-        return;
-      }
-      if (event.key === "Enter") {
-        event.preventDefault();
-        replaceEditorSelection(editorSelection, "\n");
-        return;
-      }
-    }
-    const sourceSelection = getSourceSelection(element);
-    if (!sourceSelection) return;
-    const value = element.textContent ?? "";
-    if (event.key === "Enter") {
-      event.preventDefault();
-      insertRenderedLineBreak(element, sourceSelection);
-    } else if (
-      event.key === "Backspace" &&
-      sourceSelection.start === sourceSelection.end &&
-      sourceSelection.start <= hiddenPrefixLength(line) &&
-      (line > 0 || hiddenPrefixLength(line) > 0)
-    ) {
-      event.preventDefault();
-      deleteRenderedContent(element, sourceSelection, "backward");
-    } else if (
-      event.key === "Delete" &&
-      sourceSelection.start === value.length &&
-      sourceSelection.end === value.length &&
-      line < markdownLines.length - 1
-    ) {
-      event.preventDefault();
-      deleteRenderedContent(element, sourceSelection, "forward");
-    } else if (
-      event.key === "ArrowLeft" &&
-      sourceSelection.start === sourceSelection.end &&
-      sourceSelection.start <= hiddenPrefixLength(line) &&
-      line > 0 &&
-      !event.shiftKey &&
-      !event.altKey &&
-      !event.ctrlKey &&
-      !event.metaKey
-    ) {
-      event.preventDefault();
-      activateLiveLine(line - 1, markdownLines[line - 1]?.length ?? 0);
-    } else if (
-      event.key === "ArrowRight" &&
-      sourceSelection.start === value.length &&
-      sourceSelection.end === value.length &&
-      line < markdownLines.length - 1 &&
-      !event.shiftKey &&
-      !event.altKey &&
-      !event.ctrlKey &&
-      !event.metaKey
-    ) {
-      event.preventDefault();
-      activateLiveLine(line + 1, 0);
-    } else if (
-      event.key === "ArrowUp" &&
-      sourceSelection.start === sourceSelection.end &&
-      line > 0 &&
-      !event.shiftKey &&
-      !event.altKey &&
-      !event.ctrlKey &&
-      !event.metaKey
-    ) {
-      event.preventDefault();
-      activateLiveLine(line - 1, Math.min(sourceSelection.start, markdownLines[line - 1].length));
-    } else if (
-      event.key === "ArrowDown" &&
-      sourceSelection.start === sourceSelection.end &&
-      line < markdownLines.length - 1 &&
-      !event.shiftKey &&
-      !event.altKey &&
-      !event.ctrlKey &&
-      !event.metaKey
-    ) {
-      event.preventDefault();
-      activateLiveLine(line + 1, Math.min(sourceSelection.start, markdownLines[line + 1].length));
-    }
-  }
-
-  function getSourceSelection(element: HTMLElement): { start: number; end: number } | undefined {
-    const selection = window.getSelection();
-    if (
-      !selection ||
-      selection.rangeCount === 0 ||
-      (selection.anchorNode !== element && !element.contains(selection.anchorNode)) ||
-      (selection.focusNode !== element && !element.contains(selection.focusNode))
-    )
-      return;
-    const range = selection.getRangeAt(0);
-    const start = textOffsetAt(element, range.startContainer, range.startOffset);
-    const end = textOffsetAt(element, range.endContainer, range.endOffset);
-    if (start === undefined || end === undefined) return;
-    return { start: Math.min(start, end), end: Math.max(start, end) };
-  }
-
-  function getCaretOffset(element: HTMLElement): number {
-    return getSourceSelection(element)?.end ?? element.textContent?.length ?? 0;
-  }
-
-  function renderedLineForTarget(target: EventTarget | null): HTMLElement | undefined {
-    const browserSelection = window.getSelection();
-    return (
-      liveLineElement(target instanceof Node ? target : null) ??
-      liveLineElement(browserSelection?.anchorNode ?? null) ??
-      liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${liveLine}"]`) ??
-      undefined
-    );
-  }
-
-  function insertRenderedLineBreak(
-    element: HTMLElement,
-    sourceSelection: { start: number; end: number },
-  ): void {
-    const line = liveLineIndex(element);
-    if (line === undefined) return;
-    const value = element.textContent ?? "";
-    const before = value.slice(0, sourceSelection.start);
-    const after = value.slice(sourceSelection.end);
-    const marker =
-      before.match(/^(\s*(?:(?:[-+*])\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|>\s+))/)?.[1] ?? "";
-    const hasContent = marker.length > 0 && before.slice(marker.length).trim().length > 0;
-    const orderedMarker = marker.match(/^(\s*)(\d+)([.)])(\s+)$/);
-    const continuation = hasContent
-      ? orderedMarker
-        ? `${orderedMarker[1]}${Number(orderedMarker[2]) + 1}${orderedMarker[3]}${orderedMarker[4]}`
-        : marker
-      : "";
-    const lines = [...markdownLines];
-    lines.splice(line, 1, before, `${continuation}${after}`);
-    updateMarkdown(lines.join("\n"));
-    liveLine = line + 1;
-    void tick().then(() => focusRenderedLine(line + 1, continuation.length));
-  }
-
-  function deleteRenderedContent(
-    element: HTMLElement,
-    sourceSelection: { start: number; end: number },
-    direction: "backward" | "forward",
-  ): void {
-    const line = liveLineIndex(element);
-    if (line === undefined) return;
-    const value = element.textContent ?? "";
-    if (sourceSelection.start !== sourceSelection.end) {
-      const lineOffset = markdownLineOffset(line);
-      replaceEditorSelection(
-        {
-          start: lineOffset + sourceSelection.start,
-          end: lineOffset + sourceSelection.end,
-          surface: "rendered",
-        },
-        "",
-      );
-      return;
-    }
-    const prefix = hiddenPrefixLength(line);
-    if (direction === "backward" && prefix > 0 && sourceSelection.start <= prefix) {
-      const task = value.match(/^(\s*[-+*]\s+)\[[ xX]\]\s+/);
-      const kept = task ? task[1] : "";
-      const lines = [...markdownLines];
-      lines[line] = `${kept}${value.slice(prefix)}`;
-      updateMarkdown(lines.join("\n"));
-      void tick().then(() => focusRenderedLine(line, kept.length));
-      return;
-    }
-    if (direction === "backward" && sourceSelection.start === 0) {
-      if (line === 0) return;
-      const lines = [...markdownLines];
-      const previousLength = lines[line - 1].length;
-      lines.splice(line - 1, 2, `${lines[line - 1]}${value}`);
-      updateMarkdown(lines.join("\n"));
-      liveLine = line - 1;
-      void tick().then(() => focusRenderedLine(line - 1, previousLength));
-      return;
-    }
-    if (direction === "forward" && sourceSelection.start === value.length) {
-      if (line >= markdownLines.length - 1) return;
-      const lines = [...markdownLines];
-      lines.splice(line, 2, `${lines[line]}${lines[line + 1]}`);
-      updateMarkdown(lines.join("\n"));
-      void tick().then(() => focusRenderedLine(line, value.length));
-      return;
-    }
-    const offset = markdownLineOffset(line) + sourceSelection.start;
-    const start = direction === "backward" ? offset - 1 : offset;
-    replaceEditorSelection(
-      { start, end: direction === "backward" ? offset : offset + 1, surface: "rendered" },
-      "",
-    );
-  }
-
-  function focusRenderedLine(line: number, position?: number): void {
-    const element = liveEditorContainer?.querySelector<HTMLElement>(`[data-live-line="${line}"]`);
-    if (!element) return;
-    element.focus();
-    const target = Math.min(
-      position ?? element.textContent?.length ?? 0,
-      element.textContent?.length ?? 0,
-    );
-    setRenderedSelection(element, target, target);
-  }
-
-  function setRenderedSelection(element: HTMLElement, start: number, end: number): void {
-    const startPoint = textPointAt(element, start);
-    const endPoint = textPointAt(element, end);
-    const range = document.createRange();
-    range.setStart(startPoint.node, startPoint.offset);
-    range.setEnd(endPoint.node, endPoint.offset);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-  }
-
   function queueSearch(value: string): void {
     searchQuery = value;
     searchPending = Boolean(value.trim());
@@ -3709,51 +2990,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     noteList?.scrollTo({ top: 0 });
   }
 
-  function isRenderedEditingActive(): boolean {
-    return (
-      renderedPaneVisible &&
-      !renderedReadOnly &&
-      (editingSurface === "rendered" || !outputPaneVisible)
-    );
-  }
-
-  // Formatting edits the Markdown source, so another output view is switched back first.
-  async function ensureMarkdownView(): Promise<boolean> {
-    return Boolean(editor || isRenderedEditingActive());
-  }
-
-  async function insertSyntax(before: string, after = before, placeholder = "text"): Promise<void> {
-    if (!(await ensureMarkdownView())) return;
-    if (isRenderedEditingActive()) {
-      const target = liveEditorContainer?.querySelector<HTMLElement>(
-        `[data-live-line="${liveLine}"]`,
-      );
-      const selection = target && getSourceSelection(target);
-      if (!target || !selection) return;
-      const lineOffset = markdownLines
-        .slice(0, liveLine)
-        .reduce((total, line) => total + line.length + 1, 0);
-      const start = lineOffset + selection.start;
-      const end = lineOffset + selection.end;
-      const selected = markdown.slice(start, end) || placeholder;
-      updateMarkdown(
-        `${markdown.slice(0, start)}${before}${selected}${after}${markdown.slice(end)}`,
-      );
-      requestAnimationFrame(() => {
-        focusRenderedLine(liveLine, selection.start + before.length);
-        const element = liveEditorContainer?.querySelector<HTMLElement>(
-          `[data-live-line="${liveLine}"]`,
-        );
-        if (element) {
-          setRenderedSelection(
-            element,
-            selection.start + before.length,
-            selection.start + before.length + selected.length,
-          );
-        }
-      });
-      return;
-    }
+  function insertSyntax(before: string, after = before, placeholder = "text"): void {
     const target = editor;
     if (!target) return;
     const relativeStart = target.selectionStart;
@@ -3769,21 +3006,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     });
   }
 
-  async function prefixLine(prefix: string): Promise<void> {
-    if (!(await ensureMarkdownView())) return;
-    if (isRenderedEditingActive()) {
-      const target = liveEditorContainer?.querySelector<HTMLElement>(
-        `[data-live-line="${liveLine}"]`,
-      );
-      const selection = target && getSourceSelection(target);
-      if (!target || !selection) return;
-      const lineOffset = markdownLines
-        .slice(0, liveLine)
-        .reduce((total, line) => total + line.length + 1, 0);
-      updateMarkdown(`${markdown.slice(0, lineOffset)}${prefix}${markdown.slice(lineOffset)}`);
-      requestAnimationFrame(() => focusRenderedLine(liveLine, selection.start + prefix.length));
-      return;
-    }
+  function prefixLine(prefix: string): void {
     const target = editor;
     if (!target) return;
     const relativeCursor = target.selectionStart;
@@ -3794,10 +3017,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       const nextCursor = relativeCursor + prefix.length;
       target.setSelectionRange(nextCursor, nextCursor);
     });
-  }
-
-  function findSurface(): EditorSurface {
-    return isRenderedEditingActive() ? "rendered" : "source";
   }
 
   function keepFindInputFocused(): void {
@@ -3811,29 +3030,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const match = findMatches[index];
     if (!match) return;
 
-    if (findSurface() === "rendered" && liveEditorContainer) {
-      const position = markdownPosition(match.start);
-      liveLine = position.line;
-      void tick().then(() => {
-        if (
-          sequence !== findNavigationSequence ||
-          !findOpen ||
-          !liveEditorContainer ||
-          renderedReadOnly
-        )
-          return;
-        const target = liveEditorContainer.querySelector<HTMLElement>(
-          `[data-live-line="${position.line}"]`,
-        );
-        if (!target) return;
-        focusRenderedLine(position.line, position.position);
-        setRenderedGlobalSelection(match.start, match.end);
-        keepFindInputFocused();
-      });
-      return;
-    }
-
-    if (singlePaneMode && !outputPaneVisible) showOnlyPane("source");
+    if (singlePaneMode && !sourcePaneVisible) showOnlyPane("source");
     if (!editor) {
       void tick().then(() => focusFindMatch(index, sequence));
       return;
@@ -3949,8 +3146,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   function replaceFind(): void {
     const match = findMatches[activeFindMatch];
     if (!match || !findCanEdit) return;
-    const surface = findSurface();
-    rememberEditorState({ start: match.start, end: match.end, surface });
+    rememberEditorState({ start: match.start, end: match.end });
     const nextValue = markdown.slice(0, match.start) + findReplacement + markdown.slice(match.end);
     const nextMatches = findTextMatches(nextValue, findQuery, {
       matchCase: findMatchCase,
@@ -3970,7 +3166,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     rememberEditorState({
       start: matches[0]!.start,
       end: matches.at(-1)!.end,
-      surface: findSurface(),
     });
     let nextValue = markdown;
     for (let index = matches.length - 1; index >= 0; index -= 1) {
@@ -4043,8 +3238,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     else if (action === "searchNotes" || action === "focusSearch") focusSearch();
     else if (action === "cycleTheme") setTheme(nextThemePreference(theme));
     else if (action === "toggleSidebar") toggleSidebar();
-    else if (action === "bold") void insertSyntax("**", "**", "bold text");
-    else if (action === "italic") void insertSyntax("_", "_", "italic text");
+    else if (action === "bold") insertSyntax("**", "**", "bold text");
+    else if (action === "italic") insertSyntax("_", "_", "italic text");
     else if (action === "togglePreview") toggleRenderedPane();
     else if (action === "openShortcuts") void openSettings("shortcuts").catch(() => undefined);
     else if (action === "closePanel") {
@@ -4247,237 +3442,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     files[(next + files.length) % files.length]?.focus();
   }
 
-  function isFenceLine(line: string): boolean {
-    return /^\s*(?:`{3,}|~{3,})/.test(line);
-  }
-
-  function liveCodeLanguage(index: number): string {
-    return codeLanguageLabelForPage(liveCodeLanguages[index] ?? "");
-  }
-
-  function isListLine(line: string): boolean {
-    return /^\s*(?:[-+*]|\d+[.)])\s+/.test(line);
-  }
-
-  function isOrderedListLine(line: string): boolean {
-    return /^\s*\d+[.)]\s+/.test(line);
-  }
-
-  function isTableLine(line: string): boolean {
-    return /^\s*\|.*\|\s*$/.test(line);
-  }
-
-  function isTableSeparator(line: string): boolean {
-    if (!isTableLine(line)) return false;
-    const firstPipe = line.indexOf("|");
-    const lastPipe = line.lastIndexOf("|");
-    if (firstPipe < 0 || lastPipe <= firstPipe) return false;
-    const cells = line
-      .slice(firstPipe + 1, lastPipe)
-      .split(/(?<!\\)\|/)
-      .map((cell) => cell.trim());
-    return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
-  }
-
-  function tableLineKind(index: number): "header" | "separator" | "body" | undefined {
-    const line = markdownLines[index];
-    if (line === undefined || !isTableLine(line)) return undefined;
-
-    let start = index;
-    while (start > 0 && isTableLine(markdownLines[start - 1]!)) start -= 1;
-    let separator = -1;
-    for (let candidate = start; candidate < markdownLines.length; candidate += 1) {
-      if (!isTableLine(markdownLines[candidate]!)) break;
-      if (isTableSeparator(markdownLines[candidate]!)) {
-        separator = candidate;
-        break;
-      }
-    }
-    if (separator < 0) return undefined;
-    if (index < separator) return "header";
-    if (index === separator) return "separator";
-    return "body";
-  }
-
-  function isImageOnlyLine(line: string): boolean {
-    return /^\s*!\[[^\]]*\]\([^\s)]+\)\s*$/.test(line);
-  }
-
-  function liveLineKind(line: string, index: number): string {
-    if (liveCodeLines[index]) {
-      if (isFenceLine(line)) return "code-line code-fence";
-      const previous = markdownLines[index - 1];
-      const next = markdownLines[index + 1];
-      const startsCode = !liveCodeLines[index - 1] || isFenceLine(previous ?? "");
-      const endsCode = !liveCodeLines[index + 1] || isFenceLine(next ?? "");
-      return `code-line code-content${startsCode ? " code-start" : ""}${endsCode ? " code-end" : ""}`;
-    }
-    if (!line) return "blank-line";
-    if (isImageOnlyLine(line)) return "image-line";
-    const table = tableLineKind(index);
-    if (table) return `table-line table-${table}`;
-    const heading = line.match(/^(#{1,6})\s+/);
-    if (heading) return `heading-${heading[1].length}`;
-    if (/^>\s?/.test(line)) return "quote-line";
-    if (isListLine(line)) {
-      const previous = markdownLines[index - 1];
-      const next = markdownLines[index + 1];
-      const ordered = isOrderedListLine(line);
-      const continues =
-        previous !== undefined && isListLine(previous) && isOrderedListLine(previous) === ordered;
-      const continuesNext =
-        next !== undefined && isListLine(next) && isOrderedListLine(next) === ordered;
-      return `list-line${continues ? "" : " list-start"}${continuesNext ? "" : " list-end"}${ordered ? " ordered-list" : ""}`;
-    }
-    if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) return "rule-line";
-    return "";
-  }
-
-  function renderEditableLine(line: string, index: number): string {
-    const kind = liveLineKind(line, index);
-    if (kind.includes("image-line")) {
-      // The picture itself is the visible content; keep its source out of the caret path.
-      return `<span class="md-syntax" spellcheck="false">${escapeHtml(line)}</span>`;
-    }
-    if (kind.includes("code-line")) {
-      if (isFenceLine(line)) return `<span class="md-syntax">${escapeHtml(line)}</span>`;
-      return liveCodeHighlights.get(index) || "<br>";
-    }
-    const table = tableLineKind(index);
-    if (table && table !== "separator") {
-      const firstPipe = line.indexOf("|");
-      const lastPipe = line.lastIndexOf("|");
-      const prefix = line.slice(0, firstPipe + 1);
-      const suffix = line.slice(lastPipe);
-      const cells = line.slice(firstPipe + 1, lastPipe).split(/(?<!\\)\|/);
-      const row = cells
-        .map((cell) => {
-          const leading = cell.match(/^\s*/)?.[0] ?? "";
-          const trailing = cell.match(/\s*$/)?.[0] ?? "";
-          const content = cell.slice(leading.length, cell.length - trailing.length || undefined);
-          return `<span class="live-table-cell">${
-            leading ? `<span class="md-syntax">${escapeHtml(leading)}</span>` : ""
-          }${editableInlineMarkdown(content)}${
-            trailing ? `<span class="md-syntax">${escapeHtml(trailing)}</span>` : ""
-          }</span>`;
-        })
-        .join(`<span class="md-syntax">|</span>`);
-      return `<span class="md-syntax">${escapeHtml(prefix)}</span><span class="live-table-row ${table === "header" ? "header" : "body"}" style="--table-columns: ${cells.length}">${row}</span><span class="md-syntax">${escapeHtml(suffix)}</span>`;
-    }
-    if (kind.includes("table-line")) return `<span class="md-syntax">${escapeHtml(line)}</span>`;
-    if (!line) return "<br>";
-    const heading = line.match(/^(#{1,6}\s+)(.*)$/);
-    if (heading) {
-      const content = editableInlineMarkdown(heading[2]);
-      return `<span class="md-syntax">${escapeHtml(heading[1])}</span>${content || "<br>"}`;
-    }
-    const task = line.match(/^(\s*[-+*]\s+)(\[([ xX])\]\s+)(.*)$/);
-    if (task) {
-      const content = editableInlineMarkdown(task[4]);
-      return `<span class="md-syntax">${escapeHtml(task[1])}</span><span class="live-task-check ${task[3] !== " " ? "done" : ""}"></span><span class="md-syntax">${escapeHtml(task[2])}</span>${content || "<br>"}`;
-    }
-    const list = line.match(/^(\s*([-+*]|\d+[.)])\s+)(.*)$/);
-    if (list) {
-      const ordered = /^\d/.test(list[2]!.trim());
-      const content = editableInlineMarkdown(list[3]);
-      return `<span class="md-syntax">${escapeHtml(list[1])}</span><span class="live-list-marker${ordered ? " ordered" : ""}"${ordered ? ` data-marker="${escapeHtml(list[2]!)}"` : ""}></span>${content || "<br>"}`;
-    }
-    const quote = line.match(/^(>\s?)(.*)$/);
-    if (quote) {
-      const content = editableInlineMarkdown(quote[2]);
-      return `<span class="md-syntax">${escapeHtml(quote[1])}</span>${content || "<br>"}`;
-    }
-    if (kind === "rule-line") return `<span class="md-syntax">${escapeHtml(line)}</span><br>`;
-    return editableInlineMarkdown(line);
-  }
-
-  function editableInlineMarkdown(value: string): string {
-    const patterns = [
-      /!\[([^\]]*)\]\(([^\s)]+)\)/,
-      /`([^`]+)`/,
-      /\[\[([^\]|]+)\|([^\]]+)\]\]/,
-      /\[\[([^\]]+)\]\]/,
-      /\[([^\]]+)\]\(([^\s)]+)\)/,
-      /(\*\*|__)(.+?)\1/,
-      /~~([^~]+)~~/,
-      /==([^=]+)==/,
-      /(?<!\*)\*([^*]+)\*(?!\*)|(?<!_)_([^_]+)_(?!_)/,
-    ] as const;
-
-    const syntax = (source: string) => `<span class="md-syntax">${escapeHtml(source)}</span>`;
-    let rendered = "";
-    let cursor = 0;
-
-    while (cursor < value.length) {
-      const remaining = value.slice(cursor);
-      let tokenIndex = -1;
-      let token: RegExpMatchArray | undefined;
-      let tokenStart = remaining.length;
-
-      patterns.forEach((pattern, index) => {
-        const match = remaining.match(pattern);
-        if (match && match.index !== undefined && match.index < tokenStart) {
-          tokenIndex = index;
-          token = match;
-          tokenStart = match.index;
-        }
-      });
-
-      if (!token || tokenIndex < 0) {
-        rendered += escapeHtml(remaining);
-        break;
-      }
-
-      rendered += escapeHtml(remaining.slice(0, tokenStart));
-      const full = token[0];
-      switch (tokenIndex) {
-        case 0:
-          // Filenames look like misspellings, so keep the browser from marking the picture.
-          rendered += `<span spellcheck="false">${syntax("![")}<a>${editableInlineMarkdown(token[1]!)}</a>${syntax(`](${token[2]})`)}</span>`;
-          break;
-        case 1:
-          rendered += `${syntax("`")}<code>${escapeHtml(token[1]!)}</code>${syntax("`")}`;
-          break;
-        case 2:
-          rendered += `${syntax(`[[${token[1]}|`)}<a class="wikilink">${editableInlineMarkdown(token[2]!)}</a>${syntax("]]")}`;
-          break;
-        case 3:
-          rendered += `${syntax("[[")}<a class="wikilink">${escapeHtml(token[1]!)}</a>${syntax("]]")}`;
-          break;
-        case 4:
-          rendered += `${syntax("[")}<a>${editableInlineMarkdown(token[1]!)}</a>${syntax(`](${token[2]})`)}`;
-          break;
-        case 5: {
-          const marker = token[1]!;
-          rendered += `${syntax(marker)}<strong>${editableInlineMarkdown(token[2]!)}</strong>${syntax(marker)}`;
-          break;
-        }
-        case 6:
-          rendered += `${syntax("~~")}<del>${editableInlineMarkdown(token[1]!)}</del>${syntax("~~")}`;
-          break;
-        case 7:
-          rendered += `${syntax("==")}<mark>${editableInlineMarkdown(token[1]!)}</mark>${syntax("==")}`;
-          break;
-        default: {
-          const marker = token[1] ? "*" : "_";
-          rendered += `${syntax(marker)}<em>${editableInlineMarkdown(token[1] ?? token[2]!)}</em>${syntax(marker)}`;
-        }
-      }
-      cursor += tokenStart + full.length;
-    }
-
-    return rendered;
-  }
-
-  function escapeHtml(value: string): string {
-    return value
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
-
   return {
     get vaults() {
       return vaults;
@@ -4665,17 +3629,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get primaryModifier() {
       return primaryModifier;
     },
-    get outputPaneVisible() {
-      return outputPaneVisible;
+    get sourcePaneVisible() {
+      return sourcePaneVisible;
     },
     get renderedPaneVisible() {
       return renderedPaneVisible;
     },
     get scrollSync() {
       return scrollSync;
-    },
-    get renderedReadOnly() {
-      return renderedReadOnly;
     },
     get paneLayout() {
       return effectivePaneLayout;
@@ -4698,12 +3659,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get markdownLines() {
       return markdownLines;
     },
-    get liveLine() {
-      return liveLine;
-    },
-    set liveLine(value: number) {
-      liveLine = value;
-    },
     get wordCount() {
       return wordCount;
     },
@@ -4718,12 +3673,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     },
     get renderedBlockLines() {
       return renderedBlockLines;
-    },
-    get liveRenderedMarkdown() {
-      return liveRenderedMarkdown;
-    },
-    get liveRenderedBlockLines() {
-      return liveRenderedBlockLines;
     },
     get paletteItems() {
       return paletteItems;
@@ -4760,12 +3709,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     },
     set editor(value: HTMLTextAreaElement | undefined) {
       editor = value;
-    },
-    get liveEditorContainer() {
-      return liveEditorContainer;
-    },
-    set liveEditorContainer(value: HTMLDivElement | undefined) {
-      liveEditorContainer = value;
     },
     get searchInput() {
       return searchInput;
@@ -4862,18 +3805,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     setSplitRatio,
     saveSplitRatio,
     setContentWidth,
-    toggleOutputPane,
+    toggleSourcePane,
     toggleRenderedPane,
     swapPanes,
     togglePaneLayout,
     placePane,
     copyNoteAs,
     exportNoteAs,
-    toggleRenderedReadOnly,
     toggleScrollSync,
-    focusSourceEditor,
-    focusLiveLine,
-    captureEditorState,
     handleEditorBeforeInput,
     handleEditorCopy,
     handleEditorCut,
@@ -4885,14 +3824,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     renameAttachmentFolder,
     openAttachment,
     updateMarkdown,
-    updateRenderedInput,
-    handleRenderedLineKeydown,
-    handleRenderedPaneMouseDown,
-    activateLiveLine,
-    handleRenderedTaskClick,
-    renderEditableLine,
-    liveLineKind,
-    liveCodeLanguage,
     setTheme,
     setColorTheme,
     setFont,
