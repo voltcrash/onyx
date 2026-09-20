@@ -92,7 +92,7 @@
 	}
 
 	const sections: Array<{ id: SettingsSection; label: string }> = [
-		{ id: 'editor', label: 'Fonts' },
+		{ id: 'editor', label: 'Editor' },
 		{ id: 'themes', label: 'Themes' },
 		{ id: 'shortcuts', label: 'Keyboard shortcuts' },
 		{ id: 'github', label: 'Backup & sync' },
@@ -351,7 +351,7 @@
 							</select>
 						</div>
 					{/each}
-					<h4 class="theme-section-title">Attachments</h4>
+					<h3 class="settings-group-heading">Attachments</h3>
 					<p class="settings-hint">Pasted and dropped images and files are saved to this vault folder and linked with GitHub-style Markdown. Renaming it updates the links in your notes.</p>
 					<div class="settings-field">
 						<label for="settings-attachment-folder">Folder</label>
@@ -366,7 +366,7 @@
 						<input type="checkbox" checked={attachmentsHidden} onchange={(event) => onAttachmentsHiddenChange(event.currentTarget.checked)} />
 						<span>Hide the attachments folder in the sidebar</span>
 					</label>
-					<h4 class="settings-subheading">Scrolling</h4>
+					<h3 class="settings-group-heading">Scrolling</h3>
 					<label class="settings-toggle">
 						<input type="checkbox" checked={scrollSync} onchange={onToggleScrollSync} />
 						<span><strong>Sync scrolling between panes</strong><small>Scrolling the page or the output keeps the other pane at the same part of the note.</small></span>

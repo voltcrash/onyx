@@ -890,9 +890,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     {
       id: "settings",
       group: "Settings",
-      label: "Font settings",
+      label: "Editor settings",
       icon: Settings,
-      keywords: "preferences options writing fonts typeface",
+      keywords: "preferences options writing fonts typeface editor",
       aliases: ["preferences", "configuration"],
       run: () => openSettings("editor"),
     },
