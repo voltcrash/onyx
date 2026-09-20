@@ -1247,6 +1247,46 @@
 .live-editor.prose .live-editing-overlay .live-editable-line::before {
   content: none !important;
 }
+.live-editor.prose
+  .live-editing-overlay:focus-within
+  .live-editable-line.active:has(> br:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 15%;
+  left: 0;
+  width: 2px;
+  height: 70%;
+  border-radius: 1px;
+  background: var(--ink);
+  pointer-events: none;
+  animation: rendered-caret-blink 1s steps(2, start) infinite;
+}
+/* Empty list items keep their marker, so the caret sits where the text would start. */
+.live-editor.prose
+  .live-editing-overlay:focus-within
+  .live-editable-line.active.list-line:has(> br:last-child)::after {
+  left: 24px;
+}
+.live-editor.prose
+  .live-editing-overlay:focus-within
+  .live-editable-line.active.list-line:has(.live-task-check):has(> br:last-child)::after {
+  left: 30px;
+}
+.live-editor.prose
+  .live-editing-overlay:focus-within
+  .live-editable-line.active.quote-line:has(> br:last-child)::after {
+  left: 19px;
+}
+@keyframes rendered-caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
 .live-editor.prose .live-editing-overlay .live-editable-line.code-content {
   font-family: var(--font-code) !important;
 }

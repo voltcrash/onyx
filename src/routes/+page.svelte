@@ -146,6 +146,7 @@
 		onLiveLineFocus={page.focusLiveLine}
 		onRenderedInput={page.updateRenderedInput}
 		onRenderedLineKeydown={page.handleRenderedLineKeydown}
+		onRenderedPaneMouseDown={page.handleRenderedPaneMouseDown}
 		onRenderedTaskClick={page.handleRenderedTaskClick}
 		renderEditableLine={page.renderEditableLine}
 		liveLineKind={page.liveLineKind}
