@@ -1581,10 +1581,13 @@ test("supports standard editing shortcuts in the page pane", async ({ page }) =>
   await line.press("ControlOrMeta+X");
   await expect(line).toContainText("# Shortcut !");
 
-  await page.evaluate(() => {
-    (window as typeof window & { onyxPaste?: string }).onyxPaste = "target";
+  await line.evaluate((element) => {
+    const transfer = new DataTransfer();
+    transfer.setData("text/plain", "target");
+    element.dispatchEvent(
+      new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }),
+    );
   });
-  await line.press("ControlOrMeta+V");
   await expect(line).toContainText("# Shortcut target!");
   await line.press("ControlOrMeta+Z");
   await expect(line).toContainText("# Shortcut !");
