@@ -419,6 +419,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let remoteSyncRequested = false;
   const remoteChanges: VaultChangeEvent[] = [];
   let noteLoadSequence = 0;
+  let fontRevision = 0;
   let clearingVault = false;
 
   const activeVault = $derived(
@@ -1036,6 +1037,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function applyStoredFontChoices(): void {
     const storedFonts = readFontChoices();
+    fontRevision += 1;
+    const revision = fontRevision;
     fonts = storedFonts;
     const customRoles = (Object.keys(storedFonts) as FontRole[]).filter(
       (role) => storedFonts[role] !== defaultFontChoices[role],
@@ -1044,10 +1047,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
     void Promise.all(customRoles.map((role) => loadFont(storedFonts[role]))).then(
       () => {
-        if (fonts === storedFonts) applyFontChoices(storedFonts);
+        if (fontRevision === revision) applyFontChoices(storedFonts);
       },
       () => {
-        if (fonts === storedFonts) applyFontChoices(storedFonts);
+        if (fontRevision === revision) applyFontChoices(storedFonts);
       },
     );
   }
@@ -2927,6 +2930,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function setFont(role: FontRole, id: string): void {
+    fontRevision += 1;
+    const revision = fontRevision;
     const nextFonts = { ...fonts, [role]: id };
     fonts = nextFonts;
     if (id === defaultFontChoices[role]) {
@@ -2935,15 +2940,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
     void loadFont(id).then(
       () => {
-        if (fonts === nextFonts) applyFontChoices(nextFonts);
+        if (fontRevision === revision) applyFontChoices(nextFonts);
       },
       () => {
-        if (fonts === nextFonts) applyFontChoices(nextFonts);
+        if (fontRevision === revision) applyFontChoices(nextFonts);
       },
     );
   }
 
   function resetFonts(): void {
+    fontRevision += 1;
     fonts = { ...defaultFontChoices };
     applyFontChoices(fonts);
   }
