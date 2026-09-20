@@ -23,6 +23,12 @@ const fontLoaders: Record<string, FontLoader> = {
   "google-sans-code": () => import("@fontsource-variable/google-sans-code"),
   inconsolata: () => import("@fontsource-variable/inconsolata"),
   "noto-sans-mono": () => import("@fontsource-variable/noto-sans-mono"),
+  "roboto-serif": () => import("@fontsource-variable/roboto-serif"),
+  "eb-garamond": () => import("@fontsource-variable/eb-garamond"),
+  lora: () => import("@fontsource-variable/lora"),
+  merriweather: () => import("@fontsource-variable/merriweather"),
+  "playfair-display": () => import("@fontsource-variable/playfair-display"),
+  "cormorant-garamond": () => import("@fontsource-variable/cormorant-garamond"),
   "zilla-slab": () =>
     Promise.all([
       import("@fontsource/zilla-slab/400.css"),

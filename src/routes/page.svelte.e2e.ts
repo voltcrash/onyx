@@ -410,6 +410,7 @@ test("filters typefaces by selected font type", async ({ page }) => {
   const headingFont = page.locator("#font-heading");
 
   await expect(headingType).toHaveValue("serif");
+  await expect(headingFont.locator("option")).toHaveCount(12);
 
   await headingType.selectOption("monospace");
   await expect(headingFont).toHaveValue("geist-mono");
