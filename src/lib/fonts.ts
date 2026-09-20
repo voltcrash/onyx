@@ -224,13 +224,6 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "sans-serif",
     },
     {
-      id: "lexend",
-      name: "Lexend",
-      stack: `"Lexend Variable", ${SANS_FALLBACK}`,
-      note: "Research-driven sans for reading comfort.",
-      category: "sans-serif",
-    },
-    {
       id: "system",
       name: "System serif",
       stack: `ui-serif, ${SERIF_FALLBACK}`,
@@ -391,6 +384,13 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       note: "Narrow rounded sans with an airy feel.",
       category: "rounded-sans",
     },
+    {
+      id: "lexend",
+      name: "Lexend",
+      stack: `"Lexend Variable", ${SANS_FALLBACK}`,
+      note: "Research-driven sans for reading comfort.",
+      category: "rounded-sans",
+    },
   ],
   content: [
     {
@@ -489,13 +489,6 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       name: "Noto Sans",
       stack: `"Noto Sans Variable", ${SANS_FALLBACK}`,
       note: "Broad coverage for multilingual notes.",
-      category: "sans-serif",
-    },
-    {
-      id: "lexend",
-      name: "Lexend",
-      stack: `"Lexend Variable", ${SANS_FALLBACK}`,
-      note: "Built to reduce reading fatigue.",
       category: "sans-serif",
     },
     {
@@ -736,6 +729,13 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       note: "Narrow and airy for compact paragraphs.",
       category: "rounded-sans",
     },
+    {
+      id: "lexend",
+      name: "Lexend",
+      stack: `"Lexend Variable", ${SANS_FALLBACK}`,
+      note: "Built to reduce reading fatigue.",
+      category: "rounded-sans",
+    },
   ],
   code: [
     {
@@ -970,13 +970,6 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "sans-serif",
     },
     {
-      id: "lexend",
-      name: "Lexend",
-      stack: `"Lexend Variable", ${SANS_FALLBACK}`,
-      note: "Reading-optimized sans for long sessions.",
-      category: "sans-serif",
-    },
-    {
       id: "roboto-slab",
       name: "Roboto Slab",
       stack: `"Roboto Slab Variable", ${SERIF_FALLBACK}`,
@@ -1086,6 +1079,13 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       name: "Dosis",
       stack: `"Dosis Variable", ${SANS_FALLBACK}`,
       note: "Narrow rounded sans that saves space.",
+      category: "rounded-sans",
+    },
+    {
+      id: "lexend",
+      name: "Lexend",
+      stack: `"Lexend Variable", ${SANS_FALLBACK}`,
+      note: "Reading-optimized sans for long sessions.",
       category: "rounded-sans",
     },
   ],

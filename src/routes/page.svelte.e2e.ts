@@ -414,9 +414,9 @@ test("filters typefaces by selected font type", async ({ page }) => {
 
   await headingType.selectOption("sans-serif");
   await expect(headingFont).toHaveValue("geist");
-  await expect(headingFont.locator("option")).toHaveCount(16);
-  await headingFont.selectOption("lexend");
-  await expect(page.locator(".type-specimen h4")).toHaveCSS("font-family", /Lexend Variable/);
+  await expect(headingFont.locator("option")).toHaveCount(15);
+  await headingFont.selectOption("manrope");
+  await expect(page.locator(".type-specimen h4")).toHaveCSS("font-family", /Manrope Variable/);
 
   await headingType.selectOption("monospace");
   await expect(headingFont).toHaveValue("geist-mono");
@@ -435,9 +435,9 @@ test("filters typefaces by selected font type", async ({ page }) => {
 
   await headingType.selectOption("rounded-sans");
   await expect(headingFont).toHaveValue("nunito");
-  await expect(headingFont.locator("option")).toHaveCount(6);
-  await headingFont.selectOption("fredoka");
-  await expect(page.locator(".type-specimen h4")).toHaveCSS("font-family", /Fredoka Variable/);
+  await expect(headingFont.locator("option")).toHaveCount(7);
+  await headingFont.selectOption("lexend");
+  await expect(page.locator(".type-specimen h4")).toHaveCSS("font-family", /Lexend Variable/);
 });
 
 test("persists edits made while an earlier save is still in flight", async ({ page }) => {
