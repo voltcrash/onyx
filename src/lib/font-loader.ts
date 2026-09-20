@@ -41,6 +41,12 @@ const fontLoaders: Record<string, FontLoader> = {
   "ubuntu-sans": () => import("@fontsource-variable/ubuntu-sans"),
   "noto-sans": () => import("@fontsource-variable/noto-sans"),
   lexend: () => import("@fontsource-variable/lexend"),
+  nunito: () => import("@fontsource-variable/nunito"),
+  quicksand: () => import("@fontsource-variable/quicksand"),
+  comfortaa: () => import("@fontsource-variable/comfortaa"),
+  rubik: () => import("@fontsource-variable/rubik"),
+  fredoka: () => import("@fontsource-variable/fredoka"),
+  dosis: () => import("@fontsource-variable/dosis"),
   "zilla-slab": () =>
     Promise.all([
       import("@fontsource/zilla-slab/400.css"),

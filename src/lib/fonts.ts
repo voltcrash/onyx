@@ -2,7 +2,7 @@ import { readLocalStorage, writeLocalStorage } from "./browser-storage.js";
 
 export type FontRole = "heading" | "content" | "code";
 
-export type FontCategory = "serif" | "sans-serif" | "slab-serif" | "monospace";
+export type FontCategory = "serif" | "sans-serif" | "slab-serif" | "monospace" | "rounded-sans";
 
 export interface FontOption {
   id: string;
@@ -36,6 +36,7 @@ export const fontCategories: Array<{ id: FontCategory; label: string }> = [
   { id: "sans-serif", label: "Sans serif" },
   { id: "slab-serif", label: "Slab serif" },
   { id: "monospace", label: "Monospace" },
+  { id: "rounded-sans", label: "Rounded sans" },
 ];
 
 export const fontOptions: Record<FontRole, FontOption[]> = {
@@ -348,6 +349,48 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       note: "Noto's even mono for global scripts.",
       category: "monospace",
     },
+    {
+      id: "nunito",
+      name: "Nunito",
+      stack: `"Nunito Variable", ${SANS_FALLBACK}`,
+      note: "Rounded sans with a warm, friendly voice.",
+      category: "rounded-sans",
+    },
+    {
+      id: "quicksand",
+      name: "Quicksand",
+      stack: `"Quicksand Variable", ${SANS_FALLBACK}`,
+      note: "Geometric rounded sans with a light feel.",
+      category: "rounded-sans",
+    },
+    {
+      id: "comfortaa",
+      name: "Comfortaa",
+      stack: `"Comfortaa Variable", ${SANS_FALLBACK}`,
+      note: "Soft rounded sans with wide shapes.",
+      category: "rounded-sans",
+    },
+    {
+      id: "rubik",
+      name: "Rubik",
+      stack: `"Rubik Variable", ${SANS_FALLBACK}`,
+      note: "Rounded grotesque with a sturdy rhythm.",
+      category: "rounded-sans",
+    },
+    {
+      id: "fredoka",
+      name: "Fredoka",
+      stack: `"Fredoka Variable", ${SANS_FALLBACK}`,
+      note: "Playful rounded sans for cheerful titles.",
+      category: "rounded-sans",
+    },
+    {
+      id: "dosis",
+      name: "Dosis",
+      stack: `"Dosis Variable", ${SANS_FALLBACK}`,
+      note: "Narrow rounded sans with an airy feel.",
+      category: "rounded-sans",
+    },
   ],
   content: [
     {
@@ -650,6 +693,48 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       stack: `"Noto Sans Mono Variable", ${MONO_FALLBACK}`,
       note: "Even rhythm with broad language coverage.",
       category: "monospace",
+    },
+    {
+      id: "nunito",
+      name: "Nunito",
+      stack: `"Nunito Variable", ${SANS_FALLBACK}`,
+      note: "Warm and rounded for friendly drafts.",
+      category: "rounded-sans",
+    },
+    {
+      id: "quicksand",
+      name: "Quicksand",
+      stack: `"Quicksand Variable", ${SANS_FALLBACK}`,
+      note: "Light geometric sans for airy notes.",
+      category: "rounded-sans",
+    },
+    {
+      id: "comfortaa",
+      name: "Comfortaa",
+      stack: `"Comfortaa Variable", ${SANS_FALLBACK}`,
+      note: "Soft curves for comfortable reading.",
+      category: "rounded-sans",
+    },
+    {
+      id: "rubik",
+      name: "Rubik",
+      stack: `"Rubik Variable", ${SANS_FALLBACK}`,
+      note: "Sturdy rounded sans for everyday text.",
+      category: "rounded-sans",
+    },
+    {
+      id: "fredoka",
+      name: "Fredoka",
+      stack: `"Fredoka Variable", ${SANS_FALLBACK}`,
+      note: "Playful curves for cheerful notes.",
+      category: "rounded-sans",
+    },
+    {
+      id: "dosis",
+      name: "Dosis",
+      stack: `"Dosis Variable", ${SANS_FALLBACK}`,
+      note: "Narrow and airy for compact paragraphs.",
+      category: "rounded-sans",
     },
   ],
   code: [
@@ -960,6 +1045,48 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       stack: `"Noto Sans Mono Variable", ${MONO_FALLBACK}`,
       note: "Noto mono with broad script coverage.",
       category: "monospace",
+    },
+    {
+      id: "nunito",
+      name: "Nunito",
+      stack: `"Nunito Variable", ${SANS_FALLBACK}`,
+      note: "Friendly rounded sans for a soft source pane.",
+      category: "rounded-sans",
+    },
+    {
+      id: "quicksand",
+      name: "Quicksand",
+      stack: `"Quicksand Variable", ${SANS_FALLBACK}`,
+      note: "Light rounded sans for airy code.",
+      category: "rounded-sans",
+    },
+    {
+      id: "comfortaa",
+      name: "Comfortaa",
+      stack: `"Comfortaa Variable", ${SANS_FALLBACK}`,
+      note: "Soft wide sans for relaxed code.",
+      category: "rounded-sans",
+    },
+    {
+      id: "rubik",
+      name: "Rubik",
+      stack: `"Rubik Variable", ${SANS_FALLBACK}`,
+      note: "Sturdy rounded sans, steady in code.",
+      category: "rounded-sans",
+    },
+    {
+      id: "fredoka",
+      name: "Fredoka",
+      stack: `"Fredoka Variable", ${SANS_FALLBACK}`,
+      note: "Playful rounded sans for cheerful code.",
+      category: "rounded-sans",
+    },
+    {
+      id: "dosis",
+      name: "Dosis",
+      stack: `"Dosis Variable", ${SANS_FALLBACK}`,
+      note: "Narrow rounded sans that saves space.",
+      category: "rounded-sans",
     },
   ],
 };

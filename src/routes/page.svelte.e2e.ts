@@ -432,6 +432,12 @@ test("filters typefaces by selected font type", async ({ page }) => {
   await expect(headingFont.locator("option")).toHaveCount(5);
   await headingFont.selectOption("bitter");
   await expect(page.locator(".type-specimen h4")).toHaveCSS("font-family", /Bitter Variable/);
+
+  await headingType.selectOption("rounded-sans");
+  await expect(headingFont).toHaveValue("nunito");
+  await expect(headingFont.locator("option")).toHaveCount(6);
+  await headingFont.selectOption("fredoka");
+  await expect(page.locator(".type-specimen h4")).toHaveCSS("font-family", /Fredoka Variable/);
 });
 
 test("persists edits made while an earlier save is still in flight", async ({ page }) => {
