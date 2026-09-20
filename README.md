@@ -1,20 +1,19 @@
 # Onyx
 
 Onyx is a local-first Markdown notes app. It works without an account, autosaves notes on the
-current device, and provides full-text search and several editing views. Optional GitHub sign-in
+current device, and provides full-text search. Optional GitHub sign-in
 adds private backup and cross-device restore.
 
 ## What is implemented
 
 - Create and autosave Markdown notes locally.
 - Search note titles and contents from an on-device index.
-- Write in the Markdown source and see the rendered page update alongside it; the page can also be
-  made read-only.
+- Write in the source pane and see the rendered pane update alongside it.
 - Syntax-highlight fenced code blocks and show a short language label when the opening fence names
   a language; the same markup is preserved in rich-text, PDF, and HTML output.
 - Point just beside the divider to reveal a pane's grip, drag it to any side of the workspace to place the panes side by side or stacked, and drag the divider to resize them.
-- Switch the output pane between the Markdown source, plain text, rich text, the generated HTML,
-  and a printed-page preview. Plain text copies to the clipboard or downloads as a text file, rich
+- Copy or export notes as plain text, rich text, generated HTML, or a printed-page PDF. Plain text
+  copies to the clipboard or downloads as a text file, rich
   text copies with its formatting or downloads as an RTF document, HTML downloads as a standalone
   file, and the PDF view prints through the browser's print dialog, where it can be saved as a PDF.
 - Choose a light, dark, or system theme. System follows the operating system preference, updates
@@ -48,7 +47,7 @@ use a slide-over note list. Preferences are saved per browser when local storage
 | `⌘ ⇧ Z` / `⌘ Y` | Redo the last undone edit             |
 | `⌘ A`           | Select all Markdown                   |
 | `⌘ B` / `⌘ I`   | Format selected text                  |
-| `⌘ ⇧ P`         | Toggle source/preview                 |
+| `⌘ ⇧ P`         | Toggle rendered pane                  |
 | `⌘ \`           | Toggle the note sidebar               |
 | `⌘ ⇧ L`         | Cycle light, dark, and system themes  |
 | `?`             | Show all shortcuts                    |

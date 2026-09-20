@@ -14,7 +14,7 @@ export const shortcutActions = [
   { id: "selectAll", label: "Select all" },
   { id: "bold", label: "Bold selection" },
   { id: "italic", label: "Italic selection" },
-  { id: "togglePreview", label: "Toggle page pane" },
+  { id: "togglePreview", label: "Toggle rendered pane" },
   { id: "toggleSidebar", label: "Toggle sidebar" },
   { id: "cycleTheme", label: "Cycle theme" },
   { id: "focusSearch", label: "Focus search" },
