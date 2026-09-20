@@ -1,4 +1,4 @@
-/* Printed output stays on light paper; in-pane paper surfaces inherit the active output theme. */
+/* Printed output stays on light paper; source-pane surfaces inherit the active source theme. */
 :root,
 .paper-surface {
   font-family: var(--font-content);
