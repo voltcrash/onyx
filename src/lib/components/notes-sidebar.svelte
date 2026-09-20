@@ -649,7 +649,7 @@
 				{:else}
 					{#each treeRows as row (row.key)}
 						{#if row.kind === 'folder' && row.attachments}
-							<button class="file-tree-row folder-row attachment-folder-row" data-folder-path={row.path} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Attachments — rename or hide this folder in Settings → Editor" onclick={() => toggleFolder(row.path)} oncontextmenu={(event) => event.preventDefault()}>
+							<button class="file-tree-row folder-row attachment-folder-row" data-folder-path={row.path} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Attachments — right-click to rename or delete" onclick={() => toggleFolder(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)}>
 								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Paperclip size={16} /><span class="file-tree-name">{row.label}</span>
 							</button>
 						{:else if row.kind === 'attachment'}

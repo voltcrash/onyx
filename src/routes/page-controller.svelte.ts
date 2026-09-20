@@ -1978,8 +1978,55 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
   }
 
+  function isAttachmentFolderPath(path: string): boolean {
+    return path === attachmentFolder || path.startsWith(`${attachmentFolder}/`);
+  }
+
   async function renameFolder(path: string, requestedName: string): Promise<void> {
     if (!vault || transferState === "working") return;
+    if (isAttachmentFolderPath(path)) {
+      if (path === attachmentFolder) {
+        await renameAttachmentFolder(requestedName);
+        return;
+      }
+      if (!(await settleDraft())) return;
+      try {
+        const name = normalizeFolderName(requestedName);
+        const nextPath = joinPath(parentPath(path), name);
+        if (nextPath.toLocaleLowerCase() === path.toLocaleLowerCase()) return;
+        const moved = await vault.moveAttachmentFolder(path, nextPath);
+        const movedPaths = new Map(
+          moved.map((attachment) => [
+            movePath(attachment.sourcePath ?? "", nextPath, path),
+            attachment.sourcePath ?? "",
+          ]),
+        );
+        if (movedPaths.size) {
+          const notes = await vault.listNotes();
+          for (const metadata of notes) {
+            const note = await vault.getNote(metadata.id);
+            if (!note) continue;
+            const notePath = noteFilePath(note);
+            const fixed = rewriteLocalLinks(note.markdown, notePath, notePath, (target) =>
+              movedPaths.get(target),
+            );
+            if (fixed === note.markdown) continue;
+            await vault.saveNote({
+              id: note.id,
+              title: note.title,
+              markdown: fixed,
+              expectedRevision: note.revision,
+            });
+          }
+        }
+        await relocateFolder(path, nextPath);
+        storageError = "";
+        await refreshFileTree();
+      } catch (error) {
+        storageError = error instanceof Error ? error.message : "The folder could not be renamed.";
+      }
+      return;
+    }
     if (!(await settleDraft())) return;
     try {
       const name = normalizeFolderName(requestedName);
@@ -2151,14 +2198,25 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       const folder = noteFolderPath(note);
       return folder === path || folder.startsWith(`${path}/`);
     });
+    const attached = isAttachmentFolderPath(path)
+      ? (await vault.listAttachments()).filter(
+          (attachment) =>
+            attachment.sourcePath &&
+            (attachment.sourcePath === path || attachment.sourcePath.startsWith(`${path}/`)),
+        )
+      : [];
     const label = basename(path);
-    const suffix = affectedNotes.length
-      ? ` and its ${affectedNotes.length} ${affectedNotes.length === 1 ? "file" : "files"}`
-      : "";
+    const parts: string[] = [];
+    if (affectedNotes.length)
+      parts.push(`${affectedNotes.length} ${affectedNotes.length === 1 ? "file" : "files"}`);
+    if (attached.length)
+      parts.push(`${attached.length} ${attached.length === 1 ? "attachment" : "attachments"}`);
+    const suffix = parts.length ? ` and its ${parts.join(" and ")}` : "";
     if (!window.confirm(`Delete folder “${label}”${suffix}?`)) return;
     if (!(await settleDraft())) return;
     try {
       for (const note of affectedNotes) await vault.deleteNote(note.id);
+      if (attached.length) await vault.deleteAttachmentFolder(path);
       const existingFolders = await vault.listFolders();
       const nextFolders = existingFolders.filter(
         (folder) => folder.path !== path && !folder.path.startsWith(`${path}/`),
@@ -2169,7 +2227,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       if (activeNoteId && affectedNotes.some((note) => note.id === activeNoteId)) {
         if (remaining[0]) await loadNote(remaining[0].id);
         else resetActiveNote();
+      } else if (activeNoteId) {
+        await loadNote(activeNoteId);
       }
+      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
       storageError = "";
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The folder could not be deleted.";
@@ -3034,47 +3095,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     return replaceEditorSelection(selection, "");
   }
 
-  function pasteEditorSelection(): boolean {
-    const selection = getEditorSelection();
-    const clipboard = navigator.clipboard;
-    if (!selection || !clipboard) return false;
-    rememberEditorState(selection);
-    const pasteText = () => {
-      if (typeof clipboard.readText !== "function")
-        throw new Error("Clipboard text is unavailable");
-      return Promise.resolve(clipboard.readText()).then((text) =>
-        replaceEditorSelection(selection, text),
-      );
-    };
-    if (typeof clipboard.read === "function") {
-      void clipboard
-        .read()
-        .then(async (items) => {
-          const files = await clipboardFiles(items);
-          if (files.length) {
-            await attachFiles(files, selection);
-            return;
-          }
-          const textItem = items.find((item) => item.types.includes("text/plain"));
-          if (textItem) {
-            replaceEditorSelection(selection, await (await textItem.getType("text/plain")).text());
-            return;
-          }
-          await pasteText();
-        })
-        .catch(() => {
-          void pasteText().catch(() => {
-            transferState = "error";
-          });
-        });
-    } else {
-      void pasteText().catch(() => {
-        transferState = "error";
-      });
-    }
-    return true;
-  }
-
   function selectAllEditorContent(target: EventTarget | null = document.activeElement): boolean {
     const surface = editorSurfaceForTarget(target);
     if (surface === "source" && editor) {
@@ -3162,26 +3182,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       .filter((item) => item.kind === "file")
       .map((item) => item.getAsFile())
       .filter((file): file is File => file !== null);
-  }
-
-  async function clipboardFiles(items: ClipboardItems): Promise<File[]> {
-    const files: File[] = [];
-    for (const item of items) {
-      const type = item.types.find((candidate) => !candidate.startsWith("text/"));
-      if (!type) continue;
-      try {
-        const contents = await item.getType(type);
-        const extension = type.split("/", 2)[1]?.replace(/\+.*$/, "") || "bin";
-        files.push(
-          new File([contents], `${type.startsWith("image/") ? "image" : "file"}.${extension}`, {
-            type,
-          }),
-        );
-      } catch {
-        // Clipboard entries can disappear between the permission check and the read.
-      }
-    }
-    return files;
   }
 
   function dropSelection(event: DragEvent): EditorSelection | undefined {
@@ -4003,6 +4003,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       shortcutMatchesEvent(shortcuts[candidate], event, primaryModifier),
     );
 
+    // Paste carries files in its ClipboardEvent, which the keydown cannot see.
+    // Let the browser fire the native paste so images land on the first press.
+    if (action === "paste" && isEditorTarget(event.target)) return;
+
     if (action && isEditorShortcutAction(action)) {
       if (!isEditorTarget(event.target)) return;
       if (runEditorShortcut(action, event.target)) event.preventDefault();
@@ -4054,7 +4058,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function isEditorShortcutAction(action: ShortcutAction): boolean {
-    return ["cutSelection", "copySelection", "paste", "undo", "redo", "selectAll"].includes(action);
+    return ["cutSelection", "copySelection", "undo", "redo", "selectAll"].includes(action);
   }
 
   function editorShortcutAlias(event: KeyboardEvent): ShortcutAction | undefined {
@@ -4063,7 +4067,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const key = event.key.toLowerCase();
     if (key === "x" && !event.shiftKey) return "cutSelection";
     if (key === "c" && !event.shiftKey) return "copySelection";
-    if (key === "v" && !event.shiftKey) return "paste";
     if (key === "a" && !event.shiftKey) return "selectAll";
     if (key === "z") return event.shiftKey ? "redo" : "undo";
     if (key === "y" && !event.shiftKey) return "redo";
@@ -4072,7 +4075,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   function runEditorShortcut(action: ShortcutAction, target: EventTarget | null): boolean {
     if (action === "cutSelection") return cutEditorSelection(target);
     if (action === "copySelection") return copyEditorSelection(target);
-    if (action === "paste") return pasteEditorSelection();
     if (action === "undo") return undo() || isEditorTarget(target);
     if (action === "redo") return redo() || isEditorTarget(target);
     if (action === "selectAll") return selectAllEditorContent(target);
@@ -4297,6 +4299,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     return "body";
   }
 
+  function isImageOnlyLine(line: string): boolean {
+    return /^\s*!\[[^\]]*\]\([^\s)]+\)\s*$/.test(line);
+  }
+
   function liveLineKind(line: string, index: number): string {
     if (liveCodeLines[index]) {
       if (isFenceLine(line)) return "code-line code-fence";
@@ -4307,6 +4313,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       return `code-line code-content${startsCode ? " code-start" : ""}${endsCode ? " code-end" : ""}`;
     }
     if (!line) return "blank-line";
+    if (isImageOnlyLine(line)) return "image-line";
     const table = tableLineKind(index);
     if (table) return `table-line table-${table}`;
     const heading = line.match(/^(#{1,6})\s+/);
@@ -4328,6 +4335,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function renderEditableLine(line: string, index: number): string {
     const kind = liveLineKind(line, index);
+    if (kind.includes("image-line")) {
+      // The picture itself is the visible content; keep its source out of the caret path.
+      return `<span class="md-syntax" spellcheck="false">${escapeHtml(line)}</span>`;
+    }
     if (kind.includes("code-line")) {
       if (isFenceLine(line)) return `<span class="md-syntax">${escapeHtml(line)}</span>`;
       return liveCodeHighlights.get(index) || "<br>";
@@ -4382,6 +4393,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function editableInlineMarkdown(value: string): string {
     const patterns = [
+      /!\[([^\]]*)\]\(([^\s)]+)\)/,
       /`([^`]+)`/,
       /\[\[([^\]|]+)\|([^\]]+)\]\]/,
       /\[\[([^\]]+)\]\]/,
@@ -4420,26 +4432,30 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       const full = token[0];
       switch (tokenIndex) {
         case 0:
-          rendered += `${syntax("`")}<code>${escapeHtml(token[1]!)}</code>${syntax("`")}`;
+          // Filenames look like misspellings, so keep the browser from marking the picture.
+          rendered += `<span spellcheck="false">${syntax("![")}<a>${editableInlineMarkdown(token[1]!)}</a>${syntax(`](${token[2]})`)}</span>`;
           break;
         case 1:
-          rendered += `${syntax(`[[${token[1]}|`)}<a class="wikilink">${editableInlineMarkdown(token[2]!)}</a>${syntax("]]")}`;
+          rendered += `${syntax("`")}<code>${escapeHtml(token[1]!)}</code>${syntax("`")}`;
           break;
         case 2:
-          rendered += `${syntax("[[")}<a class="wikilink">${escapeHtml(token[1]!)}</a>${syntax("]]")}`;
+          rendered += `${syntax(`[[${token[1]}|`)}<a class="wikilink">${editableInlineMarkdown(token[2]!)}</a>${syntax("]]")}`;
           break;
         case 3:
+          rendered += `${syntax("[[")}<a class="wikilink">${escapeHtml(token[1]!)}</a>${syntax("]]")}`;
+          break;
+        case 4:
           rendered += `${syntax("[")}<a>${editableInlineMarkdown(token[1]!)}</a>${syntax(`](${token[2]})`)}`;
           break;
-        case 4: {
+        case 5: {
           const marker = token[1]!;
           rendered += `${syntax(marker)}<strong>${editableInlineMarkdown(token[2]!)}</strong>${syntax(marker)}`;
           break;
         }
-        case 5:
+        case 6:
           rendered += `${syntax("~~")}<del>${editableInlineMarkdown(token[1]!)}</del>${syntax("~~")}`;
           break;
-        case 6:
+        case 7:
           rendered += `${syntax("==")}<mark>${editableInlineMarkdown(token[1]!)}</mark>${syntax("==")}`;
           break;
         default: {

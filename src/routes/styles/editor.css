@@ -465,6 +465,11 @@
   color: transparent;
   white-space: pre;
 }
+/* Block images render as pictures behind the overlay, so the overlay line stays out of the caret path. */
+.live-editable-line.image-line {
+  caret-color: transparent;
+  user-select: none;
+}
 .prose em,
 .live-editable-line em {
   font-synthesis: style;

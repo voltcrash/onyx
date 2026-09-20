@@ -332,6 +332,31 @@ export class VaultDatabase {
     await transactionDone(transaction);
   }
 
+  async deleteAttachments(attachmentIds: string[], operations: BackupOperation[]): Promise<void> {
+    if (attachmentIds.length === 0 && operations.length === 0) return;
+    const transaction = this.#database.transaction(
+      ["attachments", "backupQueue", "settings"],
+      "readwrite",
+    );
+    const complete = transactionDone(transaction);
+    try {
+      const attachments = transaction.objectStore("attachments");
+      for (const attachmentId of attachmentIds) attachments.delete(attachmentId);
+      const backupQueue = transaction.objectStore("backupQueue");
+      for (const operation of operations) backupQueue.put(operation);
+      await advanceVaultVersion(transaction);
+      await complete;
+    } catch (error) {
+      try {
+        transaction.abort();
+      } catch {
+        // The transaction may already have completed or aborted.
+      }
+      await complete.catch(() => undefined);
+      throw error;
+    }
+  }
+
   async deleteNote(
     noteId: string,
     attachmentIds: string[],

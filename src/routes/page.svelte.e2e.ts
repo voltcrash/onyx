@@ -1581,10 +1581,13 @@ test("supports standard editing shortcuts in the page pane", async ({ page }) =>
   await line.press("ControlOrMeta+X");
   await expect(line).toContainText("# Shortcut !");
 
-  await page.evaluate(() => {
-    (window as typeof window & { onyxPaste?: string }).onyxPaste = "target";
+  await line.evaluate((element) => {
+    const transfer = new DataTransfer();
+    transfer.setData("text/plain", "target");
+    element.dispatchEvent(
+      new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }),
+    );
   });
-  await line.press("ControlOrMeta+V");
   await expect(line).toContainText("# Shortcut target!");
   await line.press("ControlOrMeta+Z");
   await expect(line).toContainText("# Shortcut !");
@@ -2384,6 +2387,7 @@ test("stores pasted images in the attachments folder with GitHub-style links", a
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(editor).toBeEnabled();
   await editor.fill("# Photos\n\n");
+  await editor.focus();
   await page.evaluate(() => {
     const bytes = Uint8Array.from(
       atob(
@@ -2391,16 +2395,16 @@ test("stores pasted images in the attachments folder with GitHub-style links", a
       ),
       (character) => character.charCodeAt(0),
     );
-    const clipboardItem = {
-      types: ["image/png"],
-      getType: async () => new Blob([bytes], { type: "image/png" }),
-    };
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { read: async () => [clipboardItem], readText: async () => "" },
-    });
+    const file = new File([bytes], "image.png", { type: "image/png" });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    const target = document.querySelector(
+      'textarea[aria-label="Markdown editor"]',
+    ) as HTMLTextAreaElement;
+    target.dispatchEvent(
+      new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }),
+    );
   });
-  await editor.press("ControlOrMeta+V");
 
   await expect(editor).toHaveValue(
     /!\[image-\d{8}-\d{6}\.png\]\(attachments\/image-\d{8}-\d{6}\.png\)$/,

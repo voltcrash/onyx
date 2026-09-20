@@ -777,7 +777,9 @@
 					<div class="live-rendered-content" aria-hidden="true">{@html renderedMarkdown}</div>
 					<div class="live-editing-overlay" contenteditable={saveState !== 'loading' && transferState !== 'working'} role="textbox" tabindex="-1" aria-label="Page editor" aria-multiline="true" spellcheck="true" onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} ondragover={onEditorDragOver} ondrop={onEditorDrop} oninput={(event) => onRenderedInput(event as unknown as InputEvent)} onkeydown={onRenderedLineKeydown} onmousedown={onRenderedTaskClick}>
 						{#each markdownLines as line, index}
-							<div class="live-editable-line {liveLineKind(line, index)}" class:active={index === liveLine} style={liveLineStyle(index)} role="textbox" tabindex="0" aria-label={`Markdown line ${index + 1}`} aria-multiline="false" data-live-line={index} data-code-language={liveCodeLanguage(index) || undefined} onfocus={() => onLiveLineFocus(index)}>{@html renderEditableLine(line, index)}</div>
+							{@const lineKind = liveLineKind(line, index)}
+							{@const isImage = lineKind.includes('image-line')}
+							<div class="live-editable-line {lineKind}" class:active={index === liveLine} style={liveLineStyle(index)} role="textbox" tabindex="0" aria-label={`Markdown line ${index + 1}`} aria-multiline="false" data-live-line={index} data-code-language={liveCodeLanguage(index) || undefined} contenteditable={isImage ? 'false' : undefined} spellcheck={isImage ? 'false' : undefined} onfocus={() => onLiveLineFocus(index)}>{@html renderEditableLine(line, index)}</div>
 						{/each}
 					</div>
 				</div>
