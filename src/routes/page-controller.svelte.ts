@@ -1978,8 +1978,55 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
   }
 
+  function isAttachmentFolderPath(path: string): boolean {
+    return path === attachmentFolder || path.startsWith(`${attachmentFolder}/`);
+  }
+
   async function renameFolder(path: string, requestedName: string): Promise<void> {
     if (!vault || transferState === "working") return;
+    if (isAttachmentFolderPath(path)) {
+      if (path === attachmentFolder) {
+        await renameAttachmentFolder(requestedName);
+        return;
+      }
+      if (!(await settleDraft())) return;
+      try {
+        const name = normalizeFolderName(requestedName);
+        const nextPath = joinPath(parentPath(path), name);
+        if (nextPath.toLocaleLowerCase() === path.toLocaleLowerCase()) return;
+        const moved = await vault.moveAttachmentFolder(path, nextPath);
+        const movedPaths = new Map(
+          moved.map((attachment) => [
+            movePath(attachment.sourcePath ?? "", nextPath, path),
+            attachment.sourcePath ?? "",
+          ]),
+        );
+        if (movedPaths.size) {
+          const notes = await vault.listNotes();
+          for (const metadata of notes) {
+            const note = await vault.getNote(metadata.id);
+            if (!note) continue;
+            const notePath = noteFilePath(note);
+            const fixed = rewriteLocalLinks(note.markdown, notePath, notePath, (target) =>
+              movedPaths.get(target),
+            );
+            if (fixed === note.markdown) continue;
+            await vault.saveNote({
+              id: note.id,
+              title: note.title,
+              markdown: fixed,
+              expectedRevision: note.revision,
+            });
+          }
+        }
+        await relocateFolder(path, nextPath);
+        storageError = "";
+        await refreshFileTree();
+      } catch (error) {
+        storageError = error instanceof Error ? error.message : "The folder could not be renamed.";
+      }
+      return;
+    }
     if (!(await settleDraft())) return;
     try {
       const name = normalizeFolderName(requestedName);
@@ -2151,14 +2198,25 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       const folder = noteFolderPath(note);
       return folder === path || folder.startsWith(`${path}/`);
     });
+    const attached = isAttachmentFolderPath(path)
+      ? (await vault.listAttachments()).filter(
+          (attachment) =>
+            attachment.sourcePath &&
+            (attachment.sourcePath === path || attachment.sourcePath.startsWith(`${path}/`)),
+        )
+      : [];
     const label = basename(path);
-    const suffix = affectedNotes.length
-      ? ` and its ${affectedNotes.length} ${affectedNotes.length === 1 ? "file" : "files"}`
-      : "";
+    const parts: string[] = [];
+    if (affectedNotes.length)
+      parts.push(`${affectedNotes.length} ${affectedNotes.length === 1 ? "file" : "files"}`);
+    if (attached.length)
+      parts.push(`${attached.length} ${attached.length === 1 ? "attachment" : "attachments"}`);
+    const suffix = parts.length ? ` and its ${parts.join(" and ")}` : "";
     if (!window.confirm(`Delete folder “${label}”${suffix}?`)) return;
     if (!(await settleDraft())) return;
     try {
       for (const note of affectedNotes) await vault.deleteNote(note.id);
+      if (attached.length) await vault.deleteAttachmentFolder(path);
       const existingFolders = await vault.listFolders();
       const nextFolders = existingFolders.filter(
         (folder) => folder.path !== path && !folder.path.startsWith(`${path}/`),
@@ -2169,7 +2227,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       if (activeNoteId && affectedNotes.some((note) => note.id === activeNoteId)) {
         if (remaining[0]) await loadNote(remaining[0].id);
         else resetActiveNote();
+      } else if (activeNoteId) {
+        await loadNote(activeNoteId);
       }
+      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
       storageError = "";
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The folder could not be deleted.";

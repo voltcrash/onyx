@@ -588,6 +588,55 @@ export class Vault {
     });
   }
 
+  /** Deletes every attachment whose vault link lives in `folder`, with its stored bytes. */
+  async deleteAttachmentFolder(folder: string): Promise<AttachmentMetadata[]> {
+    return this.#withLock(async () => {
+      if (!folder) return [];
+      const attachments = await this.#database.getAttachments();
+      const targeted = attachments.filter(
+        (attachment) =>
+          attachment.sourcePath &&
+          (attachment.sourcePath === folder || isPathWithin(attachment.sourcePath, folder)),
+      );
+      if (targeted.length === 0) return [];
+      const now = new Date().toISOString();
+      const removed = await Promise.all(
+        targeted.map(async (attachment) => {
+          try {
+            return { attachment, file: await this.#filesystem.read(attachment.path) };
+          } catch {
+            return { attachment, file: undefined };
+          }
+        }),
+      );
+      const operations: BackupOperation[] = targeted.map((attachment): BackupOperation => ({
+        id: crypto.randomUUID(),
+        kind: "attachment:delete",
+        entityId: attachment.id,
+        noteId: attachment.noteId,
+        path: attachment.path,
+        revision: 1,
+        createdAt: now,
+      }));
+      try {
+        for (const attachment of targeted) {
+          await this.#filesystem.remove(attachment.path, { ignoreMissing: true });
+        }
+        await this.#database.deleteAttachments(
+          targeted.map((attachment) => attachment.id),
+          operations,
+        );
+      } catch (error) {
+        for (const { attachment, file } of removed) {
+          if (file) await this.#filesystem.write(attachment.path, file).catch(() => undefined);
+        }
+        throw error;
+      }
+      this.#publish({ kind: "vault" });
+      return targeted;
+    });
+  }
+
   /** Moves a note's attachments with it, except those kept in the shared `pinnedFolder`. */
   async moveAttachmentSourcePaths(
     noteId: string,
