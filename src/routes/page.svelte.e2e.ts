@@ -386,6 +386,11 @@ test("applies every code font to nested code content", async ({ page }) => {
     "fira-code": "Fira Code Variable",
     "source-code-pro": "Source Code Pro Variable",
     "roboto-mono": "Roboto Mono Variable",
+    "cascadia-code": "Cascadia Code Variable",
+    "ubuntu-sans-mono": "Ubuntu Sans Mono Variable",
+    "google-sans-code": "Google Sans Code Variable",
+    inconsolata: "Inconsolata Variable",
+    "noto-sans-mono": "Noto Sans Mono Variable",
   };
 
   for (const [id, family] of Object.entries(codeFonts)) {
@@ -408,7 +413,7 @@ test("filters typefaces by selected font type", async ({ page }) => {
 
   await headingType.selectOption("monospace");
   await expect(headingFont).toHaveValue("geist-mono");
-  await expect(headingFont.locator("option")).toHaveCount(6);
+  await expect(headingFont.locator("option")).toHaveCount(11);
   await headingFont.selectOption("jetbrains-mono");
   await expect(page.locator(".type-specimen h4")).toHaveCSS(
     "font-family",

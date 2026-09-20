@@ -18,6 +18,11 @@ const fontLoaders: Record<string, FontLoader> = {
   "roboto-slab": () => import("@fontsource-variable/roboto-slab"),
   rokkitt: () => import("@fontsource-variable/rokkitt"),
   bitter: () => import("@fontsource-variable/bitter"),
+  "cascadia-code": () => import("@fontsource-variable/cascadia-code"),
+  "ubuntu-sans-mono": () => import("@fontsource-variable/ubuntu-sans-mono"),
+  "google-sans-code": () => import("@fontsource-variable/google-sans-code"),
+  inconsolata: () => import("@fontsource-variable/inconsolata"),
+  "noto-sans-mono": () => import("@fontsource-variable/noto-sans-mono"),
   "zilla-slab": () =>
     Promise.all([
       import("@fontsource/zilla-slab/400.css"),
