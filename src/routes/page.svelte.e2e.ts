@@ -413,13 +413,13 @@ test("filters typefaces by selected font type", async ({ page }) => {
   await expect(headingFont.locator("option")).toHaveCount(12);
 
   await headingType.selectOption("sans-serif");
-  await expect(headingFont).toHaveValue("geist");
+  await expect(headingFont).toHaveValue("archivo");
   await expect(headingFont.locator("option")).toHaveCount(15);
   await headingFont.selectOption("manrope");
   await expect(page.locator(".type-specimen h4")).toHaveCSS("font-family", /Manrope Variable/);
 
   await headingType.selectOption("monospace");
-  await expect(headingFont).toHaveValue("geist-mono");
+  await expect(headingFont).toHaveValue("cascadia-code");
   await expect(headingFont.locator("option")).toHaveCount(11);
   await headingFont.selectOption("jetbrains-mono");
   await expect(page.locator(".type-specimen h4")).toHaveCSS(
@@ -428,13 +428,13 @@ test("filters typefaces by selected font type", async ({ page }) => {
   );
 
   await headingType.selectOption("slab-serif");
-  await expect(headingFont).toHaveValue("roboto-slab");
+  await expect(headingFont).toHaveValue("arvo");
   await expect(headingFont.locator("option")).toHaveCount(5);
   await headingFont.selectOption("bitter");
   await expect(page.locator(".type-specimen h4")).toHaveCSS("font-family", /Bitter Variable/);
 
   await headingType.selectOption("rounded-sans");
-  await expect(headingFont).toHaveValue("nunito");
+  await expect(headingFont).toHaveValue("comfortaa");
   await expect(headingFont.locator("option")).toHaveCount(7);
   await headingFont.selectOption("lexend");
   await expect(page.locator(".type-specimen h4")).toHaveCSS("font-family", /Lexend Variable/);

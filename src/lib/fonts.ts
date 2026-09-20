@@ -1128,6 +1128,12 @@ export function fontCategory(role: FontRole, id: string): FontCategory {
   return fontOption(role, id).category;
 }
 
+export function fontOptionsFor(role: FontRole, category: FontCategory): FontOption[] {
+  return fontOptions[role]
+    .filter((option) => option.category === category)
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
 export const defaultFontCategories: FontCategories = {
   heading: fontCategory("heading", defaultFontChoices.heading),
   content: fontCategory("content", defaultFontChoices.content),

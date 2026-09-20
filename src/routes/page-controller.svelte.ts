@@ -82,7 +82,7 @@ import {
   defaultFontCategories,
   defaultFontChoices,
   fontCategory,
-  fontOptions,
+  fontOptionsFor,
   readFontCategories,
   readFontChoices,
   writeFontCategory,
@@ -2976,7 +2976,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     fontRevision += 1;
     fontCategories = { ...fontCategories, [role]: category };
     writeFontCategory(role, category);
-    const candidates = fontOptions[role].filter((option) => option.category === category);
+    const candidates = fontOptionsFor(role, category);
     const current = fonts[role]!;
     const nextId = candidates.some((option) => option.id === current)
       ? current

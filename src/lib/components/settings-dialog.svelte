@@ -6,7 +6,7 @@
 		Sun, Trash2, TriangleAlert, WifiOff, X
 	} from '@lucide/svelte';
 	import { listGithubRepositories, type GithubRepository, type GithubUser } from '$lib/github';
-	import { defaultFontChoices, fontCategories as fontCategoryOptions, fontOptions, fontRoles, type FontCategories, type FontCategory, type FontChoices, type FontRole } from '$lib/fonts';
+	import { defaultFontChoices, fontCategories as fontCategoryOptions, fontOptionsFor, fontRoles, type FontCategories, type FontCategory, type FontChoices, type FontRole } from '$lib/fonts';
 	import { colorThemeOptions, type ColorTheme, type ResolvedTheme, type ThemePreference } from '$lib/theme';
 	import { persistenceDeniedMessage } from '$lib/browser-storage';
 	import {
@@ -353,7 +353,7 @@
 									{/each}
 								</select>
 								<select id={`font-${role.id}`} aria-label={`${role.label} typeface`} value={fonts[role.id]} onchange={(event) => onFontChange(role.id, event.currentTarget.value)}>
-									{#each fontOptions[role.id].filter((option) => option.category === fontCategories[role.id]) as option (option.id)}
+									{#each fontOptionsFor(role.id, fontCategories[role.id]) as option (option.id)}
 										<option value={option.id}>{option.name}</option>
 									{/each}
 								</select>
