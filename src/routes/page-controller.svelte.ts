@@ -1045,6 +1045,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     );
     if (customRoles.length === 0) return;
 
+    applyFontChoices(storedFonts);
     void Promise.all(customRoles.map((role) => loadFont(storedFonts[role]))).then(
       () => {
         if (fontRevision === revision) applyFontChoices(storedFonts);
@@ -2934,8 +2935,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const revision = fontRevision;
     const nextFonts = { ...fonts, [role]: id };
     fonts = nextFonts;
+    applyFontChoices(nextFonts);
     if (id === defaultFontChoices[role]) {
-      applyFontChoices(nextFonts);
       return;
     }
     void loadFont(id).then(
