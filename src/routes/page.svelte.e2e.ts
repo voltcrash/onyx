@@ -417,7 +417,9 @@ test("filters typefaces by selected font type", async ({ page }) => {
 
   await headingType.selectOption("slab-serif");
   await expect(headingFont).toHaveValue("roboto-slab");
-  await expect(headingFont.locator("option")).toHaveCount(1);
+  await expect(headingFont.locator("option")).toHaveCount(5);
+  await headingFont.selectOption("bitter");
+  await expect(page.locator(".type-specimen h4")).toHaveCSS("font-family", /Bitter Variable/);
 });
 
 test("persists edits made while an earlier save is still in flight", async ({ page }) => {

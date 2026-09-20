@@ -16,6 +16,19 @@ const fontLoaders: Record<string, FontLoader> = {
   "source-code-pro": () => import("@fontsource-variable/source-code-pro"),
   "roboto-mono": () => import("@fontsource-variable/roboto-mono"),
   "roboto-slab": () => import("@fontsource-variable/roboto-slab"),
+  rokkitt: () => import("@fontsource-variable/rokkitt"),
+  bitter: () => import("@fontsource-variable/bitter"),
+  "zilla-slab": () =>
+    Promise.all([
+      import("@fontsource/zilla-slab/400.css"),
+      import("@fontsource/zilla-slab/500.css"),
+      import("@fontsource/zilla-slab/600.css"),
+      import("@fontsource/zilla-slab/700.css"),
+    ]).then(() => undefined),
+  arvo: () =>
+    Promise.all([import("@fontsource/arvo/400.css"), import("@fontsource/arvo/700.css")]).then(
+      () => undefined,
+    ),
 };
 
 const loadedFonts = new Map<string, Promise<void>>();
