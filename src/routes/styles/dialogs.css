@@ -692,6 +692,12 @@ kbd {
   font-size: 12px;
   font-weight: 650;
 }
+.font-selects {
+  display: grid;
+  grid-template-columns: minmax(118px, 5fr) minmax(0, 8fr);
+  gap: 8px;
+  min-width: 0;
+}
 .font-role select {
   width: 100%;
   height: 36px;

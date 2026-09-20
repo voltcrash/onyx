@@ -79,8 +79,15 @@ import {
 } from "$lib/browser-storage";
 import {
   applyFontChoices,
+  defaultFontCategories,
   defaultFontChoices,
+  fontCategory,
+  fontOptions,
+  readFontCategories,
   readFontChoices,
+  writeFontCategory,
+  type FontCategories,
+  type FontCategory,
   type FontChoices,
   type FontRole,
 } from "$lib/fonts";
@@ -389,6 +396,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let resolvedTheme = $state<ResolvedTheme>("light");
   let colorTheme = $state<ColorTheme>("ember");
   let fonts = $state<FontChoices>({ ...defaultFontChoices });
+  let fontCategories = $state<FontCategories>({ ...defaultFontCategories });
   let paletteOpen = $state(false);
   let paletteNotes = $state<NoteMetadata[]>([]);
   let recentNoteIds = $state<string[]>([]);
@@ -1040,6 +1048,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     fontRevision += 1;
     const revision = fontRevision;
     fonts = storedFonts;
+    fontCategories = readFontCategories(storedFonts);
     const customRoles = (Object.keys(storedFonts) as FontRole[]).filter(
       (role) => storedFonts[role] !== defaultFontChoices[role],
     );
@@ -2935,6 +2944,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const revision = fontRevision;
     const nextFonts = { ...fonts, [role]: id };
     fonts = nextFonts;
+    const nextCategories = { ...fontCategories, [role]: fontCategory(role, id) };
+    fontCategories = nextCategories;
+    writeFontCategory(role, nextCategories[role]!);
     applyFontChoices(nextFonts);
     if (id === defaultFontChoices[role]) {
       return;
@@ -2952,7 +2964,24 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   function resetFonts(): void {
     fontRevision += 1;
     fonts = { ...defaultFontChoices };
+    fontCategories = { ...defaultFontCategories };
+    for (const role of Object.keys(fontCategories) as FontRole[]) {
+      writeFontCategory(role, fontCategories[role]!);
+    }
     applyFontChoices(fonts);
+  }
+
+  function setFontCategory(role: FontRole, category: FontCategory): void {
+    if (fontCategories[role] === category) return;
+    fontRevision += 1;
+    fontCategories = { ...fontCategories, [role]: category };
+    writeFontCategory(role, category);
+    const candidates = fontOptions[role].filter((option) => option.category === category);
+    const current = fonts[role]!;
+    const nextId = candidates.some((option) => option.id === current)
+      ? current
+      : (candidates[0]?.id ?? current);
+    if (nextId !== current) setFont(role, nextId);
   }
 
   function shortcutLabel(action: ShortcutAction): string | undefined {
@@ -3632,6 +3661,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get fonts() {
       return fonts;
     },
+    get fontCategories() {
+      return fontCategories;
+    },
     get shortcuts() {
       return shortcuts;
     },
@@ -3836,6 +3868,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     setTheme,
     setColorTheme,
     setFont,
+    setFontCategory,
     resetFonts,
     setShortcut,
     resetShortcuts,

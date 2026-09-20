@@ -15,6 +15,7 @@ const fontLoaders: Record<string, FontLoader> = {
   "fira-code": () => import("@fontsource-variable/fira-code"),
   "source-code-pro": () => import("@fontsource-variable/source-code-pro"),
   "roboto-mono": () => import("@fontsource-variable/roboto-mono"),
+  "roboto-slab": () => import("@fontsource-variable/roboto-slab"),
 };
 
 const loadedFonts = new Map<string, Promise<void>>();

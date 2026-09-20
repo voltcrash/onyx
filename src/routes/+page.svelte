@@ -171,6 +171,7 @@
 			resolvedTheme={page.resolvedTheme}
 			colorTheme={page.colorTheme}
 			fonts={page.fonts}
+			fontCategories={page.fontCategories}
 			attachmentFolder={page.attachmentFolder}
 			attachmentsHidden={page.attachmentsHidden}
 			onAttachmentsHiddenChange={page.setAttachmentsHidden}
@@ -180,6 +181,7 @@
 			onThemeChange={page.setTheme}
 			onColorThemeChange={page.setColorTheme}
 			onFontChange={page.setFont}
+			onFontCategoryChange={page.setFontCategory}
 			onResetFonts={page.resetFonts}
 			scrollSync={page.scrollSync}
 			onToggleScrollSync={page.toggleScrollSync}

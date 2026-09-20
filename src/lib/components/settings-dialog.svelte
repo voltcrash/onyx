@@ -6,7 +6,7 @@
 		Sun, Trash2, TriangleAlert, WifiOff, X
 	} from '@lucide/svelte';
 	import { listGithubRepositories, type GithubRepository, type GithubUser } from '$lib/github';
-	import { defaultFontChoices, fontOptions, fontRoles, type FontChoices, type FontRole } from '$lib/fonts';
+	import { defaultFontChoices, fontCategories as fontCategoryOptions, fontOptions, fontRoles, type FontCategories, type FontCategory, type FontChoices, type FontRole } from '$lib/fonts';
 	import { colorThemeOptions, type ColorTheme, type ResolvedTheme, type ThemePreference } from '$lib/theme';
 	import { persistenceDeniedMessage } from '$lib/browser-storage';
 	import {
@@ -37,6 +37,7 @@
 		resolvedTheme: ResolvedTheme;
 		colorTheme: ColorTheme;
 		fonts: FontChoices;
+		fontCategories: FontCategories;
 		attachmentFolder: string;
 		attachmentsHidden: boolean;
 		onAttachmentsHiddenChange: (hidden: boolean) => void;
@@ -47,6 +48,7 @@
 		onThemeChange: (preference: ThemePreference) => void;
 		onColorThemeChange: (theme: ColorTheme) => void;
 		onFontChange: (role: FontRole, id: string) => void;
+		onFontCategoryChange: (role: FontRole, category: FontCategory) => void;
 		onResetFonts: () => void;
 		scrollSync: boolean;
 		onToggleScrollSync: () => void;
@@ -70,8 +72,8 @@
 
 	let {
 		vault, vaultName, suggestedRepositoryName, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
-		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, fonts, attachmentFolder, attachmentsHidden, onAttachmentsHiddenChange, onRenameAttachmentFolder, scrollSync, onToggleScrollSync, shortcuts, primaryModifier,
-		section = $bindable('editor'), onThemeChange, onColorThemeChange, onFontChange, onResetFonts, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
+		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, fonts, fontCategories, attachmentFolder, attachmentsHidden, onAttachmentsHiddenChange, onRenameAttachmentFolder, scrollSync, onToggleScrollSync, shortcuts, primaryModifier,
+		section = $bindable('editor'), onThemeChange, onColorThemeChange, onFontChange, onFontCategoryChange, onResetFonts, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onPrepareVaultDeletion, onDeleteVault
 	}: Props = $props();
 
@@ -344,11 +346,18 @@
 					{#each fontRoles as role (role.id)}
 						<div class="font-role">
 							<label for={`font-${role.id}`}>{role.label}</label>
-							<select id={`font-${role.id}`} aria-label={`${role.label} typeface`} value={fonts[role.id]} onchange={(event) => onFontChange(role.id, event.currentTarget.value)}>
-								{#each fontOptions[role.id] as option (option.id)}
-									<option value={option.id}>{option.name}</option>
-								{/each}
-							</select>
+							<div class="font-selects">
+								<select id={`font-${role.id}-type`} aria-label={`${role.label} font type`} value={fontCategories[role.id]} onchange={(event) => onFontCategoryChange(role.id, event.currentTarget.value as FontCategory)}>
+									{#each fontCategoryOptions as category (category.id)}
+										<option value={category.id}>{category.label}</option>
+									{/each}
+								</select>
+								<select id={`font-${role.id}`} aria-label={`${role.label} typeface`} value={fonts[role.id]} onchange={(event) => onFontChange(role.id, event.currentTarget.value)}>
+									{#each fontOptions[role.id] as option (option.id)}
+										<option value={option.id}>{option.name}</option>
+									{/each}
+								</select>
+							</div>
 						</div>
 					{/each}
 					<h3 class="settings-group-heading">Attachments</h3>
