@@ -4384,6 +4384,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function editableInlineMarkdown(value: string): string {
     const patterns = [
+      /!\[([^\]]*)\]\(([^\s)]+)\)/,
       /`([^`]+)`/,
       /\[\[([^\]|]+)\|([^\]]+)\]\]/,
       /\[\[([^\]]+)\]\]/,
@@ -4422,26 +4423,30 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       const full = token[0];
       switch (tokenIndex) {
         case 0:
-          rendered += `${syntax("`")}<code>${escapeHtml(token[1]!)}</code>${syntax("`")}`;
+          // Filenames look like misspellings, so keep the browser from marking the picture.
+          rendered += `<span spellcheck="false">${syntax("![")}<a>${editableInlineMarkdown(token[1]!)}</a>${syntax(`](${token[2]})`)}</span>`;
           break;
         case 1:
-          rendered += `${syntax(`[[${token[1]}|`)}<a class="wikilink">${editableInlineMarkdown(token[2]!)}</a>${syntax("]]")}`;
+          rendered += `${syntax("`")}<code>${escapeHtml(token[1]!)}</code>${syntax("`")}`;
           break;
         case 2:
-          rendered += `${syntax("[[")}<a class="wikilink">${escapeHtml(token[1]!)}</a>${syntax("]]")}`;
+          rendered += `${syntax(`[[${token[1]}|`)}<a class="wikilink">${editableInlineMarkdown(token[2]!)}</a>${syntax("]]")}`;
           break;
         case 3:
+          rendered += `${syntax("[[")}<a class="wikilink">${escapeHtml(token[1]!)}</a>${syntax("]]")}`;
+          break;
+        case 4:
           rendered += `${syntax("[")}<a>${editableInlineMarkdown(token[1]!)}</a>${syntax(`](${token[2]})`)}`;
           break;
-        case 4: {
+        case 5: {
           const marker = token[1]!;
           rendered += `${syntax(marker)}<strong>${editableInlineMarkdown(token[2]!)}</strong>${syntax(marker)}`;
           break;
         }
-        case 5:
+        case 6:
           rendered += `${syntax("~~")}<del>${editableInlineMarkdown(token[1]!)}</del>${syntax("~~")}`;
           break;
-        case 6:
+        case 7:
           rendered += `${syntax("==")}<mark>${editableInlineMarkdown(token[1]!)}</mark>${syntax("==")}`;
           break;
         default: {
