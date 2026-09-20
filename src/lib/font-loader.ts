@@ -29,6 +29,18 @@ const fontLoaders: Record<string, FontLoader> = {
   merriweather: () => import("@fontsource-variable/merriweather"),
   "playfair-display": () => import("@fontsource-variable/playfair-display"),
   "cormorant-garamond": () => import("@fontsource-variable/cormorant-garamond"),
+  "ibm-plex-sans": () => import("@fontsource-variable/ibm-plex-sans"),
+  manrope: () => import("@fontsource-variable/manrope"),
+  "dm-sans": () => import("@fontsource-variable/dm-sans"),
+  "plus-jakarta-sans": () => import("@fontsource-variable/plus-jakarta-sans"),
+  "roboto-flex": () => import("@fontsource-variable/roboto-flex"),
+  archivo: () => import("@fontsource-variable/archivo"),
+  sora: () => import("@fontsource-variable/sora"),
+  montserrat: () => import("@fontsource-variable/montserrat"),
+  "open-sans": () => import("@fontsource-variable/open-sans"),
+  "ubuntu-sans": () => import("@fontsource-variable/ubuntu-sans"),
+  "noto-sans": () => import("@fontsource-variable/noto-sans"),
+  lexend: () => import("@fontsource-variable/lexend"),
   "zilla-slab": () =>
     Promise.all([
       import("@fontsource/zilla-slab/400.css"),

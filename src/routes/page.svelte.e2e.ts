@@ -412,6 +412,12 @@ test("filters typefaces by selected font type", async ({ page }) => {
   await expect(headingType).toHaveValue("serif");
   await expect(headingFont.locator("option")).toHaveCount(12);
 
+  await headingType.selectOption("sans-serif");
+  await expect(headingFont).toHaveValue("geist");
+  await expect(headingFont.locator("option")).toHaveCount(16);
+  await headingFont.selectOption("lexend");
+  await expect(page.locator(".type-specimen h4")).toHaveCSS("font-family", /Lexend Variable/);
+
   await headingType.selectOption("monospace");
   await expect(headingFont).toHaveValue("geist-mono");
   await expect(headingFont.locator("option")).toHaveCount(11);
