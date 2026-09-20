@@ -330,7 +330,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let renderedPaneVisible = $state(true);
   let scrollSync = $state(true);
   let paneLayout = $state<PaneLayout>("columns");
-  let paneOrder = $state<PaneOrder>("rendered-first");
+  let paneOrder = $state<PaneOrder>("source-first");
   let splitRatio = $state(50);
   let contentWidth = $state(DEFAULT_CONTENT_WIDTH);
   let saveState = $state<SaveState>("loading");
@@ -2532,12 +2532,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   function applyPanePreferences(): void {
     paneLayout = readLocalStorage("onyx:pane-layout") === "rows" ? "rows" : "columns";
     paneOrder =
-      readLocalStorage("onyx:pane-order") === "source-first" ? "source-first" : "rendered-first";
+      readLocalStorage("onyx:pane-order") === "rendered-first" ? "rendered-first" : "source-first";
     const storedSourcePane = readLocalStorage("onyx:output-pane-visible");
     const storedRenderedPane = readLocalStorage("onyx:rendered-pane-visible");
     scrollSync = readLocalStorage("onyx:scroll-sync") !== "false";
     if (singlePaneMode) {
-      showOnlyPane(storedRenderedPane === "false" ? "source" : "rendered");
+      showOnlyPane(
+        storedRenderedPane === undefined || storedRenderedPane === "false" ? "source" : "rendered",
+      );
       return;
     }
     sourcePaneVisible = storedSourcePane !== "false";

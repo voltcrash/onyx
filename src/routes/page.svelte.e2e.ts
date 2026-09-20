@@ -740,8 +740,10 @@ test.describe("mobile settings", () => {
 
   test("keeps settings sections usable on a phone-sized viewport", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: "Show the source pane" }).click();
-    await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+    const editor = page.getByRole("textbox", { name: "Markdown editor" });
+    await expect(editor).toBeEnabled();
+    await expect(editor).toBeVisible();
+    await expect(page.locator(".rendered-pane")).toBeHidden();
 
     await page.getByRole("button", { name: "Show notes sidebar" }).click();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
@@ -934,14 +936,14 @@ test("moves a pane by dragging its grip beside the divider or with the arrow key
     expect(box.y + box.height / 2).toBeCloseTo(divider.y + divider.height / 2, 0);
     return box.x + box.width / 2 - divider.x;
   };
-  const leadingOffset = await gripOffset("Move the rendered pane");
+  const leadingOffset = await gripOffset("Move the source pane");
   expect(leadingOffset).toBeLessThan(-14);
   expect(leadingOffset).toBeGreaterThan(-40);
-  const trailingOffset = await gripOffset("Move the source pane");
+  const trailingOffset = await gripOffset("Move the rendered pane");
   expect(trailingOffset).toBeGreaterThan(14);
   expect(trailingOffset).toBeLessThan(40);
 
-  const gripLocator = page.getByRole("button", { name: "Move the rendered pane" });
+  const gripLocator = page.getByRole("button", { name: "Move the source pane" });
   const pill = () =>
     gripLocator.evaluate((element) => getComputedStyle(element, "::after").opacity);
   expect(await pill()).toBe("0");
@@ -949,7 +951,7 @@ test("moves a pane by dragging its grip beside the divider or with the arrow key
   await expect.poll(pill).toBe("1");
 
   const grip = await gripLocator.boundingBox();
-  if (!grip) throw new Error("The rendered pane grip is not laid out");
+  if (!grip) throw new Error("The source pane grip is not laid out");
   await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
   await page.mouse.down();
   await page.mouse.move(panesBox.x + panesBox.width / 2, panesBox.y + panesBox.height - 20, {
@@ -958,7 +960,7 @@ test("moves a pane by dragging its grip beside the divider or with the arrow key
   await expect(page.locator(".pane-drop-slot")).toBeVisible();
   await page.mouse.up();
   await expect(shell).toHaveClass(/panes-stacked/);
-  await expect(shell).not.toHaveClass(/panes-swapped/);
+  await expect(shell).toHaveClass(/panes-swapped/);
   await expect(page.locator(".pane-drop-slot")).toHaveCount(0);
   await page.evaluate(() =>
     Promise.all(
@@ -966,26 +968,31 @@ test("moves a pane by dragging its grip beside the divider or with the arrow key
     ),
   );
 
-  const sourceGrip = await page.getByRole("button", { name: "Move the source pane" }).boundingBox();
-  if (!sourceGrip) throw new Error("The source pane grip is not laid out");
-  await page.mouse.move(sourceGrip.x + sourceGrip.width / 2, sourceGrip.y + sourceGrip.height / 2);
+  const renderedGrip = await page
+    .getByRole("button", { name: "Move the rendered pane" })
+    .boundingBox();
+  if (!renderedGrip) throw new Error("The rendered pane grip is not laid out");
+  await page.mouse.move(
+    renderedGrip.x + renderedGrip.width / 2,
+    renderedGrip.y + renderedGrip.height / 2,
+  );
   await page.mouse.down();
   await page.mouse.move(panesBox.x + panesBox.width - 20, panesBox.y + panesBox.height / 2, {
     steps: 10,
   });
   await page.mouse.up();
   await expect(shell).not.toHaveClass(/panes-stacked/);
-  await expect(shell).toHaveClass(/panes-swapped/);
-
-  await page.getByRole("button", { name: "Move the rendered pane" }).focus();
-  await page.keyboard.press("ArrowRight");
   await expect(shell).not.toHaveClass(/panes-swapped/);
+
+  await page.getByRole("button", { name: "Move the source pane" }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(shell).toHaveClass(/panes-swapped/);
   await page.evaluate(() =>
     Promise.all(
       document.getAnimations().map((animation) => animation.finished.catch(() => undefined)),
     ),
   );
-  expect(await gripOffset("Move the rendered pane")).toBeGreaterThan(14);
+  expect(await gripOffset("Move the source pane")).toBeGreaterThan(14);
 });
 
 test("copies and downloads the Markdown source from the file menu", async ({ page }) => {
