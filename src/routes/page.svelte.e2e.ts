@@ -362,6 +362,7 @@ test("opens general settings on Editor and the storage shortcut on Storage choic
   await expect(page.getByRole("heading", { name: "Scrolling", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Restore default fonts" })).toHaveCount(0);
 
+  await page.locator("#font-heading-type").selectOption("sans-serif");
   await page.locator("#font-heading").selectOption("inter");
   await expect(page.getByRole("button", { name: "Restore default fonts" })).toBeVisible();
   await page.getByRole("button", { name: "Restore default fonts" }).click();
@@ -394,6 +395,29 @@ test("applies every code font to nested code content", async ({ page }) => {
       new RegExp(family),
     );
   }
+});
+
+test("filters typefaces by selected font type", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+
+  const headingType = page.locator("#font-heading-type");
+  const headingFont = page.locator("#font-heading");
+
+  await expect(headingType).toHaveValue("serif");
+
+  await headingType.selectOption("monospace");
+  await expect(headingFont).toHaveValue("geist-mono");
+  await expect(headingFont.locator("option")).toHaveCount(6);
+  await headingFont.selectOption("jetbrains-mono");
+  await expect(page.locator(".type-specimen h4")).toHaveCSS(
+    "font-family",
+    /JetBrains Mono Variable/,
+  );
+
+  await headingType.selectOption("slab-serif");
+  await expect(headingFont).toHaveValue("roboto-slab");
+  await expect(headingFont.locator("option")).toHaveCount(1);
 });
 
 test("persists edits made while an earlier save is still in flight", async ({ page }) => {

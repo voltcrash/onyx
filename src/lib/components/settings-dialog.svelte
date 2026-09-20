@@ -353,7 +353,7 @@
 									{/each}
 								</select>
 								<select id={`font-${role.id}`} aria-label={`${role.label} typeface`} value={fonts[role.id]} onchange={(event) => onFontChange(role.id, event.currentTarget.value)}>
-									{#each fontOptions[role.id] as option (option.id)}
+									{#each fontOptions[role.id].filter((option) => option.category === fontCategories[role.id]) as option (option.id)}
 										<option value={option.id}>{option.name}</option>
 									{/each}
 								</select>
