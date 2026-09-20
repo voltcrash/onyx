@@ -4299,6 +4299,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     return "body";
   }
 
+  function isImageOnlyLine(line: string): boolean {
+    return /^\s*!\[[^\]]*\]\([^\s)]+\)\s*$/.test(line);
+  }
+
   function liveLineKind(line: string, index: number): string {
     if (liveCodeLines[index]) {
       if (isFenceLine(line)) return "code-line code-fence";
@@ -4309,6 +4313,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       return `code-line code-content${startsCode ? " code-start" : ""}${endsCode ? " code-end" : ""}`;
     }
     if (!line) return "blank-line";
+    if (isImageOnlyLine(line)) return "image-line";
     const table = tableLineKind(index);
     if (table) return `table-line table-${table}`;
     const heading = line.match(/^(#{1,6})\s+/);
@@ -4330,6 +4335,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function renderEditableLine(line: string, index: number): string {
     const kind = liveLineKind(line, index);
+    if (kind.includes("image-line")) {
+      // The picture itself is the visible content; keep its source out of the caret path.
+      return `<span class="md-syntax" spellcheck="false">${escapeHtml(line)}</span>`;
+    }
     if (kind.includes("code-line")) {
       if (isFenceLine(line)) return `<span class="md-syntax">${escapeHtml(line)}</span>`;
       return liveCodeHighlights.get(index) || "<br>";
