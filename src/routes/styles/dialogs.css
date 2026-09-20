@@ -655,6 +655,9 @@ kbd {
   font: 13px / 1.6 var(--font-code);
   white-space: pre;
 }
+.type-specimen-code pre code {
+  font: inherit;
+}
 .type-specimen-code-keyword {
   color: #e79ab6;
 }

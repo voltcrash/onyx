@@ -566,6 +566,7 @@
   padding: 0;
   background: transparent;
   color: inherit;
+  font-family: var(--font-code);
 }
 .prose pre code.hljs {
   display: block;

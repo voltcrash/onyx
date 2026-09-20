@@ -373,6 +373,27 @@ test("opens general settings on Fonts and the storage shortcut on Storage choice
   );
 });
 
+test("applies every code font to nested code content", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+
+  const codeFonts = {
+    "geist-mono": "Geist Mono Variable",
+    "jetbrains-mono": "JetBrains Mono Variable",
+    "fira-code": "Fira Code Variable",
+    "source-code-pro": "Source Code Pro Variable",
+    "roboto-mono": "Roboto Mono Variable",
+  };
+
+  for (const [id, family] of Object.entries(codeFonts)) {
+    await page.locator("#font-code").selectOption(id);
+    await expect(page.locator(".type-specimen-code pre code")).toHaveCSS(
+      "font-family",
+      new RegExp(family),
+    );
+  }
+});
+
 test("persists edits made while an earlier save is still in flight", async ({ page }) => {
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
