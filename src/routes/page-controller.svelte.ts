@@ -2712,8 +2712,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const continued = continueListOnEnter(target.value, target.selectionStart);
     if (!continued) return;
     event.preventDefault();
+    // Placed synchronously so no deferred caret restore can race later input.
+    target.value = continued.value;
+    target.setSelectionRange(continued.caret, continued.caret);
     updateMarkdown(continued.value);
-    restoreEditorSelection({ start: continued.caret, end: continued.caret });
   }
 
   function isEditorTarget(target: EventTarget | null): boolean {

@@ -960,6 +960,16 @@ test("continues list markers when Enter is pressed in the editor", async ({ page
   await editor.press("Enter");
   await expect(editor).toHaveValue("1. First\n2. ");
 
+  // Splitting mid-line leaves the caret after the new marker.
+  await editor.fill("- abc");
+  await editor.press("Home");
+  await editor.press("ArrowRight");
+  await editor.press("ArrowRight");
+  await editor.press("Enter");
+  await expect(editor).toHaveValue("- \n- abc");
+  await page.keyboard.type("X");
+  await expect(editor).toHaveValue("- \n- Xabc");
+
   await editor.fill("- ");
   await editor.press("End");
   await editor.press("Enter");
