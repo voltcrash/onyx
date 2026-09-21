@@ -63,6 +63,15 @@ describe("continueListOnEnter", () => {
     expect(continueListOnEnter("Plain text", 5)).toBeUndefined();
     expect(continueListOnEnter("- item", 1)).toBeUndefined();
   });
+
+  it("exits the list when Enter is pressed on the fresh marker", () => {
+    const first = continueListOnEnter("- Buy milk", 10)!;
+    expect(first).toEqual({ value: "- Buy milk\n- ", caret: 13 });
+    expect(continueListOnEnter(first.value, first.caret)).toEqual({
+      value: "- Buy milk\n",
+      caret: 11,
+    });
+  });
 });
 
 describe("rewriteLocalLinks", () => {

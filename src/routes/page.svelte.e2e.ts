@@ -949,6 +949,8 @@ test("continues list markers when Enter is pressed in the editor", async ({ page
   await editor.press("End");
   await editor.press("Enter");
   await expect(editor).toHaveValue("- first\n- ");
+  await editor.press("Enter");
+  await expect(editor).toHaveValue("- first\n");
 
   await editor.fill("- [x] Done");
   await editor.press("End");
