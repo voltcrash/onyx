@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   attachmentMarkdown,
+  continueListOnEnter,
   normalizeAttachmentFolder,
   resolveLocalAttachmentUrl,
   rewriteLocalLinks,
@@ -33,6 +34,34 @@ describe("normalizeAttachmentFolder", () => {
     expect(normalizeAttachmentFolder("")).toBeUndefined();
     expect(normalizeAttachmentFolder("../outside")).toBeUndefined();
     expect(normalizeAttachmentFolder("bad:name")).toBeUndefined();
+  });
+});
+
+describe("continueListOnEnter", () => {
+  it("continues bullets, tasks, and ordered items", () => {
+    expect(continueListOnEnter("- Buy milk", 10)).toEqual({
+      value: "- Buy milk\n- ",
+      caret: 13,
+    });
+    expect(continueListOnEnter("- [x] Done", 10)).toEqual({
+      value: "- [x] Done\n- [ ] ",
+      caret: 17,
+    });
+    expect(continueListOnEnter("1. First", 8)).toEqual({
+      value: "1. First\n2. ",
+      caret: 12,
+    });
+  });
+
+  it("exits the list from an empty item", () => {
+    expect(continueListOnEnter("- ", 2)).toEqual({ value: "", caret: 0 });
+    expect(continueListOnEnter("- [ ]", 5)).toEqual({ value: "", caret: 0 });
+    expect(continueListOnEnter("3. ", 3)).toEqual({ value: "", caret: 0 });
+  });
+
+  it("leaves other lines alone", () => {
+    expect(continueListOnEnter("Plain text", 5)).toBeUndefined();
+    expect(continueListOnEnter("- item", 1)).toBeUndefined();
   });
 });
 

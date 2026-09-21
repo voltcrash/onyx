@@ -188,3 +188,47 @@ function encodeLinkPath(path: string): string {
     .map((part) => encodeURIComponent(part))
     .join("/");
 }
+
+export interface ListEnterResult {
+  value: string;
+  caret: number;
+}
+
+/**
+ * Continues a bullet, ordered, or task list when Enter is pressed with the caret on one of
+ * its items. Returns the replacement text and caret, or undefined to leave the key alone.
+ */
+export function continueListOnEnter(value: string, caret: number): ListEnterResult | undefined {
+  const cursor = Math.max(0, Math.min(caret, value.length));
+  const lineStart = value.lastIndexOf("\n", cursor - 1) + 1;
+  const lineBreak = value.indexOf("\n", cursor);
+  const lineEnd = lineBreak === -1 ? value.length : lineBreak;
+  const line = value.slice(lineStart, lineEnd);
+  const match = line.match(/^(\s*)([-+*]|\d+[.)])(\s+)(.*)$/);
+  if (!match) return;
+  const [, indent, marker, gap, rest] = match as [string, string, string, string, string];
+  const task = rest.match(/^\[([ xX])\](\s+|$)([\s\S]*)$/);
+  const ordered = marker.match(/^(\d+)([.)])$/);
+  const prefixLength =
+    indent.length +
+    marker.length +
+    gap.length +
+    (task ? task[1]!.length + 2 + (task[2] ? task[2]!.length : 0) : 0);
+  const content = line.slice(prefixLength);
+  if (!content.trim()) {
+    return { value: value.slice(0, lineStart) + value.slice(lineEnd), caret: lineStart };
+  }
+  if (cursor < lineStart + prefixLength) return;
+  let continuation: string;
+  if (task) {
+    continuation = `${indent}${marker} [ ] `;
+  } else if (ordered) {
+    continuation = `${indent}${Number(ordered[1]) + 1}${ordered[2]} `;
+  } else {
+    continuation = `${indent}${marker} `;
+  }
+  return {
+    value: `${value.slice(0, cursor)}\n${continuation}${value.slice(cursor)}`,
+    caret: cursor + 1 + continuation.length,
+  };
+}

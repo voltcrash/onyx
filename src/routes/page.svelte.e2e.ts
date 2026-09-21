@@ -940,6 +940,32 @@ test("renders read-only Markdown in the rendered pane", async ({ page }) => {
   await expect(article.locator(".hljs-number")).toHaveText("42");
 });
 
+test("continues list markers when Enter is pressed in the editor", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await editor.fill("- first");
+  await editor.press("End");
+  await editor.press("Enter");
+  await expect(editor).toHaveValue("- first\n- ");
+
+  await editor.fill("- [x] Done");
+  await editor.press("End");
+  await editor.press("Enter");
+  await expect(editor).toHaveValue("- [x] Done\n- [ ] ");
+
+  await editor.fill("1. First");
+  await editor.press("End");
+  await editor.press("Enter");
+  await expect(editor).toHaveValue("1. First\n2. ");
+
+  await editor.fill("- ");
+  await editor.press("End");
+  await editor.press("Enter");
+  await expect(editor).toHaveValue("");
+});
+
 test("keeps source and rendered panes synchronized and lets each pane be tucked away", async ({
   page,
 }) => {

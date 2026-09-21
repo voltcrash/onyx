@@ -65,6 +65,7 @@ import type { SettingsSection } from "$lib/components/settings-types";
 import { renderMarkdownBlocks as renderLiteMarkdownBlocks } from "$lib/markdown-lite";
 import {
   attachmentMarkdown,
+  continueListOnEnter,
   DEFAULT_ATTACHMENT_FOLDER,
   normalizeAttachmentFolder,
   resolveLocalAttachmentUrl,
@@ -2702,8 +2703,17 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function handleEditorBeforeInput(event: InputEvent): void {
-    void event;
     captureEditorState();
+    if (event.isComposing) return;
+    if (event.inputType !== "insertLineBreak" && event.inputType !== "insertParagraph") return;
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLTextAreaElement)) return;
+    if (target.selectionStart !== target.selectionEnd) return;
+    const continued = continueListOnEnter(target.value, target.selectionStart);
+    if (!continued) return;
+    event.preventDefault();
+    updateMarkdown(continued.value);
+    restoreEditorSelection({ start: continued.caret, end: continued.caret });
   }
 
   function isEditorTarget(target: EventTarget | null): boolean {
