@@ -48,6 +48,7 @@ import {
   Trash2,
   Type,
   Quote,
+  type LucideIcon,
 } from "@lucide/svelte";
 import type {
   BackupState,
@@ -565,7 +566,20 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     });
   }
 
-  const paletteItems = $derived([
+  interface PaletteCommand {
+    id: string;
+    group: string;
+    label: string;
+    hint?: string;
+    keywords?: string;
+    aliases?: string[];
+    shortcut?: string;
+    icon: LucideIcon;
+    disabled?: boolean;
+    run: () => void;
+  }
+
+  const paletteItems = $derived<PaletteCommand[]>([
     ...paletteNoteItems,
     {
       id: "new-note",
@@ -592,6 +606,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       id: "open-trash",
       group: "View",
       label: trashOpen ? "Close trash" : "Open trash",
+      shortcut: shortcutLabel("openTrash"),
       hint: trashedNotes.length ? `${trashedNotes.length}` : undefined,
       icon: Trash2,
       keywords: "trash deleted restore bin",
@@ -3365,6 +3380,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     else if (action === "searchNotes" || action === "focusSearch") focusSearch();
     else if (action === "cycleTheme") setTheme(nextThemePreference(theme));
     else if (action === "toggleSidebar") toggleSidebar();
+    else if (action === "openTrash" && transferState !== "working") toggleTrash();
     else if (action === "bold") insertSyntax("**", "**", "bold text");
     else if (action === "italic") insertSyntax("_", "_", "italic text");
     else if (action === "togglePreview") toggleRenderedPane();

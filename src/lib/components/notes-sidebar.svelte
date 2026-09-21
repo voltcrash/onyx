@@ -649,7 +649,7 @@
 		<div class="sidebar-panel trash-panel" aria-label="Trash">
 			<div class="trash-panel-header">
 				<div class="trash-panel-title"><strong>Trash</strong><span>Deleted notes stay here for 30 days.</span></div>
-				<button class="icon-button" type="button" aria-label="Close trash" title="Close trash" onclick={onToggleTrash}><X size={17} /></button>
+				<button class="icon-button" type="button" aria-label="Close trash" title={`Close trash (${formatShortcut(shortcuts.openTrash, primaryModifier)})`} onclick={onToggleTrash}><X size={17} /></button>
 			</div>
 			{#if trashedNotes.length === 0}
 				<div class="trash-empty">Trash is empty.</div>

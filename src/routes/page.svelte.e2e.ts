@@ -821,8 +821,8 @@ test("moves deleted notes to trash, restores them, and deletes them forever", as
   await expect(file).toBeHidden();
   await expect(page.getByRole("button", { name: "Close trash" })).toBeHidden();
 
-  // Trash opens as its own sidebar panel from the command palette.
-  await openTrash(page);
+  // Trash opens as its own sidebar panel with its keyboard shortcut.
+  await page.keyboard.press("ControlOrMeta+g");
   await expect(page.getByRole("button", { name: "Close trash" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Restore Trashme", exact: true })).toBeVisible();
 
