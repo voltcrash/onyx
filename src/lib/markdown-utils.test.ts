@@ -6,6 +6,7 @@ import {
   normalizeAttachmentFolder,
   resolveLocalAttachmentUrl,
   rewriteLocalLinks,
+  toggleCheckboxes,
 } from "./markdown-utils.js";
 
 describe("attachment markdown", () => {
@@ -112,6 +113,43 @@ describe("indentEditorLines", () => {
   it("outdents one space and tabs", () => {
     expect(indentEditorLines(" - a", 4, 4, -1)).toEqual({ value: "- a", start: 3, end: 3 });
     expect(indentEditorLines("\t- a", 4, 4, -1)).toEqual({ value: "- a", start: 3, end: 3 });
+  });
+});
+
+describe("toggleCheckboxes", () => {
+  it("flips a checkbox without moving the caret", () => {
+    expect(toggleCheckboxes("- [ ] Buy milk", 13, 13)).toEqual({
+      value: "- [x] Buy milk",
+      start: 13,
+      end: 13,
+    });
+    expect(toggleCheckboxes("- [X] Done", 9, 9)).toEqual({
+      value: "- [ ] Done",
+      start: 9,
+      end: 9,
+    });
+  });
+
+  it("turns plain bullets and ordered items into tasks", () => {
+    expect(toggleCheckboxes("- Buy milk", 9, 9)).toEqual({
+      value: "- [ ] Buy milk",
+      start: 13,
+      end: 13,
+    });
+    expect(toggleCheckboxes("2. Second", 9, 9)).toEqual({
+      value: "2. [ ] Second",
+      start: 13,
+      end: 13,
+    });
+  });
+
+  it("toggles every touched line and leaves other lines alone", () => {
+    expect(toggleCheckboxes("- [ ] a\n- [x] b", 0, 13)).toEqual({
+      value: "- [x] a\n- [ ] b",
+      start: 0,
+      end: 13,
+    });
+    expect(toggleCheckboxes("Plain text", 5, 5)).toBeUndefined();
   });
 });
 

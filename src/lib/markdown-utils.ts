@@ -239,6 +239,64 @@ export interface IndentEdit {
   end: number;
 }
 
+interface TouchedLines {
+  head: string;
+  tail: string;
+  lines: string[];
+  starts: number[];
+  first: number;
+  last: number;
+  collapsed: boolean;
+}
+
+/** The full lines a caret or selection touches; a trailing line start belongs to the line above. */
+function touchedLines(value: string, start: number, end: number): TouchedLines {
+  const clamp = (point: number): number => Math.min(Math.max(point, 0), value.length);
+  const anchor = clamp(start);
+  const focus = clamp(end);
+  const [first, last] = anchor <= focus ? [anchor, focus] : [focus, anchor];
+  const lastContent = last > first && last > 0 && value[last - 1] === "\n" ? last - 1 : last;
+  const firstLineStart = value.lastIndexOf("\n", first - 1) + 1;
+  const lineBreak = value.indexOf("\n", lastContent);
+  const lastLineEnd = lineBreak === -1 ? value.length : lineBreak;
+  const lines = value.slice(firstLineStart, lastLineEnd).split("\n");
+  let offset = firstLineStart;
+  const starts = lines.map((line) => {
+    const lineStart = offset;
+    offset += line.length + 1;
+    return lineStart;
+  });
+  return {
+    head: value.slice(0, firstLineStart),
+    tail: value.slice(lastLineEnd),
+    lines,
+    starts,
+    first,
+    last,
+    collapsed: first === last,
+  };
+}
+
+/** Moves a document offset through per-line edits, keeping it on the same text. */
+function remapPosition(
+  touched: Pick<TouchedLines, "lines" | "starts">,
+  deltas: number[],
+  position: number,
+): number {
+  let index = 0;
+  for (let i = 0; i < touched.starts.length; i++) {
+    if (touched.starts[i]! <= position) index = i;
+    else break;
+  }
+  let shift = 0;
+  for (let i = 0; i < index; i++) shift += deltas[i]!;
+  const delta = deltas[index]!;
+  const lineStart = touched.starts[index]!;
+  if (position >= lineStart + touched.lines[index]!.length) return position + shift + delta;
+  if (delta >= 0) return position + shift + delta;
+  return lineStart + shift + Math.max(0, position - lineStart + delta);
+}
+
 /**
  * Indents or outdents the touched lines by two spaces, keeping the selection on the same
  * text. Blank lines in a range are left alone so no trailing whitespace is added.
@@ -249,45 +307,58 @@ export function indentEditorLines(
   end: number,
   direction: 1 | -1,
 ): IndentEdit {
-  const clamp = (point: number): number => Math.min(Math.max(point, 0), value.length);
-  const anchor = clamp(start);
-  const focus = clamp(end);
-  const [first, last] = anchor <= focus ? [anchor, focus] : [focus, anchor];
-  const collapsed = first === last;
-  // A selection ending exactly on a line start belongs to the previous line.
-  const lastContent = last > first && last > 0 && value[last - 1] === "\n" ? last - 1 : last;
-  const firstLineStart = value.lastIndexOf("\n", first - 1) + 1;
-  const lineBreak = value.indexOf("\n", lastContent);
-  const lastLineEnd = lineBreak === -1 ? value.length : lineBreak;
-  const head = value.slice(0, firstLineStart);
-  const tail = value.slice(lastLineEnd);
-  const lines = value.slice(firstLineStart, lastLineEnd).split("\n");
-  const starts = lines.map((_, index) =>
-    index === 0 ? firstLineStart : lines.slice(0, index).join("\n").length + 1 + firstLineStart,
-  );
-  const edits = lines.map((line) => {
-    if (!line.trim() && !collapsed) return { text: line, delta: 0 };
+  const touched = touchedLines(value, start, end);
+  const edits = touched.lines.map((line) => {
+    if (!line.trim() && !touched.collapsed) return { text: line, delta: 0 };
     if (direction === 1) return { text: `  ${line}`, delta: 2 };
     const unit = line.match(/^ {1,2}/)?.[0] ?? (line.startsWith("\t") ? "\t" : "");
     return { text: line.slice(unit.length), delta: -unit.length };
   });
-  const mapPosition = (position: number): number => {
-    let index = 0;
-    for (let i = 0; i < starts.length; i++) {
-      if (starts[i]! <= position) index = i;
-      else break;
-    }
-    let shift = 0;
-    for (let i = 0; i < index; i++) shift += edits[i]!.delta;
-    const edit = edits[index]!;
-    const lineStart = starts[index]!;
-    if (position >= lineStart + lines[index]!.length) return position + shift + edit.delta;
-    if (edit.delta >= 0) return position + shift + edit.delta;
-    return lineStart + shift + Math.max(0, position - lineStart + edit.delta);
-  };
+  const deltas = edits.map((edit) => edit.delta);
   return {
-    value: head + edits.map((edit) => edit.text).join("\n") + tail,
-    start: mapPosition(first),
-    end: mapPosition(last),
+    value: touched.head + edits.map((edit) => edit.text).join("\n") + touched.tail,
+    start: remapPosition(touched, deltas, touched.first),
+    end: remapPosition(touched, deltas, touched.last),
+  };
+}
+
+export interface ToggleCheckboxesEdit {
+  value: string;
+  start: number;
+  end: number;
+}
+
+/**
+ * Flips the checkboxes on the touched list items, turning plain bullets into unchecked
+ * tasks. Returns undefined when no touched line is a list item.
+ */
+export function toggleCheckboxes(
+  value: string,
+  start: number,
+  end: number,
+): ToggleCheckboxesEdit | undefined {
+  const touched = touchedLines(value, start, end);
+  let changed = false;
+  const edits = touched.lines.map((line) => {
+    const match = line.match(/^(\s*)([-+*]|\d+[.)])(\s+)(.*)$/);
+    if (!match) return { text: line, delta: 0 };
+    const [, indent, marker, , rest] = match as [string, string, string, string, string];
+    const task = rest.match(/^\[([ xX])\](\s+|$)([\s\S]*)$/);
+    let text: string;
+    if (task) {
+      const checked = task[1] === " ";
+      text = `${indent}${marker} [${checked ? "x" : " "}]${task[2]}${task[3]}`;
+    } else {
+      text = `${indent}${marker} [ ] ${rest}`;
+    }
+    changed = true;
+    return { text, delta: text.length - line.length };
+  });
+  if (!changed) return;
+  const deltas = edits.map((edit) => edit.delta);
+  return {
+    value: touched.head + edits.map((edit) => edit.text).join("\n") + touched.tail,
+    start: remapPosition(touched, deltas, touched.first),
+    end: remapPosition(touched, deltas, touched.last),
   };
 }

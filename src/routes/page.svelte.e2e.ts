@@ -998,6 +998,24 @@ test("indents lines with Tab and outdents with Shift+Tab", async ({ page }) => {
   await expect(editor).toHaveValue("- a\n- b");
 });
 
+test("toggles checkboxes without leaving the editor", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await editor.fill("- [ ] Buy milk");
+  await editor.press("End");
+  await editor.press("Alt+Enter");
+  await expect(editor).toHaveValue("- [x] Buy milk");
+  await editor.press("Alt+Enter");
+  await expect(editor).toHaveValue("- [ ] Buy milk");
+
+  await editor.fill("- Buy milk");
+  await editor.press("End");
+  await editor.press("Alt+Enter");
+  await expect(editor).toHaveValue("- [ ] Buy milk");
+});
+
 test("keeps source and rendered panes synchronized and lets each pane be tucked away", async ({
   page,
 }) => {

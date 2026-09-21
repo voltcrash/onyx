@@ -72,6 +72,7 @@ import {
   resolveLocalAttachmentUrl,
   rewriteLocalLinks,
   titleFromMarkdown,
+  toggleCheckboxes,
   type LocalAttachmentUrl,
 } from "$lib/markdown-utils";
 import {
@@ -727,6 +728,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       icon: ListChecks,
       keywords: "checklist todo checkbox format",
       run: () => prefixLine("- [ ] "),
+    },
+    {
+      id: "toggle-checkbox",
+      group: "Formatting",
+      label: "Toggle checkbox",
+      shortcut: shortcutLabel("toggleCheckbox"),
+      icon: ListChecks,
+      keywords: "checklist todo checkbox check uncheck toggle",
+      run: () => toggleCheckboxAtCaret(),
     },
     {
       id: "quote",
@@ -2801,6 +2811,18 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     return true;
   }
 
+  function toggleCheckboxAtCaret(): boolean {
+    if (!editor) return false;
+    const edit = toggleCheckboxes(editor.value, editor.selectionStart, editor.selectionEnd);
+    if (!edit) return false;
+    captureEditorState();
+    // Placed synchronously so no deferred caret restore can race later input.
+    editor.value = edit.value;
+    editor.setSelectionRange(edit.start, edit.end);
+    updateMarkdown(edit.value);
+    return true;
+  }
+
   function writeEditorClipboard(text: string): boolean {
     const clipboard = navigator.clipboard;
     if (!clipboard || typeof clipboard.writeText !== "function") return false;
@@ -3377,6 +3399,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     // Paste carries files in its ClipboardEvent, which the keydown cannot see.
     // Let the browser fire the native paste so images land on the first press.
     if (action === "paste" && isEditorTarget(event.target)) return;
+
+    if (action === "toggleCheckbox") {
+      if (!isEditorTarget(event.target)) return;
+      if (toggleCheckboxAtCaret()) event.preventDefault();
+      return;
+    }
 
     if (action && isEditorShortcutAction(action)) {
       if (!isEditorTarget(event.target)) return;
