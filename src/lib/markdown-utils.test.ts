@@ -4,6 +4,7 @@ import {
   continueListOnEnter,
   indentEditorLines,
   normalizeAttachmentFolder,
+  pasteUrlOverSelection,
   resolveLocalAttachmentUrl,
   rewriteLocalLinks,
   toggleCheckboxes,
@@ -211,6 +212,23 @@ describe("wrapSelectionWith", () => {
       start: 5,
       end: 9,
     });
+  });
+});
+
+describe("pasteUrlOverSelection", () => {
+  it("wraps the selection in a link for bare URLs", () => {
+    expect(pasteUrlOverSelection("the guide", "https://example.com/guide")).toBe(
+      "[the guide](https://example.com/guide)",
+    );
+    expect(pasteUrlOverSelection("the guide", "  https://example.com/guide\n")).toBe(
+      "[the guide](https://example.com/guide)",
+    );
+  });
+
+  it("leaves anything else alone", () => {
+    expect(pasteUrlOverSelection("", "https://example.com")).toBeUndefined();
+    expect(pasteUrlOverSelection("the guide", "not a url")).toBeUndefined();
+    expect(pasteUrlOverSelection("the guide", "https://example.com/has space")).toBeUndefined();
   });
 });
 

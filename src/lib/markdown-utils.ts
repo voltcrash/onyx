@@ -405,6 +405,17 @@ export function wrapSelectionWith(
   };
 }
 
+/**
+ * The link markup replacing selected text when a bare URL is pasted over it, or undefined
+ * for anything else. Surrounding whitespace on the clipboard is ignored.
+ */
+export function pasteUrlOverSelection(selected: string, clipboard: string): string | undefined {
+  if (!selected) return;
+  const destination = clipboard.trim();
+  if (!/^https?:\/\/\S+$/i.test(destination)) return;
+  return `[${selected}](${destination})`;
+}
+
 export interface ToggleCheckboxesEdit {
   value: string;
   start: number;

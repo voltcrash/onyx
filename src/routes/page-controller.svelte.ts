@@ -70,6 +70,7 @@ import {
   indentEditorLines,
   wrapSelectionWith,
   normalizeAttachmentFolder,
+  pasteUrlOverSelection,
   resolveLocalAttachmentUrl,
   rewriteLocalLinks,
   titleFromMarkdown,
@@ -2909,7 +2910,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const selection = getEditorSelection(event.currentTarget);
     if (!selection) return;
     event.preventDefault();
-    replaceEditorSelection(selection, text);
+    const from = Math.min(selection.start, selection.end);
+    const to = Math.max(selection.start, selection.end);
+    replaceEditorSelection(
+      selection,
+      pasteUrlOverSelection(markdown.slice(from, to), text) ?? text,
+    );
   }
 
   function handleEditorDragOver(event: DragEvent): void {

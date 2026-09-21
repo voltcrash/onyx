@@ -1043,6 +1043,19 @@ test("wraps the selection instead of replacing it", async ({ page }) => {
   await expect(editor).toHaveValue("*Buy milk*");
 });
 
+test("pastes a link over selected text", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await editor.fill("the guide");
+  await editor.press("ControlOrMeta+a");
+  await page.evaluate((url) => navigator.clipboard.writeText(url), "https://example.com/guide");
+  await editor.press("ControlOrMeta+v");
+  await expect(editor).toHaveValue("[the guide](https://example.com/guide)");
+});
+
 test("keeps source and rendered panes synchronized and lets each pane be tucked away", async ({
   page,
 }) => {
