@@ -589,6 +589,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       run: () => void saveDraft(),
     },
     {
+      id: "open-trash",
+      group: "View",
+      label: trashOpen ? "Close trash" : "Open trash",
+      hint: trashedNotes.length ? `${trashedNotes.length}` : undefined,
+      icon: Trash2,
+      keywords: "trash deleted restore bin",
+      disabled: transferState === "working",
+      run: () => toggleTrash(),
+    },
+    {
       id: "empty-trash",
       group: "Actions",
       label: "Empty trash",
@@ -2106,7 +2116,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!(await settleDraft())) return;
     try {
       await vault.trashNote(noteId);
-      trashOpen = true;
       const notes = await refreshFileTree();
       if (activeNoteId === noteId) {
         if (notes[0]) await loadNote(notes[0].id);
@@ -2137,7 +2146,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     try {
       for (const note of affectedNotes) await vault.trashNote(note.id);
       if (attached.length) await vault.deleteAttachmentFolder(path);
-      if (affectedNotes.length) trashOpen = true;
       const existingFolders = await vault.listFolders();
       const nextFolders = existingFolders.filter(
         (folder) => folder.path !== path && !folder.path.startsWith(`${path}/`),
@@ -2165,6 +2173,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       const restored = await vault.restoreNote(noteId);
       if (!restored) return;
       await refreshFileTree();
+      trashOpen = false;
       await selectNote(noteId);
       pendingBackupCount = (await vault.getPendingBackupOperations()).length;
       storageError = "";

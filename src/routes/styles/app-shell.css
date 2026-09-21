@@ -879,23 +879,57 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
-.trash-section {
+.trash-button {
+  position: relative;
+}
+.trash-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.trash-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  padding-inline: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+.trash-panel {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.trash-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 4px 6px 10px;
+}
+.trash-panel-title {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-top: 4px;
-  padding: 8px 4px 0;
-  border-top: 1px solid var(--line-soft);
 }
-.trash-toggle .trash-count {
-  min-width: 20px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--subtle-strong);
-  color: var(--ink-soft);
-  font-size: 10px;
+.trash-panel-title > strong {
+  color: var(--ink);
+  font-size: 13px;
   font-weight: 650;
-  text-align: center;
+}
+.trash-panel-title > span {
+  color: var(--faint);
+  font-size: 11px;
 }
 .trash-empty {
   padding: 6px 10px;
@@ -903,12 +937,13 @@
   font-size: 11px;
 }
 .trash-list {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 220px;
   margin: 0;
-  padding: 0;
+  padding: 0 4px 0 0;
   overflow-y: auto;
   list-style: none;
   scrollbar-width: thin;

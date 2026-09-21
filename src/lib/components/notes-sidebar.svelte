@@ -591,6 +591,7 @@
 		if (event.key === 'Escape') {
 			if (contextMenu) closeContextMenu();
 			else if (naming) cancelNaming();
+			else if (trashOpen && !paletteOpen && !findOpen) onToggleTrash();
 		}
 	}
 
@@ -619,7 +620,7 @@
 {/snippet}
 
 <aside class="sidebar" aria-label="Notes" oncontextmenu={openSidebarContextMenu} bind:this={sidebarElement} ontouchstart={handleSidebarTouchStart} ontouchend={handleSidebarTouchEnd} ontouchcancel={() => (touchStart = undefined)}>
-	<div class="notes-heading"><div class="notes-title"><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions"><button class="icon-button search-palette-button" type="button" aria-label="Open the command palette" aria-haspopup="listbox" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Search notes and commands (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><Search size={19} aria-hidden="true" /></button><button class="icon-button sidebar-toggle" onpointerdown={onSidebarDragStart} aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button></div></div>
+	<div class="notes-heading"><div class="notes-title"><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions"><button class="icon-button search-palette-button" type="button" aria-label="Open the command palette" aria-haspopup="listbox" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Search notes and commands (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><Search size={19} aria-hidden="true" /></button><button class="icon-button trash-button" type="button" aria-label={trashedNotes.length ? `Trash, ${trashedNotes.length} ${trashedNotes.length === 1 ? 'note' : 'notes'}` : 'Trash, empty'} aria-expanded={trashOpen} title="Open trash" disabled={transferState === 'working'} onclick={onToggleTrash}><Trash2 size={19} aria-hidden="true" />{#if trashedNotes.length}<span class="trash-badge" aria-hidden="true">{trashedNotes.length > 99 ? '99+' : trashedNotes.length}</span>{/if}</button><button class="icon-button sidebar-toggle" onpointerdown={onSidebarDragStart} aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button></div></div>
 	{#if paletteOpen}
 		<CommandPalette items={paletteItems} controls={paletteControls} query={searchQuery} loading={searchPending} bind:searchInput onQueryChange={onSearch} onClose={onClosePalette} />
 	{:else if findOpen}
@@ -644,6 +645,29 @@
 			onReplaceAll={onFindReplaceAll}
 			onClose={onCloseFind}
 		/>
+	{:else if trashOpen}
+		<div class="sidebar-panel trash-panel" aria-label="Trash">
+			<div class="trash-panel-header">
+				<div class="trash-panel-title"><strong>Trash</strong><span>Deleted notes stay here for 30 days.</span></div>
+				<button class="icon-button" type="button" aria-label="Close trash" title="Close trash" onclick={onToggleTrash}><X size={17} /></button>
+			</div>
+			{#if trashedNotes.length === 0}
+				<div class="trash-empty">Trash is empty.</div>
+			{:else}
+				<ul class="trash-list">
+					{#each trashedNotes as trashed (trashed.id)}
+						<li class="trash-row" title={trashedNoteDeletedLabel(trashed)}>
+							<button class="trash-name" onclick={() => onRestoreFile(trashed.id)} title={`Restore ${trashedNoteLabel(trashed)}`}>
+								<FileText size={15} /><span>{trashedNoteLabel(trashed)}</span>
+							</button>
+							<button class="trash-icon-button" aria-label={`Restore ${trashedNoteLabel(trashed)}`} title="Restore" disabled={transferState === 'working'} onclick={() => onRestoreFile(trashed.id)}><Undo2 size={14} /></button>
+							<button class="trash-icon-button danger" aria-label={`Delete ${trashedNoteLabel(trashed)} forever`} title="Delete forever" disabled={transferState === 'working'} onclick={() => onPurgeFile(trashed.id)}><X size={14} /></button>
+						</li>
+					{/each}
+				</ul>
+				<button class="trash-empty-button" disabled={transferState === 'working'} onclick={onEmptyTrash}>Empty trash</button>
+			{/if}
+		</div>
 	{:else}
 		<div class="sidebar-panel files-panel" bind:this={swipePanel}>
 			<div class="file-toolbar">
@@ -688,29 +712,6 @@
 					{/each}
 				{/if}
 			</nav>
-			<div class="trash-section">
-				<button class="file-tree-row folder-row trash-toggle" aria-expanded={trashOpen} aria-label={trashedNotes.length ? `Trash, ${trashedNotes.length} ${trashedNotes.length === 1 ? 'note' : 'notes'}` : 'Trash, empty'} title="Deleted notes stay here for 30 days" disabled={transferState === 'working'} onclick={onToggleTrash}>
-					<span class="file-tree-caret">{#if trashOpen}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}</span><Trash2 size={16} /><span class="file-tree-name">Trash</span>{#if trashedNotes.length}<span class="trash-count">{trashedNotes.length}</span>{/if}
-				</button>
-				{#if trashOpen}
-					{#if trashedNotes.length === 0}
-						<div class="trash-empty">Trash is empty. Deleted notes stay here for 30 days.</div>
-					{:else}
-						<ul class="trash-list">
-							{#each trashedNotes as trashed (trashed.id)}
-								<li class="trash-row" title={trashedNoteDeletedLabel(trashed)}>
-									<button class="trash-name" onclick={() => onRestoreFile(trashed.id)} title={`Restore ${trashedNoteLabel(trashed)}`}>
-										<FileText size={15} /><span>{trashedNoteLabel(trashed)}</span>
-									</button>
-									<button class="trash-icon-button" aria-label={`Restore ${trashedNoteLabel(trashed)}`} title="Restore" disabled={transferState === 'working'} onclick={() => onRestoreFile(trashed.id)}><Undo2 size={14} /></button>
-									<button class="trash-icon-button danger" aria-label={`Delete ${trashedNoteLabel(trashed)} forever`} title="Delete forever" disabled={transferState === 'working'} onclick={() => onPurgeFile(trashed.id)}><X size={14} /></button>
-								</li>
-							{/each}
-						</ul>
-						<button class="trash-empty-button" disabled={transferState === 'working'} onclick={onEmptyTrash}>Empty trash</button>
-					{/if}
-				{/if}
-			</div>
 			{#if contextMenu}
 				<button class="file-context-backdrop" aria-label="Close file menu" onclick={closeContextMenu}></button>
 				<div class="file-context-menu" role="menu" aria-label={contextMenu.kind === 'sidebar' ? 'Sidebar actions' : 'File actions'} style={`top: ${contextMenu.y}px; left: ${contextMenu.x}px`}>
