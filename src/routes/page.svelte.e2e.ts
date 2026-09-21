@@ -1016,6 +1016,17 @@ test("toggles checkboxes without leaving the editor", async ({ page }) => {
   await expect(editor).toHaveValue("- [ ] Buy milk");
 });
 
+test("renumbers ordered items after the new one", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await editor.fill("1. one\n2. two");
+  await editor.press("ArrowUp");
+  await editor.press("Enter");
+  await expect(editor).toHaveValue("1. one\n2. \n3. two");
+});
+
 test("wraps the selection instead of replacing it", async ({ page }) => {
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Markdown editor" });

@@ -221,16 +221,59 @@ export function continueListOnEnter(value: string, caret: number): ListEnterResu
   if (cursor < lineStart + prefixLength) return;
   let continuation: string;
   if (task) {
-    continuation = `${indent}${marker} [ ] `;
+    continuation = ordered
+      ? `${indent}${Number(ordered[1]) + 1}${ordered[2]} [ ] `
+      : `${indent}${marker} [ ] `;
   } else if (ordered) {
     continuation = `${indent}${Number(ordered[1]) + 1}${ordered[2]} `;
   } else {
     continuation = `${indent}${marker} `;
   }
+  const inserted = `${value.slice(0, cursor)}\n${continuation}${value.slice(cursor)}`;
+  const nextCaret = cursor + 1 + continuation.length;
+  if (!ordered) return { value: inserted, caret: nextCaret };
   return {
-    value: `${value.slice(0, cursor)}\n${continuation}${value.slice(cursor)}`,
-    caret: cursor + 1 + continuation.length,
+    value: renumberFollowingItems(inserted, nextCaret, indent, ordered[2]!),
+    caret: nextCaret,
   };
+}
+
+/**
+ * Shifts the numbers of the ordered items following an insertion, so `1, 2` with a new
+ * item between them reads `1, 2, 3`. Nested items keep their numbers; anything outside
+ * the list stops the pass.
+ */
+function renumberFollowingItems(
+  value: string,
+  from: number,
+  indent: string,
+  delimiter: string,
+): string {
+  const lineBreak = value.indexOf("\n", from);
+  if (lineBreak === -1) return value;
+  const head = value.slice(0, lineBreak + 1);
+  const lines: string[] = [];
+  let active = true;
+  for (const line of value.slice(lineBreak + 1).split("\n")) {
+    if (!active || !line.trim()) {
+      lines.push(line);
+      continue;
+    }
+    const match = line.match(/^(\s*)(\d+)([.)])(\s[\s\S]*)?$/);
+    if (!match) {
+      active = false;
+    } else if (match[1] !== indent) {
+      // A deeper item belongs to a nested list; anything else ends this one.
+      if (!(match[1]!.startsWith(indent) && match[1]!.length > indent.length)) active = false;
+    } else if (match[3] !== delimiter) {
+      active = false;
+    } else {
+      lines.push(`${match[1]}${Number(match[2]) + 1}${match[3]}${match[4] ?? ""}`);
+      continue;
+    }
+    lines.push(line);
+  }
+  return head + lines.join("\n");
 }
 
 export interface IndentEdit {

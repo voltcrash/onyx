@@ -67,6 +67,36 @@ describe("continueListOnEnter", () => {
     expect(continueListOnEnter("- item", 1)).toBeUndefined();
   });
 
+  it("renumbers the items following a new ordered item", () => {
+    expect(continueListOnEnter("1. a\n2. b\n3. c", 4)).toEqual({
+      value: "1. a\n2. \n3. b\n4. c",
+      caret: 8,
+    });
+    expect(continueListOnEnter("1. [x] Done\n2. [ ] Next", 11)).toEqual({
+      value: "1. [x] Done\n2. [ ] \n3. [ ] Next",
+      caret: 19,
+    });
+  });
+
+  it("leaves nested items and other lists alone when renumbering", () => {
+    expect(continueListOnEnter("1. a\n   1. x\n2. b", 4)).toEqual({
+      value: "1. a\n2. \n   1. x\n3. b",
+      caret: 8,
+    });
+    expect(continueListOnEnter("1. a\n1) b", 4)).toEqual({
+      value: "1. a\n2. \n1) b",
+      caret: 8,
+    });
+    expect(continueListOnEnter("1. a\ntext\n2. b", 4)).toEqual({
+      value: "1. a\n2. \ntext\n2. b",
+      caret: 8,
+    });
+    expect(continueListOnEnter("- a\n1. b", 3)).toEqual({
+      value: "- a\n- \n1. b",
+      caret: 6,
+    });
+  });
+
   it("exits the list when Enter is pressed on the fresh marker", () => {
     const first = continueListOnEnter("- Buy milk", 10)!;
     expect(first).toEqual({ value: "- Buy milk\n- ", caret: 13 });
