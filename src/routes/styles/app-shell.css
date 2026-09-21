@@ -879,6 +879,125 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+.trash-panel {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.trash-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 4px 6px 10px;
+}
+.trash-panel-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.trash-panel-title > strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+.trash-panel-title > span {
+  color: var(--faint);
+  font-size: 11px;
+}
+.trash-empty {
+  padding: 6px 10px;
+  color: var(--faint);
+  font-size: 11px;
+}
+.trash-list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0 4px 0 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+.trash-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px 2px 10px;
+  border-radius: 7px;
+}
+.trash-row:hover {
+  background: var(--subtle);
+}
+.trash-name {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+.trash-name > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trash-name:hover {
+  color: var(--ink);
+}
+.trash-icon-button {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+.trash-icon-button:hover:not(:disabled) {
+  background: var(--subtle-strong);
+  color: var(--ink);
+}
+.trash-icon-button.danger:hover:not(:disabled) {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.trash-icon-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.trash-empty-button {
+  align-self: flex-start;
+  margin: 2px 0 2px 10px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 11px;
+}
+.trash-empty-button:hover:not(:disabled) {
+  background: var(--danger-bg);
+}
+.trash-empty-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .file {
   position: relative;
   width: 100%;

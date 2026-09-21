@@ -45,8 +45,10 @@ import {
   Sigma,
   Sun,
   Strikethrough,
+  Trash2,
   Type,
   Quote,
+  type LucideIcon,
 } from "@lucide/svelte";
 import type {
   BackupState,
@@ -392,6 +394,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let attachmentFolder = $state(DEFAULT_ATTACHMENT_FOLDER);
   let attachmentsHidden = $state(false);
   let vaultAttachments = $state<AttachmentMetadata[]>([]);
+  let trashedNotes = $state<NoteMetadata[]>([]);
+  let trashOpen = $state(false);
   let theme = $state<ThemePreference>("system");
   let resolvedTheme = $state<ResolvedTheme>("light");
   let colorTheme = $state<ColorTheme>("ember");
@@ -562,7 +566,20 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     });
   }
 
-  const paletteItems = $derived([
+  interface PaletteCommand {
+    id: string;
+    group: string;
+    label: string;
+    hint?: string;
+    keywords?: string;
+    aliases?: string[];
+    shortcut?: string;
+    icon: LucideIcon;
+    disabled?: boolean;
+    run: () => void;
+  }
+
+  const paletteItems = $derived<PaletteCommand[]>([
     ...paletteNoteItems,
     {
       id: "new-note",
@@ -584,6 +601,27 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       keywords: "write store",
       disabled: saveState === "saving" || transferState === "working",
       run: () => void saveDraft(),
+    },
+    {
+      id: "open-trash",
+      group: "View",
+      label: trashOpen ? "Close trash" : "Open trash",
+      shortcut: shortcutLabel("openTrash"),
+      hint: trashedNotes.length ? `${trashedNotes.length}` : undefined,
+      icon: Trash2,
+      keywords: "trash deleted restore bin",
+      disabled: transferState === "working",
+      run: () => toggleTrash(),
+    },
+    {
+      id: "empty-trash",
+      group: "Actions",
+      label: "Empty trash",
+      hint: trashedNotes.length ? `${trashedNotes.length}` : undefined,
+      icon: Trash2,
+      keywords: "trash deleted restore purge permanent delete",
+      disabled: transferState === "working" || trashedNotes.length === 0,
+      run: () => void emptyTrash(),
     },
     {
       id: "attach-file",
@@ -1360,6 +1398,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     results = [];
     folders = [];
     vaultAttachments = [];
+    trashedNotes = [];
+    trashOpen = false;
     paletteNotes = [];
     activeNoteId = "";
     noteRevision = 0;
@@ -1548,8 +1588,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         });
         notes = [firstNote];
       }
+      await vault.purgeExpiredTrash().catch(() => []);
+      notes = await vault.listNotes();
       await loadNote(notes[0].id);
       vaultAttachments = await vault.listAttachments();
+      trashedNotes = await vault.listTrashedNotes();
       await runSearch("");
       if (searchQuery.trim()) await runSearch(searchQuery);
       githubBackup = await vault.getGithubBackupState();
@@ -1660,7 +1703,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const currentVault = vault;
     const sequence = ++noteLoadSequence;
     const note = await currentVault.getNote(id);
-    if (!note) return;
+    if (!note || note.deletedAt) return;
     const fullMarkdownParser =
       !markdownModule && needsFullMarkdownParser(note.markdown)
         ? loadMarkdownModule().catch(() => undefined)
@@ -1745,6 +1788,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       await runSearch(searchQuery);
       paletteNotes = notes;
       vaultAttachments = await vault.listAttachments();
+      trashedNotes = await vault.listTrashedNotes();
       githubBackup = await vault.getGithubBackupState();
       pendingBackupCount = (await vault.getPendingBackupOperations()).length;
     }
@@ -1784,6 +1828,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const notes = await vault.listNotes();
     folders = await vault.listFolders();
     vaultAttachments = await vault.listAttachments();
+    trashedNotes = await vault.listTrashedNotes();
     paletteNotes = notes;
     await runSearch(searchQuery);
     return notes;
@@ -2082,15 +2127,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   async function deleteFile(noteId: string): Promise<void> {
     if (!vault || transferState === "working") return;
     const note = await vault.getNote(noteId);
-    if (!note || !window.confirm(`Delete “${fileStem(noteFilePath(note))}”?`)) return;
+    if (!note || note.deletedAt) return;
     if (!(await settleDraft())) return;
     try {
-      await vault.deleteNote(noteId);
+      await vault.trashNote(noteId);
       const notes = await refreshFileTree();
       if (activeNoteId === noteId) {
         if (notes[0]) await loadNote(notes[0].id);
         else resetActiveNote();
       }
+      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
       storageError = "";
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The file could not be deleted.";
@@ -2111,17 +2157,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
             (attachment.sourcePath === path || attachment.sourcePath.startsWith(`${path}/`)),
         )
       : [];
-    const label = basename(path);
-    const parts: string[] = [];
-    if (affectedNotes.length)
-      parts.push(`${affectedNotes.length} ${affectedNotes.length === 1 ? "file" : "files"}`);
-    if (attached.length)
-      parts.push(`${attached.length} ${attached.length === 1 ? "attachment" : "attachments"}`);
-    const suffix = parts.length ? ` and its ${parts.join(" and ")}` : "";
-    if (!window.confirm(`Delete folder “${label}”${suffix}?`)) return;
     if (!(await settleDraft())) return;
     try {
-      for (const note of affectedNotes) await vault.deleteNote(note.id);
+      for (const note of affectedNotes) await vault.trashNote(note.id);
       if (attached.length) await vault.deleteAttachmentFolder(path);
       const existingFolders = await vault.listFolders();
       const nextFolders = existingFolders.filter(
@@ -2141,6 +2179,72 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The folder could not be deleted.";
     }
+  }
+
+  async function restoreFile(noteId: string): Promise<void> {
+    if (!vault || transferState === "working") return;
+    if (!(await settleDraft())) return;
+    try {
+      const restored = await vault.restoreNote(noteId);
+      if (!restored) return;
+      await refreshFileTree();
+      trashOpen = false;
+      await selectNote(noteId);
+      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      storageError = "";
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "The file could not be restored.";
+    }
+  }
+
+  async function purgeFile(noteId: string): Promise<void> {
+    if (!vault || transferState === "working") return;
+    const note = await vault.getNote(noteId);
+    if (!note) return;
+    if (
+      !window.confirm(
+        `Permanently delete “${fileStem(noteFilePath(note))}”? This cannot be undone.`,
+      )
+    )
+      return;
+    if (!(await settleDraft())) return;
+    try {
+      await vault.purgeNote(noteId);
+      await refreshFileTree();
+      if (activeNoteId === noteId) {
+        const notes = await vault.listNotes();
+        if (notes[0]) await loadNote(notes[0].id);
+        else resetActiveNote();
+      }
+      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      storageError = "";
+    } catch (error) {
+      storageError =
+        error instanceof Error ? error.message : "The file could not be permanently deleted.";
+    }
+  }
+
+  async function emptyTrash(): Promise<void> {
+    if (!vault || transferState === "working" || trashedNotes.length === 0) return;
+    if (
+      !window.confirm(
+        `Permanently delete ${trashedNotes.length} ${trashedNotes.length === 1 ? "note" : "notes"} in Trash? This cannot be undone.`,
+      )
+    )
+      return;
+    if (!(await settleDraft())) return;
+    try {
+      await vault.emptyTrash();
+      await refreshFileTree();
+      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      storageError = "";
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "Trash could not be emptied.";
+    }
+  }
+
+  function toggleTrash(): void {
+    trashOpen = !trashOpen;
   }
 
   async function copyFilePath(path: string): Promise<void> {
@@ -3276,6 +3380,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     else if (action === "searchNotes" || action === "focusSearch") focusSearch();
     else if (action === "cycleTheme") setTheme(nextThemePreference(theme));
     else if (action === "toggleSidebar") toggleSidebar();
+    else if (action === "openTrash" && transferState !== "working") toggleTrash();
     else if (action === "bold") insertSyntax("**", "**", "bold text");
     else if (action === "italic") insertSyntax("_", "_", "italic text");
     else if (action === "togglePreview") toggleRenderedPane();
@@ -3796,6 +3901,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get vaultAttachments() {
       return vaultAttachments;
     },
+    get trashedNotes() {
+      return trashedNotes;
+    },
+    get trashOpen() {
+      return trashOpen;
+    },
+    set trashOpen(value: boolean) {
+      trashOpen = value;
+    },
     get zipInput() {
       return zipInput;
     },
@@ -3833,6 +3947,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     moveFolder,
     deleteFile,
     deleteFolder,
+    restoreFile,
+    purgeFile,
+    emptyTrash,
+    toggleTrash,
     copyFilePath,
     changeNotePage,
     saveDraft,
