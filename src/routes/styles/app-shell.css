@@ -879,31 +879,6 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
-.trash-button {
-  position: relative;
-}
-.trash-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.trash-badge {
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  min-width: 16px;
-  height: 16px;
-  display: grid;
-  place-items: center;
-  padding-inline: 4px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--ink-soft);
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1;
-  pointer-events: none;
-}
 .trash-panel {
   display: flex;
   flex-direction: column;

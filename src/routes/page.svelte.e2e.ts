@@ -788,8 +788,16 @@ test("creates, moves, and manages folders and files", async ({ page }) => {
   await expect(fileMenu.getByRole("menuitem", { name: "Delete", exact: true })).toBeVisible();
   await fileMenu.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await expect(file).toBeHidden();
-  await expect(page.getByRole("button", { name: "Trash, 1 note" })).toBeVisible();
+  await openTrash(page);
+  await expect(page.getByRole("button", { name: "Restore Today", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Close trash" }).click();
 });
+
+// Trash lives outside the file tree and opens from the command palette.
+async function openTrash(page: Page) {
+  await page.getByRole("button", { name: "Open the command palette" }).click();
+  await page.getByRole("option", { name: /^Open trash/ }).click();
+}
 
 test("moves deleted notes to trash, restores them, and deletes them forever", async ({ page }) => {
   await page.goto("/");
@@ -811,11 +819,10 @@ test("moves deleted notes to trash, restores them, and deletes them forever", as
   await file.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await expect(file).toBeHidden();
-  await expect(page.getByRole("button", { name: "Trash, 1 note" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Close trash" })).toBeHidden();
 
-  // Trash opens as its own sidebar panel, like the command palette.
-  await page.getByRole("button", { name: "Trash, 1 note" }).click();
+  // Trash opens as its own sidebar panel from the command palette.
+  await openTrash(page);
   await expect(page.getByRole("button", { name: "Close trash" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Restore Trashme", exact: true })).toBeVisible();
 
@@ -830,7 +837,7 @@ test("moves deleted notes to trash, restores them, and deletes them forever", as
   await restored.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await expect(restored).toBeHidden();
-  await page.getByRole("button", { name: "Trash, 1 note" }).click();
+  await openTrash(page);
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Delete Trashme forever", exact: true }).click();
   await expect(page.getByRole("button", { name: "Restore Trashme", exact: true })).toBeHidden();
@@ -849,7 +856,7 @@ test("moves deleted notes to trash, restores them, and deletes them forever", as
   await second.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await expect(second).toBeHidden();
-  await page.getByRole("button", { name: "Trash, 1 note" }).click();
+  await openTrash(page);
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Empty trash", exact: true }).click();
   await expect(page.getByText("Trash is empty")).toBeVisible();
