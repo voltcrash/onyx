@@ -68,6 +68,7 @@ import {
   continueListOnEnter,
   DEFAULT_ATTACHMENT_FOLDER,
   indentEditorLines,
+  wrapSelectionWith,
   normalizeAttachmentFolder,
   resolveLocalAttachmentUrl,
   rewriteLocalLinks,
@@ -2716,9 +2717,25 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   function handleEditorBeforeInput(event: InputEvent): void {
     captureEditorState();
     if (event.isComposing) return;
-    if (event.inputType !== "insertLineBreak" && event.inputType !== "insertParagraph") return;
     const target = event.currentTarget;
     if (!(target instanceof HTMLTextAreaElement)) return;
+    if (event.inputType === "insertText" && typeof event.data === "string") {
+      if (target.selectionStart === target.selectionEnd) return;
+      const wrapped = wrapSelectionWith(
+        target.value,
+        target.selectionStart,
+        target.selectionEnd,
+        event.data,
+      );
+      if (!wrapped) return;
+      event.preventDefault();
+      // Placed synchronously so no deferred caret restore can race later input.
+      target.value = wrapped.value;
+      target.setSelectionRange(wrapped.start, wrapped.end);
+      updateMarkdown(wrapped.value);
+      return;
+    }
+    if (event.inputType !== "insertLineBreak" && event.inputType !== "insertParagraph") return;
     if (target.selectionStart !== target.selectionEnd) return;
     const continued = continueListOnEnter(target.value, target.selectionStart);
     if (!continued) return;

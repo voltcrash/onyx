@@ -7,6 +7,7 @@ import {
   resolveLocalAttachmentUrl,
   rewriteLocalLinks,
   toggleCheckboxes,
+  wrapSelectionWith,
 } from "./markdown-utils.js";
 
 describe("attachment markdown", () => {
@@ -150,6 +151,36 @@ describe("toggleCheckboxes", () => {
       end: 13,
     });
     expect(toggleCheckboxes("Plain text", 5, 5)).toBeUndefined();
+  });
+});
+
+describe("wrapSelectionWith", () => {
+  it("surrounds the selection and keeps the inner text selected", () => {
+    expect(wrapSelectionWith("Buy milk", 4, 8, "(")).toEqual({
+      value: "Buy (milk)",
+      start: 5,
+      end: 9,
+    });
+    expect(wrapSelectionWith("Buy milk", 4, 8, "*")).toEqual({
+      value: "Buy *milk*",
+      start: 5,
+      end: 9,
+    });
+    expect(wrapSelectionWith("code", 0, 4, "`")).toEqual({
+      value: "`code`",
+      start: 1,
+      end: 5,
+    });
+  });
+
+  it("leaves collapsed carets and other keys alone", () => {
+    expect(wrapSelectionWith("Buy milk", 4, 4, "(")).toBeUndefined();
+    expect(wrapSelectionWith("Buy milk", 4, 8, "x")).toBeUndefined();
+    expect(wrapSelectionWith("Buy milk", 8, 4, "[")).toEqual({
+      value: "Buy [milk]",
+      start: 5,
+      end: 9,
+    });
   });
 });
 

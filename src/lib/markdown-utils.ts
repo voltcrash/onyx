@@ -322,6 +322,46 @@ export function indentEditorLines(
   };
 }
 
+export interface WrapSelectionEdit {
+  value: string;
+  start: number;
+  end: number;
+}
+
+const WRAP_PAIRS: Record<string, string> = {
+  "(": ")",
+  "[": "]",
+  "{": "}",
+  '"': '"',
+  "'": "'",
+  "`": "`",
+  "*": "*",
+};
+
+/**
+ * Surrounds the selected text with a brackety pair instead of replacing it, keeping the
+ * inner text selected. Returns undefined for anything but a single wrapping key over a range.
+ */
+export function wrapSelectionWith(
+  value: string,
+  start: number,
+  end: number,
+  key: string,
+): WrapSelectionEdit | undefined {
+  const closer = WRAP_PAIRS[key];
+  if (!closer || key.length !== 1) return;
+  const clamp = (point: number): number => Math.min(Math.max(point, 0), value.length);
+  const anchor = clamp(start);
+  const focus = clamp(end);
+  const [first, last] = anchor <= focus ? [anchor, focus] : [focus, anchor];
+  if (first === last) return;
+  return {
+    value: `${value.slice(0, first)}${key}${value.slice(first, last)}${closer}${value.slice(last)}`,
+    start: first + 1,
+    end: last + 1,
+  };
+}
+
 export interface ToggleCheckboxesEdit {
   value: string;
   start: number;
