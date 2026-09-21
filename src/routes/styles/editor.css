@@ -521,6 +521,13 @@
   margin: 7px 0;
   padding-left: 3px;
 }
+/* A blank line between items makes the list loose, wrapping each item in a paragraph. */
+.prose li > p {
+  margin: 0;
+}
+.prose li > p + p {
+  margin-top: 10px;
+}
 .prose li.task-list-item {
   list-style: none;
   margin-left: -22px;
