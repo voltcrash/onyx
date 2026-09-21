@@ -164,6 +164,8 @@ export function createHtmlDocument({ title, body }: HtmlDocumentOptions): string
       pre code .hljs-emphasis { font-style: italic; }
       pre code .hljs-strong { font-weight: 700; }
       blockquote { margin: 1.5em 0; padding-left: 1.1em; border-left: 3px solid currentColor; opacity: 0.85; }
+      li > p { margin: 0; }
+      li > p + p { margin-top: 0.6em; }
       img { max-width: 100%; height: auto; }
       table { width: 100%; border-collapse: collapse; }
       th, td { padding: 0.45em 0.7em; border: 1px solid rgb(128 128 128 / 0.35); }

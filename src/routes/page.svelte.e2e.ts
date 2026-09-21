@@ -940,6 +940,122 @@ test("renders read-only Markdown in the rendered pane", async ({ page }) => {
   await expect(article.locator(".hljs-number")).toHaveText("42");
 });
 
+test("continues list markers when Enter is pressed in the editor", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await editor.fill("- first");
+  await editor.press("End");
+  await editor.press("Enter");
+  await expect(editor).toHaveValue("- first\n- ");
+  await editor.press("Enter");
+  await expect(editor).toHaveValue("- first\n");
+
+  await editor.fill("- [x] Done");
+  await editor.press("End");
+  await editor.press("Enter");
+  await expect(editor).toHaveValue("- [x] Done\n- [ ] ");
+
+  await editor.fill("1. First");
+  await editor.press("End");
+  await editor.press("Enter");
+  await expect(editor).toHaveValue("1. First\n2. ");
+
+  // Splitting mid-line leaves the caret after the new marker.
+  await editor.fill("- abc");
+  await editor.press("Home");
+  await editor.press("ArrowRight");
+  await editor.press("ArrowRight");
+  await editor.press("Enter");
+  await expect(editor).toHaveValue("- \n- abc");
+  await page.keyboard.type("X");
+  await expect(editor).toHaveValue("- \n- Xabc");
+
+  await editor.fill("- ");
+  await editor.press("End");
+  await editor.press("Enter");
+  await expect(editor).toHaveValue("");
+});
+
+test("indents lines with Tab and outdents with Shift+Tab", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await editor.fill("- a");
+  await editor.press("End");
+  await editor.press("Tab");
+  await expect(editor).toHaveValue("  - a");
+  await editor.press("Shift+Tab");
+  await expect(editor).toHaveValue("- a");
+
+  await editor.fill("- a\n- b");
+  await editor.press("ControlOrMeta+a");
+  await editor.press("Tab");
+  await expect(editor).toHaveValue("  - a\n  - b");
+  await editor.press("Shift+Tab");
+  await expect(editor).toHaveValue("- a\n- b");
+});
+
+test("toggles checkboxes without leaving the editor", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await editor.fill("- [ ] Buy milk");
+  await editor.press("End");
+  await editor.press("Alt+Enter");
+  await expect(editor).toHaveValue("- [x] Buy milk");
+  await editor.press("Alt+Enter");
+  await expect(editor).toHaveValue("- [ ] Buy milk");
+
+  await editor.fill("- Buy milk");
+  await editor.press("End");
+  await editor.press("Alt+Enter");
+  await expect(editor).toHaveValue("- [ ] Buy milk");
+});
+
+test("renumbers ordered items after the new one", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await editor.fill("1. one\n2. two");
+  await editor.press("ArrowUp");
+  await editor.press("Enter");
+  await expect(editor).toHaveValue("1. one\n2. \n3. two");
+});
+
+test("wraps the selection instead of replacing it", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await editor.fill("Buy milk");
+  await editor.press("ControlOrMeta+a");
+  await editor.press("(");
+  await expect(editor).toHaveValue("(Buy milk)");
+
+  await editor.fill("Buy milk");
+  await editor.press("ControlOrMeta+a");
+  await editor.press("*");
+  await expect(editor).toHaveValue("*Buy milk*");
+});
+
+test("pastes a link over selected text", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await editor.fill("the guide");
+  await editor.press("ControlOrMeta+a");
+  await page.evaluate((url) => navigator.clipboard.writeText(url), "https://example.com/guide");
+  await editor.press("ControlOrMeta+v");
+  await expect(editor).toHaveValue("[the guide](https://example.com/guide)");
+});
+
 test("keeps source and rendered panes synchronized and lets each pane be tucked away", async ({
   page,
 }) => {

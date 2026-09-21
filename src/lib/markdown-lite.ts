@@ -118,14 +118,29 @@ export function renderMarkdownBlocks(
     if (isListItem(lines[index]!)) {
       const start = index;
       const ordered = /^\s*\d+[.)]\s+/.test(lines[index]!);
-      const items: string[] = [];
+      const values: string[] = [];
+      let loose = false;
       while (index < lines.length) {
-        const match = lines[index]!.match(ordered ? /^\s*\d+[.)]\s+(.+)$/ : /^\s*[-+*]\s+(.+)$/);
+        const line = lines[index]!;
+        if (!line.trim()) {
+          let ahead = index + 1;
+          while (ahead < lines.length && !lines[ahead]!.trim()) ahead += 1;
+          const next = ahead < lines.length ? lines[ahead]! : "";
+          const continues = ordered
+            ? /^\s*\d+[.)]\s+.+$/.test(next) && isListItem(next)
+            : /^\s*[-+*]\s+.+$/.test(next) && isListItem(next);
+          if (!continues) break;
+          loose = true;
+          index = ahead;
+          continue;
+        }
+        const match = line.match(ordered ? /^\s*\d+[.)]\s+(.+)$/ : /^\s*[-+*]\s+(.+)$/);
         if (!match) break;
-        items.push(renderListItem(match[1]!, resolveLocalUrl));
+        values.push(match[1]!);
         index += 1;
       }
       const tag = ordered ? "ol" : "ul";
+      const items = values.map((value) => renderListItem(value, resolveLocalUrl, loose));
       blocks.push({
         html: `<${tag}>${items.join("")}</${tag}>`,
         element: true,
@@ -181,11 +196,17 @@ function isBlockStart(line: string): boolean {
   );
 }
 
-function renderListItem(value: string, resolveLocalUrl?: LocalUrlResolver): string {
+function renderListItem(value: string, resolveLocalUrl?: LocalUrlResolver, loose = false): string {
   const task = value.match(/^\[([ xX])\]\s+(.*)$/);
-  if (!task) return `<li>${renderInline(value, resolveLocalUrl)}</li>`;
+  if (!task) {
+    const inner = renderInline(value, resolveLocalUrl);
+    return loose ? `<li><p>${inner}</p></li>` : `<li>${inner}</li>`;
+  }
   const checked = task[1]!.toLowerCase() === "x";
-  return `<li class="task-list-item"><input type="checkbox"${checked ? " checked" : ""} disabled>${renderInline(task[2]!, resolveLocalUrl)}</li>`;
+  const inner = `<input type="checkbox"${checked ? " checked" : ""} disabled>${renderInline(task[2]!, resolveLocalUrl)}`;
+  return loose
+    ? `<li class="task-list-item"><p>${inner}</p></li>`
+    : `<li class="task-list-item">${inner}</li>`;
 }
 
 function renderInline(value: string, resolveLocalUrl?: LocalUrlResolver): string {

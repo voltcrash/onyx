@@ -65,11 +65,16 @@ import type { SettingsSection } from "$lib/components/settings-types";
 import { renderMarkdownBlocks as renderLiteMarkdownBlocks } from "$lib/markdown-lite";
 import {
   attachmentMarkdown,
+  continueListOnEnter,
   DEFAULT_ATTACHMENT_FOLDER,
+  indentEditorLines,
+  wrapSelectionWith,
   normalizeAttachmentFolder,
+  pasteUrlOverSelection,
   resolveLocalAttachmentUrl,
   rewriteLocalLinks,
   titleFromMarkdown,
+  toggleCheckboxes,
   type LocalAttachmentUrl,
 } from "$lib/markdown-utils";
 import {
@@ -725,6 +730,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       icon: ListChecks,
       keywords: "checklist todo checkbox format",
       run: () => prefixLine("- [ ] "),
+    },
+    {
+      id: "toggle-checkbox",
+      group: "Formatting",
+      label: "Toggle checkbox",
+      shortcut: shortcutLabel("toggleCheckbox"),
+      icon: ListChecks,
+      keywords: "checklist todo checkbox check uncheck toggle",
+      run: () => toggleCheckboxAtCaret(),
     },
     {
       id: "quote",
@@ -2702,8 +2716,35 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function handleEditorBeforeInput(event: InputEvent): void {
-    void event;
     captureEditorState();
+    if (event.isComposing) return;
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLTextAreaElement)) return;
+    if (event.inputType === "insertText" && typeof event.data === "string") {
+      if (target.selectionStart === target.selectionEnd) return;
+      const wrapped = wrapSelectionWith(
+        target.value,
+        target.selectionStart,
+        target.selectionEnd,
+        event.data,
+      );
+      if (!wrapped) return;
+      event.preventDefault();
+      // Placed synchronously so no deferred caret restore can race later input.
+      target.value = wrapped.value;
+      target.setSelectionRange(wrapped.start, wrapped.end);
+      updateMarkdown(wrapped.value);
+      return;
+    }
+    if (event.inputType !== "insertLineBreak" && event.inputType !== "insertParagraph") return;
+    if (target.selectionStart !== target.selectionEnd) return;
+    const continued = continueListOnEnter(target.value, target.selectionStart);
+    if (!continued) return;
+    event.preventDefault();
+    // Placed synchronously so no deferred caret restore can race later input.
+    target.value = continued.value;
+    target.setSelectionRange(continued.caret, continued.caret);
+    updateMarkdown(continued.value);
   }
 
   function isEditorTarget(target: EventTarget | null): boolean {
@@ -2769,6 +2810,34 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     rememberEditorState(selection);
     updateMarkdown(`${markdown.slice(0, start)}${replacement}${markdown.slice(end)}`);
     restoreEditorSelection({ start: start + replacement.length, end: start + replacement.length });
+    return true;
+  }
+
+  function runEditorIndent(target: EventTarget | null, outdent: boolean): boolean {
+    if (!(target instanceof HTMLTextAreaElement)) return false;
+    const edit = indentEditorLines(
+      target.value,
+      target.selectionStart,
+      target.selectionEnd,
+      outdent ? -1 : 1,
+    );
+    captureEditorState();
+    // Placed synchronously so no deferred caret restore can race later input.
+    target.value = edit.value;
+    target.setSelectionRange(edit.start, edit.end);
+    updateMarkdown(edit.value);
+    return true;
+  }
+
+  function toggleCheckboxAtCaret(): boolean {
+    if (!editor) return false;
+    const edit = toggleCheckboxes(editor.value, editor.selectionStart, editor.selectionEnd);
+    if (!edit) return false;
+    captureEditorState();
+    // Placed synchronously so no deferred caret restore can race later input.
+    editor.value = edit.value;
+    editor.setSelectionRange(edit.start, edit.end);
+    updateMarkdown(edit.value);
     return true;
   }
 
@@ -2841,7 +2910,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const selection = getEditorSelection(event.currentTarget);
     if (!selection) return;
     event.preventDefault();
-    replaceEditorSelection(selection, text);
+    const from = Math.min(selection.start, selection.end);
+    const to = Math.max(selection.start, selection.end);
+    replaceEditorSelection(
+      selection,
+      pasteUrlOverSelection(markdown.slice(from, to), text) ?? text,
+    );
   }
 
   function handleEditorDragOver(event: DragEvent): void {
@@ -3336,6 +3410,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       moveFindMatch(event.shiftKey ? -1 : 1);
       return;
     }
+    // Tab indents code and lists instead of leaving the editor.
+    if (event.key === "Tab" && !event.isComposing && isEditorTarget(event.target)) {
+      if (runEditorIndent(event.target, event.shiftKey)) event.preventDefault();
+      return;
+    }
     const action = (Object.keys(shortcuts) as ShortcutAction[]).find((candidate) =>
       shortcutMatchesEvent(shortcuts[candidate], event, primaryModifier),
     );
@@ -3343,6 +3422,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     // Paste carries files in its ClipboardEvent, which the keydown cannot see.
     // Let the browser fire the native paste so images land on the first press.
     if (action === "paste" && isEditorTarget(event.target)) return;
+
+    if (action === "toggleCheckbox") {
+      if (!isEditorTarget(event.target)) return;
+      if (toggleCheckboxAtCaret()) event.preventDefault();
+      return;
+    }
 
     if (action && isEditorShortcutAction(action)) {
       if (!isEditorTarget(event.target)) return;

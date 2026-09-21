@@ -188,3 +188,271 @@ function encodeLinkPath(path: string): string {
     .map((part) => encodeURIComponent(part))
     .join("/");
 }
+
+export interface ListEnterResult {
+  value: string;
+  caret: number;
+}
+
+/**
+ * Continues a bullet, ordered, or task list when Enter is pressed with the caret on one of
+ * its items. Returns the replacement text and caret, or undefined to leave the key alone.
+ */
+export function continueListOnEnter(value: string, caret: number): ListEnterResult | undefined {
+  const cursor = Math.max(0, Math.min(caret, value.length));
+  const lineStart = value.lastIndexOf("\n", cursor - 1) + 1;
+  const lineBreak = value.indexOf("\n", cursor);
+  const lineEnd = lineBreak === -1 ? value.length : lineBreak;
+  const line = value.slice(lineStart, lineEnd);
+  const match = line.match(/^(\s*)([-+*]|\d+[.)])(\s+)(.*)$/);
+  if (!match) return;
+  const [, indent, marker, gap, rest] = match as [string, string, string, string, string];
+  const task = rest.match(/^\[([ xX])\](\s+|$)([\s\S]*)$/);
+  const ordered = marker.match(/^(\d+)([.)])$/);
+  const prefixLength =
+    indent.length +
+    marker.length +
+    gap.length +
+    (task ? task[1]!.length + 2 + (task[2] ? task[2]!.length : 0) : 0);
+  const content = line.slice(prefixLength);
+  if (!content.trim()) {
+    return { value: value.slice(0, lineStart) + value.slice(lineEnd), caret: lineStart };
+  }
+  if (cursor < lineStart + prefixLength) return;
+  let continuation: string;
+  if (task) {
+    continuation = ordered
+      ? `${indent}${Number(ordered[1]) + 1}${ordered[2]} [ ] `
+      : `${indent}${marker} [ ] `;
+  } else if (ordered) {
+    continuation = `${indent}${Number(ordered[1]) + 1}${ordered[2]} `;
+  } else {
+    continuation = `${indent}${marker} `;
+  }
+  const inserted = `${value.slice(0, cursor)}\n${continuation}${value.slice(cursor)}`;
+  const nextCaret = cursor + 1 + continuation.length;
+  if (!ordered) return { value: inserted, caret: nextCaret };
+  return {
+    value: renumberFollowingItems(inserted, nextCaret, indent, ordered[2]!),
+    caret: nextCaret,
+  };
+}
+
+/**
+ * Shifts the numbers of the ordered items following an insertion, so `1, 2` with a new
+ * item between them reads `1, 2, 3`. Nested items keep their numbers; anything outside
+ * the list stops the pass.
+ */
+function renumberFollowingItems(
+  value: string,
+  from: number,
+  indent: string,
+  delimiter: string,
+): string {
+  const lineBreak = value.indexOf("\n", from);
+  if (lineBreak === -1) return value;
+  const head = value.slice(0, lineBreak + 1);
+  const lines: string[] = [];
+  let active = true;
+  for (const line of value.slice(lineBreak + 1).split("\n")) {
+    if (!active || !line.trim()) {
+      lines.push(line);
+      continue;
+    }
+    const match = line.match(/^(\s*)(\d+)([.)])(\s[\s\S]*)?$/);
+    if (!match) {
+      active = false;
+    } else if (match[1] !== indent) {
+      // A deeper item belongs to a nested list; anything else ends this one.
+      if (!(match[1]!.startsWith(indent) && match[1]!.length > indent.length)) active = false;
+    } else if (match[3] !== delimiter) {
+      active = false;
+    } else {
+      lines.push(`${match[1]}${Number(match[2]) + 1}${match[3]}${match[4] ?? ""}`);
+      continue;
+    }
+    lines.push(line);
+  }
+  return head + lines.join("\n");
+}
+
+export interface IndentEdit {
+  value: string;
+  start: number;
+  end: number;
+}
+
+interface TouchedLines {
+  head: string;
+  tail: string;
+  lines: string[];
+  starts: number[];
+  first: number;
+  last: number;
+  collapsed: boolean;
+}
+
+/** The full lines a caret or selection touches; a trailing line start belongs to the line above. */
+function touchedLines(value: string, start: number, end: number): TouchedLines {
+  const clamp = (point: number): number => Math.min(Math.max(point, 0), value.length);
+  const anchor = clamp(start);
+  const focus = clamp(end);
+  const [first, last] = anchor <= focus ? [anchor, focus] : [focus, anchor];
+  const lastContent = last > first && last > 0 && value[last - 1] === "\n" ? last - 1 : last;
+  const firstLineStart = value.lastIndexOf("\n", first - 1) + 1;
+  const lineBreak = value.indexOf("\n", lastContent);
+  const lastLineEnd = lineBreak === -1 ? value.length : lineBreak;
+  const lines = value.slice(firstLineStart, lastLineEnd).split("\n");
+  let offset = firstLineStart;
+  const starts = lines.map((line) => {
+    const lineStart = offset;
+    offset += line.length + 1;
+    return lineStart;
+  });
+  return {
+    head: value.slice(0, firstLineStart),
+    tail: value.slice(lastLineEnd),
+    lines,
+    starts,
+    first,
+    last,
+    collapsed: first === last,
+  };
+}
+
+/** Moves a document offset through per-line edits, keeping it on the same text. */
+function remapPosition(
+  touched: Pick<TouchedLines, "lines" | "starts">,
+  deltas: number[],
+  position: number,
+): number {
+  let index = 0;
+  for (let i = 0; i < touched.starts.length; i++) {
+    if (touched.starts[i]! <= position) index = i;
+    else break;
+  }
+  let shift = 0;
+  for (let i = 0; i < index; i++) shift += deltas[i]!;
+  const delta = deltas[index]!;
+  const lineStart = touched.starts[index]!;
+  if (position >= lineStart + touched.lines[index]!.length) return position + shift + delta;
+  if (delta >= 0) return position + shift + delta;
+  return lineStart + shift + Math.max(0, position - lineStart + delta);
+}
+
+/**
+ * Indents or outdents the touched lines by two spaces, keeping the selection on the same
+ * text. Blank lines in a range are left alone so no trailing whitespace is added.
+ */
+export function indentEditorLines(
+  value: string,
+  start: number,
+  end: number,
+  direction: 1 | -1,
+): IndentEdit {
+  const touched = touchedLines(value, start, end);
+  const edits = touched.lines.map((line) => {
+    if (!line.trim() && !touched.collapsed) return { text: line, delta: 0 };
+    if (direction === 1) return { text: `  ${line}`, delta: 2 };
+    const unit = line.match(/^ {1,2}/)?.[0] ?? (line.startsWith("\t") ? "\t" : "");
+    return { text: line.slice(unit.length), delta: -unit.length };
+  });
+  const deltas = edits.map((edit) => edit.delta);
+  return {
+    value: touched.head + edits.map((edit) => edit.text).join("\n") + touched.tail,
+    start: remapPosition(touched, deltas, touched.first),
+    end: remapPosition(touched, deltas, touched.last),
+  };
+}
+
+export interface WrapSelectionEdit {
+  value: string;
+  start: number;
+  end: number;
+}
+
+const WRAP_PAIRS: Record<string, string> = {
+  "(": ")",
+  "[": "]",
+  "{": "}",
+  '"': '"',
+  "'": "'",
+  "`": "`",
+  "*": "*",
+};
+
+/**
+ * Surrounds the selected text with a brackety pair instead of replacing it, keeping the
+ * inner text selected. Returns undefined for anything but a single wrapping key over a range.
+ */
+export function wrapSelectionWith(
+  value: string,
+  start: number,
+  end: number,
+  key: string,
+): WrapSelectionEdit | undefined {
+  const closer = WRAP_PAIRS[key];
+  if (!closer || key.length !== 1) return;
+  const clamp = (point: number): number => Math.min(Math.max(point, 0), value.length);
+  const anchor = clamp(start);
+  const focus = clamp(end);
+  const [first, last] = anchor <= focus ? [anchor, focus] : [focus, anchor];
+  if (first === last) return;
+  return {
+    value: `${value.slice(0, first)}${key}${value.slice(first, last)}${closer}${value.slice(last)}`,
+    start: first + 1,
+    end: last + 1,
+  };
+}
+
+/**
+ * The link markup replacing selected text when a bare URL is pasted over it, or undefined
+ * for anything else. Surrounding whitespace on the clipboard is ignored.
+ */
+export function pasteUrlOverSelection(selected: string, clipboard: string): string | undefined {
+  if (!selected) return;
+  const destination = clipboard.trim();
+  if (!/^https?:\/\/\S+$/i.test(destination)) return;
+  return `[${selected}](${destination})`;
+}
+
+export interface ToggleCheckboxesEdit {
+  value: string;
+  start: number;
+  end: number;
+}
+
+/**
+ * Flips the checkboxes on the touched list items, turning plain bullets into unchecked
+ * tasks. Returns undefined when no touched line is a list item.
+ */
+export function toggleCheckboxes(
+  value: string,
+  start: number,
+  end: number,
+): ToggleCheckboxesEdit | undefined {
+  const touched = touchedLines(value, start, end);
+  let changed = false;
+  const edits = touched.lines.map((line) => {
+    const match = line.match(/^(\s*)([-+*]|\d+[.)])(\s+)(.*)$/);
+    if (!match) return { text: line, delta: 0 };
+    const [, indent, marker, , rest] = match as [string, string, string, string, string];
+    const task = rest.match(/^\[([ xX])\](\s+|$)([\s\S]*)$/);
+    let text: string;
+    if (task) {
+      const checked = task[1] === " ";
+      text = `${indent}${marker} [${checked ? "x" : " "}]${task[2]}${task[3]}`;
+    } else {
+      text = `${indent}${marker} [ ] ${rest}`;
+    }
+    changed = true;
+    return { text, delta: text.length - line.length };
+  });
+  if (!changed) return;
+  const deltas = edits.map((edit) => edit.delta);
+  return {
+    value: touched.head + edits.map((edit) => edit.text).join("\n") + touched.tail,
+    start: remapPosition(touched, deltas, touched.first),
+    end: remapPosition(touched, deltas, touched.last),
+  };
+}
