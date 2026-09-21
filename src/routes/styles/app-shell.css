@@ -631,6 +631,10 @@
 }
 .file-tree-row {
   --tree-depth: 0;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
 }
 .file-tree-row[draggable="true"] {
   cursor: grab;
@@ -791,6 +795,20 @@
 .sidebar-right .file-context-submenu {
   right: 100%;
   left: auto;
+}
+@media (pointer: coarse) {
+  .file-context-menu button {
+    min-height: 40px;
+  }
+}
+@media (max-width: 700px) {
+  .file-context-submenu {
+    position: static;
+    margin-left: 12px;
+  }
+  .sidebar-right .file-context-submenu {
+    right: auto;
+  }
 }
 .file-context-divider {
   margin: 4px 2px;
