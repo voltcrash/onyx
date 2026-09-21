@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { ChevronDown, ChevronRight, Copy, Download, FilePlus2, FileText, Folder, FolderPlus, Image, Paperclip, HardDrive, LoaderCircle, Lock, LockOpen, LogOut, PanelLeft, PanelRight, Pencil, Plus, Search, Settings, Trash2, Type } from '@lucide/svelte';
+	import { ChevronDown, ChevronRight, Copy, Download, FilePlus2, FileText, Folder, FolderPlus, Image, Paperclip, HardDrive, LoaderCircle, Lock, LockOpen, LogOut, PanelLeft, PanelRight, Pencil, Plus, Search, Settings, Trash2, Type, Undo2, X } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
 	import type { GithubUser } from '$lib/github';
 	import type { VaultDescriptor } from '$lib/storage/registry';
-	import type { AttachmentMetadata, FolderMetadata, VaultSearchResult } from '$lib/storage/types';
+	import type { AttachmentMetadata, FolderMetadata, NoteMetadata, VaultSearchResult } from '$lib/storage/types';
 	import GithubIcon from './github-icon.svelte';
 	import VaultSwitcher from './vault-switcher.svelte';
 	import FindReplace from './find-replace.svelte';
@@ -71,6 +71,12 @@
 		onMoveFolder: (path: string, parentPath: string) => void;
 		onDeleteFile: (id: string) => void;
 		onDeleteFolder: (path: string) => void;
+		trashedNotes: NoteMetadata[];
+		trashOpen: boolean;
+		onToggleTrash: () => void;
+		onRestoreFile: (id: string) => void;
+		onPurgeFile: (id: string) => void;
+		onEmptyTrash: () => void;
 		onCopyFilePath: (path: string) => void;
 		onCopyFileAs: (id: string, format: Exclude<NoteFormat, 'pdf'>) => void;
 		onExportFileAs: (id: string, format: NoteFormat) => void;
@@ -97,7 +103,7 @@
 	let {
 		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, attachments, attachmentFolder, attachmentsHidden, onOpenAttachment, searchQuery, findOpen, findQuery, findReplacement, findMatchCase, findWholeWord, findMatchCount, activeFindMatch, findCanEdit, notePage, notePageCount, saveState, notesLoaded, paletteOpen, searchPending, paletteItems, settingsOpen,
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, wordCount, readingMinutes, contentWidth,
-		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSidebarDragStart, sidebarSide, onSidebarSideChange, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, onCopyFilePath, onCopyFileAs, onExportFileAs, onSearch,
+		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSidebarDragStart, sidebarSide, onSidebarSideChange, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, trashedNotes, trashOpen, onToggleTrash, onRestoreFile, onPurgeFile, onEmptyTrash, onCopyFilePath, onCopyFileAs, onExportFileAs, onSearch,
 		onFindQueryChange, onFindReplacementChange, onFindMatchCaseChange, onFindWholeWordChange, onFindPrevious, onFindNext, onFindReplace, onFindReplaceAll, onCloseFind,
 		onOpenPalette, onClosePalette, onOpenSettings, onOpenStorageSettings, onMoveNoteFocus, onSelectNote, onChangePage,
 		onContentWidthChange
@@ -171,6 +177,20 @@
 
 	function noteLabel(result: VaultSearchResult): string {
 		return result.note.title || basename(notePath(result)).replace(/\.(?:md|markdown)$/i, '') || 'Untitled';
+	}
+
+	function trashedNoteLabel(note: NoteMetadata): string {
+		const path = note.sourcePath?.trim() || `${note.title || 'Untitled'}.md`;
+		return note.title || basename(path).replace(/\.(?:md|markdown)$/i, '') || 'Untitled';
+	}
+
+	function trashedNoteDeletedLabel(note: NoteMetadata): string {
+		if (!note.deletedAt) return 'In trash';
+		try {
+			return `Deleted ${new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(note.deletedAt))}`;
+		} catch {
+			return 'In trash';
+		}
 	}
 
 	function isAttachmentPath(path: string): boolean {
@@ -668,6 +688,29 @@
 					{/each}
 				{/if}
 			</nav>
+			<div class="trash-section">
+				<button class="file-tree-row folder-row trash-toggle" aria-expanded={trashOpen} aria-label={trashedNotes.length ? `Trash, ${trashedNotes.length} ${trashedNotes.length === 1 ? 'note' : 'notes'}` : 'Trash, empty'} title="Deleted notes stay here for 30 days" disabled={transferState === 'working'} onclick={onToggleTrash}>
+					<span class="file-tree-caret">{#if trashOpen}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}</span><Trash2 size={16} /><span class="file-tree-name">Trash</span>{#if trashedNotes.length}<span class="trash-count">{trashedNotes.length}</span>{/if}
+				</button>
+				{#if trashOpen}
+					{#if trashedNotes.length === 0}
+						<div class="trash-empty">Trash is empty. Deleted notes stay here for 30 days.</div>
+					{:else}
+						<ul class="trash-list">
+							{#each trashedNotes as trashed (trashed.id)}
+								<li class="trash-row" title={trashedNoteDeletedLabel(trashed)}>
+									<button class="trash-name" onclick={() => onRestoreFile(trashed.id)} title={`Restore ${trashedNoteLabel(trashed)}`}>
+										<FileText size={15} /><span>{trashedNoteLabel(trashed)}</span>
+									</button>
+									<button class="trash-icon-button" aria-label={`Restore ${trashedNoteLabel(trashed)}`} title="Restore" disabled={transferState === 'working'} onclick={() => onRestoreFile(trashed.id)}><Undo2 size={14} /></button>
+									<button class="trash-icon-button danger" aria-label={`Delete ${trashedNoteLabel(trashed)} forever`} title="Delete forever" disabled={transferState === 'working'} onclick={() => onPurgeFile(trashed.id)}><X size={14} /></button>
+								</li>
+							{/each}
+						</ul>
+						<button class="trash-empty-button" disabled={transferState === 'working'} onclick={onEmptyTrash}>Empty trash</button>
+					{/if}
+				{/if}
+			</div>
 			{#if contextMenu}
 				<button class="file-context-backdrop" aria-label="Close file menu" onclick={closeContextMenu}></button>
 				<div class="file-context-menu" role="menu" aria-label={contextMenu.kind === 'sidebar' ? 'Sidebar actions' : 'File actions'} style={`top: ${contextMenu.y}px; left: ${contextMenu.x}px`}>

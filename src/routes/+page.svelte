@@ -72,6 +72,12 @@
 		onMoveFolder={(path, parent) => void page.moveFolder(path, parent)}
 		onDeleteFile={(id) => void page.deleteFile(id)}
 		onDeleteFolder={(path) => void page.deleteFolder(path)}
+		trashedNotes={page.trashedNotes}
+		trashOpen={page.trashOpen}
+		onToggleTrash={page.toggleTrash}
+		onRestoreFile={(id) => void page.restoreFile(id)}
+		onPurgeFile={(id) => void page.purgeFile(id)}
+		onEmptyTrash={() => void page.emptyTrash()}
 		onCopyFilePath={(path) => void page.copyFilePath(path)}
 		onCopyFileAs={(id, format) => void page.copyNoteAs(id, format)}
 		onExportFileAs={(id, format) => void page.exportNoteAs(id, format)}

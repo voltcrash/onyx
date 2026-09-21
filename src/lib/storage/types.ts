@@ -10,6 +10,7 @@ export interface NoteMetadata {
   revision: number;
   size: number;
   sourcePath?: string;
+  deletedAt?: string;
 }
 
 export interface Note extends NoteMetadata {

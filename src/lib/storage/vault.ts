@@ -35,6 +35,9 @@ import { VaultConflictError } from "./types.js";
 const DEFAULT_DATABASE_NAME = "onyx-vault";
 const DEFAULT_DIRECTORY_NAME = "onyx";
 
+/** Trashed notes are permanently deleted after 30 days. */
+export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
+
 function isPathWithin(path: string, parent: string): boolean {
   return !parent || path === parent || path.startsWith(`${parent}/`);
 }
@@ -245,6 +248,8 @@ export class Vault {
         revision: actualRevision + 1,
         size: new Blob([markdown]).size,
         sourcePath: input.sourcePath ?? existing?.sourcePath,
+        // Saving a trashed note must not resurrect it; trash state only changes via trash/restore.
+        ...(existing?.deletedAt ? { deletedAt: existing.deletedAt } : {}),
       };
 
       const previousMarkdown = existing
@@ -299,29 +304,122 @@ export class Vault {
   async listNotes(): Promise<NoteMetadata[]> {
     return this.#withLock(async () => {
       const notes = await this.#database.getNotes();
-      return notes.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+      return notes
+        .filter((note) => !note.deletedAt)
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
     });
   }
 
-  listFolders(): Promise<FolderMetadata[]> {
-    return this.#withLock(() => this.#database.getFileFolders());
-  }
-
-  async saveFolders(folders: FolderMetadata[]): Promise<void> {
-    await this.#withLock(async () => {
-      await this.#database.setFileFolders(folders);
-      this.#publish({ kind: "vault" });
+  async listTrashedNotes(): Promise<NoteMetadata[]> {
+    return this.#withLock(async () => {
+      const notes = await this.#database.getNotes();
+      return notes
+        .filter((note) => Boolean(note.deletedAt))
+        .sort((left, right) => (right.deletedAt ?? "").localeCompare(left.deletedAt ?? ""));
     });
   }
 
-  async deleteNote(noteId: string): Promise<boolean> {
+  /** Moves a note to the trash, keeping its files so it can be restored. */
+  async trashNote(noteId: string): Promise<boolean> {
+    return this.#withLock(async () => {
+      const note = await this.#database.getNote(noteId);
+      if (!note || note.deletedAt) return false;
+      const attachments = await this.#database.getAttachments(noteId);
+      const now = new Date().toISOString();
+      const attachmentOperations: BackupOperation[] = attachments.map(
+        (attachment): BackupOperation => ({
+          id: crypto.randomUUID(),
+          kind: "attachment:delete",
+          entityId: attachment.id,
+          noteId,
+          path: attachment.path,
+          revision: 1,
+          createdAt: now,
+        }),
+      );
+      const operation: BackupOperation = {
+        id: crypto.randomUUID(),
+        kind: "note:delete",
+        entityId: noteId,
+        noteId,
+        path: note.path,
+        revision: note.revision + 1,
+        createdAt: now,
+      };
+      const trashed = await this.#database.trashNote(
+        noteId,
+        now,
+        now,
+        operation,
+        attachmentOperations,
+      );
+      if (trashed) this.#publish({ kind: "note", noteId });
+      return trashed;
+    });
+  }
+
+  /** Restores a trashed note to its former folder, renaming on path conflicts. */
+  async restoreNote(noteId: string): Promise<boolean> {
+    return this.#withLock(async () => {
+      const note = await this.#database.getNote(noteId);
+      if (!note || !note.deletedAt) return false;
+      const [notes, attachments] = await Promise.all([
+        this.#database.getNotes(),
+        this.#database.getAttachments(noteId),
+      ]);
+      const now = new Date().toISOString();
+      const taken = new Set(
+        notes
+          .filter((candidate) => candidate.id !== noteId && !candidate.deletedAt)
+          .flatMap((candidate) =>
+            candidate.sourcePath ? [candidate.sourcePath.toLocaleLowerCase()] : [],
+          ),
+      );
+      const sourcePath =
+        note.sourcePath && taken.has(note.sourcePath.toLocaleLowerCase())
+          ? uniqueRestoreSourcePath(note.sourcePath, taken)
+          : undefined;
+      const attachmentOperations: BackupOperation[] = attachments.map(
+        (attachment): BackupOperation => ({
+          id: crypto.randomUUID(),
+          kind: "attachment:upsert",
+          entityId: attachment.id,
+          noteId,
+          path: attachment.path,
+          revision: 1,
+          createdAt: now,
+        }),
+      );
+      const operation: BackupOperation = {
+        id: crypto.randomUUID(),
+        kind: "note:upsert",
+        entityId: noteId,
+        noteId,
+        path: note.path,
+        revision: note.revision + 1,
+        createdAt: now,
+      };
+      const restored = await this.#database.restoreNote(
+        noteId,
+        now,
+        operation,
+        attachmentOperations,
+        sourcePath,
+      );
+      if (restored) this.#publish({ kind: "note", noteId });
+      return restored;
+    });
+  }
+
+  /** Permanently deletes one trashed note and its files. Cannot be undone. */
+  async purgeNote(noteId: string): Promise<boolean> {
     return this.#withLock(async () => {
       const note = await this.#database.getNote(noteId);
       if (!note) return false;
       const attachments = await this.#database.getAttachments(noteId);
       const markdown =
         (await this.#database.getNoteMarkdown(noteId)) ??
-        (await this.#filesystem.readText(note.path));
+        (await this.#filesystem.readText(note.path).catch(() => ""));
       const attachmentFiles = await Promise.all(
         attachments.map(async (attachment) => {
           try {
@@ -364,7 +462,7 @@ export class Vault {
           operations,
         );
       } catch (error) {
-        await this.#filesystem.writeText(note.path, markdown).catch(() => undefined);
+        if (markdown) await this.#filesystem.writeText(note.path, markdown).catch(() => undefined);
         for (const { attachment, file } of attachmentFiles) {
           if (file) await this.#filesystem.write(attachment.path, file).catch(() => undefined);
         }
@@ -372,6 +470,43 @@ export class Vault {
       }
       this.#publish({ kind: "note", noteId });
       return true;
+    });
+  }
+
+  /** Permanently deletes every trashed note. Cannot be undone. */
+  async emptyTrash(): Promise<number> {
+    const trashed = await this.listTrashedNotes();
+    let purged = 0;
+    for (const note of trashed) {
+      if (await this.purgeNote(note.id)) purged += 1;
+    }
+    return purged;
+  }
+
+  /** Permanently deletes trashed notes older than the retention window. */
+  async purgeExpiredTrash(
+    now: Date = new Date(),
+    retentionMs: number = TRASH_RETENTION_MS,
+  ): Promise<string[]> {
+    const trashed = await this.listTrashedNotes();
+    const cutoff = now.getTime() - retentionMs;
+    const purged: string[] = [];
+    for (const note of trashed) {
+      const deletedAt = note.deletedAt ? Date.parse(note.deletedAt) : Number.NaN;
+      if (Number.isNaN(deletedAt) || deletedAt > cutoff) continue;
+      if (await this.purgeNote(note.id)) purged.push(note.id);
+    }
+    return purged;
+  }
+
+  listFolders(): Promise<FolderMetadata[]> {
+    return this.#withLock(() => this.#database.getFileFolders());
+  }
+
+  async saveFolders(folders: FolderMetadata[]): Promise<void> {
+    await this.#withLock(async () => {
+      await this.#database.setFileFolders(folders);
+      this.#publish({ kind: "vault" });
     });
   }
 
@@ -502,7 +637,15 @@ export class Vault {
   }
 
   listAttachments(noteId?: string): Promise<AttachmentMetadata[]> {
-    return this.#withLock(() => this.#database.getAttachments(noteId));
+    return this.#withLock(async () => {
+      if (noteId) return this.#database.getAttachments(noteId);
+      const [notes, attachments] = await Promise.all([
+        this.#database.getNotes(),
+        this.#database.getAttachments(),
+      ]);
+      const trashedIds = new Set(notes.filter((note) => note.deletedAt).map((note) => note.id));
+      return attachments.filter((attachment) => !trashedIds.has(attachment.noteId));
+    });
   }
 
   /** Stores a file for a note under `folder`, renaming it if that vault path is already taken. */
@@ -672,7 +815,9 @@ export class Vault {
           this.#database.getSearchDocuments(),
           this.#database.getNotes(),
         ]);
-        const metadataById = new Map(notes.map((note) => [note.id, note]));
+        const metadataById = new Map(
+          notes.filter((note) => !note.deletedAt).map((note) => [note.id, note]),
+        );
         return documents
           .filter((document) => requiredTags.every((tag) => document.tags.includes(tag)))
           .map((document) => scoreDocument(document, [], metadataById.get(document.noteId), []))
@@ -687,7 +832,9 @@ export class Vault {
       if (matchingNoteIds.length === 0) return [];
 
       const { documents, notes } = await this.#database.getSearchRecords(matchingNoteIds);
-      const metadataById = new Map(notes.map((note) => [note.id, note]));
+      const metadataById = new Map(
+        notes.filter((note) => !note.deletedAt).map((note) => [note.id, note]),
+      );
       const postingsByNote = new Map<string, SearchPosting[]>();
       for (const posting of postingsByTerm.flat()) {
         const postings = postingsByNote.get(posting.noteId) ?? [];
@@ -822,7 +969,13 @@ export class Vault {
         this.#database.getNotes(),
         this.#database.getAttachments(),
       ]);
-      return { version: 1, notes, attachments };
+      const activeNotes = notes.filter((note) => !note.deletedAt);
+      const activeIds = new Set(activeNotes.map((note) => note.id));
+      return {
+        version: 1,
+        notes: activeNotes,
+        attachments: attachments.filter((attachment) => activeIds.has(attachment.noteId)),
+      };
     }, options.context);
   }
 
@@ -1068,6 +1221,18 @@ function restoreOperation(
     revision: 1,
     createdAt: restoredAt,
   };
+}
+
+function uniqueRestoreSourcePath(sourcePath: string, taken: Set<string>): string {
+  const dot = sourcePath.lastIndexOf(".");
+  const stem = dot > 0 ? sourcePath.slice(0, dot) : sourcePath;
+  const extension = dot > 0 ? sourcePath.slice(dot) : "";
+  const cleanedStem = stem.replace(/\s+\(restored(?:\s+\d+)?\)$/i, "") || stem;
+  let candidate = `${cleanedStem} (restored)${extension}`;
+  for (let index = 2; taken.has(candidate.toLocaleLowerCase()); index += 1) {
+    candidate = `${cleanedStem} (restored ${index})${extension}`;
+  }
+  return candidate;
 }
 
 function sanitizeAttachmentName(name: string): string {

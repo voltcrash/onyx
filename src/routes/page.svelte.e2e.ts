@@ -753,7 +753,7 @@ test("creates, moves, and manages folders and files", async ({ page }) => {
   const fileName = page.getByRole("textbox", { name: "File name" });
   await fileName.fill("Today.md");
   await fileName.press("Enter");
-  const file = page.getByRole("button", { name: "Today", exact: true });
+  const file = page.locator(".note-list").getByRole("button", { name: "Today", exact: true });
   await expect(file).toBeVisible();
 
   await page.getByRole("button", { name: "New folder", exact: true }).click();
@@ -786,9 +786,65 @@ test("creates, moves, and manages folders and files", async ({ page }) => {
     fileMenu.getByRole("menuitem", { name: "Copy relative path", exact: true }),
   ).toBeVisible();
   await expect(fileMenu.getByRole("menuitem", { name: "Delete", exact: true })).toBeVisible();
-  page.once("dialog", (dialog) => dialog.accept());
   await fileMenu.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await expect(file).toBeHidden();
+  await expect(page.getByRole("button", { name: "Trash, 1 note" })).toBeVisible();
+});
+
+test("moves deleted notes to trash, restores them, and deletes them forever", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await page.getByRole("button", { name: "New file" }).click();
+  const fileName = page.getByRole("textbox", { name: "File name" });
+  await fileName.fill("Trashme.md");
+  await fileName.press("Enter");
+  const file = page.locator(".note-list").getByRole("button", { name: "Trashme", exact: true });
+  await expect(file).toBeVisible();
+
+  await editor.fill("# Trashme\n\nThis note will visit the trash.");
+  await page.keyboard.press("ControlOrMeta+S");
+  await expect(page.getByText("Unsaved", { exact: true })).toBeHidden();
+
+  // Deleting moves the note to trash instead of destroying it.
+  await file.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  await expect(file).toBeHidden();
+  await expect(page.getByRole("button", { name: "Trash, 1 note" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Restore Trashme", exact: true })).toBeVisible();
+
+  // Restoring brings the note back to the file tree.
+  await page.getByRole("button", { name: "Restore Trashme", exact: true }).click();
+  const restored = page.locator(".note-list").getByRole("button", { name: "Trashme", exact: true });
+  await expect(restored).toHaveAttribute("aria-current", "true");
+  await expect(editor).toHaveValue(/# Trashme/);
+
+  // Deleting forever removes the note from the trash.
+  await restored.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  await expect(restored).toBeHidden();
+  await expect(page.getByRole("button", { name: "Trash, 1 note" })).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Delete Trashme forever", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Restore Trashme", exact: true })).toBeHidden();
+  await expect(page.getByText("Trash is empty")).toBeVisible();
+
+  // Empty trash permanently deletes every trashed note at once.
+  await page.getByRole("button", { name: "New file" }).click();
+  const secondName = page.getByRole("textbox", { name: "File name" });
+  await secondName.fill("Trashmetoo.md");
+  await secondName.press("Enter");
+  const second = page
+    .locator(".note-list")
+    .getByRole("button", { name: "Trashmetoo", exact: true });
+  await expect(second).toBeVisible();
+  await second.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  await expect(second).toBeHidden();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Empty trash", exact: true }).click();
+  await expect(page.getByText("Trash is empty")).toBeVisible();
 });
 
 test("uses the first Markdown heading for notes with front matter", async ({ page }) => {

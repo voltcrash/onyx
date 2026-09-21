@@ -7,7 +7,7 @@ import type {
 } from "./types.js";
 import { VaultConflictError } from "./types.js";
 
-const DATABASE_VERSION = 3;
+const DATABASE_VERSION = 4;
 const VAULT_VERSION_KEY = "vaultVersion";
 const NATIVE_DIRECTORY_HANDLE_KEY = "nativeDirectoryHandle";
 const FILE_FOLDERS_KEY = "fileFolders";
@@ -93,6 +93,13 @@ export class VaultDatabase {
 
       if (event.oldVersion < 3) {
         database.createObjectStore("noteContents", { keyPath: "noteId" });
+      }
+
+      if (event.oldVersion < 4) {
+        const notes = request.transaction?.objectStore("notes");
+        if (notes && !notes.indexNames.contains("deletedAt")) {
+          notes.createIndex("deletedAt", "deletedAt");
+        }
       }
     };
 
@@ -390,6 +397,121 @@ export class VaultDatabase {
       for (const operation of operations) backupQueue.put(operation);
       await advanceVaultVersion(transaction);
       await complete;
+    } catch (error) {
+      try {
+        transaction.abort();
+      } catch {
+        // The transaction may already have completed or aborted.
+      }
+      await complete.catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async trashNote(
+    noteId: string,
+    deletedAt: string,
+    updatedAt: string,
+    operation: BackupOperation,
+    attachmentOperations: BackupOperation[] = [],
+  ): Promise<boolean> {
+    const transaction = this.#database.transaction(
+      ["notes", "searchDocuments", "backupQueue", "settings"],
+      "readwrite",
+    );
+    const complete = transactionDone(transaction);
+    try {
+      const current = await requestResult<NoteMetadata | undefined>(
+        transaction.objectStore("notes").get(noteId),
+      );
+      if (!current) {
+        transaction.abort();
+        await complete.catch(() => undefined);
+        return false;
+      }
+      if (current.deletedAt) {
+        transaction.abort();
+        await complete.catch(() => undefined);
+        return true;
+      }
+      transaction.objectStore("notes").put({
+        ...current,
+        deletedAt,
+        updatedAt,
+        revision: current.revision + 1,
+      });
+      const document = await requestResult<SearchDocument | undefined>(
+        transaction.objectStore("searchDocuments").get(noteId),
+      );
+      if (document) {
+        transaction.objectStore("searchDocuments").put({ ...document, updatedAt });
+      }
+      const backupQueue = transaction.objectStore("backupQueue");
+      backupQueue.put(operation);
+      for (const attachmentOperation of attachmentOperations) {
+        backupQueue.put(attachmentOperation);
+      }
+      await advanceVaultVersion(transaction);
+      await complete;
+      return true;
+    } catch (error) {
+      try {
+        transaction.abort();
+      } catch {
+        // The transaction may already have completed or aborted.
+      }
+      await complete.catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async restoreNote(
+    noteId: string,
+    updatedAt: string,
+    operation: BackupOperation,
+    attachmentOperations: BackupOperation[] = [],
+    sourcePath?: string,
+  ): Promise<boolean> {
+    const transaction = this.#database.transaction(
+      ["notes", "searchDocuments", "backupQueue", "settings"],
+      "readwrite",
+    );
+    const complete = transactionDone(transaction);
+    try {
+      const current = await requestResult<NoteMetadata | undefined>(
+        transaction.objectStore("notes").get(noteId),
+      );
+      if (!current) {
+        transaction.abort();
+        await complete.catch(() => undefined);
+        return false;
+      }
+      if (!current.deletedAt) {
+        transaction.abort();
+        await complete.catch(() => undefined);
+        return true;
+      }
+      const { deletedAt: _deletedAt, ...rest } = current;
+      transaction.objectStore("notes").put({
+        ...rest,
+        ...(sourcePath !== undefined ? { sourcePath } : {}),
+        updatedAt,
+        revision: current.revision + 1,
+      });
+      const document = await requestResult<SearchDocument | undefined>(
+        transaction.objectStore("searchDocuments").get(noteId),
+      );
+      if (document) {
+        transaction.objectStore("searchDocuments").put({ ...document, updatedAt });
+      }
+      const backupQueue = transaction.objectStore("backupQueue");
+      backupQueue.put(operation);
+      for (const attachmentOperation of attachmentOperations) {
+        backupQueue.put(attachmentOperation);
+      }
+      await advanceVaultVersion(transaction);
+      await complete;
+      return true;
     } catch (error) {
       try {
         transaction.abort();
