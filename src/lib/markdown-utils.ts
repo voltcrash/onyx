@@ -232,3 +232,62 @@ export function continueListOnEnter(value: string, caret: number): ListEnterResu
     caret: cursor + 1 + continuation.length,
   };
 }
+
+export interface IndentEdit {
+  value: string;
+  start: number;
+  end: number;
+}
+
+/**
+ * Indents or outdents the touched lines by two spaces, keeping the selection on the same
+ * text. Blank lines in a range are left alone so no trailing whitespace is added.
+ */
+export function indentEditorLines(
+  value: string,
+  start: number,
+  end: number,
+  direction: 1 | -1,
+): IndentEdit {
+  const clamp = (point: number): number => Math.min(Math.max(point, 0), value.length);
+  const anchor = clamp(start);
+  const focus = clamp(end);
+  const [first, last] = anchor <= focus ? [anchor, focus] : [focus, anchor];
+  const collapsed = first === last;
+  // A selection ending exactly on a line start belongs to the previous line.
+  const lastContent = last > first && last > 0 && value[last - 1] === "\n" ? last - 1 : last;
+  const firstLineStart = value.lastIndexOf("\n", first - 1) + 1;
+  const lineBreak = value.indexOf("\n", lastContent);
+  const lastLineEnd = lineBreak === -1 ? value.length : lineBreak;
+  const head = value.slice(0, firstLineStart);
+  const tail = value.slice(lastLineEnd);
+  const lines = value.slice(firstLineStart, lastLineEnd).split("\n");
+  const starts = lines.map((_, index) =>
+    index === 0 ? firstLineStart : lines.slice(0, index).join("\n").length + 1 + firstLineStart,
+  );
+  const edits = lines.map((line) => {
+    if (!line.trim() && !collapsed) return { text: line, delta: 0 };
+    if (direction === 1) return { text: `  ${line}`, delta: 2 };
+    const unit = line.match(/^ {1,2}/)?.[0] ?? (line.startsWith("\t") ? "\t" : "");
+    return { text: line.slice(unit.length), delta: -unit.length };
+  });
+  const mapPosition = (position: number): number => {
+    let index = 0;
+    for (let i = 0; i < starts.length; i++) {
+      if (starts[i]! <= position) index = i;
+      else break;
+    }
+    let shift = 0;
+    for (let i = 0; i < index; i++) shift += edits[i]!.delta;
+    const edit = edits[index]!;
+    const lineStart = starts[index]!;
+    if (position >= lineStart + lines[index]!.length) return position + shift + edit.delta;
+    if (edit.delta >= 0) return position + shift + edit.delta;
+    return lineStart + shift + Math.max(0, position - lineStart + edit.delta);
+  };
+  return {
+    value: head + edits.map((edit) => edit.text).join("\n") + tail,
+    start: mapPosition(first),
+    end: mapPosition(last),
+  };
+}

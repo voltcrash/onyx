@@ -978,6 +978,26 @@ test("continues list markers when Enter is pressed in the editor", async ({ page
   await expect(editor).toHaveValue("");
 });
 
+test("indents lines with Tab and outdents with Shift+Tab", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await editor.fill("- a");
+  await editor.press("End");
+  await editor.press("Tab");
+  await expect(editor).toHaveValue("  - a");
+  await editor.press("Shift+Tab");
+  await expect(editor).toHaveValue("- a");
+
+  await editor.fill("- a\n- b");
+  await editor.press("ControlOrMeta+a");
+  await editor.press("Tab");
+  await expect(editor).toHaveValue("  - a\n  - b");
+  await editor.press("Shift+Tab");
+  await expect(editor).toHaveValue("- a\n- b");
+});
+
 test("keeps source and rendered panes synchronized and lets each pane be tucked away", async ({
   page,
 }) => {

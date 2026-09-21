@@ -67,6 +67,7 @@ import {
   attachmentMarkdown,
   continueListOnEnter,
   DEFAULT_ATTACHMENT_FOLDER,
+  indentEditorLines,
   normalizeAttachmentFolder,
   resolveLocalAttachmentUrl,
   rewriteLocalLinks,
@@ -2784,6 +2785,22 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     return true;
   }
 
+  function runEditorIndent(target: EventTarget | null, outdent: boolean): boolean {
+    if (!(target instanceof HTMLTextAreaElement)) return false;
+    const edit = indentEditorLines(
+      target.value,
+      target.selectionStart,
+      target.selectionEnd,
+      outdent ? -1 : 1,
+    );
+    captureEditorState();
+    // Placed synchronously so no deferred caret restore can race later input.
+    target.value = edit.value;
+    target.setSelectionRange(edit.start, edit.end);
+    updateMarkdown(edit.value);
+    return true;
+  }
+
   function writeEditorClipboard(text: string): boolean {
     const clipboard = navigator.clipboard;
     if (!clipboard || typeof clipboard.writeText !== "function") return false;
@@ -3346,6 +3363,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     ) {
       event.preventDefault();
       moveFindMatch(event.shiftKey ? -1 : 1);
+      return;
+    }
+    // Tab indents code and lists instead of leaving the editor.
+    if (event.key === "Tab" && !event.isComposing && isEditorTarget(event.target)) {
+      if (runEditorIndent(event.target, event.shiftKey)) event.preventDefault();
       return;
     }
     const action = (Object.keys(shortcuts) as ShortcutAction[]).find((candidate) =>

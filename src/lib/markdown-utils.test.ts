@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   attachmentMarkdown,
   continueListOnEnter,
+  indentEditorLines,
   normalizeAttachmentFolder,
   resolveLocalAttachmentUrl,
   rewriteLocalLinks,
@@ -71,6 +72,46 @@ describe("continueListOnEnter", () => {
       value: "- Buy milk\n",
       caret: 11,
     });
+  });
+});
+
+describe("indentEditorLines", () => {
+  it("indents and outdents a single line with the caret", () => {
+    expect(indentEditorLines("- a", 3, 3, 1)).toEqual({ value: "  - a", start: 5, end: 5 });
+    expect(indentEditorLines("  - a", 5, 5, -1)).toEqual({ value: "- a", start: 3, end: 3 });
+  });
+
+  it("clamps the caret when outdenting past it", () => {
+    expect(indentEditorLines("  - a", 1, 1, -1)).toEqual({ value: "- a", start: 0, end: 0 });
+  });
+
+  it("indents every selected line and keeps the selection on its text", () => {
+    expect(indentEditorLines("- a\n- b", 0, 7, 1)).toEqual({
+      value: "  - a\n  - b",
+      start: 2,
+      end: 11,
+    });
+  });
+
+  it("ignores a trailing line start so fully selected lines stay covered", () => {
+    expect(indentEditorLines("- a\n- b\n- c", 0, 8, 1)).toEqual({
+      value: "  - a\n  - b\n- c",
+      start: 2,
+      end: 12,
+    });
+  });
+
+  it("leaves blank lines alone inside a range", () => {
+    expect(indentEditorLines("- a\n\n- b", 0, 8, 1)).toEqual({
+      value: "  - a\n\n  - b",
+      start: 2,
+      end: 12,
+    });
+  });
+
+  it("outdents one space and tabs", () => {
+    expect(indentEditorLines(" - a", 4, 4, -1)).toEqual({ value: "- a", start: 3, end: 3 });
+    expect(indentEditorLines("\t- a", 4, 4, -1)).toEqual({ value: "- a", start: 3, end: 3 });
   });
 });
 
