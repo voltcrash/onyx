@@ -276,13 +276,25 @@
 	);
 	const docStatusTone = $derived(saveState === 'error' || githubState === 'error' ? 'error' : saveState === 'loading' ? 'busy' : 'ok');
 
-	function menuPosition(event: MouseEvent): { x: number; y: number } {
+	function menuPositionFromPoint(x: number, y: number): { x: number; y: number } {
 		const width = 210;
 		const height = 285;
 		return {
-			x: Math.max(8, Math.min(event.clientX, globalThis.innerWidth - width - 8)),
-			y: Math.max(8, Math.min(event.clientY, globalThis.innerHeight - height - 8)),
+			x: Math.max(8, Math.min(x, globalThis.innerWidth - width - 8)),
+			y: Math.max(8, Math.min(y, globalThis.innerHeight - height - 8)),
 		};
+	}
+
+	function menuPosition(event: MouseEvent): { x: number; y: number } {
+		return menuPositionFromPoint(event.clientX, event.clientY);
+	}
+
+	function showFolderContextMenu(path: string, x: number, y: number): void {
+		contextMenu = { kind: 'folder', path, ...menuPositionFromPoint(x, y) };
+	}
+
+	function showFileContextMenu(result: VaultSearchResult, x: number, y: number): void {
+		contextMenu = { kind: 'file', id: result.note.id, path: notePath(result), ...menuPositionFromPoint(x, y) };
 	}
 
 	function openRootContextMenu(event: MouseEvent): void {
@@ -305,13 +317,78 @@
 	function openFolderContextMenu(event: MouseEvent, path: string): void {
 		event.preventDefault();
 		event.stopPropagation();
-		contextMenu = { kind: 'folder', path, ...menuPosition(event) };
+		showFolderContextMenu(path, event.clientX, event.clientY);
 	}
 
 	function openFileContextMenu(event: MouseEvent, result: VaultSearchResult): void {
 		event.preventDefault();
 		event.stopPropagation();
-		contextMenu = { kind: 'file', id: result.note.id, path: notePath(result), ...menuPosition(event) };
+		showFileContextMenu(result, event.clientX, event.clientY);
+	}
+
+	const LONG_PRESS_MS = 500;
+	const LONG_PRESS_MOVE_PX = 10;
+	let longPressTimer: ReturnType<typeof setTimeout> | undefined;
+	let longPressStart: { x: number; y: number } | undefined;
+	let suppressRowClickUntil = 0;
+
+	function clearLongPress(): void {
+		if (longPressTimer !== undefined) clearTimeout(longPressTimer);
+		longPressTimer = undefined;
+		longPressStart = undefined;
+	}
+
+	function handleRowTouchStart(event: TouchEvent, onLongPress: (x: number, y: number) => void): void {
+		if (event.touches.length !== 1) {
+			clearLongPress();
+			return;
+		}
+		const touch = event.touches[0];
+		const x = touch.clientX;
+		const y = touch.clientY;
+		clearLongPress();
+		longPressStart = { x, y };
+		longPressTimer = setTimeout(() => {
+			longPressTimer = undefined;
+			longPressStart = undefined;
+			suppressRowClickUntil = Date.now() + 1000;
+			try {
+				navigator.vibrate?.(10);
+			} catch {
+				// Haptics are best-effort.
+			}
+			onLongPress(x, y);
+		}, LONG_PRESS_MS);
+	}
+
+	function handleRowTouchMove(event: TouchEvent): void {
+		const start = longPressStart;
+		if (!start || longPressTimer === undefined) return;
+		const touch = event.touches[0] ?? event.changedTouches[0];
+		if (!touch) return;
+		if (Math.hypot(touch.clientX - start.x, touch.clientY - start.y) > LONG_PRESS_MOVE_PX) clearLongPress();
+	}
+
+	function handleRowTouchEnd(): void {
+		clearLongPress();
+	}
+
+	function shouldSuppressRowClick(): boolean {
+		if (Date.now() < suppressRowClickUntil) {
+			suppressRowClickUntil = 0;
+			return true;
+		}
+		return false;
+	}
+
+	function handleFileRowClick(id: string): void {
+		if (shouldSuppressRowClick()) return;
+		onSelectNote(id);
+	}
+
+	function handleFolderRowClick(path: string): void {
+		if (shouldSuppressRowClick()) return;
+		toggleFolder(path);
 	}
 
 	function closeContextMenu(): void {
@@ -693,7 +770,7 @@
 				{:else}
 					{#each treeRows as row (row.key)}
 						{#if row.kind === 'folder' && row.attachments}
-							<button class="file-tree-row folder-row attachment-folder-row" data-folder-path={row.path} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Attachments — right-click to rename or delete" onclick={() => toggleFolder(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)}>
+							<button class="file-tree-row folder-row attachment-folder-row" data-folder-path={row.path} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Attachments — right-click or long-press to rename or delete" onclick={() => handleFolderRowClick(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)} ontouchstart={(event) => { const path = row.path; handleRowTouchStart(event, (x, y) => showFolderContextMenu(path, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd}>
 								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Paperclip size={16} /><span class="file-tree-name">{row.label}</span>
 							</button>
 						{:else if row.kind === 'attachment'}
@@ -701,11 +778,11 @@
 								{#if row.attachment.type.startsWith('image/')}<Image size={16} />{:else}<Paperclip size={16} />{/if}<span><strong>{row.label}</strong></span>
 							</button>
 						{:else if row.kind === 'folder'}
-							<button class="file-tree-row folder-row" class:drop-target={dropTargetPath === row.path} class:dragging={draggedEntry?.kind === 'folder' && draggedEntry.path === row.path} data-folder-path={row.path} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Drag to move folder" draggable="true" disabled={transferState === 'working'} onclick={() => toggleFolder(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)} ondragstart={(event) => startDrag(event, { kind: 'folder', path: row.path })} ondragend={endDrag} ondragover={(event) => keepDropTarget(event, row.path)} ondragleave={(event) => clearDropTarget(event, row.path)} ondrop={(event) => dropOnFolder(event, row.path)}>
+							<button class="file-tree-row folder-row" class:drop-target={dropTargetPath === row.path} class:dragging={draggedEntry?.kind === 'folder' && draggedEntry.path === row.path} data-folder-path={row.path} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Drag to move folder — right-click or long-press for options" draggable="true" disabled={transferState === 'working'} onclick={() => handleFolderRowClick(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)} ontouchstart={(event) => { const path = row.path; handleRowTouchStart(event, (x, y) => showFolderContextMenu(path, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd} ondragstart={(event) => startDrag(event, { kind: 'folder', path: row.path })} ondragend={endDrag} ondragover={(event) => keepDropTarget(event, row.path)} ondragleave={(event) => clearDropTarget(event, row.path)} ondrop={(event) => dropOnFolder(event, row.path)}>
 								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Folder size={16} /><span class="file-tree-name">{row.label}</span>
 							</button>
 						{:else}
-							<button class="file file-tree-row" class:active={row.result.note.id === activeNoteId} class:dragging={draggedEntry?.kind === 'file' && draggedEntry.id === row.result.note.id} data-file-path={row.path} style={`--tree-depth: ${row.depth}`} aria-current={row.result.note.id === activeNoteId ? 'true' : undefined} title="Drag to move file" draggable="true" disabled={transferState === 'working'} onkeydown={onMoveNoteFocus} onclick={() => onSelectNote(row.result.note.id)} oncontextmenu={(event) => openFileContextMenu(event, row.result)} ondragstart={(event) => startDrag(event, { kind: 'file', id: row.result.note.id, path: row.path })} ondragend={endDrag}>
+							<button class="file file-tree-row" class:active={row.result.note.id === activeNoteId} class:dragging={draggedEntry?.kind === 'file' && draggedEntry.id === row.result.note.id} data-file-path={row.path} style={`--tree-depth: ${row.depth}`} aria-current={row.result.note.id === activeNoteId ? 'true' : undefined} title="Drag to move file — right-click or long-press for options" draggable="true" disabled={transferState === 'working'} onkeydown={onMoveNoteFocus} onclick={() => handleFileRowClick(row.result.note.id)} oncontextmenu={(event) => openFileContextMenu(event, row.result)} ontouchstart={(event) => { const result = row.result; handleRowTouchStart(event, (x, y) => showFileContextMenu(result, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd} ondragstart={(event) => startDrag(event, { kind: 'file', id: row.result.note.id, path: row.path })} ondragend={endDrag}>
 												<FileText size={16} /><span>{#if naming?.action === 'rename-file' && naming.id === row.result.note.id}<input class="file-inline-input" bind:this={namingInput} bind:value={draftName} aria-label="File name" spellcheck="false" onblur={commitNaming} onkeydown={handleNamingKeydown} />{:else}<strong>{row.label}</strong>{/if}</span>{#if row.result.note.id === activeNoteId}<i></i>{/if}
 							</button>
 						{/if}
