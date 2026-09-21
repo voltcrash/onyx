@@ -19,11 +19,11 @@ export type FontCategories = Record<FontRole, FontCategory>;
 const SANS_FALLBACK = '"Inter Variable", Inter, sans-serif';
 const SERIF_FALLBACK = 'Georgia, "Times New Roman", serif';
 const MONO_FALLBACK = 'ui-monospace, "SFMono-Regular", Consolas, monospace';
-// Apple ships these and does not license them for the web, so they can only be
-// named and left to resolve locally. Elsewhere the rest of the stack takes over.
-const SF_PRO = `"SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, ${SANS_FALLBACK}`;
-const SF_MONO = `"SF Mono", SFMono-Regular, ui-monospace, Menlo, ${MONO_FALLBACK}`;
-const NEW_YORK = `"New York", ui-serif, ${SERIF_FALLBACK}`;
+const SYSTEM_SERIF = `ui-serif, ${SERIF_FALLBACK}`;
+const SYSTEM_SANS = "ui-sans-serif, system-ui, sans-serif";
+const SYSTEM_SLAB = `ui-serif, ${SERIF_FALLBACK}`;
+const SYSTEM_MONO = MONO_FALLBACK;
+const SYSTEM_ROUNDED = "ui-sans-serif, system-ui, sans-serif";
 
 export const fontRoles: Array<{ id: FontRole; label: string; hint: string }> = [
   { id: "heading", label: "Headings", hint: "Every heading level, in both panes." },
@@ -70,20 +70,6 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "serif",
     },
     {
-      id: "new-york",
-      name: "New York",
-      stack: NEW_YORK,
-      note: "Apple's screen serif, warm and compact. Needs an Apple device.",
-      category: "serif",
-    },
-    {
-      id: "roboto-serif",
-      name: "Roboto Serif",
-      stack: `"Roboto Serif Variable", ${SERIF_FALLBACK}`,
-      note: "Crisp serif with an even, rational texture.",
-      category: "serif",
-    },
-    {
       id: "eb-garamond",
       name: "EB Garamond",
       stack: `"EB Garamond Variable", ${SERIF_FALLBACK}`,
@@ -91,31 +77,10 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "serif",
     },
     {
-      id: "lora",
-      name: "Lora",
-      stack: `"Lora Variable", ${SERIF_FALLBACK}`,
-      note: "Calligraphic serif with soft, brushed curves.",
-      category: "serif",
-    },
-    {
-      id: "merriweather",
-      name: "Merriweather",
-      stack: `"Merriweather Variable", ${SERIF_FALLBACK}`,
-      note: "Sturdy serif designed for screens.",
-      category: "serif",
-    },
-    {
-      id: "playfair-display",
-      name: "Playfair Display",
-      stack: `"Playfair Display Variable", ${SERIF_FALLBACK}`,
-      note: "High-contrast display serif for bold titles.",
-      category: "serif",
-    },
-    {
-      id: "cormorant-garamond",
-      name: "Cormorant Garamond",
-      stack: `"Cormorant Garamond Variable", ${SERIF_FALLBACK}`,
-      note: "Delicate Garamond with a light touch.",
+      id: "system-serif",
+      name: "System serif",
+      stack: SYSTEM_SERIF,
+      note: "Whatever serif this device already has. Nothing to download.",
       category: "serif",
     },
     {
@@ -140,13 +105,6 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "sans-serif",
     },
     {
-      id: "sf-pro",
-      name: "SF Pro",
-      stack: SF_PRO,
-      note: "Apple's interface sans, plain and even. Needs an Apple device.",
-      category: "sans-serif",
-    },
-    {
       id: "ibm-plex-sans",
       name: "IBM Plex Sans",
       stack: `"IBM Plex Sans Variable", ${SANS_FALLBACK}`,
@@ -161,74 +119,11 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "sans-serif",
     },
     {
-      id: "dm-sans",
-      name: "DM Sans",
-      stack: `"DM Sans Variable", ${SANS_FALLBACK}`,
-      note: "Low-contrast grotesque for confident titles.",
+      id: "system-sans",
+      name: "System sans",
+      stack: SYSTEM_SANS,
+      note: "Whatever sans this device already has. Nothing to download.",
       category: "sans-serif",
-    },
-    {
-      id: "plus-jakarta-sans",
-      name: "Plus Jakarta Sans",
-      stack: `"Plus Jakarta Sans Variable", ${SANS_FALLBACK}`,
-      note: "Friendly geometric sans with wide shapes.",
-      category: "sans-serif",
-    },
-    {
-      id: "roboto-flex",
-      name: "Roboto Flex",
-      stack: `"Roboto Flex Variable", ${SANS_FALLBACK}`,
-      note: "Adaptable grotesque with width axes.",
-      category: "sans-serif",
-    },
-    {
-      id: "archivo",
-      name: "Archivo",
-      stack: `"Archivo Variable", ${SANS_FALLBACK}`,
-      note: "Expanded grotesque for statement titles.",
-      category: "sans-serif",
-    },
-    {
-      id: "sora",
-      name: "Sora",
-      stack: `"Sora Variable", ${SANS_FALLBACK}`,
-      note: "Geometric sans with a futuristic edge.",
-      category: "sans-serif",
-    },
-    {
-      id: "montserrat",
-      name: "Montserrat",
-      stack: `"Montserrat Variable", ${SANS_FALLBACK}`,
-      note: "Urban geometric sans, classic and clean.",
-      category: "sans-serif",
-    },
-    {
-      id: "open-sans",
-      name: "Open Sans",
-      stack: `"Open Sans Variable", ${SANS_FALLBACK}`,
-      note: "Neutral workhorse, legible everywhere.",
-      category: "sans-serif",
-    },
-    {
-      id: "ubuntu-sans",
-      name: "Ubuntu Sans",
-      stack: `"Ubuntu Sans Variable", ${SANS_FALLBACK}`,
-      note: "Ubuntu's rounded grotesque for screens.",
-      category: "sans-serif",
-    },
-    {
-      id: "noto-sans",
-      name: "Noto Sans",
-      stack: `"Noto Sans Variable", ${SANS_FALLBACK}`,
-      note: "Global sans with broad script coverage.",
-      category: "sans-serif",
-    },
-    {
-      id: "system",
-      name: "System serif",
-      stack: `ui-serif, ${SERIF_FALLBACK}`,
-      note: "Whatever serif this device already has. Nothing to download.",
-      category: "serif",
     },
     {
       id: "roboto-slab",
@@ -266,6 +161,13 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "slab-serif",
     },
     {
+      id: "system-slab",
+      name: "System slab",
+      stack: SYSTEM_SLAB,
+      note: "Whatever serif this device already has. Nothing to download.",
+      category: "slab-serif",
+    },
+    {
       id: "geist-mono",
       name: "Geist Mono",
       stack: `"Geist Mono Variable", ${MONO_FALLBACK}`,
@@ -294,20 +196,6 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "monospace",
     },
     {
-      id: "roboto-mono",
-      name: "Roboto Mono",
-      stack: `"Roboto Mono Variable", ${MONO_FALLBACK}`,
-      note: "Mechanical monospace with a level texture.",
-      category: "monospace",
-    },
-    {
-      id: "sf-mono",
-      name: "SF Mono",
-      stack: SF_MONO,
-      note: "Apple's coding monospace, narrow and calm. Needs an Apple device.",
-      category: "monospace",
-    },
-    {
       id: "cascadia-code",
       name: "Cascadia Code",
       stack: `"Cascadia Code Variable", ${MONO_FALLBACK}`,
@@ -315,31 +203,10 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "monospace",
     },
     {
-      id: "ubuntu-sans-mono",
-      name: "Ubuntu Sans Mono",
-      stack: `"Ubuntu Sans Mono Variable", ${MONO_FALLBACK}`,
-      note: "Ubuntu's grotesque mono with open shapes.",
-      category: "monospace",
-    },
-    {
-      id: "google-sans-code",
-      name: "Google Sans Code",
-      stack: `"Google Sans Code Variable", ${MONO_FALLBACK}`,
-      note: "Google's geometric mono, clean and round.",
-      category: "monospace",
-    },
-    {
-      id: "inconsolata",
-      name: "Inconsolata",
-      stack: `"Inconsolata Variable", ${MONO_FALLBACK}`,
-      note: "Tall, narrow mono for compact titles.",
-      category: "monospace",
-    },
-    {
-      id: "noto-sans-mono",
-      name: "Noto Sans Mono",
-      stack: `"Noto Sans Mono Variable", ${MONO_FALLBACK}`,
-      note: "Noto's even mono for global scripts.",
+      id: "system-mono",
+      name: "System mono",
+      stack: SYSTEM_MONO,
+      note: "Whatever monospace this device already has. Nothing to download.",
       category: "monospace",
     },
     {
@@ -357,13 +224,6 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "rounded-sans",
     },
     {
-      id: "comfortaa",
-      name: "Comfortaa",
-      stack: `"Comfortaa Variable", ${SANS_FALLBACK}`,
-      note: "Soft rounded sans with wide shapes.",
-      category: "rounded-sans",
-    },
-    {
       id: "rubik",
       name: "Rubik",
       stack: `"Rubik Variable", ${SANS_FALLBACK}`,
@@ -378,119 +238,21 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "rounded-sans",
     },
     {
-      id: "dosis",
-      name: "Dosis",
-      stack: `"Dosis Variable", ${SANS_FALLBACK}`,
-      note: "Narrow rounded sans with an airy feel.",
-      category: "rounded-sans",
-    },
-    {
       id: "lexend",
       name: "Lexend",
       stack: `"Lexend Variable", ${SANS_FALLBACK}`,
       note: "Research-driven sans for reading comfort.",
       category: "rounded-sans",
     },
+    {
+      id: "system-rounded",
+      name: "System rounded",
+      stack: SYSTEM_ROUNDED,
+      note: "Whatever sans this device already has. Nothing to download.",
+      category: "rounded-sans",
+    },
   ],
   content: [
-    {
-      id: "geist",
-      name: "Geist",
-      stack: `"Geist Variable", ${SANS_FALLBACK}`,
-      note: "Clean sans with an open, even rhythm.",
-      category: "sans-serif",
-    },
-    {
-      id: "inter",
-      name: "Inter",
-      stack: SANS_FALLBACK,
-      note: "Neutral sans tuned for screens.",
-      category: "sans-serif",
-    },
-    {
-      id: "sf-pro",
-      name: "SF Pro",
-      stack: SF_PRO,
-      note: "Apple's interface sans, plain and even. Needs an Apple device.",
-      category: "sans-serif",
-    },
-    {
-      id: "ibm-plex-sans",
-      name: "IBM Plex Sans",
-      stack: `"IBM Plex Sans Variable", ${SANS_FALLBACK}`,
-      note: "Technical grotesque for clear drafts.",
-      category: "sans-serif",
-    },
-    {
-      id: "manrope",
-      name: "Manrope",
-      stack: `"Manrope Variable", ${SANS_FALLBACK}`,
-      note: "Soft geometry for comfortable reading.",
-      category: "sans-serif",
-    },
-    {
-      id: "dm-sans",
-      name: "DM Sans",
-      stack: `"DM Sans Variable", ${SANS_FALLBACK}`,
-      note: "Even grotesque for everyday notes.",
-      category: "sans-serif",
-    },
-    {
-      id: "plus-jakarta-sans",
-      name: "Plus Jakarta Sans",
-      stack: `"Plus Jakarta Sans Variable", ${SANS_FALLBACK}`,
-      note: "Friendly shapes for long passages.",
-      category: "sans-serif",
-    },
-    {
-      id: "roboto-flex",
-      name: "Roboto Flex",
-      stack: `"Roboto Flex Variable", ${SANS_FALLBACK}`,
-      note: "Flexible grotesque for any layout.",
-      category: "sans-serif",
-    },
-    {
-      id: "archivo",
-      name: "Archivo",
-      stack: `"Archivo Variable", ${SANS_FALLBACK}`,
-      note: "Grotesque with room to breathe.",
-      category: "sans-serif",
-    },
-    {
-      id: "sora",
-      name: "Sora",
-      stack: `"Sora Variable", ${SANS_FALLBACK}`,
-      note: "Futuristic geometry for modern notes.",
-      category: "sans-serif",
-    },
-    {
-      id: "montserrat",
-      name: "Montserrat",
-      stack: `"Montserrat Variable", ${SANS_FALLBACK}`,
-      note: "Clean classic for structured text.",
-      category: "sans-serif",
-    },
-    {
-      id: "open-sans",
-      name: "Open Sans",
-      stack: `"Open Sans Variable", ${SANS_FALLBACK}`,
-      note: "Neutral and legible at any size.",
-      category: "sans-serif",
-    },
-    {
-      id: "ubuntu-sans",
-      name: "Ubuntu Sans",
-      stack: `"Ubuntu Sans Variable", ${SANS_FALLBACK}`,
-      note: "Rounded grotesque, easy on the eyes.",
-      category: "sans-serif",
-    },
-    {
-      id: "noto-sans",
-      name: "Noto Sans",
-      stack: `"Noto Sans Variable", ${SANS_FALLBACK}`,
-      note: "Broad coverage for multilingual notes.",
-      category: "sans-serif",
-    },
     {
       id: "newsreader",
       name: "Newsreader",
@@ -520,20 +282,6 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "serif",
     },
     {
-      id: "new-york",
-      name: "New York",
-      stack: NEW_YORK,
-      note: "Apple's screen serif, warm and compact. Needs an Apple device.",
-      category: "serif",
-    },
-    {
-      id: "roboto-serif",
-      name: "Roboto Serif",
-      stack: `"Roboto Serif Variable", ${SERIF_FALLBACK}`,
-      note: "Even texture for comfortable long reads.",
-      category: "serif",
-    },
-    {
       id: "eb-garamond",
       name: "EB Garamond",
       stack: `"EB Garamond Variable", ${SERIF_FALLBACK}`,
@@ -541,37 +289,51 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "serif",
     },
     {
-      id: "lora",
-      name: "Lora",
-      stack: `"Lora Variable", ${SERIF_FALLBACK}`,
-      note: "Brushed curves that read well on screens.",
+      id: "system-serif",
+      name: "System serif",
+      stack: SYSTEM_SERIF,
+      note: "Whatever serif this device already has. Nothing to download.",
       category: "serif",
     },
     {
-      id: "merriweather",
-      name: "Merriweather",
-      stack: `"Merriweather Variable", ${SERIF_FALLBACK}`,
-      note: "Open letterforms built for screens.",
-      category: "serif",
+      id: "geist",
+      name: "Geist",
+      stack: `"Geist Variable", ${SANS_FALLBACK}`,
+      note: "Clean sans with an open, even rhythm.",
+      category: "sans-serif",
     },
     {
-      id: "playfair-display",
-      name: "Playfair Display",
-      stack: `"Playfair Display Variable", ${SERIF_FALLBACK}`,
-      note: "High-contrast serif for expressive notes.",
-      category: "serif",
+      id: "inter",
+      name: "Inter",
+      stack: SANS_FALLBACK,
+      note: "Neutral sans tuned for screens.",
+      category: "sans-serif",
     },
     {
-      id: "cormorant-garamond",
-      name: "Cormorant Garamond",
-      stack: `"Cormorant Garamond Variable", ${SERIF_FALLBACK}`,
-      note: "Light, airy serif for elegant drafts.",
-      category: "serif",
+      id: "space-grotesk",
+      name: "Space Grotesk",
+      stack: `"Space Grotesk Variable", ${SANS_FALLBACK}`,
+      note: "Geometric sans for modern drafts.",
+      category: "sans-serif",
     },
     {
-      id: "system",
+      id: "ibm-plex-sans",
+      name: "IBM Plex Sans",
+      stack: `"IBM Plex Sans Variable", ${SANS_FALLBACK}`,
+      note: "Technical grotesque for clear drafts.",
+      category: "sans-serif",
+    },
+    {
+      id: "manrope",
+      name: "Manrope",
+      stack: `"Manrope Variable", ${SANS_FALLBACK}`,
+      note: "Soft geometry for comfortable reading.",
+      category: "sans-serif",
+    },
+    {
+      id: "system-sans",
       name: "System sans",
-      stack: "ui-sans-serif, system-ui, sans-serif",
+      stack: SYSTEM_SANS,
       note: "Whatever sans this device already has. Nothing to download.",
       category: "sans-serif",
     },
@@ -611,6 +373,13 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "slab-serif",
     },
     {
+      id: "system-slab",
+      name: "System slab",
+      stack: SYSTEM_SLAB,
+      note: "Whatever serif this device already has. Nothing to download.",
+      category: "slab-serif",
+    },
+    {
       id: "geist-mono",
       name: "Geist Mono",
       stack: `"Geist Mono Variable", ${MONO_FALLBACK}`,
@@ -639,20 +408,6 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "monospace",
     },
     {
-      id: "roboto-mono",
-      name: "Roboto Mono",
-      stack: `"Roboto Mono Variable", ${MONO_FALLBACK}`,
-      note: "Mechanical rhythm for structured notes.",
-      category: "monospace",
-    },
-    {
-      id: "sf-mono",
-      name: "SF Mono",
-      stack: SF_MONO,
-      note: "Apple's coding monospace, narrow and calm. Needs an Apple device.",
-      category: "monospace",
-    },
-    {
       id: "cascadia-code",
       name: "Cascadia Code",
       stack: `"Cascadia Code Variable", ${MONO_FALLBACK}`,
@@ -660,31 +415,10 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "monospace",
     },
     {
-      id: "ubuntu-sans-mono",
-      name: "Ubuntu Sans Mono",
-      stack: `"Ubuntu Sans Mono Variable", ${MONO_FALLBACK}`,
-      note: "Open shapes for comfortable long reads.",
-      category: "monospace",
-    },
-    {
-      id: "google-sans-code",
-      name: "Google Sans Code",
-      stack: `"Google Sans Code Variable", ${MONO_FALLBACK}`,
-      note: "Round geometric mono for soft text.",
-      category: "monospace",
-    },
-    {
-      id: "inconsolata",
-      name: "Inconsolata",
-      stack: `"Inconsolata Variable", ${MONO_FALLBACK}`,
-      note: "Narrow mono that fits more per line.",
-      category: "monospace",
-    },
-    {
-      id: "noto-sans-mono",
-      name: "Noto Sans Mono",
-      stack: `"Noto Sans Mono Variable", ${MONO_FALLBACK}`,
-      note: "Even rhythm with broad language coverage.",
+      id: "system-mono",
+      name: "System mono",
+      stack: SYSTEM_MONO,
+      note: "Whatever monospace this device already has. Nothing to download.",
       category: "monospace",
     },
     {
@@ -702,13 +436,6 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "rounded-sans",
     },
     {
-      id: "comfortaa",
-      name: "Comfortaa",
-      stack: `"Comfortaa Variable", ${SANS_FALLBACK}`,
-      note: "Soft curves for comfortable reading.",
-      category: "rounded-sans",
-    },
-    {
       id: "rubik",
       name: "Rubik",
       stack: `"Rubik Variable", ${SANS_FALLBACK}`,
@@ -723,70 +450,21 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "rounded-sans",
     },
     {
-      id: "dosis",
-      name: "Dosis",
-      stack: `"Dosis Variable", ${SANS_FALLBACK}`,
-      note: "Narrow and airy for compact paragraphs.",
-      category: "rounded-sans",
-    },
-    {
       id: "lexend",
       name: "Lexend",
       stack: `"Lexend Variable", ${SANS_FALLBACK}`,
       note: "Built to reduce reading fatigue.",
       category: "rounded-sans",
     },
+    {
+      id: "system-rounded",
+      name: "System rounded",
+      stack: SYSTEM_ROUNDED,
+      note: "Whatever sans this device already has. Nothing to download.",
+      category: "rounded-sans",
+    },
   ],
   code: [
-    {
-      id: "geist-mono",
-      name: "Geist Mono",
-      stack: `"Geist Mono Variable", ${MONO_FALLBACK}`,
-      note: "Wide monospace with clearly separated shapes.",
-      category: "monospace",
-    },
-    {
-      id: "jetbrains-mono",
-      name: "JetBrains Mono",
-      stack: `"JetBrains Mono Variable", ${MONO_FALLBACK}`,
-      note: "Tall x-height built for reading code all day.",
-      category: "monospace",
-    },
-    {
-      id: "fira-code",
-      name: "Fira Code",
-      stack: `"Fira Code Variable", ${MONO_FALLBACK}`,
-      note: "Humanist monospace with ligatures for operators.",
-      category: "monospace",
-    },
-    {
-      id: "source-code-pro",
-      name: "Source Code Pro",
-      stack: `"Source Code Pro Variable", ${MONO_FALLBACK}`,
-      note: "Narrow and plain, so more fits on a line.",
-      category: "monospace",
-    },
-    {
-      id: "roboto-mono",
-      name: "Roboto Mono",
-      stack: `"Roboto Mono Variable", ${MONO_FALLBACK}`,
-      note: "Even monospace with a mechanical, level texture.",
-      category: "monospace",
-    },
-    {
-      id: "sf-mono",
-      name: "SF Mono",
-      stack: SF_MONO,
-      note: "Apple's coding monospace, narrow and calm. Needs an Apple device.",
-      category: "monospace",
-    },
-    {
-      id: "system",
-      name: "System mono",
-      stack: MONO_FALLBACK,
-      note: "Whatever monospace this device already has. Nothing to download.",
-      category: "monospace",
-    },
     {
       id: "newsreader",
       name: "Newsreader",
@@ -816,20 +494,6 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "serif",
     },
     {
-      id: "new-york",
-      name: "New York",
-      stack: NEW_YORK,
-      note: "Apple's screen serif, warm and compact. Needs an Apple device.",
-      category: "serif",
-    },
-    {
-      id: "roboto-serif",
-      name: "Roboto Serif",
-      stack: `"Roboto Serif Variable", ${SERIF_FALLBACK}`,
-      note: "Rational serif for a calm source pane.",
-      category: "serif",
-    },
-    {
       id: "eb-garamond",
       name: "EB Garamond",
       stack: `"EB Garamond Variable", ${SERIF_FALLBACK}`,
@@ -837,31 +501,10 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "serif",
     },
     {
-      id: "lora",
-      name: "Lora",
-      stack: `"Lora Variable", ${SERIF_FALLBACK}`,
-      note: "Soft serif for a gentler source pane.",
-      category: "serif",
-    },
-    {
-      id: "merriweather",
-      name: "Merriweather",
-      stack: `"Merriweather Variable", ${SERIF_FALLBACK}`,
-      note: "Screen-first serif, steady in code.",
-      category: "serif",
-    },
-    {
-      id: "playfair-display",
-      name: "Playfair Display",
-      stack: `"Playfair Display Variable", ${SERIF_FALLBACK}`,
-      note: "Bold display serif for statement code.",
-      category: "serif",
-    },
-    {
-      id: "cormorant-garamond",
-      name: "Cormorant Garamond",
-      stack: `"Cormorant Garamond Variable", ${SERIF_FALLBACK}`,
-      note: "Light serif for airy code.",
+      id: "system-serif",
+      name: "System serif",
+      stack: SYSTEM_SERIF,
+      note: "Whatever serif this device already has. Nothing to download.",
       category: "serif",
     },
     {
@@ -886,13 +529,6 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "sans-serif",
     },
     {
-      id: "sf-pro",
-      name: "SF Pro",
-      stack: SF_PRO,
-      note: "Apple's interface sans. Needs an Apple device.",
-      category: "sans-serif",
-    },
-    {
       id: "ibm-plex-sans",
       name: "IBM Plex Sans",
       stack: `"IBM Plex Sans Variable", ${SANS_FALLBACK}`,
@@ -907,66 +543,10 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "sans-serif",
     },
     {
-      id: "dm-sans",
-      name: "DM Sans",
-      stack: `"DM Sans Variable", ${SANS_FALLBACK}`,
-      note: "Even grotesque, calm in code.",
-      category: "sans-serif",
-    },
-    {
-      id: "plus-jakarta-sans",
-      name: "Plus Jakarta Sans",
-      stack: `"Plus Jakarta Sans Variable", ${SANS_FALLBACK}`,
-      note: "Wide, friendly sans for code.",
-      category: "sans-serif",
-    },
-    {
-      id: "roboto-flex",
-      name: "Roboto Flex",
-      stack: `"Roboto Flex Variable", ${SANS_FALLBACK}`,
-      note: "Adaptable sans for dense code.",
-      category: "sans-serif",
-    },
-    {
-      id: "archivo",
-      name: "Archivo",
-      stack: `"Archivo Variable", ${SANS_FALLBACK}`,
-      note: "Roomy grotesque for the source pane.",
-      category: "sans-serif",
-    },
-    {
-      id: "sora",
-      name: "Sora",
-      stack: `"Sora Variable", ${SANS_FALLBACK}`,
-      note: "Futuristic sans with a sharp voice.",
-      category: "sans-serif",
-    },
-    {
-      id: "montserrat",
-      name: "Montserrat",
-      stack: `"Montserrat Variable", ${SANS_FALLBACK}`,
-      note: "Clean geometric sans for code.",
-      category: "sans-serif",
-    },
-    {
-      id: "open-sans",
-      name: "Open Sans",
-      stack: `"Open Sans Variable", ${SANS_FALLBACK}`,
-      note: "Neutral sans, steady everywhere.",
-      category: "sans-serif",
-    },
-    {
-      id: "ubuntu-sans",
-      name: "Ubuntu Sans",
-      stack: `"Ubuntu Sans Variable", ${SANS_FALLBACK}`,
-      note: "Rounded Ubuntu sans for screens.",
-      category: "sans-serif",
-    },
-    {
-      id: "noto-sans",
-      name: "Noto Sans",
-      stack: `"Noto Sans Variable", ${SANS_FALLBACK}`,
-      note: "Global coverage for any script.",
+      id: "system-sans",
+      name: "System sans",
+      stack: SYSTEM_SANS,
+      note: "Whatever sans this device already has. Nothing to download.",
       category: "sans-serif",
     },
     {
@@ -1005,6 +585,41 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "slab-serif",
     },
     {
+      id: "system-slab",
+      name: "System slab",
+      stack: SYSTEM_SLAB,
+      note: "Whatever serif this device already has. Nothing to download.",
+      category: "slab-serif",
+    },
+    {
+      id: "geist-mono",
+      name: "Geist Mono",
+      stack: `"Geist Mono Variable", ${MONO_FALLBACK}`,
+      note: "Wide monospace with clearly separated shapes.",
+      category: "monospace",
+    },
+    {
+      id: "jetbrains-mono",
+      name: "JetBrains Mono",
+      stack: `"JetBrains Mono Variable", ${MONO_FALLBACK}`,
+      note: "Tall x-height built for reading code all day.",
+      category: "monospace",
+    },
+    {
+      id: "fira-code",
+      name: "Fira Code",
+      stack: `"Fira Code Variable", ${MONO_FALLBACK}`,
+      note: "Humanist monospace with ligatures for operators.",
+      category: "monospace",
+    },
+    {
+      id: "source-code-pro",
+      name: "Source Code Pro",
+      stack: `"Source Code Pro Variable", ${MONO_FALLBACK}`,
+      note: "Narrow and plain, so more fits on a line.",
+      category: "monospace",
+    },
+    {
       id: "cascadia-code",
       name: "Cascadia Code",
       stack: `"Cascadia Code Variable", ${MONO_FALLBACK}`,
@@ -1012,31 +627,10 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "monospace",
     },
     {
-      id: "ubuntu-sans-mono",
-      name: "Ubuntu Sans Mono",
-      stack: `"Ubuntu Sans Mono Variable", ${MONO_FALLBACK}`,
-      note: "Ubuntu mono with clear, open letterforms.",
-      category: "monospace",
-    },
-    {
-      id: "google-sans-code",
-      name: "Google Sans Code",
-      stack: `"Google Sans Code Variable", ${MONO_FALLBACK}`,
-      note: "Geometric mono with a soft voice.",
-      category: "monospace",
-    },
-    {
-      id: "inconsolata",
-      name: "Inconsolata",
-      stack: `"Inconsolata Variable", ${MONO_FALLBACK}`,
-      note: "Narrow mono built for code listings.",
-      category: "monospace",
-    },
-    {
-      id: "noto-sans-mono",
-      name: "Noto Sans Mono",
-      stack: `"Noto Sans Mono Variable", ${MONO_FALLBACK}`,
-      note: "Noto mono with broad script coverage.",
+      id: "system-mono",
+      name: "System mono",
+      stack: SYSTEM_MONO,
+      note: "Whatever monospace this device already has. Nothing to download.",
       category: "monospace",
     },
     {
@@ -1054,13 +648,6 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "rounded-sans",
     },
     {
-      id: "comfortaa",
-      name: "Comfortaa",
-      stack: `"Comfortaa Variable", ${SANS_FALLBACK}`,
-      note: "Soft wide sans for relaxed code.",
-      category: "rounded-sans",
-    },
-    {
       id: "rubik",
       name: "Rubik",
       stack: `"Rubik Variable", ${SANS_FALLBACK}`,
@@ -1075,17 +662,17 @@ export const fontOptions: Record<FontRole, FontOption[]> = {
       category: "rounded-sans",
     },
     {
-      id: "dosis",
-      name: "Dosis",
-      stack: `"Dosis Variable", ${SANS_FALLBACK}`,
-      note: "Narrow rounded sans that saves space.",
-      category: "rounded-sans",
-    },
-    {
       id: "lexend",
       name: "Lexend",
       stack: `"Lexend Variable", ${SANS_FALLBACK}`,
       note: "Reading-optimized sans for long sessions.",
+      category: "rounded-sans",
+    },
+    {
+      id: "system-rounded",
+      name: "System rounded",
+      stack: SYSTEM_ROUNDED,
+      note: "Whatever sans this device already has. Nothing to download.",
       category: "rounded-sans",
     },
   ],
@@ -1115,9 +702,21 @@ const CSS_VARIABLE: Record<FontRole, string> = {
   code: "--font-code",
 };
 
+const LEGACY_SYSTEM_ID: Record<FontRole, string> = {
+  heading: "system-serif",
+  content: "system-sans",
+  code: "system-mono",
+};
+
+function resolveFontId(role: FontRole, id: string): string {
+  if (id === "system") return LEGACY_SYSTEM_ID[role]!;
+  return id;
+}
+
 export function fontOption(role: FontRole, id: string): FontOption {
   const options = fontOptions[role];
-  return options.find((option) => option.id === id) ?? options[0]!;
+  const resolved = resolveFontId(role, id);
+  return options.find((option) => option.id === resolved) ?? options[0]!;
 }
 
 export function fontStack(role: FontRole, id: string): string {
@@ -1168,7 +767,9 @@ export function readFontChoices(): FontChoices {
   const choices = { ...defaultFontChoices };
   for (const role of Object.keys(choices) as FontRole[]) {
     const stored = readLocalStorage(STORAGE_KEY[role]);
-    if (stored && fontOptions[role].some((option) => option.id === stored)) choices[role] = stored;
+    const resolved = stored ? resolveFontId(role, stored) : undefined;
+    if (resolved && fontOptions[role].some((option) => option.id === resolved))
+      choices[role] = resolved;
   }
   return choices;
 }
