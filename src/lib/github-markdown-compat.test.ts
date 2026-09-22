@@ -169,6 +169,27 @@ describe("github markdown compatibility", () => {
     expect(html).toContain('href="https://example.com"');
   });
 
+  it("matches GFM reference link semantics", () => {
+    expect(renderMarkdown("[id][]\n\n[id]: https://example.com")).toContain(
+      '<a href="https://example.com">id</a>',
+    );
+    expect(renderMarkdown("[id]\n\n[id]: https://example.com")).toContain(
+      '<a href="https://example.com">id</a>',
+    );
+    expect(renderMarkdown("[EXAMPLE][ID]\n\n[id]: https://example.com")).toContain(
+      'href="https://example.com"',
+    );
+    const duplicate = renderMarkdown("[id]\n\n[id]: https://first.com\n[id]: https://second.com");
+    expect(duplicate).toContain('href="https://first.com"');
+    expect(duplicate).not.toContain("second");
+    expect(renderMarkdown('[a][b]\n\n[b]: https://example.com "T"')).toContain(
+      '<a href="https://example.com" title="T">a</a>',
+    );
+    expect(renderMarkdown("> quote [a][b]\n>\n> [b]: https://example.com")).toContain(
+      'href="https://example.com"',
+    );
+  });
+
   it("slugs duplicate headings distinctly", () => {
     const html = renderMarkdown("# Same\n\n# Same");
     expect(html.match(/id="user-content-same"/g)).toHaveLength(1);
