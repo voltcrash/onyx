@@ -454,4 +454,10 @@ describe("github markdown compatibility", () => {
     expect(html).toContain("diagram-error");
     expect(html).toContain("Invalid STL");
   });
+
+  it("rejects STL that only mentions endsolid outside its closing line", () => {
+    const html = renderMarkdown("```stl\nsolid x\nnote endsolid here\nfacet normal 0 0 1\n```");
+    expect(html).toContain("diagram-error");
+    expect(html).toContain("Invalid STL");
+  });
 });

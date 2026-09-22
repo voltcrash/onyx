@@ -245,9 +245,16 @@ export const remarkTopoJSON: Plugin<[]> = () => (tree) => {
 // GitHub renders ```stl fences (ASCII STL) as 3D models. Onyx has no 3D
 // viewer, so valid solids get a facet summary above their source.
 export function describeSTL(source: string): string | undefined {
-  const normalized = source.trim();
-  if (!/^solid(\s|$)/i.test(normalized) || !/endsolid/i.test(normalized)) return;
-  const facets = normalized.match(/facet\s+normal/gi)?.length ?? 0;
+  const lines = source
+    .trim()
+    .split("\n")
+    .map((line) => line.trim());
+  // ASCII STL wraps facets in `solid …` / `endsolid …` lines; a bare mention
+  // of `endsolid` elsewhere must not validate the document.
+  if (!/^solid(\s|$)/i.test(lines[0] ?? "") || !/^endsolid(\s|$)/i.test(lines.at(-1) ?? "")) {
+    return;
+  }
+  const facets = source.match(/facet\s+normal/gi)?.length ?? 0;
   return `STL model · ${facets} facet${facets === 1 ? "" : "s"}`;
 }
 
