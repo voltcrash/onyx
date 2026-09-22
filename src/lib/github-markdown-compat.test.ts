@@ -55,6 +55,26 @@ describe("github markdown compatibility", () => {
     expect(html).toContain("inner");
   });
 
+  it("matches GFM list semantics", () => {
+    const nestedOrdered = renderMarkdown("1. first\n   1. nested");
+    expect(nestedOrdered.match(/<ol>/g)).toHaveLength(2);
+    const mixed = renderMarkdown("- bullet\n1. numbered");
+    expect(mixed).toContain("<ul>");
+    expect(mixed).toContain("<ol>");
+    const started = renderMarkdown("3. third\n4. fourth");
+    expect(started).toContain('<ol start="3">');
+    const tight = renderMarkdown("- one\n- two");
+    expect(tight).not.toContain("<p>");
+    const loose = renderMarkdown("- one\n\n- two");
+    expect(loose).toContain("<p>one</p>");
+    const multiline = renderMarkdown("- first line\n  continued");
+    expect(multiline).toContain("continued");
+    const nestedTasks = renderMarkdown("- [ ] outer\n  - [x] inner");
+    expect(nestedTasks.match(/task-list-item/g)?.length).toBe(2);
+    const codeInItem = renderMarkdown("- item\n\n      code");
+    expect(codeInItem).toContain("<code>code");
+  });
+
   it("renders task lists", () => {
     const html = renderMarkdown("- [x] done\n- [ ] todo");
     expect(html).toContain("task-list-item");
