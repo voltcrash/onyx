@@ -1,3 +1,5 @@
+import type { FolderIcon } from "../folder-icons.js";
+
 export type VaultId = string;
 
 export interface NoteMetadata {
@@ -22,6 +24,7 @@ export interface FolderMetadata {
   path: string;
   createdAt: string;
   updatedAt: string;
+  icon?: FolderIcon;
 }
 
 export interface SaveNoteInput {
