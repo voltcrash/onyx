@@ -16,6 +16,7 @@ import {
   remarkCallouts,
   remarkGithubInlineMath,
   remarkInlineMarks,
+  remarkMermaid,
   remarkWikiLinks,
 } from "./markdown-extensions.js";
 
@@ -112,7 +113,7 @@ const markdownSchema: Options = {
     ],
     li: allowClasses("li", ["task-list-item"]),
     p: allowClasses("p", ["callout-title"]),
-    pre: allowClasses("pre", ["math", "math-display"]),
+    pre: allowClasses("pre", ["math", "math-display", "diagram", /^diagram-/]),
     span: allowClasses("span", ["math", "math-inline"]),
     ul: allowClasses("ul", ["contains-task-list"]),
   },
@@ -238,6 +239,7 @@ function markdownProcessor() {
       // remark-math covers `$…$`, `$$…$$`, and GitHub's ```math fences.
       .use(remarkMath)
       .use(remarkGithubInlineMath)
+      .use(remarkMermaid)
       .use(remarkGemoji)
       .use(remarkCallouts)
       .use(remarkWikiLinks)

@@ -12,6 +12,8 @@ export interface MdastNode {
     hProperties?: Record<string, unknown>;
     hChildren?: MdastNode[];
   };
+  lang?: string;
+  position?: { start: { line: number }; end: { line: number } };
   type: string;
   value?: string;
 }
@@ -123,6 +125,40 @@ export const remarkGithubInlineMath: Plugin<[]> = () => (tree) => {
     parent.children = result;
   });
 };
+
+// Fenced diagram languages render client-side from a safe placeholder holding
+// the raw source as text. The source is never executed during rendering, and
+// failures keep the readable source instead of breaking the note.
+function fencedDiagramNode(language: string, source: string): MdastNode {
+  return {
+    type: "diagram",
+    data: {
+      hName: "pre",
+      hProperties: { className: [`diagram`, `diagram-${language}`] },
+    },
+    children: [{ type: "text", value: source }],
+  };
+}
+
+function remarkFencedLanguage(language: string): Plugin<[]> {
+  return () => (tree) => {
+    visitParents(tree as MdastNode, (parent) => {
+      parent.children = (parent.children ?? []).map((child) => {
+        if (child.type !== "code" || (child.lang ?? "").toLowerCase() !== language) {
+          return child;
+        }
+        return {
+          ...fencedDiagramNode(language, child.value ?? ""),
+          position: child.position,
+        };
+      });
+    });
+  };
+}
+
+// GitHub renders ```mermaid fences as diagrams. Onyx emits a placeholder the
+// viewer lazy-loads Mermaid for; without it the source stays readable text.
+export const remarkMermaid = remarkFencedLanguage("mermaid");
 
 export const remarkWikiLinks: Plugin<[]> = () => (tree) => {
   visitParents(tree as MdastNode, (parent) => {

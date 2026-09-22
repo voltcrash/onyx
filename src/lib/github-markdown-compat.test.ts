@@ -260,4 +260,17 @@ describe("github markdown compatibility", () => {
     expect(html).toContain("<pre");
     expect(html).not.toContain("<math");
   });
+
+  it("recognizes Mermaid fences as diagrams instead of code", () => {
+    const html = renderMarkdown("```mermaid\ngraph TD;\n  A-->B;\n```");
+    expect(html).toContain("diagram-mermaid");
+    expect(html).toContain("graph TD;");
+    expect(html).not.toContain("language-mermaid");
+  });
+
+  it("keeps Mermaid failures readable and inert", () => {
+    const html = renderMarkdown("```mermaid\n<script>alert(1)</script>\n```");
+    expect(html).toContain("diagram-mermaid");
+    expect(html).not.toContain("<script");
+  });
 });
