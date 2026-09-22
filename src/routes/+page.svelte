@@ -66,6 +66,7 @@
 		onCreateNote={() => void page.createNote()}
 		onCreateFile={(folder, name) => void page.createFile(folder, name)}
 		onCreateFolder={(folder, name) => void page.createFolder(folder, name)}
+		onDeleteAttachment={(id) => void page.deleteAttachment(id)}
 		onRenameFile={(id, name) => void page.renameFile(id, name)}
 		onRenameFolder={(path, name) => void page.renameFolder(path, name)}
 		onMoveFile={(id, folder) => void page.moveFile(id, folder)}

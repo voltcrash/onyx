@@ -2186,6 +2186,33 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
   }
 
+  async function deleteAttachment(id: string): Promise<void> {
+    if (!vault || transferState === "working") return;
+    const currentVault = vault;
+    try {
+      const attachment = await currentVault.deleteAttachment(id);
+      if (!attachment) return;
+      if (attachment.sourcePath) {
+        const retained = localAttachmentUrls.filter(
+          (candidate) => candidate.sourcePath !== attachment.sourcePath,
+        );
+        if (retained.length !== localAttachmentUrls.length) {
+          for (const candidate of localAttachmentUrls) {
+            if (candidate.sourcePath === attachment.sourcePath) URL.revokeObjectURL(candidate.url);
+          }
+          localAttachmentUrls = retained;
+          markdownModuleRevision += 1;
+        }
+      }
+      await refreshFileTree();
+      pendingBackupCount = (await currentVault.getPendingBackupOperations()).length;
+      storageError = "";
+    } catch (error) {
+      storageError =
+        error instanceof Error ? error.message : "The attachment could not be deleted.";
+    }
+  }
+
   async function restoreFile(noteId: string): Promise<void> {
     if (!vault || transferState === "working") return;
     if (!(await settleDraft())) return;
@@ -4023,6 +4050,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     moveFolder,
     deleteFile,
     deleteFolder,
+    deleteAttachment,
     restoreFile,
     purgeFile,
     emptyTrash,
