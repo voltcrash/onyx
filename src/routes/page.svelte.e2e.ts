@@ -1214,6 +1214,7 @@ test("keeps source and rendered panes synchronized and lets each pane be tucked 
   await page.getByRole("button", { name: "Hide the source pane" }).click();
   await expect(markdown).toBeHidden();
   await expect(handle).toHaveCount(0);
+  await expect(page.locator(".pane-divider")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await page.getByRole("button", { name: "Show the source pane" }).click();
   await expect(markdown).toBeVisible();
   await expect(handle).toBeVisible();
@@ -1224,6 +1225,7 @@ test("keeps source and rendered panes synchronized and lets each pane be tucked 
   await expect(page.locator(".rendered-pane h1")).toHaveText("Written on the left");
   await page.getByRole("button", { name: "Hide the rendered pane" }).click();
   await expect(page.locator(".rendered-pane")).toBeHidden();
+  await expect(page.locator(".pane-divider")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   const sourcePaneBox = await page.locator(".source-pane").boundingBox();
   const sourceEditorBox = await markdown.boundingBox();
   if (!sourcePaneBox || !sourceEditorBox) throw new Error("The source pane is not laid out");
@@ -1251,6 +1253,8 @@ test("keeps source and rendered panes synchronized and lets each pane be tucked 
     stackedDividerBox.y + stackedDividerBox.height / 2,
     0,
   );
+  await page.getByRole("button", { name: "Hide the source pane" }).click();
+  await expect(page.locator(".pane-divider")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
 });
 
 type ScrollSide = "source" | "rendered";
