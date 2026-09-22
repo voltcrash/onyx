@@ -306,6 +306,7 @@
 .files-panel {
   display: flex;
   flex-direction: column;
+  will-change: transform, opacity;
 }
 .find-panel {
   overflow-y: auto;
