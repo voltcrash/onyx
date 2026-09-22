@@ -67,9 +67,11 @@ import {
   attachmentMarkdown,
   continueListOnEnter,
   DEFAULT_ATTACHMENT_FOLDER,
+  findNoteIdForPath,
   indentEditorLines,
   wrapSelectionWith,
   normalizeAttachmentFolder,
+  parseRelativeNoteLink,
   pasteUrlOverSelection,
   resolveLocalAttachmentUrl,
   rewriteLocalLinks,
@@ -1179,7 +1181,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const stopThemeWatch = watchSystemTheme(() => {
       if (theme === "system") resolvedTheme = applyTheme(theme);
     });
-    void openVault().finally(scheduleServiceWorkerRegistration);
+    void openVault()
+      .then(() => {
+        try {
+          history.replaceState({ onyxNoteId: activeNoteId }, "");
+        } catch {
+          // History is best-effort; the app works without it.
+        }
+      })
+      .finally(scheduleServiceWorkerRegistration);
     if (isOnline) scheduleGithubRestore();
     else githubState = "disconnected";
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -1202,16 +1212,23 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden" && markdown !== lastSavedMarkdown) void saveDraft();
     };
+    const onPopState = (event: PopStateEvent) => {
+      const noteId = (event.state as { onyxNoteId?: unknown } | null)?.onyxNoteId;
+      if (typeof noteId !== "string" || !noteId || noteId === activeNoteId) return;
+      void selectNote(noteId);
+    };
     window.addEventListener("beforeunload", onBeforeUnload);
     window.addEventListener("keydown", onKeydown);
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
+    window.addEventListener("popstate", onPopState);
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       window.removeEventListener("beforeunload", onBeforeUnload);
       window.removeEventListener("keydown", onKeydown);
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
+      window.removeEventListener("popstate", onPopState);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       narrowQuery?.removeEventListener("change", onViewportChange);
       stopThemeWatch();
@@ -1844,6 +1861,69 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
     await loadNote(id);
     recentNoteIds = [id, ...recentNoteIds.filter((recentId) => recentId !== id)].slice(0, 8);
+  }
+
+  function scrollToNoteFragment(fragment: string): void {
+    if (!fragment) return;
+    let decoded = fragment;
+    try {
+      decoded = decodeURIComponent(fragment);
+    } catch {
+      decoded = fragment;
+    }
+    for (const candidate of [
+      decoded,
+      `user-content-${decoded}`,
+      fragment,
+      `user-content-${fragment}`,
+    ]) {
+      if (!candidate) continue;
+      const element = document.getElementById(candidate);
+      if (element) {
+        element.scrollIntoView();
+        return;
+      }
+    }
+  }
+
+  /**
+   * Opens a relative Markdown link (`other.md`, `./other.md`, `../other.md`,
+   * `other.md#heading`) as its Onyx note. The rendered click handler already
+   * prevented the browser navigation, so missing notes fail gracefully by doing
+   * nothing instead of hitting a SvelteKit 404.
+   */
+  async function openNoteLink(href: string): Promise<void> {
+    const parsed = parseRelativeNoteLink(href, activeNoteSourcePath);
+    if (!parsed) return;
+    let notes: NoteMetadata[];
+    try {
+      notes = vault ? await vault.listNotes() : paletteNotes;
+    } catch {
+      notes = paletteNotes;
+    }
+    const id = findNoteIdForPath(notes, parsed.path);
+    if (!id) return;
+    if (id === activeNoteId) {
+      if (parsed.fragment) scrollToNoteFragment(parsed.fragment);
+      return;
+    }
+    const sourceId = activeNoteId;
+    try {
+      history.replaceState({ onyxNoteId: sourceId }, "");
+    } catch {
+      // History is best-effort; navigation still works without it.
+    }
+    await selectNote(id);
+    if (activeNoteId !== id) return;
+    try {
+      history.pushState({ onyxNoteId: id }, "");
+    } catch {
+      // Ignore history failures after a successful navigation.
+    }
+    if (parsed.fragment) {
+      await tick();
+      scrollToNoteFragment(parsed.fragment);
+    }
   }
 
   async function refreshFileTree(): Promise<NoteMetadata[]> {
@@ -4126,6 +4206,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     disconnectGitHub,
     moveNoteFocus,
     selectNote,
+    openNoteLink,
     createFile: createNote,
     createFolder,
     renameFile,

@@ -28,4 +28,26 @@ describe("renderMarkdownBlocks", () => {
       },
     ]);
   });
+
+  it("preserves relative Markdown note links for preview navigation", () => {
+    const html = renderMarkdownBlocks("[Other](other.md)")
+      .map((block) => block.html)
+      .join("");
+    expect(html).toContain('href="other.md"');
+    const fragment = renderMarkdownBlocks("[Section](other.md#heading)")
+      .map((block) => block.html)
+      .join("");
+    expect(fragment).toContain('href="other.md#heading"');
+  });
+
+  it("leaves external and fragment-only links untouched", () => {
+    const external = renderMarkdownBlocks("[Site](https://example.com)")
+      .map((block) => block.html)
+      .join("");
+    expect(external).toContain('href="https://example.com"');
+    const fragment = renderMarkdownBlocks("[Section](#heading)")
+      .map((block) => block.html)
+      .join("");
+    expect(fragment).toContain('href="#heading"');
+  });
 });

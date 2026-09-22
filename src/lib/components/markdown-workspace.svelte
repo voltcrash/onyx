@@ -51,14 +51,30 @@
 		onEditorPaste: (event: ClipboardEvent) => void;
 		onEditorDragOver: (event: DragEvent) => void;
 		onEditorDrop: (event: DragEvent) => void;
+		onNoteLink?: (href: string) => void;
 	}
 
 	let {
 		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, scrollSync, markdown, markdownLines, findOpen, findQuery, findMatches, activeFindMatch,
 		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
 		editor = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
-		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop
+		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onNoteLink
 	}: Props = $props();
+
+	function handleRenderedClick(event: MouseEvent): void {
+		if (!onNoteLink || event.defaultPrevented || event.button !== 0) return;
+		if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+		const anchor = (event.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+		if (!anchor || !renderedPaneElement?.contains(anchor)) return;
+		if (anchor.target === '_blank') return;
+		const href = anchor.getAttribute('href');
+		if (!href || href.startsWith('#')) return;
+		if (/^[a-z][a-z\d+.-]*:/i.test(href)) return;
+		if (href.startsWith('/') || href.startsWith('\\')) return;
+		if (!/\.(?:md|markdown)(?:[?#]|$)/i.test(href)) return;
+		event.preventDefault();
+		onNoteLink(href);
+	}
 
 	let shell = $state<HTMLElement>();
 	let resizing = $state(false);
@@ -423,7 +439,7 @@
 				<button class="pane-handle pane-handle-end" title={label} aria-label={label} aria-expanded={secondPaneVisible} onclick={toggleSecondPane}><Icon size={15} /></button>
 			{/if}
 		</div>
-		<div bind:this={renderedPaneElement} class="rendered-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
+		<div bind:this={renderedPaneElement} class="rendered-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} onclick={handleRenderedClick} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
 			{#if hasContent}
 				<article class="prose">{@html renderedMarkdown}</article>
 			{:else}
