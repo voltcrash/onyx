@@ -230,6 +230,7 @@ function markdownProcessor() {
       .use(remarkParse)
       .use(remarkFrontmatter, ["yaml", "toml"])
       .use(remarkGfm)
+      // remark-math covers `$…$`, `$$…$$`, and GitHub's ```math fences.
       .use(remarkMath)
       .use(remarkGemoji)
       .use(remarkCallouts)

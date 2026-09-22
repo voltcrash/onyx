@@ -233,9 +233,15 @@ describe("github markdown compatibility", () => {
     expect(renderMarkdown("$$a^2$$")).toContain("<math");
   });
 
-  it("documents math fenced blocks", () => {
-    // GitHub renders ```math fences as mathematics rather than code.
-    const html = renderMarkdown("```math\na^2\n```");
+  it("renders GitHub math code fences as mathematics", () => {
+    const html = renderMarkdown("```math\na^2 + b^2 = c^2\n```");
     expect(html).toContain("<math");
+    expect(html).not.toContain("<pre>");
+  });
+
+  it("keeps non-math fences as code blocks", () => {
+    const html = renderMarkdown("```js\nconst a = 1;\n```");
+    expect(html).toContain("<pre");
+    expect(html).not.toContain("<math");
   });
 });
