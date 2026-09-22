@@ -152,7 +152,12 @@
 </div>
 
 {#if page.imagePreview}
-	<ImagePreview name={page.imagePreview.name} src={page.imagePreview.url} onClose={page.closeImagePreview} />
+	<ImagePreview
+		name={page.imagePreview.name}
+		src={page.imagePreview.url}
+		onClose={page.closeImagePreview}
+		onDelete={() => void page.deleteAttachment(page.imagePreview?.id ?? '')}
+	/>
 {/if}
 
 <div class="print-document paper-surface" aria-hidden="true"><article class="prose">{@html page.renderedMarkdown}</article></div>

@@ -1,14 +1,15 @@
 <script lang="ts">
-	import { X } from '@lucide/svelte';
+	import { Trash2, X } from '@lucide/svelte';
 	import { manageModalFocus } from '$lib/modal-focus';
 
 	interface Props {
 		name: string;
 		src: string;
 		onClose: () => void;
+		onDelete: () => void;
 	}
 
-	let { name, src, onClose }: Props = $props();
+	let { name, src, onClose, onDelete }: Props = $props();
 
 	function handleKeydown(event: KeyboardEvent): void {
 		if (event.key !== 'Escape') return;
@@ -26,7 +27,10 @@
 				<span>Image preview</span>
 				<h2 id="image-preview-title">{name}</h2>
 			</div>
-			<button class="icon-button" type="button" aria-label="Close image preview" title="Close image preview (Esc)" onclick={onClose}><X size={18} /></button>
+			<div class="image-preview-actions">
+				<button class="image-preview-delete" type="button" aria-label={`Delete ${name}`} title={`Delete ${name}`} onclick={onDelete}><Trash2 size={15} /><span>Delete</span></button>
+				<button class="icon-button" type="button" aria-label="Close image preview" title="Close image preview (Esc)" onclick={onClose}><X size={18} /></button>
+			</div>
 		</div>
 		<div class="image-preview-body">
 			<img src={src} alt={name} />
@@ -94,6 +98,29 @@
 		letter-spacing: -0.025em;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	.image-preview-actions {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.image-preview-delete {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 7px 9px;
+		border: 0;
+		border-radius: 7px;
+		background: transparent;
+		color: var(--danger);
+		cursor: pointer;
+		font-size: 12px;
+	}
+
+	.image-preview-delete:hover {
+		background: var(--danger-bg);
 	}
 
 	.image-preview-body {

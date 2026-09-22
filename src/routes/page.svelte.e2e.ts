@@ -1783,6 +1783,13 @@ test("deletes one image from the attachments folder without deleting its sibling
 
   await expect(trashed).toBeHidden();
   await expect(kept).toBeVisible();
+
+  await kept.click();
+  const keptPreview = page.getByRole("dialog", { name: "keep.png" });
+  await expect(keptPreview).toBeVisible();
+  await keptPreview.getByRole("button", { name: "Delete keep.png", exact: true }).click();
+  await expect(keptPreview).toBeHidden();
+  await expect(kept).toBeHidden();
 });
 
 test("stores pasted images in the attachments folder with GitHub-style links", async ({ page }) => {
