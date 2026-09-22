@@ -99,6 +99,28 @@ describe("github markdown compatibility", () => {
     expect(renderMarkdown("[Sibling](other.md)")).toContain('href="other.md"');
   });
 
+  it("resolves relative note links after GFM parsing", () => {
+    const resolve = (destination: string): string | undefined => {
+      if (destination === "other.md") return "blob:other";
+      if (destination === "other.md#heading") return "blob:other#heading";
+      return undefined;
+    };
+    expect(renderMarkdown("[Sibling](other.md)", resolve)).toContain('href="blob:other"');
+    expect(renderMarkdown("[Child](./folder/note.md)")).toContain('href="./folder/note.md"');
+    expect(renderMarkdown("[Parent](../note.md)")).toContain('href="../note.md"');
+    expect(renderMarkdown("[Section](#heading)")).toContain('href="#user-content-heading"');
+    expect(renderMarkdown("[Sibling section](other.md#heading)", resolve)).toContain(
+      'href="blob:other#heading"',
+    );
+  });
+
+  it("leaves malformed links and external URLs alone", () => {
+    expect(renderMarkdown("[broken](foo bar)")).not.toContain("<a");
+    expect(renderMarkdown("[safe](https://example.com)")).toContain(
+      '<a href="https://example.com">safe</a>',
+    );
+  });
+
   it("renders reference links", () => {
     const html = renderMarkdown("[example][id]\n\n[id]: https://example.com");
     expect(html).toContain('href="https://example.com"');
