@@ -85,6 +85,16 @@ describe("github markdown compatibility", () => {
     expect(renderMarkdown("> quoted")).toContain("<blockquote>");
   });
 
+  it("matches GFM line break semantics", () => {
+    expect(renderMarkdown("one\ntwo")).not.toContain("<br>");
+    expect(renderMarkdown("one  \ntwo")).toContain("<br>");
+    expect(renderMarkdown("one\\\ntwo")).toContain("<br>");
+    const paragraphs = renderMarkdown("one\n\ntwo");
+    expect(paragraphs.match(/<p>/g)).toHaveLength(2);
+    expect(renderMarkdown("> one\n> two")).not.toContain("<br>");
+    expect(renderMarkdown("- one\n  two")).not.toContain("<br>");
+  });
+
   it("renders fenced code", () => {
     const html = renderMarkdown("```js\nconst a = 1;\n```");
     expect(html).toContain("<pre");
