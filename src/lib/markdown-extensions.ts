@@ -32,7 +32,20 @@ const WIKI_LINK = /(!?)\[\[([^\]|\n]+?)(?:\|([^\]\n]+?))?\]\]/g;
 
 const CALLOUT_MARKER = /^\[!([A-Za-z][\w-]*)\][-+]?[ \t]*(.*)$/;
 
-// GitHub renders five alert types; Obsidian adds the rest and aliases the overlap.
+// GitHub documents five alert types; other callout kinds are Onyx-only and kept
+// separate from GitHub-compatible alert semantics.
+export const GITHUB_ALERT_TYPES = ["caution", "important", "note", "tip", "warning"] as const;
+export type GitHubAlertType = (typeof GITHUB_ALERT_TYPES)[number];
+
+const GITHUB_ALERT_TITLES: Record<GitHubAlertType, string> = {
+  caution: "Caution",
+  important: "Important",
+  note: "Note",
+  tip: "Tip",
+  warning: "Warning",
+};
+
+// Onyx-only callout titles; GitHub-compatible alerts resolve via GITHUB_ALERT_TITLES.
 const CALLOUT_TITLES: Record<string, string> = {
   abstract: "Abstract",
   bug: "Bug",
@@ -79,11 +92,22 @@ export const remarkCallouts: Plugin<[]> = () => (tree) => {
       const marker = line?.match(CALLOUT_MARKER);
       if (!marker) continue;
       const kind = marker[1]!.toLowerCase();
-      const title = marker[2]?.trim() || (CALLOUT_TITLES[kind] ?? capitalize(kind));
+      const githubAlert = (GITHUB_ALERT_TYPES as readonly string[]).includes(kind);
+      const title =
+        marker[2]?.trim() ||
+        (githubAlert
+          ? GITHUB_ALERT_TITLES[kind as GitHubAlertType]
+          : (CALLOUT_TITLES[kind] ?? capitalize(kind)));
       first.value = rest.join("\n");
       if (!first.value && paragraph!.children!.length === 1) paragraph!.children = [];
       node.data = {
-        hProperties: { className: ["callout", `callout-${kind}`] },
+        // Onyx-only callouts keep an extra marker class so GitHub-compatible
+        // alerts stay identifiable by `callout` + `callout-<type>` alone.
+        hProperties: {
+          className: githubAlert
+            ? ["callout", `callout-${kind}`]
+            : ["callout", `callout-${kind}`, "onyx-callout"],
+        },
       };
       node.children = [
         {

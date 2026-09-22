@@ -122,6 +122,20 @@ describe("github markdown compatibility", () => {
     expect(html).toContain("Useful information");
   });
 
+  it.each(["NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION"])(
+    "renders the %s GitHub alert",
+    (type) => {
+      const html = renderMarkdown(`> [!${type}]\n> Body`);
+      expect(html).toContain(`callout-${type.toLowerCase()}`);
+      expect(html).toContain("Body");
+    },
+  );
+
+  it("keeps Onyx-only callouts separate from GitHub alerts", () => {
+    const html = renderMarkdown("> [!TODO]\n> Body");
+    expect(html).toContain("onyx-callout");
+  });
+
   it("sanitizes raw HTML", () => {
     const html = renderMarkdown('<script>alert("xss")</script>');
     expect(html).not.toContain("<script");

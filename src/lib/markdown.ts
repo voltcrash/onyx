@@ -96,7 +96,7 @@ const markdownSchema: Options = {
   attributes: {
     ...defaultSchema.attributes,
     a: allowClasses("a", [/^wikilink/], "dataWikilink"),
-    blockquote: allowClasses("blockquote", [/^callout/]),
+    blockquote: allowClasses("blockquote", [/^callout/, "onyx-callout"]),
     code: allowClasses("code", ["math-inline", "math-display"]),
     div: allowClasses("div", ["math", "math-display"]),
     input: [
