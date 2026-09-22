@@ -1307,10 +1307,11 @@ test("scrolls each pane to the part of the note shown in the other one", async (
   await expect(page.locator(".rendered-pane").getByText("The last word.")).toBeInViewport();
 });
 
-test("hides both native scrollbars only while synced scrolling is active", async ({ page }) => {
+test("keeps a native scrollbar only on the right pane during synced scrolling", async ({
+  page,
+}) => {
   await page.goto("/");
-  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
-  await expect(markdown).toBeEnabled();
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
   const scrollbarWidths = () =>
     page.evaluate(() => ({
@@ -1321,84 +1322,20 @@ test("hides both native scrollbars only while synced scrolling is active", async
         .scrollbarWidth,
     }));
 
-  await expect(page.locator(".editor-shell")).toHaveClass(/sync-scrollbars/);
-  await expect.poll(scrollbarWidths).toEqual({ source: "none", rendered: "none" });
+  await expect(page.locator(".editor-shell")).toHaveClass(/hide-leading-scrollbar/);
+  await expect.poll(scrollbarWidths).toEqual({ source: "none", rendered: "auto" });
 
-  await page.evaluate(() => localStorage.setItem("onyx:scroll-sync", "false"));
+  await page.evaluate(() => localStorage.setItem("onyx:pane-order", "rendered-first"));
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
-  await expect(page.locator(".editor-shell")).not.toHaveClass(/sync-scrollbars/);
+  await expect(page.locator(".editor-shell")).toHaveClass(/panes-swapped/);
+  await expect.poll(scrollbarWidths).toEqual({ source: "auto", rendered: "none" });
+
+  await page.evaluate(() => localStorage.setItem("onyx:pane-layout", "rows"));
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await expect(page.locator(".editor-shell")).not.toHaveClass(/hide-leading-scrollbar/);
   await expect.poll(scrollbarWidths).toEqual({ source: "auto", rendered: "auto" });
-});
-
-test("fades the pane handles behind a shared draggable divider scrollbar", async ({ page }) => {
-  await page.goto("/");
-  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
-  await expect(markdown).toBeEnabled();
-  await markdown.fill(
-    Array.from(
-      { length: 16 },
-      (_, index) => `## Part ${index}\n\nParagraph ${index}.\n\nMore detail for part ${index}.`,
-    ).join("\n\n"),
-  );
-
-  const shell = page.locator(".editor-shell");
-  const rendered = page.locator(".rendered-pane");
-  const scrollbar = page.getByRole("button", { name: "Scroll both panes" });
-  const handles = page.locator(".pane-handle");
-  const idleHandleCenters = await handles.evaluateAll((elements) =>
-    elements.map((element) => {
-      const bounds = element.getBoundingClientRect();
-      return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
-    }),
-  );
-  await rendered.evaluate((pane) => {
-    pane.scrollTop = (pane.scrollHeight - pane.clientHeight) * 0.4;
-  });
-
-  await expect(shell).toHaveClass(/sync-scrolling/);
-  await scrollbar.focus();
-  await expect(scrollbar).toHaveCSS("opacity", "1");
-  await expect
-    .poll(() =>
-      shell.evaluate((element) =>
-        Number(getComputedStyle(element).getPropertyValue("--sync-scroll-progress")),
-      ),
-    )
-    .toBeCloseTo(0.4, 1);
-
-  await expect(handles.first()).toHaveCSS("opacity", "0");
-  const activeHandleCenters = await handles.evaluateAll((elements) =>
-    elements.map((element) => {
-      const bounds = element.getBoundingClientRect();
-      return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
-    }),
-  );
-  expect(activeHandleCenters).toEqual(idleHandleCenters);
-
-  const before = await page.evaluate(() => ({
-    source: document.querySelector<HTMLTextAreaElement>(".source-body > textarea")!.scrollTop,
-    rendered: document.querySelector<HTMLElement>(".rendered-pane")!.scrollTop,
-  }));
-  const thumb = await scrollbar.boundingBox();
-  if (!thumb) throw new Error("The shared scrollbar is not laid out");
-  await page.mouse.move(thumb.x + thumb.width / 2, thumb.y + thumb.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(thumb.x + thumb.width / 2, thumb.y + thumb.height / 2 + 100, {
-    steps: 8,
-  });
-  await page.mouse.up();
-
-  await expect
-    .poll(() => page.locator(".source-body > textarea").evaluate((element) => element.scrollTop))
-    .toBeGreaterThan(before.source);
-  await expect
-    .poll(() => rendered.evaluate((element) => element.scrollTop))
-    .toBeGreaterThan(before.rendered);
-
-  await scrollbar.evaluate((element) => element.blur());
-  await expect(shell).not.toHaveClass(/sync-scrolling/, { timeout: 2_000 });
-  await expect(page.locator(".pane-handle").first()).toHaveCSS("opacity", "1");
 });
 
 test("moves a pane by dragging its grip beside the divider or with the arrow keys", async ({

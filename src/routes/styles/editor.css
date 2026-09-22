@@ -1,6 +1,5 @@
 .editor-shell {
   --split: 50%;
-  --sync-scroll-length: 46px;
   position: relative;
   --content-width: 700px;
   flex: 1;
@@ -107,7 +106,6 @@
   cursor: pointer;
   transform: translate(-50%, -50%);
   transition:
-    opacity 0.12s ease,
     width 0.16s ease,
     height 0.16s ease,
     background 0.16s ease,
@@ -166,72 +164,6 @@
 }
 .pane-handle:hover {
   color: var(--ink);
-}
-.sync-scrollbar {
-  position: absolute;
-  top: calc(
-    var(--sync-scroll-progress) * (100% - var(--sync-scroll-length)) + var(--sync-scroll-length) / 2
-  );
-  left: 50%;
-  z-index: 7;
-  width: 18px;
-  height: var(--sync-scroll-length);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  opacity: 0;
-  pointer-events: none;
-  cursor: ns-resize;
-  touch-action: none;
-  transform: translate(-50%, -50%);
-  transition: opacity 0.1s ease;
-}
-.sync-scrollbar::after {
-  content: "";
-  position: absolute;
-  inset: 0 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--line-hover) 82%, var(--ink));
-  box-shadow: 0 1px 6px color-mix(in srgb, var(--ink) 14%, transparent);
-  transition:
-    inset 0.14s ease,
-    background 0.14s ease,
-    box-shadow 0.14s ease;
-}
-.sync-scrolling .sync-scrollbar {
-  opacity: 1;
-  pointer-events: auto;
-}
-.sync-scrollbar:hover::after,
-.sync-scrollbar:focus-visible::after {
-  inset-inline: 5px;
-  background: color-mix(in srgb, var(--accent) 42%, var(--line-hover));
-  box-shadow: 0 1px 8px color-mix(in srgb, var(--accent) 24%, transparent);
-}
-.sync-scrollbar:focus-visible {
-  outline: none;
-}
-.sync-scrolling .pane-handle {
-  opacity: 0;
-  pointer-events: none;
-}
-.panes-stacked .sync-scrollbar {
-  top: 50%;
-  left: calc(
-    var(--sync-scroll-progress) * (100% - var(--sync-scroll-length)) + var(--sync-scroll-length) / 2
-  );
-  width: var(--sync-scroll-length);
-  height: 18px;
-  cursor: ew-resize;
-  transform: translate(-50%, -50%);
-}
-.panes-stacked .sync-scrollbar::after {
-  inset: 6px 0;
-}
-.panes-stacked .sync-scrollbar:hover::after,
-.panes-stacked .sync-scrollbar:focus-visible::after {
-  inset-block: 5px;
-  inset-inline: 0;
 }
 /*
  * Each pane's grip is a pill just inside it beside the divider, midway between the pane handles.
@@ -324,8 +256,7 @@
   transition: opacity 0.16s ease;
 }
 .pane-moving .pane-handle,
-.pane-moving .pane-grip,
-.pane-moving .sync-scrollbar {
+.pane-moving .pane-grip {
   visibility: hidden;
 }
 /* Shows where the dragged pane will land; it glides between edges as the pointer crosses them. */
@@ -408,12 +339,12 @@
   max-width: var(--content-width);
   margin: 0 auto;
 }
-.sync-scrollbars .source-body > textarea,
-.sync-scrollbars .rendered-pane {
+.hide-leading-scrollbar:not(.panes-swapped) .source-body > textarea,
+.hide-leading-scrollbar.panes-swapped .rendered-pane {
   scrollbar-width: none;
 }
-.sync-scrollbars .source-body > textarea::-webkit-scrollbar,
-.sync-scrollbars .rendered-pane::-webkit-scrollbar {
+.hide-leading-scrollbar:not(.panes-swapped) .source-body > textarea::-webkit-scrollbar,
+.hide-leading-scrollbar.panes-swapped .rendered-pane::-webkit-scrollbar {
   display: none;
 }
 .source-body > textarea::placeholder {
