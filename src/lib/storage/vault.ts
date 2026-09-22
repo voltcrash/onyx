@@ -731,6 +731,39 @@ export class Vault {
     });
   }
 
+  /** Permanently deletes one attachment with its stored bytes. */
+  async deleteAttachment(id: string): Promise<AttachmentMetadata | undefined> {
+    return this.#withLock(async () => {
+      const attachment = await this.#database.getAttachment(id);
+      if (!attachment) return undefined;
+      let file: File | undefined;
+      try {
+        file = await this.#filesystem.read(attachment.path);
+      } catch {
+        // The metadata can still be removed when the stored file is already missing.
+      }
+      const now = new Date().toISOString();
+      const operation: BackupOperation = {
+        id: crypto.randomUUID(),
+        kind: "attachment:delete",
+        entityId: attachment.id,
+        noteId: attachment.noteId,
+        path: attachment.path,
+        revision: 1,
+        createdAt: now,
+      };
+      try {
+        await this.#filesystem.remove(attachment.path, { ignoreMissing: true });
+        await this.#database.deleteAttachments([attachment.id], [operation]);
+      } catch (error) {
+        if (file) await this.#filesystem.write(attachment.path, file).catch(() => undefined);
+        throw error;
+      }
+      this.#publish({ kind: "note", noteId: attachment.noteId });
+      return attachment;
+    });
+  }
+
   /** Deletes every attachment whose vault link lives in `folder`, with its stored bytes. */
   async deleteAttachmentFolder(folder: string): Promise<AttachmentMetadata[]> {
     return this.#withLock(async () => {

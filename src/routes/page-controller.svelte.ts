@@ -231,6 +231,12 @@ interface EditorHistoryEntry {
   selection?: EditorSelection;
 }
 
+interface ImagePreviewState {
+  id: string;
+  name: string;
+  url: string;
+}
+
 function pathParts(path: string): string[] {
   return path.split("/").filter(Boolean);
 }
@@ -422,6 +428,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let noteList: HTMLElement | undefined = $state();
   let activeNoteSourcePath: string | undefined = $state();
   let localAttachmentUrls = $state<LocalAttachmentUrl[]>([]);
+  let imagePreview = $state<ImagePreviewState>();
+  let imagePreviewRequest = 0;
   let markdownModule: MarkdownModule | undefined;
   let markdownModulePromise: Promise<MarkdownModule> | undefined;
   let markdownModuleRevision = $state(0);
@@ -1214,6 +1222,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       if (githubRestoreTimer) window.clearTimeout(githubRestoreTimer);
       unsubscribeVault?.();
       releaseLocalAttachmentUrls();
+      closeImagePreview();
       vault?.close();
     };
   });
@@ -1412,6 +1421,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     noteRevision = 0;
     activeNoteSourcePath = undefined;
     releaseLocalAttachmentUrls();
+    closeImagePreview();
     markdown = "";
     lastSavedMarkdown = "";
     updatePreviewImmediately("");
@@ -1822,6 +1832,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     localAttachmentUrls = [];
   }
 
+  function closeImagePreview(): void {
+    imagePreviewRequest += 1;
+    const preview = imagePreview;
+    imagePreview = undefined;
+    if (preview) URL.revokeObjectURL(preview.url);
+  }
+
   async function selectNote(id: string): Promise<void> {
     if (id === activeNoteId || transferState === "working") return;
     if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
@@ -2218,6 +2235,34 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       storageError = "";
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The folder could not be deleted.";
+    }
+  }
+
+  async function deleteAttachment(id: string): Promise<void> {
+    if (!vault || transferState === "working") return;
+    const currentVault = vault;
+    try {
+      const attachment = await currentVault.deleteAttachment(id);
+      if (!attachment) return;
+      if (imagePreview?.id === attachment.id) closeImagePreview();
+      if (attachment.sourcePath) {
+        const retained = localAttachmentUrls.filter(
+          (candidate) => candidate.sourcePath !== attachment.sourcePath,
+        );
+        if (retained.length !== localAttachmentUrls.length) {
+          for (const candidate of localAttachmentUrls) {
+            if (candidate.sourcePath === attachment.sourcePath) URL.revokeObjectURL(candidate.url);
+          }
+          localAttachmentUrls = retained;
+          markdownModuleRevision += 1;
+        }
+      }
+      await refreshFileTree();
+      pendingBackupCount = (await currentVault.getPendingBackupOperations()).length;
+      storageError = "";
+    } catch (error) {
+      storageError =
+        error instanceof Error ? error.message : "The attachment could not be deleted.";
     }
   }
 
@@ -3114,9 +3159,36 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
   }
 
-  async function openAttachment(id: string): Promise<void> {
+  async function previewAttachment(id: string): Promise<void> {
+    const currentVault = vault;
+    if (!currentVault) return;
+    const request = ++imagePreviewRequest;
+    const attachment = await currentVault.getAttachment(id);
+    if (!attachment) return;
+    if (request !== imagePreviewRequest) return;
+    if (!attachment.metadata.type.startsWith("image/")) {
+      openAttachmentInNewTabData(attachment);
+      return;
+    }
+    const previous = imagePreview;
+    imagePreview = {
+      id: attachment.metadata.id,
+      name: attachment.metadata.name,
+      url: URL.createObjectURL(safeAttachmentBlob(attachment.file, attachment.metadata.type)),
+    };
+    if (previous) URL.revokeObjectURL(previous.url);
+  }
+
+  async function openAttachmentInNewTab(id: string): Promise<void> {
     const attachment = await vault?.getAttachment(id);
     if (!attachment) return;
+    openAttachmentInNewTabData(attachment);
+  }
+
+  function openAttachmentInNewTabData(attachment: {
+    metadata: AttachmentMetadata;
+    file: File;
+  }): void {
     const url = URL.createObjectURL(safeAttachmentBlob(attachment.file, attachment.metadata.type));
     if (
       attachment.metadata.type.startsWith("image/") &&
@@ -3497,7 +3569,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     else if (action === "togglePreview") toggleRenderedPane();
     else if (action === "openShortcuts") void openSettings("shortcuts").catch(() => undefined);
     else if (action === "closePanel") {
-      if (restoreModalOpen && restoreState !== "restoring") restoreModalOpen = false;
+      if (imagePreview) closeImagePreview();
+      else if (restoreModalOpen && restoreState !== "restoring") restoreModalOpen = false;
       else if (settingsOpen) closeSettings();
       else if (paletteOpen) closePalette();
       else if (findOpen) closeFind();
@@ -4012,6 +4085,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get vaultAttachments() {
       return vaultAttachments;
     },
+    get imagePreview() {
+      return imagePreview;
+    },
     get trashedNotes() {
       return trashedNotes;
     },
@@ -4059,6 +4135,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     moveFolder,
     deleteFile,
     deleteFolder,
+    deleteAttachment,
     restoreFile,
     purgeFile,
     emptyTrash,
@@ -4093,7 +4170,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     attachSelectedFiles,
     setAttachmentsHidden,
     renameAttachmentFolder,
-    openAttachment,
+    previewAttachment,
+    openAttachmentInNewTab,
+    closeImagePreview,
     updateMarkdown,
     setTheme,
     setColorTheme,
