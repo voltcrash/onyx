@@ -236,9 +236,11 @@ export function renderMarkdownTree(source: string): MarkdownTreeNode {
 function markdownProcessor() {
   return (
     unified()
+      // Core CommonMark/GFM parsing.
       .use(remarkParse)
       .use(remarkFrontmatter, ["yaml", "toml"])
       .use(remarkGfm)
+      // GitHub writing extensions: math, alerts, diagrams, and emoji.
       // remark-math covers `$…$`, `$$…$$`, and GitHub's ```math fences.
       .use(remarkMath)
       .use(remarkGithubInlineMath)
@@ -248,6 +250,8 @@ function markdownProcessor() {
       .use(remarkSTL)
       .use(remarkGemoji)
       .use(remarkCallouts)
+      // Onyx note-taking extensions: wiki links and `==highlight==` marks.
+      // GitHub-incompatible by design; keep them out of the layers above.
       .use(remarkWikiLinks)
       .use(remarkInlineMarks)
       // Front matter is metadata, not prose, so it is dropped rather than printed.

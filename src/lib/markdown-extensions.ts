@@ -1,8 +1,10 @@
 import type { Plugin } from "unified";
 
 /**
- * Markdown extensions shared by the editors that other platforms treat as standard:
- * Obsidian highlights and wiki links, Pandoc sub/superscript, and GitHub alerts.
+ * Markdown extensions in three layers: GitHub writing extensions (alerts,
+ * alternate inline math, fenced diagrams), Onyx note-taking extensions (wiki
+ * links, `==highlight==` marks, Onyx-only callout kinds), and shared mdast
+ * helpers. GitHub-compatible behavior must not depend on Onyx-only syntax.
  */
 
 export interface MdastNode {
