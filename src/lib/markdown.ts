@@ -81,9 +81,18 @@ const CODE_LANGUAGE_LABELS: Record<string, string> = {
 // Sanitizing strips generated ids of their prefix-free form, so anchors are re-pointed after.
 const ID_PREFIX = "user-content-";
 
+// GitHub-compatible safe HTML stays narrow: sub/sup/ins and details/summary
+// plus named anchors via the shared id/name attributes. Style attributes and
+// event handlers remain stripped.
+const GITHUB_SAFE_TAGS = ["details", "ins", "sub", "summary", "sup"];
+
 const markdownSchema: Options = {
   ...defaultSchema,
-  tagNames: [...(defaultSchema.tagNames ?? []), "mark"],
+  tagNames: [
+    ...(defaultSchema.tagNames ?? []),
+    "mark",
+    ...GITHUB_SAFE_TAGS.filter((tag) => !(defaultSchema.tagNames ?? []).includes(tag)),
+  ],
   attributes: {
     ...defaultSchema.attributes,
     a: allowClasses("a", [/^wikilink/], "dataWikilink"),

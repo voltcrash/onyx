@@ -148,11 +148,23 @@ describe("github markdown compatibility", () => {
   });
 
   it("supports subscript via HTML", () => {
-    // TODO: GitHub supports H<sub>2</sub>O via safe HTML; allowlist work lands
-    // in a later commit.
     const html = renderMarkdown("~text~");
     expect(html).toContain("<del>text</del>");
     expect(html).not.toContain("<sub>");
+  });
+
+  it("allows GitHub-compatible safe HTML elements", () => {
+    expect(renderMarkdown("H<sub>2</sub>O")).toContain("H<sub>2</sub>O");
+    expect(renderMarkdown("x<sup>2</sup>")).toContain("x<sup>2</sup>");
+    expect(renderMarkdown("<ins>inserted</ins>")).toContain("<ins>inserted</ins>");
+  });
+
+  it("allows safe anchors while stripping unsafe attributes", () => {
+    const html = renderMarkdown('<a id="custom" href="#section">jump</a>');
+    expect(html).toContain('href="#user-content-section"');
+    const unsafe = renderMarkdown('<a href="#x" onclick="alert(1)" style="color:red">x</a>');
+    expect(unsafe).not.toContain("onclick");
+    expect(unsafe).not.toContain("style");
   });
 
   it("does not treat carets as superscript", () => {
