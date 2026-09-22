@@ -449,38 +449,39 @@
   scroll-margin-top: 24px;
 }
 .prose h1 {
-  margin: 0 0 25px;
-  font-size: clamp(32px, 4vw, 42px);
-  font-weight: 500;
+  margin: 0 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 2em;
+  font-weight: 600;
 }
 .prose h2 {
-  margin: 42px 0 14px;
-  font-size: 25px;
-  font-weight: 520;
+  margin: 24px 0 16px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  font-size: 1.5em;
+  font-weight: 600;
 }
 .prose h3 {
-  margin: 32px 0 10px;
-  font-size: 19px;
+  margin: 24px 0 12px;
+  font-size: 1.25em;
   font-weight: 600;
 }
 .prose h4 {
-  margin: 26px 0 9px;
-  font-size: 17px;
-  font-weight: 700;
+  margin: 22px 0 10px;
+  font-size: 1em;
+  font-weight: 600;
 }
 .prose h5 {
-  margin: 24px 0 8px;
-  font-size: 15px;
-  font-weight: 700;
+  margin: 20px 0 8px;
+  font-size: 0.875em;
+  font-weight: 600;
 }
 .prose h6 {
-  margin: 22px 0 8px;
+  margin: 20px 0 8px;
   color: var(--muted);
-  font-family: var(--font-content);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 0.85em;
+  font-weight: 600;
 }
 .prose p {
   margin: 0 0 17px;
@@ -496,12 +497,11 @@
   font-synthesis: style;
 }
 .prose blockquote {
-  margin: 27px 0;
-  padding: 2px 0 2px 19px;
-  border-left: 3px solid var(--accent);
+  margin: 24px 0;
+  padding: 2px 0 2px 16px;
+  border-left: 3px solid var(--line-hover);
   color: var(--muted);
-  font-size: 19px;
-  font-style: italic;
+  font-size: 1em;
 }
 .prose blockquote > :last-child {
   margin-bottom: 0;
@@ -536,27 +536,32 @@
   margin-left: -22px;
 }
 .prose .task-list-item input {
-  width: 16px;
-  height: 16px;
-  margin: 0 9px 0 0;
+  width: 15px;
+  height: 15px;
+  margin: 0 8px 0 0;
   accent-color: var(--accent);
-  transform: translateY(2px);
+  vertical-align: -2px;
+}
+.prose .task-list-item input:disabled {
+  cursor: default;
+  opacity: 0.85;
 }
 .prose code {
-  padding: 2px 5px;
-  border-radius: 4px;
+  padding: 0.2em 0.4em;
+  border-radius: 6px;
   background: var(--subtle-strong);
   color: var(--accent-quiet);
   font-family: var(--font-code);
-  font-size: 0.84em;
+  font-size: 0.85em;
 }
 .prose pre {
   overflow-x: auto;
-  margin: 24px 0;
-  padding: 18px;
+  margin: 16px 0;
+  padding: 16px;
   border-radius: 8px;
   background: var(--code-bg);
   color: var(--code-text);
+  line-height: 1.45;
 }
 .prose pre[data-code-language] {
   position: relative;
@@ -665,9 +670,9 @@
   text-decoration-thickness: 1px;
 }
 .prose hr {
-  margin: 36px 0;
+  margin: 24px 0;
   border: 0;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--line-hover);
 }
 .prose a {
   color: var(--accent-link);
@@ -686,15 +691,15 @@
 }
 .prose th,
 .prose td {
-  padding: 8px 11px;
-  border: 1px solid var(--line-hover);
+  padding: 7px 13px;
+  border: 1px solid var(--line);
 }
 .prose th {
   color: var(--ink-strong);
   background: var(--subtle);
-  font-weight: 650;
+  font-weight: 600;
 }
-.prose tbody tr:nth-child(even) {
+.prose tbody tr:nth-child(2n) {
   background: var(--surface-soft);
 }
 .prose img {
@@ -752,13 +757,23 @@
   margin-bottom: 0;
 }
 .prose .callout-title {
-  margin: 0 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
   color: var(--callout);
   font-family: var(--font-content);
-  font-size: 0.82em;
+  font-size: 0.85em;
   font-weight: 650;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+/* GitHub's five alert kinds stay distinct by title text as well as accent, so
+   meaning never rides on color alone in either theme. */
+.prose
+  :is(.callout-note, .callout-tip, .callout-important, .callout-warning, .callout-caution)
+  > .callout-title {
+  line-height: 1.4;
 }
 .prose :is(.callout-note, .callout-info, .callout-todo, .callout-question) {
   --callout: var(--accent);
@@ -775,6 +790,17 @@
 .prose :is(.callout-danger, .callout-important, .callout-bug, .callout-failure) {
   --callout: var(--danger);
   --callout-bg: var(--danger-bg);
+}
+/* Native disclosure keeps GitHub-style collapsed sections accessible. */
+.prose details {
+  margin: 24px 0;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.prose summary {
+  cursor: pointer;
+  font-weight: 650;
 }
 /* KaTeX emits MathML only, so display math needs the block box from CSS. */
 .prose .katex:has(math[display="block"]) {

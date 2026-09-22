@@ -1,5 +1,6 @@
 import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
+import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema, type Options } from "rehype-sanitize";
 import rehypeSlug from "rehype-slug";
 import rehypeStringify from "rehype-stringify";
@@ -11,7 +12,19 @@ import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified, type Plugin } from "unified";
 
-import { remarkCallouts, remarkInlineMarks, remarkWikiLinks } from "./markdown-extensions.js";
+import {
+  remarkCallouts,
+  remarkGeoJSON,
+  remarkGithubInlineMath,
+  remarkInlineMarks,
+  remarkMermaid,
+  remarkSTL,
+  remarkTopoJSON,
+  remarkWikiLinks,
+  type MarkdownDialect,
+} from "./markdown-extensions.js";
+
+export type { MarkdownDialect };
 
 export { resolveLocalAttachmentUrl, titleFromMarkdown } from "./markdown-utils.js";
 
@@ -30,6 +43,8 @@ export type RemoteImagePolicy = "block" | "allow";
 
 export interface MarkdownRenderOptions {
   remoteImages?: RemoteImagePolicy;
+  /** "github" disables Onyx-only extensions; default "onyx" keeps them. */
+  dialect?: MarkdownDialect;
 }
 
 const CODE_LANGUAGE_LABELS: Record<string, string> = {
@@ -80,13 +95,22 @@ const CODE_LANGUAGE_LABELS: Record<string, string> = {
 // Sanitizing strips generated ids of their prefix-free form, so anchors are re-pointed after.
 const ID_PREFIX = "user-content-";
 
+// GitHub-compatible safe HTML stays narrow: sub/sup/ins and details/summary
+// plus named anchors via the shared id/name attributes. Style attributes and
+// event handlers remain stripped.
+const GITHUB_SAFE_TAGS = ["details", "ins", "sub", "summary", "sup"];
+
 const markdownSchema: Options = {
   ...defaultSchema,
-  tagNames: [...(defaultSchema.tagNames ?? []), "mark"],
+  tagNames: [
+    ...(defaultSchema.tagNames ?? []),
+    "mark",
+    ...GITHUB_SAFE_TAGS.filter((tag) => !(defaultSchema.tagNames ?? []).includes(tag)),
+  ],
   attributes: {
     ...defaultSchema.attributes,
     a: allowClasses("a", [/^wikilink/], "dataWikilink"),
-    blockquote: allowClasses("blockquote", [/^callout/]),
+    blockquote: allowClasses("blockquote", [/^callout/, "onyx-callout"]),
     code: allowClasses("code", ["math-inline", "math-display"]),
     div: allowClasses("div", ["math", "math-display"]),
     input: [
@@ -97,7 +121,7 @@ const markdownSchema: Options = {
     ],
     li: allowClasses("li", ["task-list-item"]),
     p: allowClasses("p", ["callout-title"]),
-    pre: allowClasses("pre", ["math", "math-display"]),
+    pre: allowClasses("pre", ["math", "math-display", "diagram", /^diagram-/]),
     span: allowClasses("span", ["math", "math-inline"]),
     ul: allowClasses("ul", ["contains-task-list"]),
   },
@@ -182,7 +206,7 @@ export function renderMarkdownBlocks(
   options: MarkdownRenderOptions = {},
 ): RenderedBlock[] {
   const remoteImagePolicy = options.remoteImages ?? "block";
-  const processor = markdownProcessor()
+  const processor = markdownProcessor(options.dialect ?? "onyx")
     // Generated markup runs after sanitizing, so authored HTML stays constrained by the schema.
     .use(rehypeHighlight)
     .use(addCodeLanguage)
@@ -209,24 +233,42 @@ export function sourceLines(node: MarkdownTreeNode): SourceLines | undefined {
  * The sanitized HTML tree of a note, before math is typeset, so math keeps its TeX source. Output
  * formats other than HTML are written from this tree.
  */
-export function renderMarkdownTree(source: string): MarkdownTreeNode {
-  const processor = markdownProcessor();
+export function renderMarkdownTree(
+  source: string,
+  options: Pick<MarkdownRenderOptions, "dialect"> = {},
+): MarkdownTreeNode {
+  const processor = markdownProcessor(options.dialect ?? "onyx");
   return processor.runSync(processor.parse(source)) as MarkdownTreeNode;
 }
 
-function markdownProcessor() {
+function markdownProcessor(dialect: MarkdownDialect = "onyx") {
   return (
     unified()
+      // Core CommonMark/GFM parsing.
       .use(remarkParse)
       .use(remarkFrontmatter, ["yaml", "toml"])
-      .use(remarkGfm, { singleTilde: false })
+      .use(remarkGfm)
+      // GitHub writing extensions: math, alerts, diagrams, and emoji.
+      // remark-math covers `$…$`, `$$…$$`, and GitHub's ```math fences.
       .use(remarkMath)
+      .use(remarkGithubInlineMath)
+      .use(remarkMermaid)
+      .use(remarkGeoJSON)
+      .use(remarkTopoJSON)
+      .use(remarkSTL)
       .use(remarkGemoji)
-      .use(remarkCallouts)
-      .use(remarkWikiLinks)
-      .use(remarkInlineMarks)
+      .use(remarkCallouts, { dialect })
+      // Onyx note-taking extensions: wiki links and `==highlight==` marks.
+      // GitHub-incompatible by design; keep them out of the layers above.
+      .use(remarkWikiLinks, { dialect })
+      .use(remarkInlineMarks, { dialect })
       // Front matter is metadata, not prose, so it is dropped rather than printed.
-      .use(remarkRehype, { clobberPrefix: "", handlers: { toml: noHandler, yaml: noHandler } })
+      .use(remarkRehype, {
+        allowDangerousHtml: true,
+        clobberPrefix: "",
+        handlers: { toml: noHandler, yaml: noHandler },
+      })
+      .use(rehypeRaw)
       .use(rehypeSlug)
       .use(rehypeSanitize, markdownSchema)
   );

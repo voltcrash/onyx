@@ -1,3 +1,6 @@
+// Temporary first-paint fallback only. This is not a GitHub Markdown
+// implementation and must never remain authoritative once the full renderer
+// loads. Keep it fast and approximate; do not grow it into a second parser.
 export interface SourceLines {
   start: number;
   end: number;
@@ -36,12 +39,14 @@ const CODE_LANGUAGE_LABELS: Record<string, string> = {
   yml: "YAML",
 };
 
+// First-paint rendering only; the full renderer replaces this output.
 export function renderMarkdown(source: string, resolveLocalUrl?: LocalUrlResolver): string {
   return renderMarkdownBlocks(source, resolveLocalUrl)
     .map((block) => block.html)
     .join("");
 }
 
+// First-paint block rendering only; approximate structure for instant display.
 export function renderMarkdownBlocks(
   source: string,
   resolveLocalUrl?: LocalUrlResolver,
@@ -178,6 +183,7 @@ export function codeLanguageLabel(language: string): string {
   );
 }
 
+// Fallback highlighting escapes without tokenizing; full renderer handles real highlighting.
 export function highlightCodeLines(source: string, _language: string): string[] {
   return source.split("\n").map(escapeHtml);
 }
