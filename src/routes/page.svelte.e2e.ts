@@ -1307,6 +1307,30 @@ test("scrolls each pane to the part of the note shown in the other one", async (
   await expect(page.locator(".rendered-pane").getByText("The last word.")).toBeInViewport();
 });
 
+test("hides both native scrollbars only while synced scrolling is active", async ({ page }) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+
+  const scrollbarWidths = () =>
+    page.evaluate(() => ({
+      source: getComputedStyle(
+        document.querySelector<HTMLTextAreaElement>(".source-body > textarea")!,
+      ).scrollbarWidth,
+      rendered: getComputedStyle(document.querySelector<HTMLElement>(".rendered-pane")!)
+        .scrollbarWidth,
+    }));
+
+  await expect(page.locator(".editor-shell")).toHaveClass(/sync-scrollbars/);
+  await expect.poll(scrollbarWidths).toEqual({ source: "none", rendered: "none" });
+
+  await page.evaluate(() => localStorage.setItem("onyx:scroll-sync", "false"));
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await expect(page.locator(".editor-shell")).not.toHaveClass(/sync-scrollbars/);
+  await expect.poll(scrollbarWidths).toEqual({ source: "auto", rendered: "auto" });
+});
+
 test("moves a pane by dragging its grip beside the divider or with the arrow keys", async ({
   page,
 }) => {

@@ -339,6 +339,14 @@
   max-width: var(--content-width);
   margin: 0 auto;
 }
+.sync-scrollbars .source-body > textarea,
+.sync-scrollbars .rendered-pane {
+  scrollbar-width: none;
+}
+.sync-scrollbars .source-body > textarea::-webkit-scrollbar,
+.sync-scrollbars .rendered-pane::-webkit-scrollbar {
+  display: none;
+}
 .source-body > textarea::placeholder {
   color: var(--faint);
 }
