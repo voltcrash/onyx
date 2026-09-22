@@ -173,6 +173,7 @@
 
 	let sourcePaneElement = $state<HTMLElement>();
 	let renderedPaneElement = $state<HTMLElement>();
+	let paneDivider = $state<HTMLElement>();
 	let drag = $state<{ pane: Pane; pointerId: number; startX: number; startY: number; dx: number; dy: number; originX: number; originY: number; scale: number; edge: PaneEdge; moving: boolean }>();
 
 	function paneEdge(pane: Pane): PaneEdge {
@@ -269,10 +270,115 @@
 	let scrollDriver: Pane = 'rendered';
 	let syncFrame = 0;
 	const syncedTops = new WeakMap<Element, number>();
+	const SCROLLBAR_IDLE_DELAY = 650;
+	const SCROLLBAR_LENGTH = 46;
+	let syncScrollProgress = $state(0);
+	let syncScrollbarActive = $state(false);
+	let syncScrollbarElement = $state<HTMLButtonElement>();
+	let scrollIdleTimer: ReturnType<typeof setTimeout> | undefined;
+	let scrollbarDrag: { pointerId: number; pane: Pane; grabOffset: number } | undefined;
+	let syncScrollbarEnabled = $derived(scrollSync && bothPanesVisible);
 
 	function scrollerOf(pane: Pane): HTMLElement | undefined {
 		if (pane === 'rendered') return renderedPaneElement;
 		return (sourceBody?.firstElementChild as HTMLElement | null) ?? undefined;
+	}
+
+	function clearScrollIdleTimer(): void {
+		if (scrollIdleTimer) clearTimeout(scrollIdleTimer);
+		scrollIdleTimer = undefined;
+	}
+
+	function hideSyncScrollbar(): void {
+		clearScrollIdleTimer();
+		syncScrollbarActive = false;
+	}
+
+	function scheduleScrollIdle(): void {
+		clearScrollIdleTimer();
+		scrollIdleTimer = setTimeout(() => {
+			if (scrollbarDrag || document.activeElement === syncScrollbarElement) return;
+			syncScrollbarActive = false;
+		}, SCROLLBAR_IDLE_DELAY);
+	}
+
+	function updateSyncScrollProgress(pane: Pane): void {
+		const scroller = scrollerOf(pane);
+		if (!scroller) return;
+		const range = scroller.scrollHeight - scroller.clientHeight;
+		syncScrollProgress = range > 0 ? Math.min(Math.max(scroller.scrollTop / range, 0), 1) : 0;
+	}
+
+	function showSyncScrollbar(pane: Pane): void {
+		if (!syncScrollbarEnabled) return;
+		updateSyncScrollProgress(pane);
+		syncScrollbarActive = true;
+		if (!scrollbarDrag) scheduleScrollIdle();
+	}
+
+	function scrollbarPane(): Pane {
+		const driver = scrollerOf(scrollDriver);
+		if (driver && driver.scrollHeight > driver.clientHeight) return scrollDriver;
+		return scrollDriver === 'source' ? 'rendered' : 'source';
+	}
+
+	function scrollbarAxis(event: PointerEvent): number {
+		return stacked ? event.clientX : event.clientY;
+	}
+
+	function moveSyncScrollbar(event: PointerEvent): void {
+		if (!scrollbarDrag || event.pointerId !== scrollbarDrag.pointerId) return;
+		const bounds = paneDivider?.getBoundingClientRect();
+		const scroller = scrollerOf(scrollbarDrag.pane);
+		if (!bounds || !scroller) return;
+		const start = stacked ? bounds.left : bounds.top;
+		const span = stacked ? bounds.width : bounds.height;
+		const travel = Math.max(span - SCROLLBAR_LENGTH, 1);
+		const progress = Math.min(Math.max((scrollbarAxis(event) - start - scrollbarDrag.grabOffset) / travel, 0), 1);
+		const scrollRange = Math.max(scroller.scrollHeight - scroller.clientHeight, 0);
+		syncScrollProgress = progress;
+		scroller.scrollTo({ top: progress * scrollRange, behavior: 'instant' });
+		queueScrollSync(scrollbarDrag.pane);
+	}
+
+	function startSyncScrollbarDrag(event: PointerEvent): void {
+		if (event.button !== 0 || !syncScrollbarActive) return;
+		const bounds = paneDivider?.getBoundingClientRect();
+		if (!bounds) return;
+		event.preventDefault();
+		clearScrollIdleTimer();
+		const span = stacked ? bounds.width : bounds.height;
+		const start = stacked ? bounds.left : bounds.top;
+		const travel = Math.max(span - SCROLLBAR_LENGTH, 1);
+		scrollbarDrag = {
+			pointerId: event.pointerId,
+			pane: scrollbarPane(),
+			grabOffset: scrollbarAxis(event) - start - syncScrollProgress * travel,
+		};
+		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+	}
+
+	function endSyncScrollbarDrag(event: PointerEvent): void {
+		if (!scrollbarDrag || event.pointerId !== scrollbarDrag.pointerId) return;
+		scrollbarDrag = undefined;
+		(event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+		scheduleScrollIdle();
+	}
+
+	function nudgeSyncScrollbar(event: KeyboardEvent): void {
+		let progress: number;
+		if (event.key === 'Home' || event.key === 'End') progress = event.key === 'Home' ? 0 : 1;
+		else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft' || event.key === 'PageUp') progress = syncScrollProgress - (event.key === 'PageUp' ? 0.15 : 0.03);
+		else if (event.key === 'ArrowDown' || event.key === 'ArrowRight' || event.key === 'PageDown') progress = syncScrollProgress + (event.key === 'PageDown' ? 0.15 : 0.03);
+		else return;
+		event.preventDefault();
+		const pane = scrollbarPane();
+		const scroller = scrollerOf(pane);
+		if (!scroller) return;
+		syncScrollProgress = Math.min(Math.max(progress, 0), 1);
+		scroller.scrollTo({ top: syncScrollProgress * Math.max(scroller.scrollHeight - scroller.clientHeight, 0), behavior: 'instant' });
+		queueScrollSync(pane);
+		scheduleScrollIdle();
 	}
 
 	function proseAnchors(scroller: HTMLElement): ScrollAnchor[] {
@@ -375,12 +481,17 @@
 		syncedTops.delete(scroller);
 		if (synced !== undefined && Math.abs(scroller.scrollTop - synced) <= 1) return;
 		if (glide?.target === scroller) stopGlide();
-		queueScrollSync(pane, true);
+		showSyncScrollbar(pane);
+		queueScrollSync(pane, !scrollbarDrag);
 	}
 
 	$effect(() => {
 		if (!scrollSync) stopGlide();
 		else tick().then(() => queueScrollSync(leadingPane()));
+	});
+
+	$effect(() => {
+		if (!syncScrollbarEnabled) hideSyncScrollbar();
 	});
 
 	$effect(() => {
@@ -401,6 +512,7 @@
 			observer.disconnect();
 			cancelAnimationFrame(syncFrame);
 			syncFrame = 0;
+			hideSyncScrollbar();
 			stopGlide();
 		};
 	});
@@ -432,7 +544,7 @@
 		</div>
 	{/if}
 
-	<section bind:this={shell} class="editor-shell" class:source-hidden={!sourcePaneVisible} class:rendered-hidden={!renderedPaneVisible} class:panes-stacked={stacked} class:panes-swapped={swapped} class:first-hidden={!firstPaneVisible} class:second-hidden={!secondPaneVisible} class:resizing class:pane-moving={drag?.moving} class:sync-scrollbars={scrollSync && bothPanesVisible} style={`--split: ${splitRatio}%; --content-width: ${contentWidth}px`}>
+	<section bind:this={shell} class="editor-shell" class:source-hidden={!sourcePaneVisible} class:rendered-hidden={!renderedPaneVisible} class:panes-stacked={stacked} class:panes-swapped={swapped} class:first-hidden={!firstPaneVisible} class:second-hidden={!secondPaneVisible} class:resizing class:pane-moving={drag?.moving} class:sync-scrollbars={syncScrollbarEnabled} class:sync-scrolling={syncScrollbarActive} style={`--split: ${splitRatio}%; --content-width: ${contentWidth}px; --sync-scroll-progress: ${syncScrollProgress}`}>
 		<div bind:this={sourcePaneElement} class="source-pane" class:dragged={drag?.moving && drag.pane === 'source'} data-source-theme={resolvedTheme} data-color-theme={colorTheme} style={drag?.moving && drag.pane === 'source' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined}>
 			<div class="source-body" bind:this={sourceBody} onscrollcapture={(event) => handlePaneScroll(event, 'source')} onloadcapture={() => queueScrollSync(leadingPane())}>
 					<textarea bind:this={editor} class:find-highlights-active={sourceFindActive} value={markdown} onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} ondragover={onEditorDragOver} ondrop={onEditorDrop} oninput={(event) => onMarkdownChange(event.currentTarget.value)} onscroll={syncSourceFindLayer} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
@@ -441,8 +553,11 @@
 					{/if}
 			</div>
 		</div>
-		<div class="pane-divider">
+		<div class="pane-divider" bind:this={paneDivider}>
 			<button type="button" class="pane-resize" class:enabled={bothPanesVisible} aria-label={`Resize the panes, the ${firstPane} pane takes ${Math.round(splitRatio)} percent`} title="Drag to resize, double-click to even out" tabindex={bothPanesVisible ? 0 : -1} onpointerdown={startResize} onpointermove={trackResize} onpointerup={endResize} onpointercancel={endResize} onkeydown={nudgeResize} ondblclick={resetSplit}></button>
+			{#if syncScrollbarEnabled}
+				<button bind:this={syncScrollbarElement} type="button" class="sync-scrollbar" aria-label="Scroll both panes" title="Drag to scroll both panes" tabindex={syncScrollbarActive ? 0 : -1} onpointerdown={startSyncScrollbarDrag} onpointermove={moveSyncScrollbar} onpointerup={endSyncScrollbarDrag} onpointercancel={endSyncScrollbarDrag} onkeydown={nudgeSyncScrollbar} onfocus={clearScrollIdleTimer} onblur={scheduleScrollIdle}></button>
+			{/if}
 			{#if bothPanesVisible}
 				<button type="button" class="pane-grip" class:grip-start={!swapped} aria-label="Move the source pane" title="Drag to move this pane, or use the arrow keys" onpointerdown={(event) => startPaneDrag(event, 'source')} onpointermove={trackPaneDrag} onpointerup={endPaneDrag} onpointercancel={endPaneDrag} onkeydown={(event) => nudgePane(event, 'source')}></button>
 				<button type="button" class="pane-grip" class:grip-start={swapped} aria-label="Move the rendered pane" title="Drag to move this pane, or use the arrow keys" onpointerdown={(event) => startPaneDrag(event, 'rendered')} onpointermove={trackPaneDrag} onpointerup={endPaneDrag} onpointercancel={endPaneDrag} onkeydown={(event) => nudgePane(event, 'rendered')}></button>
