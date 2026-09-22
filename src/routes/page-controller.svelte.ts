@@ -154,7 +154,6 @@ import { onMount, tick } from "svelte";
 import { pushState as pushAppState, replaceState as replaceAppState } from "$app/navigation";
 
 const NOTE_PAGE_SIZE = 100;
-const PREVIEW_DELAY_MS = 120;
 const DEFAULT_CONTENT_WIDTH = 700;
 const DEFERRED_STARTUP_DELAY_MS = 8_000;
 // Matches the single-column breakpoint in the responsive stylesheet.
@@ -378,7 +377,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let saveRequested = false;
   let searchTimer: number | undefined = $state();
   let searchPending = $state(false);
-  let previewTimer: number | undefined = $state();
+  let previewFrame: number | undefined = $state();
   let searchSequence = 0;
   let editor: HTMLTextAreaElement | undefined = $state();
   let searchInput: HTMLInputElement | undefined = $state();
@@ -1249,7 +1248,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       stopThemeWatch();
       if (saveTimer) window.clearTimeout(saveTimer);
       if (searchTimer) window.clearTimeout(searchTimer);
-      if (previewTimer) window.clearTimeout(previewTimer);
+      if (previewFrame !== undefined) window.cancelAnimationFrame(previewFrame);
       if (serviceWorkerTimer) window.clearTimeout(serviceWorkerTimer);
       if (githubRestoreTimer) window.clearTimeout(githubRestoreTimer);
       unsubscribeVault?.();
@@ -2783,17 +2782,18 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     queueSave();
   }
 
+  // Coalesce bursts of input without waiting for the editor to become idle.
   function queuePreview(value: string): void {
-    if (previewTimer) window.clearTimeout(previewTimer);
-    previewTimer = window.setTimeout(() => {
-      previewTimer = undefined;
+    if (previewFrame !== undefined) window.cancelAnimationFrame(previewFrame);
+    previewFrame = window.requestAnimationFrame(() => {
+      previewFrame = undefined;
       previewMarkdown = value;
-    }, PREVIEW_DELAY_MS);
+    });
   }
 
   function updatePreviewImmediately(value: string): void {
-    if (previewTimer) window.clearTimeout(previewTimer);
-    previewTimer = undefined;
+    if (previewFrame !== undefined) window.cancelAnimationFrame(previewFrame);
+    previewFrame = undefined;
     previewMarkdown = value;
   }
 
