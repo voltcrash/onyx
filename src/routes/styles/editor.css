@@ -107,10 +107,7 @@
   cursor: pointer;
   transform: translate(-50%, -50%);
   transition:
-    top 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
-    left 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
     opacity 0.12s ease,
-    transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
     width 0.16s ease,
     height 0.16s ease,
     background 0.16s ease,
@@ -186,11 +183,8 @@
   pointer-events: none;
   cursor: ns-resize;
   touch-action: none;
-  transform: translate(-50%, -50%) scaleY(0.25);
-  transition:
-    top 0.06s linear,
-    opacity 0.1s ease,
-    transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform: translate(-50%, -50%);
+  transition: opacity 0.1s ease;
 }
 .sync-scrollbar::after {
   content: "";
@@ -207,7 +201,6 @@
 .sync-scrolling .sync-scrollbar {
   opacity: 1;
   pointer-events: auto;
-  transform: translate(-50%, -50%) scaleY(1);
 }
 .sync-scrollbar:hover::after,
 .sync-scrollbar:focus-visible::after {
@@ -219,14 +212,8 @@
   outline: none;
 }
 .sync-scrolling .pane-handle {
-  top: calc(
-    var(--sync-scroll-progress) * (100% - var(--sync-scroll-length)) + var(--sync-scroll-length) / 2
-  );
-  width: 5px;
-  height: 24px;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, -50%) scaleY(0.35);
 }
 .panes-stacked .sync-scrollbar {
   top: 50%;
@@ -236,27 +223,15 @@
   width: var(--sync-scroll-length);
   height: 18px;
   cursor: ew-resize;
-  transform: translate(-50%, -50%) scaleX(0.25);
+  transform: translate(-50%, -50%);
 }
 .panes-stacked .sync-scrollbar::after {
   inset: 6px 0;
-}
-.panes-stacked.sync-scrolling .sync-scrollbar {
-  transform: translate(-50%, -50%) scaleX(1);
 }
 .panes-stacked .sync-scrollbar:hover::after,
 .panes-stacked .sync-scrollbar:focus-visible::after {
   inset-block: 5px;
   inset-inline: 0;
-}
-.panes-stacked.sync-scrolling .pane-handle {
-  top: 50%;
-  left: calc(
-    var(--sync-scroll-progress) * (100% - var(--sync-scroll-length)) + var(--sync-scroll-length) / 2
-  );
-  width: 24px;
-  height: 5px;
-  transform: translate(-50%, -50%) scaleX(0.35);
 }
 /*
  * Each pane's grip is a pill just inside it beside the divider, midway between the pane handles.

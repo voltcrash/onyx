@@ -1331,13 +1331,13 @@ test("hides both native scrollbars only while synced scrolling is active", async
   await expect.poll(scrollbarWidths).toEqual({ source: "auto", rendered: "auto" });
 });
 
-test("morphs the pane handles into a shared draggable divider scrollbar", async ({ page }) => {
+test("fades the pane handles behind a shared draggable divider scrollbar", async ({ page }) => {
   await page.goto("/");
   const markdown = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(markdown).toBeEnabled();
   await markdown.fill(
     Array.from(
-      { length: 80 },
+      { length: 16 },
       (_, index) => `## Part ${index}\n\nParagraph ${index}.\n\nMore detail for part ${index}.`,
     ).join("\n\n"),
   );
@@ -1345,6 +1345,13 @@ test("morphs the pane handles into a shared draggable divider scrollbar", async 
   const shell = page.locator(".editor-shell");
   const rendered = page.locator(".rendered-pane");
   const scrollbar = page.getByRole("button", { name: "Scroll both panes" });
+  const handles = page.locator(".pane-handle");
+  const idleHandleCenters = await handles.evaluateAll((elements) =>
+    elements.map((element) => {
+      const bounds = element.getBoundingClientRect();
+      return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+    }),
+  );
   await rendered.evaluate((pane) => {
     pane.scrollTop = (pane.scrollHeight - pane.clientHeight) * 0.4;
   });
@@ -1360,21 +1367,14 @@ test("morphs the pane handles into a shared draggable divider scrollbar", async 
     )
     .toBeCloseTo(0.4, 1);
 
-  await expect
-    .poll(async () => {
-      const thumb = await scrollbar.boundingBox();
-      const handles = await page.locator(".pane-handle").all();
-      if (!thumb || handles.length !== 2) return Number.POSITIVE_INFINITY;
-      const thumbCenter = thumb.y + thumb.height / 2;
-      const offsets = await Promise.all(
-        handles.map(async (handle) => {
-          const box = await handle.boundingBox();
-          return box ? Math.abs(box.y + box.height / 2 - thumbCenter) : Number.POSITIVE_INFINITY;
-        }),
-      );
-      return Math.max(...offsets);
-    })
-    .toBeLessThan(2);
+  await expect(handles.first()).toHaveCSS("opacity", "0");
+  const activeHandleCenters = await handles.evaluateAll((elements) =>
+    elements.map((element) => {
+      const bounds = element.getBoundingClientRect();
+      return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+    }),
+  );
+  expect(activeHandleCenters).toEqual(idleHandleCenters);
 
   const before = await page.evaluate(() => ({
     source: document.querySelector<HTMLTextAreaElement>(".source-body > textarea")!.scrollTop,
