@@ -1202,10 +1202,21 @@ test("keeps source and rendered panes synchronized and lets each pane be tucked 
   await markdown.fill("# Written on the right");
   await expect(page.locator(".rendered-pane h1")).toHaveText("Written on the right");
 
+  const handle = page.getByRole("group", { name: "Pane visibility" });
+  await expect(handle).toBeVisible();
+  await expect(handle.getByRole("button")).toHaveCount(2);
+  const dividerBox = await page.locator(".pane-divider").boundingBox();
+  const handleBox = await handle.boundingBox();
+  if (!dividerBox || !handleBox) throw new Error("The divider handle is not laid out");
+  expect(handleBox.x + handleBox.width / 2).toBeCloseTo(dividerBox.x + dividerBox.width / 2, 0);
+  expect(handleBox.y + handleBox.height / 2).toBeCloseTo(dividerBox.y + dividerBox.height / 2, 0);
+
   await page.getByRole("button", { name: "Hide the source pane" }).click();
   await expect(markdown).toBeHidden();
+  await expect(handle).toHaveCount(0);
   await page.getByRole("button", { name: "Show the source pane" }).click();
   await expect(markdown).toBeVisible();
+  await expect(handle).toBeVisible();
 
   await markdown.fill("# Written on the left");
   await expect(markdown).toHaveValue("# Written on the left");
@@ -1215,6 +1226,24 @@ test("keeps source and rendered panes synchronized and lets each pane be tucked 
   await expect(page.locator(".rendered-pane")).toBeHidden();
   await page.getByRole("button", { name: "Show the rendered pane" }).click();
   await expect(page.locator(".rendered-pane")).toBeVisible();
+
+  await page.evaluate(() => localStorage.setItem("onyx:pane-layout", "rows"));
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await expect(handle).toHaveCSS("flex-direction", "column");
+  const stackedDividerBox = await page.locator(".pane-divider").boundingBox();
+  const stackedHandleBox = await handle.boundingBox();
+  if (!stackedDividerBox || !stackedHandleBox) {
+    throw new Error("The stacked divider handle is not laid out");
+  }
+  expect(stackedHandleBox.x + stackedHandleBox.width / 2).toBeCloseTo(
+    stackedDividerBox.x + stackedDividerBox.width / 2,
+    0,
+  );
+  expect(stackedHandleBox.y + stackedHandleBox.height / 2).toBeCloseTo(
+    stackedDividerBox.y + stackedDividerBox.height / 2,
+    0,
+  );
 });
 
 type ScrollSide = "source" | "rendered";

@@ -446,16 +446,18 @@
 			{#if bothPanesVisible}
 				<button type="button" class="pane-grip" class:grip-start={!swapped} aria-label="Move the source pane" title="Drag to move this pane, or use the arrow keys" onpointerdown={(event) => startPaneDrag(event, 'source')} onpointermove={trackPaneDrag} onpointerup={endPaneDrag} onpointercancel={endPaneDrag} onkeydown={(event) => nudgePane(event, 'source')}></button>
 				<button type="button" class="pane-grip" class:grip-start={swapped} aria-label="Move the rendered pane" title="Drag to move this pane, or use the arrow keys" onpointerdown={(event) => startPaneDrag(event, 'rendered')} onpointermove={trackPaneDrag} onpointerup={endPaneDrag} onpointercancel={endPaneDrag} onkeydown={(event) => nudgePane(event, 'rendered')}></button>
-			{/if}
-			{#if secondPaneVisible}
-				{@const label = `${firstPaneVisible ? 'Hide' : 'Show'} the ${firstPane} pane`}
-				{@const Icon = firstPaneVisible ? towardsStart : towardsEnd}
-				<button class="pane-handle pane-handle-start" title={label} aria-label={label} aria-expanded={firstPaneVisible} onclick={toggleFirstPane}><Icon size={15} /></button>
-			{/if}
-			{#if firstPaneVisible}
-				{@const label = `${secondPaneVisible ? 'Hide' : 'Show'} the ${secondPane} pane`}
-				{@const Icon = secondPaneVisible ? towardsEnd : towardsStart}
-				<button class="pane-handle pane-handle-end" title={label} aria-label={label} aria-expanded={secondPaneVisible} onclick={toggleSecondPane}><Icon size={15} /></button>
+				{@const FirstIcon = towardsStart}
+				{@const SecondIcon = towardsEnd}
+				<div class="pane-handle-pair" role="group" aria-label="Pane visibility">
+					<button class="pane-handle-direction" title={`Hide the ${firstPane} pane`} aria-label={`Hide the ${firstPane} pane`} aria-expanded="true" onclick={toggleFirstPane}><FirstIcon size={15} /></button>
+					<button class="pane-handle-direction" title={`Hide the ${secondPane} pane`} aria-label={`Hide the ${secondPane} pane`} aria-expanded="true" onclick={toggleSecondPane}><SecondIcon size={15} /></button>
+				</div>
+			{:else if secondPaneVisible}
+				{@const RestoreIcon = towardsEnd}
+				<button class="pane-handle" title={`Show the ${firstPane} pane`} aria-label={`Show the ${firstPane} pane`} aria-expanded="false" onclick={toggleFirstPane}><RestoreIcon size={15} /></button>
+			{:else if firstPaneVisible}
+				{@const RestoreIcon = towardsStart}
+				<button class="pane-handle" title={`Show the ${secondPane} pane`} aria-label={`Show the ${secondPane} pane`} aria-expanded="false" onclick={toggleSecondPane}><RestoreIcon size={15} /></button>
 			{/if}
 		</div>
 		<div bind:this={renderedPaneElement} class="rendered-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} onmousemove={handleRenderedMouseMove} onmousedown={handleRenderedMouseDown} onclick={handleRenderedClick} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
