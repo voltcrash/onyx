@@ -219,7 +219,7 @@ function markdownProcessor() {
     unified()
       .use(remarkParse)
       .use(remarkFrontmatter, ["yaml", "toml"])
-      .use(remarkGfm, { singleTilde: false })
+      .use(remarkGfm)
       .use(remarkMath)
       .use(remarkGemoji)
       .use(remarkCallouts)

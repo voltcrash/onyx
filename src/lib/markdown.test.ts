@@ -156,7 +156,7 @@ A footnote[^1] and math $a^2$.
 
     expect(html).not.toContain("title: Hidden");
     expect(html).toContain("<mark><strong>a mark</strong></mark>");
-    expect(html).toContain("H<sub>2</sub>O");
+    expect(html).toContain("H<del>2</del>O");
     expect(html).toContain("x<sup>2</sup>");
     expect(html).toContain("\u{1F389}");
     expect(html).toContain('<a class="wikilink" data-wikilink="Other Note">wiki link</a>');

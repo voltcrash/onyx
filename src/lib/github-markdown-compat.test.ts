@@ -29,10 +29,8 @@ describe("github markdown compatibility", () => {
     expect(renderMarkdown("__bold__")).toContain("<strong>bold</strong>");
   });
 
-  it("documents single-tilde behavior", () => {
-    // TODO: GitHub/GFM renders ~deleted~ per remark-gfm single-tilde semantics;
-    // Onyx currently treats it as subscript via a custom extension.
-    expect(renderMarkdown("H~2~O")).toContain("<sub>2</sub>");
+  it("renders single-tilde strikethrough like GitHub", () => {
+    expect(renderMarkdown("~deleted~")).toContain("<del>deleted</del>");
   });
 
   it("renders double-tilde strikethrough", () => {
@@ -137,8 +135,9 @@ describe("github markdown compatibility", () => {
   });
 
   it("supports subscript via HTML", () => {
-    // TODO: GitHub supports H<sub>2</sub>O; allowlist work lands in a later commit.
-    expect(renderMarkdown("H~2~O")).toContain("<sub>2</sub>");
+    // TODO: GitHub supports H<sub>2</sub>O via safe HTML; allowlist work lands
+    // in a later commit. Single-tilde custom subscript is removed separately.
+    expect(renderMarkdown("~deleted~")).toContain("<del>deleted</del>");
   });
 
   it("supports superscript via HTML", () => {
