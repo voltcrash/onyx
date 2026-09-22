@@ -18,9 +18,11 @@ Markdown source
 → renderer → preview styles
 ```
 
-`src/lib/markdown-lite.ts` is temporary first-paint rendering only. It is not
-a GitHub Markdown implementation and never stays authoritative once the full
-renderer loads (`src/routes/page-controller.svelte.ts` always loads it).
+`src/lib/markdown-lite.ts` is a temporary first-paint and active-typing
+renderer. It keeps the preview responsive while text is changing, then the
+full renderer replaces it once input settles. It is not a second GitHub
+Markdown implementation (`src/routes/page-controller.svelte.ts` always loads
+the full renderer).
 
 ## 1. CommonMark/GFM — supported
 

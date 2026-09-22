@@ -1217,6 +1217,41 @@ test("keeps source and rendered panes synchronized and lets each pane be tucked 
   await expect(page.locator(".rendered-pane")).toBeVisible();
 });
 
+test("coalesces rapid input without postponing the rendered text", async ({ page }) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+  await markdown.fill("# Rapid");
+  await expect(page.locator(".rendered-pane h1")).toHaveText("Rapid");
+
+  const scheduledFrames = await page.evaluate(() => {
+    const callbacks: FrameRequestCallback[] = [];
+    const requestFrame = window.requestAnimationFrame;
+    window.requestAnimationFrame = (callback) => {
+      callbacks.push(callback);
+      return callbacks.length;
+    };
+
+    const editor = document.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="Markdown editor"]',
+    )!;
+    for (const character of " preview") {
+      editor.value += character;
+      editor.dispatchEvent(
+        new InputEvent("input", { bubbles: true, data: character, inputType: "insertText" }),
+      );
+    }
+
+    const count = callbacks.length;
+    callbacks[0]?.(performance.now());
+    window.requestAnimationFrame = requestFrame;
+    return count;
+  });
+
+  expect(scheduledFrames).toBe(1);
+  await expect(page.locator(".rendered-pane h1")).toHaveText("Rapid preview");
+});
+
 type ScrollSide = "source" | "rendered";
 
 // Scrolls one pane so the marker sits where the pane reads its position, then reports how far
@@ -1498,9 +1533,9 @@ test("prints a note as PDF from the file menu", async ({ page }) => {
   await expect(markdown).toBeEnabled();
   await markdown.fill("# Field report\n\nEverything is in order.");
   await page.evaluate(() => {
-    const state = window as typeof window & { onyxPrinted?: boolean };
+    const state = window as typeof window & { onyxPrinted?: string };
     window.print = () => {
-      state.onyxPrinted = true;
+      state.onyxPrinted = document.querySelector(".print-document article")?.textContent ?? "";
     };
   });
 
@@ -1514,9 +1549,9 @@ test("prints a note as PDF from the file menu", async ({ page }) => {
   await useFileMenu(page, "Export as", "PDF");
   await expect
     .poll(() =>
-      page.evaluate(() => (window as typeof window & { onyxPrinted?: boolean }).onyxPrinted),
+      page.evaluate(() => (window as typeof window & { onyxPrinted?: string }).onyxPrinted),
     )
-    .toBe(true);
+    .toContain("Everything is in order.");
 });
 
 test("customizes and persists keyboard shortcuts", async ({ page }) => {
