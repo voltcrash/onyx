@@ -547,20 +547,21 @@
   opacity: 0.85;
 }
 .prose code {
-  padding: 2px 5px;
-  border-radius: 4px;
+  padding: 0.2em 0.4em;
+  border-radius: 6px;
   background: var(--subtle-strong);
   color: var(--accent-quiet);
   font-family: var(--font-code);
-  font-size: 0.84em;
+  font-size: 0.85em;
 }
 .prose pre {
   overflow-x: auto;
-  margin: 24px 0;
-  padding: 18px;
+  margin: 16px 0;
+  padding: 16px;
   border-radius: 8px;
   background: var(--code-bg);
   color: var(--code-text);
+  line-height: 1.45;
 }
 .prose pre[data-code-language] {
   position: relative;
