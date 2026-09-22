@@ -57,6 +57,10 @@
   position: relative;
   background: var(--line);
 }
+.first-hidden .pane-divider,
+.second-hidden .pane-divider {
+  background: transparent;
+}
 .panes-stacked .pane-divider {
   grid-row: 2;
   grid-column: 1;
@@ -87,11 +91,13 @@
 .editor-shell.panes-stacked.resizing {
   cursor: row-resize;
 }
-.editor-shell.resizing .pane-handle {
+.editor-shell.resizing .pane-handle,
+.editor-shell.resizing .pane-handle-pair {
   transition: none;
 }
 .pane-handle {
   position: absolute;
+  top: 50%;
   left: 50%;
   z-index: 6;
   display: grid;
@@ -112,22 +118,9 @@
     border-color 0.16s ease,
     color 0.16s ease;
 }
-.pane-handle-start {
-  top: 27%;
-}
-.pane-handle-end {
-  top: 73%;
-}
 .panes-stacked .pane-handle {
-  top: 50%;
   width: 30px;
   height: 6px;
-}
-.panes-stacked .pane-handle-start {
-  left: 27%;
-}
-.panes-stacked .pane-handle-end {
-  left: 73%;
 }
 .first-hidden .pane-handle {
   transform: translate(0, -50%);
@@ -164,6 +157,77 @@
 }
 .pane-handle:hover {
   color: var(--ink);
+}
+.pane-handle-pair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  width: 6px;
+  height: 30px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--line-hover);
+  transform: translate(-50%, -50%);
+  transition:
+    width 0.16s ease,
+    height 0.16s ease,
+    background 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+.pane-handle-direction {
+  display: grid;
+  flex: 1 1 50%;
+  place-items: center;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  opacity: 0;
+  cursor: pointer;
+  transition:
+    color 0.14s ease,
+    opacity 0.1s ease;
+}
+.pane-divider:hover:not(:has(.pane-grip:hover)) .pane-handle-pair,
+.pane-handle-pair:hover,
+.pane-handle-pair:focus-within {
+  width: 46px;
+  height: 26px;
+  border-color: var(--line-strong);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.pane-divider:hover:not(:has(.pane-grip:hover)) .pane-handle-direction,
+.pane-handle-pair:hover .pane-handle-direction,
+.pane-handle-pair:focus-within .pane-handle-direction {
+  opacity: 1;
+}
+.pane-handle-direction:hover,
+.pane-handle-direction:focus-visible {
+  color: var(--ink);
+}
+.pane-handle-direction:focus-visible {
+  outline: none;
+}
+.panes-stacked .pane-handle-pair {
+  flex-direction: column;
+  width: 30px;
+  height: 6px;
+}
+.panes-stacked .pane-handle-direction {
+  width: 100%;
+  min-height: 0;
+}
+.panes-stacked .pane-divider:hover:not(:has(.pane-grip:hover)) .pane-handle-pair,
+.panes-stacked .pane-handle-pair:hover,
+.panes-stacked .pane-handle-pair:focus-within {
+  width: 26px;
+  height: 46px;
 }
 /*
  * Each pane's grip is a pill just inside it beside the divider, midway between the pane handles.
@@ -256,6 +320,7 @@
   transition: opacity 0.16s ease;
 }
 .pane-moving .pane-handle,
+.pane-moving .pane-handle-pair,
 .pane-moving .pane-grip {
   visibility: hidden;
 }
@@ -326,7 +391,9 @@
   width: 100%;
   min-height: 0;
   resize: none;
-  padding: 52px clamp(28px, 5vw, 72px) 60px;
+  padding: 52px
+    max(clamp(28px, 5vw, 72px), calc((100% - var(--content-width)) / 2 + clamp(28px, 5vw, 72px)))
+    60px;
   border: 0;
   outline: 0;
   background: transparent;
@@ -336,8 +403,14 @@
   font-variant-ligatures: none;
   line-height: 1.78;
   tab-size: 2;
-  max-width: var(--content-width);
-  margin: 0 auto;
+}
+.hide-leading-scrollbar:not(.panes-swapped) .source-body > textarea,
+.hide-leading-scrollbar.panes-swapped .rendered-pane {
+  scrollbar-width: none;
+}
+.hide-leading-scrollbar:not(.panes-swapped) .source-body > textarea::-webkit-scrollbar,
+.hide-leading-scrollbar.panes-swapped .rendered-pane::-webkit-scrollbar {
+  display: none;
 }
 .source-body > textarea::placeholder {
   color: var(--faint);

@@ -1202,10 +1202,22 @@ test("keeps source and rendered panes synchronized and lets each pane be tucked 
   await markdown.fill("# Written on the right");
   await expect(page.locator(".rendered-pane h1")).toHaveText("Written on the right");
 
+  const handle = page.getByRole("group", { name: "Pane visibility" });
+  await expect(handle).toBeVisible();
+  await expect(handle.getByRole("button")).toHaveCount(2);
+  const dividerBox = await page.locator(".pane-divider").boundingBox();
+  const handleBox = await handle.boundingBox();
+  if (!dividerBox || !handleBox) throw new Error("The divider handle is not laid out");
+  expect(handleBox.x + handleBox.width / 2).toBeCloseTo(dividerBox.x + dividerBox.width / 2, 0);
+  expect(handleBox.y + handleBox.height / 2).toBeCloseTo(dividerBox.y + dividerBox.height / 2, 0);
+
   await page.getByRole("button", { name: "Hide the source pane" }).click();
   await expect(markdown).toBeHidden();
+  await expect(handle).toHaveCount(0);
+  await expect(page.locator(".pane-divider")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await page.getByRole("button", { name: "Show the source pane" }).click();
   await expect(markdown).toBeVisible();
+  await expect(handle).toBeVisible();
 
   await markdown.fill("# Written on the left");
   await expect(markdown).toHaveValue("# Written on the left");
@@ -1213,8 +1225,36 @@ test("keeps source and rendered panes synchronized and lets each pane be tucked 
   await expect(page.locator(".rendered-pane h1")).toHaveText("Written on the left");
   await page.getByRole("button", { name: "Hide the rendered pane" }).click();
   await expect(page.locator(".rendered-pane")).toBeHidden();
+  await expect(page.locator(".pane-divider")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  const sourcePaneBox = await page.locator(".source-pane").boundingBox();
+  const sourceEditorBox = await markdown.boundingBox();
+  if (!sourcePaneBox || !sourceEditorBox) throw new Error("The source pane is not laid out");
+  expect(sourceEditorBox.x + sourceEditorBox.width).toBeCloseTo(
+    sourcePaneBox.x + sourcePaneBox.width,
+    0,
+  );
   await page.getByRole("button", { name: "Show the rendered pane" }).click();
   await expect(page.locator(".rendered-pane")).toBeVisible();
+
+  await page.evaluate(() => localStorage.setItem("onyx:pane-layout", "rows"));
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await expect(handle).toHaveCSS("flex-direction", "column");
+  const stackedDividerBox = await page.locator(".pane-divider").boundingBox();
+  const stackedHandleBox = await handle.boundingBox();
+  if (!stackedDividerBox || !stackedHandleBox) {
+    throw new Error("The stacked divider handle is not laid out");
+  }
+  expect(stackedHandleBox.x + stackedHandleBox.width / 2).toBeCloseTo(
+    stackedDividerBox.x + stackedDividerBox.width / 2,
+    0,
+  );
+  expect(stackedHandleBox.y + stackedHandleBox.height / 2).toBeCloseTo(
+    stackedDividerBox.y + stackedDividerBox.height / 2,
+    0,
+  );
+  await page.getByRole("button", { name: "Hide the source pane" }).click();
+  await expect(page.locator(".pane-divider")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
 });
 
 test("coalesces rapid input without postponing the rendered text", async ({ page }) => {
@@ -1340,6 +1380,37 @@ test("scrolls each pane to the part of the note shown in the other one", async (
   await page.keyboard.press("ControlOrMeta+End");
   await page.keyboard.type("\n\nThe last word.");
   await expect(page.locator(".rendered-pane").getByText("The last word.")).toBeInViewport();
+});
+
+test("keeps a native scrollbar only on the right pane during synced scrolling", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  const scrollbarWidths = () =>
+    page.evaluate(() => ({
+      source: getComputedStyle(
+        document.querySelector<HTMLTextAreaElement>(".source-body > textarea")!,
+      ).scrollbarWidth,
+      rendered: getComputedStyle(document.querySelector<HTMLElement>(".rendered-pane")!)
+        .scrollbarWidth,
+    }));
+
+  await expect(page.locator(".editor-shell")).toHaveClass(/hide-leading-scrollbar/);
+  await expect.poll(scrollbarWidths).toEqual({ source: "none", rendered: "auto" });
+
+  await page.evaluate(() => localStorage.setItem("onyx:pane-order", "rendered-first"));
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await expect(page.locator(".editor-shell")).toHaveClass(/panes-swapped/);
+  await expect.poll(scrollbarWidths).toEqual({ source: "auto", rendered: "none" });
+
+  await page.evaluate(() => localStorage.setItem("onyx:pane-layout", "rows"));
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await expect(page.locator(".editor-shell")).not.toHaveClass(/hide-leading-scrollbar/);
+  await expect.poll(scrollbarWidths).toEqual({ source: "auto", rendered: "auto" });
 });
 
 test("moves a pane by dragging its grip beside the divider or with the arrow keys", async ({
