@@ -16,6 +16,8 @@
 		paneLayout: PaneLayout;
 		paneOrder: PaneOrder;
 		renderedBlockLines: (SourceLines | undefined)[];
+		renderedBlocks: string[];
+		displayedRenderedBlocks: string[];
 		scrollSync: boolean;
 		markdown: string;
 		markdownLines: string[];
@@ -26,7 +28,6 @@
 		saveState: SaveState;
 		transferState: TransferState;
 		hasContent: boolean;
-		renderedMarkdown: string;
 		shortcuts: KeyboardShortcuts;
 		primaryModifier: PrimaryModifier;
 		editor?: HTMLTextAreaElement;
@@ -55,8 +56,8 @@
 	}
 
 	let {
-		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, scrollSync, markdown, markdownLines, findOpen, findQuery, findMatches, activeFindMatch,
-		saveState, transferState, hasContent, renderedMarkdown, shortcuts, primaryModifier,
+		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedBlocks, displayedRenderedBlocks, scrollSync, markdown, markdownLines, findOpen, findQuery, findMatches, activeFindMatch,
+		saveState, transferState, hasContent, shortcuts, primaryModifier,
 		editor = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
 		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onNoteLink
 	}: Props = $props();
@@ -378,14 +379,19 @@
 		queueScrollSync(pane, true);
 	}
 
+	function handleMarkdownInput(event: Event & { currentTarget: HTMLTextAreaElement }): void {
+		scrollDriver = 'source';
+		onMarkdownChange(event.currentTarget.value);
+	}
+
 	$effect(() => {
 		if (!scrollSync) stopGlide();
 		else tick().then(() => queueScrollSync(leadingPane()));
 	});
 
 	$effect(() => {
-		void [markdown, renderedMarkdown, bothPanesVisible, stacked, contentWidth];
-		tick().then(() => queueScrollSync(leadingPane()));
+		void [renderedBlocks, bothPanesVisible, stacked, contentWidth];
+		tick().then(() => queueScrollSync(scrollDriver));
 	});
 
 	$effect(() => {
@@ -435,7 +441,7 @@
 	<section bind:this={shell} class="editor-shell" class:source-hidden={!sourcePaneVisible} class:rendered-hidden={!renderedPaneVisible} class:panes-stacked={stacked} class:panes-swapped={swapped} class:first-hidden={!firstPaneVisible} class:second-hidden={!secondPaneVisible} class:resizing class:pane-moving={drag?.moving} class:hide-leading-scrollbar={scrollSync && bothPanesVisible && !stacked} style={`--split: ${splitRatio}%; --content-width: ${contentWidth}px`}>
 		<div bind:this={sourcePaneElement} class="source-pane" class:dragged={drag?.moving && drag.pane === 'source'} data-source-theme={resolvedTheme} data-color-theme={colorTheme} style={drag?.moving && drag.pane === 'source' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined}>
 			<div class="source-body" bind:this={sourceBody} onscrollcapture={(event) => handlePaneScroll(event, 'source')} onloadcapture={() => queueScrollSync(leadingPane())}>
-					<textarea bind:this={editor} class:find-highlights-active={sourceFindActive} value={markdown} onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} ondragover={onEditorDragOver} ondrop={onEditorDrop} oninput={(event) => onMarkdownChange(event.currentTarget.value)} onscroll={syncSourceFindLayer} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
+					<textarea bind:this={editor} class:find-highlights-active={sourceFindActive} value={markdown} onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} ondragover={onEditorDragOver} ondrop={onEditorDrop} oninput={handleMarkdownInput} onscroll={syncSourceFindLayer} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
 					{#if sourceFindActive}
 						<div class="source-find-layer" aria-hidden="true"><div style={`transform: translate(${-sourceScrollLeft}px, ${-sourceScrollTop}px)`}>{@html sourceFindMarkup}</div></div>
 					{/if}
@@ -462,7 +468,11 @@
 		</div>
 		<div bind:this={renderedPaneElement} class="rendered-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} onmousemove={handleRenderedMouseMove} onmousedown={handleRenderedMouseDown} onclick={handleRenderedClick} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
 			{#if hasContent}
-				<article class="prose">{@html renderedMarkdown}</article>
+				<article class="prose">
+					{#each displayedRenderedBlocks as block}
+						{@html block}
+					{/each}
+				</article>
 			{:else}
 				<div class="preview-empty"><PencilLine size={26} /><strong>Nothing here yet</strong><span>Start writing in the source pane.</span></div>
 			{/if}

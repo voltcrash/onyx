@@ -113,6 +113,8 @@
 		paneLayout={page.paneLayout}
 		paneOrder={page.paneOrder}
 		renderedBlockLines={page.renderedBlockLines}
+		renderedBlocks={page.renderedBlocks}
+		displayedRenderedBlocks={page.displayedRenderedBlocks}
 		scrollSync={page.scrollSync}
 		markdown={page.markdown}
 		markdownLines={page.markdownLines}
@@ -123,7 +125,6 @@
 		saveState={page.saveState}
 		transferState={page.transferState}
 		hasContent={page.hasContent}
-		renderedMarkdown={page.renderedMarkdown}
 		shortcuts={page.shortcuts}
 		primaryModifier={page.primaryModifier}
 		bind:editor={page.editor}
@@ -162,7 +163,9 @@
 	/>
 {/if}
 
-<div class="print-document paper-surface" aria-hidden="true"><article class="prose">{@html page.renderedMarkdown}</article></div>
+{#if page.printing}
+	<div class="print-document paper-surface" aria-hidden="true"><article class="prose">{@html page.renderedMarkdown}</article></div>
+{/if}
 
 <StatusNotices
 	backupMessage={page.backupMessage}
