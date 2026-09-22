@@ -151,6 +151,7 @@ import type { FolderIcon } from "$lib/folder-icons";
 import { outputFileName } from "$lib/output-utils";
 import type { MarkdownTransferFile } from "$lib/markdown-transfer";
 import { onMount, tick } from "svelte";
+import { pushState as pushAppState, replaceState as replaceAppState } from "$app/navigation";
 
 const NOTE_PAGE_SIZE = 100;
 const PREVIEW_DELAY_MS = 120;
@@ -160,6 +161,20 @@ const DEFERRED_STARTUP_DELAY_MS = 8_000;
 const NARROW_VIEWPORT = "(max-width: 900px)";
 const EDITOR_HISTORY_LIMIT = 200;
 const MARKDOWN_EXTENSION = ".md";
+const SVELTEKIT_STATES_KEY = "sveltekit:states";
+
+function noteIdFromHistoryState(state: unknown): string | undefined {
+  if (!state || typeof state !== "object") return;
+  const record = state as Record<string, unknown>;
+  const pageState =
+    record.onyxNoteId !== undefined
+      ? record
+      : record[SVELTEKIT_STATES_KEY] && typeof record[SVELTEKIT_STATES_KEY] === "object"
+        ? (record[SVELTEKIT_STATES_KEY] as Record<string, unknown>)
+        : undefined;
+  const noteId = pageState?.onyxNoteId;
+  return typeof noteId === "string" && noteId ? noteId : undefined;
+}
 
 const noteFormatPaletteNames: Record<NoteFormat, string> = {
   markdown: "Markdown",
@@ -1184,7 +1199,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     void openVault()
       .then(() => {
         try {
-          history.replaceState({ onyxNoteId: activeNoteId }, "");
+          replaceAppState("", { onyxNoteId: activeNoteId });
         } catch {
           // History is best-effort; the app works without it.
         }
@@ -1213,7 +1228,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       if (document.visibilityState === "hidden" && markdown !== lastSavedMarkdown) void saveDraft();
     };
     const onPopState = (event: PopStateEvent) => {
-      const noteId = (event.state as { onyxNoteId?: unknown } | null)?.onyxNoteId;
+      const noteId = noteIdFromHistoryState(event.state);
       if (typeof noteId !== "string" || !noteId || noteId === activeNoteId) return;
       void selectNote(noteId);
     };
@@ -1278,7 +1293,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       githubRestoreTimer = undefined;
     }
     const result = new URLSearchParams(location.search).get("github");
-    if (result) history.replaceState(history.state, "", location.pathname + location.hash);
+    if (result) {
+      try {
+        replaceAppState(`${location.pathname}${location.hash}`, {
+          onyxNoteId: noteIdFromHistoryState(history.state) ?? activeNoteId,
+        });
+      } catch {
+        // History is best-effort; the callback can still be handled.
+      }
+    }
     if (result && result !== "connected") {
       githubMessage =
         result === "configuration"
@@ -1863,14 +1886,18 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     recentNoteIds = [id, ...recentNoteIds.filter((recentId) => recentId !== id)].slice(0, 8);
   }
 
-  function scrollToNoteFragment(fragment: string): void {
+  async function scrollToNoteFragment(fragment: string): Promise<void> {
     if (!fragment) return;
+    await tick();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     let decoded = fragment;
     try {
       decoded = decodeURIComponent(fragment);
     } catch {
       decoded = fragment;
     }
+    const renderedPane = document.querySelector<HTMLElement>(".rendered-pane");
+    const elementsWithIds = renderedPane?.querySelectorAll<HTMLElement>("[id]");
     for (const candidate of [
       decoded,
       `user-content-${decoded}`,
@@ -1878,12 +1905,20 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       `user-content-${fragment}`,
     ]) {
       if (!candidate) continue;
-      const element = document.getElementById(candidate);
+      const element =
+        [...(elementsWithIds ?? [])].find(
+          (candidateElement) => candidateElement.id === candidate,
+        ) ?? (renderedPane ? undefined : document.getElementById(candidate));
       if (element) {
         element.scrollIntoView();
         return;
       }
     }
+    const normalizedFragment = decoded.trim().toLocaleLowerCase();
+    const heading = [
+      ...(renderedPane?.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6") ?? []),
+    ].find((candidate) => candidate.textContent?.trim().toLocaleLowerCase() === normalizedFragment);
+    heading?.scrollIntoView();
   }
 
   /**
@@ -1904,25 +1939,27 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const id = findNoteIdForPath(notes, parsed.path);
     if (!id) return;
     if (id === activeNoteId) {
-      if (parsed.fragment) scrollToNoteFragment(parsed.fragment);
+      if (parsed.fragment) {
+        if (!markdownModule) await loadMarkdownModule().catch(() => undefined);
+        await scrollToNoteFragment(parsed.fragment);
+      }
       return;
     }
     const sourceId = activeNoteId;
     try {
-      history.replaceState({ onyxNoteId: sourceId }, "");
+      replaceAppState("", { onyxNoteId: sourceId });
     } catch {
       // History is best-effort; navigation still works without it.
     }
     await selectNote(id);
     if (activeNoteId !== id) return;
     try {
-      history.pushState({ onyxNoteId: id }, "");
+      pushAppState("", { onyxNoteId: id });
     } catch {
       // Ignore history failures after a successful navigation.
     }
     if (parsed.fragment) {
-      await tick();
-      scrollToNoteFragment(parsed.fragment);
+      await scrollToNoteFragment(parsed.fragment);
     }
   }
 

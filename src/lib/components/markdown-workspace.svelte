@@ -61,19 +61,38 @@
 		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onNoteLink
 	}: Props = $props();
 
-	function handleRenderedClick(event: MouseEvent): void {
-		if (!onNoteLink || event.defaultPrevented || event.button !== 0) return;
-		if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+	function renderedNoteHref(event: MouseEvent): string | undefined {
+		if (!onNoteLink || event.defaultPrevented) return;
 		const anchor = (event.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
 		if (!anchor || !renderedPaneElement?.contains(anchor)) return;
-		if (anchor.target === '_blank') return;
+		if (anchor.target.toLowerCase() === '_blank') return;
 		const href = anchor.getAttribute('href');
 		if (!href || href.startsWith('#')) return;
 		if (/^[a-z][a-z\d+.-]*:/i.test(href)) return;
 		if (href.startsWith('/') || href.startsWith('\\')) return;
 		if (!/\.(?:md|markdown)(?:[?#]|$)/i.test(href)) return;
+		return href;
+	}
+
+	function renderedNoteLink(event: MouseEvent): string | undefined {
+		if (event.button !== 0) return;
+		if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+		return renderedNoteHref(event);
+	}
+
+	function handleRenderedMouseMove(event: MouseEvent): void {
+		if (renderedNoteHref(event)) event.stopPropagation();
+	}
+
+	function handleRenderedMouseDown(event: MouseEvent): void {
+		if (renderedNoteLink(event)) event.preventDefault();
+	}
+
+	function handleRenderedClick(event: MouseEvent): void {
+		const href = renderedNoteLink(event);
+		if (!href) return;
 		event.preventDefault();
-		onNoteLink(href);
+		onNoteLink?.(href);
 	}
 
 	let shell = $state<HTMLElement>();
@@ -439,7 +458,7 @@
 				<button class="pane-handle pane-handle-end" title={label} aria-label={label} aria-expanded={secondPaneVisible} onclick={toggleSecondPane}><Icon size={15} /></button>
 			{/if}
 		</div>
-		<div bind:this={renderedPaneElement} class="rendered-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} onclick={handleRenderedClick} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
+		<div bind:this={renderedPaneElement} class="rendered-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} onmousemove={handleRenderedMouseMove} onmousedown={handleRenderedMouseDown} onclick={handleRenderedClick} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
 			{#if hasContent}
 				<article class="prose">{@html renderedMarkdown}</article>
 			{:else}
