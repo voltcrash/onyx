@@ -22,10 +22,11 @@ const OPAQUE_PARENTS = new Set([
   "toml",
 ]);
 
+// Single-tilde subscript was removed: `~text~` follows GitHub/GFM strikethrough.
+// Subscript remains available via safe HTML `<sub>`.
 const INLINE_MARKS: Array<{ delimiter: string; tagName: string }> = [
   { delimiter: "==", tagName: "mark" },
   { delimiter: "^", tagName: "sup" },
-  { delimiter: "~", tagName: "sub" },
 ];
 
 const WIKI_LINK = /(!?)\[\[([^\]|\n]+?)(?:\|([^\]\n]+?))?\]\]/g;

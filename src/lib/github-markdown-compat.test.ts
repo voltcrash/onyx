@@ -136,8 +136,10 @@ describe("github markdown compatibility", () => {
 
   it("supports subscript via HTML", () => {
     // TODO: GitHub supports H<sub>2</sub>O via safe HTML; allowlist work lands
-    // in a later commit. Single-tilde custom subscript is removed separately.
-    expect(renderMarkdown("~deleted~")).toContain("<del>deleted</del>");
+    // in a later commit.
+    const html = renderMarkdown("~text~");
+    expect(html).toContain("<del>text</del>");
+    expect(html).not.toContain("<sub>");
   });
 
   it("supports superscript via HTML", () => {
