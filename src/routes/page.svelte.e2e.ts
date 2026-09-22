@@ -1834,3 +1834,30 @@ test("switches repositories by swiping horizontally on the sidebar", async ({ pa
   await page.mouse.wheel(120, 0);
   await expect(dots.nth(1)).toHaveAttribute("aria-selected", "true");
 });
+
+test("switches repositories with mouse back and forward buttons", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  await page.locator(".vault-trigger").click();
+  await page.getByRole("menuitem", { name: "New repository" }).click();
+  const dots = page.getByRole("tablist", { name: /Repositories/ }).getByRole("tab");
+  await expect(dots).toHaveCount(2);
+  await expect(dots.nth(1)).toHaveAttribute("aria-selected", "true");
+
+  const sidebar = page.locator(".sidebar .note-list");
+  await sidebar.hover();
+  async function pressMouseButton(button: 3 | 4): Promise<void> {
+    await sidebar.evaluate((element, button) => {
+      for (const type of ["pointerdown", "mousedown", "mouseup", "auxclick"]) {
+        element.dispatchEvent(new MouseEvent(type, { button, bubbles: true, cancelable: true }));
+      }
+    }, button);
+  }
+
+  await pressMouseButton(3);
+  await expect(dots.nth(0)).toHaveAttribute("aria-selected", "true");
+
+  await pressMouseButton(4);
+  await expect(dots.nth(1)).toHaveAttribute("aria-selected", "true");
+});
