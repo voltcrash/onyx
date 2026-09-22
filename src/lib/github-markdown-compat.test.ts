@@ -142,9 +142,11 @@ describe("github markdown compatibility", () => {
     expect(html).not.toContain("<sub>");
   });
 
-  it("supports superscript via HTML", () => {
-    // TODO: GitHub supports x<sup>2</sup>; custom caret syntax is removed later.
-    expect(renderMarkdown("x^2^")).toContain("<sup>2</sup>");
+  it("does not treat carets as superscript", () => {
+    // GitHub documents superscript via safe HTML `<sup>`, not `^text^`.
+    const html = renderMarkdown("x^2^");
+    expect(html).not.toContain("<sup>");
+    expect(html).toContain("x^2^");
   });
 
   it("renders inline math", () => {
