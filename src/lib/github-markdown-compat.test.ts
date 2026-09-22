@@ -85,6 +85,19 @@ describe("github markdown compatibility", () => {
     expect(renderMarkdown("https://example.com")).toContain('href="https://example.com"');
   });
 
+  it("matches GFM autolink behavior", () => {
+    expect(renderMarkdown("http://example.com")).toContain('href="http://example.com"');
+    expect(renderMarkdown("www.example.com")).toContain('href="http://www.example.com"');
+    const trailing = renderMarkdown("See https://example.com.");
+    expect(trailing).toContain('href="https://example.com"');
+    expect(trailing).toContain("</a>.");
+    const parens = renderMarkdown("(https://example.com)");
+    expect(parens).toContain('href="https://example.com"');
+    expect(renderMarkdown("`https://example.com`")).not.toContain("<a");
+    const explicit = renderMarkdown("[label](https://example.com)");
+    expect(explicit.match(/<a /g)).toHaveLength(1);
+  });
+
   it("autolinks email addresses", () => {
     expect(renderMarkdown("someone@example.com")).toContain("mailto:");
   });
