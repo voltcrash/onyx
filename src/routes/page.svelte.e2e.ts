@@ -1770,6 +1770,7 @@ test("deletes one image from the attachments folder without deleting its sibling
 
   await trashed.click({ button: "right" });
   const menu = page.getByRole("menu", { name: "File actions" });
+  await expect(menu.getByRole("menuitem", { name: "Open in new tab", exact: true })).toBeVisible();
   await expect(menu.getByRole("menuitem", { name: "Delete", exact: true })).toBeVisible();
   await menu.getByRole("menuitem", { name: "Delete", exact: true }).click();
 

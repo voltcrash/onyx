@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { ChevronDown, ChevronRight, Copy, Download, FilePlus2, FileText, Folder, FolderPlus, Image, Paperclip, HardDrive, LoaderCircle, Lock, LockOpen, LogOut, PanelLeft, PanelRight, Pencil, Plus, Search, Settings, Trash2, Type, Undo2, X } from '@lucide/svelte';
+	import { ChevronDown, ChevronRight, Copy, Download, ExternalLink, FilePlus2, FileText, Folder, FolderPlus, Image, Paperclip, HardDrive, LoaderCircle, Lock, LockOpen, LogOut, PanelLeft, PanelRight, Pencil, Plus, Search, Settings, Trash2, Type, Undo2, X } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
 	import type { GithubUser } from '$lib/github';
 	import type { VaultDescriptor } from '$lib/storage/registry';
@@ -923,7 +923,7 @@
 							{@render sidebarPositionItems()}
 						{/if}
 					{:else if contextMenu.kind === 'attachment'}
-						<button role="menuitem" disabled={transferState === 'working'} onclick={contextOpenAttachment}><Image size={15} /><span>Open</span></button>
+						<button role="menuitem" disabled={transferState === 'working'} onclick={contextOpenAttachment}><ExternalLink size={15} /><span>Open in new tab</span></button>
 						<button role="menuitem" onclick={contextCopyPath}><Copy size={15} /><span>Copy relative path</span></button>
 						<div class="file-context-divider"></div>
 						<button role="menuitem" class="danger" disabled={transferState === 'working'} onclick={contextDeleteAttachment}><Trash2 size={15} /><span>Delete</span></button>
