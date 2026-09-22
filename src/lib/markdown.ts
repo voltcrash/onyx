@@ -12,7 +12,12 @@ import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified, type Plugin } from "unified";
 
-import { remarkCallouts, remarkInlineMarks, remarkWikiLinks } from "./markdown-extensions.js";
+import {
+  remarkCallouts,
+  remarkGithubInlineMath,
+  remarkInlineMarks,
+  remarkWikiLinks,
+} from "./markdown-extensions.js";
 
 export { resolveLocalAttachmentUrl, titleFromMarkdown } from "./markdown-utils.js";
 
@@ -232,6 +237,7 @@ function markdownProcessor() {
       .use(remarkGfm)
       // remark-math covers `$…$`, `$$…$$`, and GitHub's ```math fences.
       .use(remarkMath)
+      .use(remarkGithubInlineMath)
       .use(remarkGemoji)
       .use(remarkCallouts)
       .use(remarkWikiLinks)

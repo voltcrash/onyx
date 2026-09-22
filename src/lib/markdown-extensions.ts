@@ -7,7 +7,11 @@ import type { Plugin } from "unified";
 
 export interface MdastNode {
   children?: MdastNode[];
-  data?: { hName?: string; hProperties?: Record<string, unknown> };
+  data?: {
+    hName?: string;
+    hProperties?: Record<string, unknown>;
+    hChildren?: MdastNode[];
+  };
   type: string;
   value?: string;
 }
@@ -70,6 +74,53 @@ export const remarkInlineMarks: Plugin<[]> = () => (tree) => {
     for (const { delimiter, tagName } of INLINE_MARKS) {
       parent.children = wrapDelimited(parent.children ?? [], delimiter, tagName);
     }
+  });
+};
+
+// GitHub's alternate inline math `$`…`$` for equations containing Markdown
+// syntax. The parser leaves it as text/code/text, so adjacent `$`-wrapped code
+// spans are folded into inline math matching remark-math's node shape.
+export const remarkGithubInlineMath: Plugin<[]> = () => (tree) => {
+  visitParents(tree as MdastNode, (parent) => {
+    const children = parent.children ?? [];
+    if (children.length < 3) return;
+    const result: MdastNode[] = [];
+    let index = 0;
+    while (index < children.length) {
+      const first = children[index]!;
+      const code = children[index + 1];
+      const last = children[index + 2];
+      if (
+        first.type === "text" &&
+        (first.value ?? "").endsWith("$") &&
+        !(first.value ?? "").endsWith("$$") &&
+        code?.type === "inlineCode" &&
+        (code.value ?? "") !== "" &&
+        last?.type === "text" &&
+        (last.value ?? "").startsWith("$") &&
+        !(last.value ?? "").startsWith("$$")
+      ) {
+        const head = first.value!.slice(0, -1);
+        if (head) result.push({ type: "text", value: head });
+        const value = code.value ?? "";
+        result.push({
+          type: "inlineMath",
+          value,
+          data: {
+            hName: "code",
+            hProperties: { className: ["language-math", "math-inline"] },
+            hChildren: [{ type: "text", value }],
+          },
+        });
+        const tail = last.value!.slice(1);
+        if (tail) result.push({ type: "text", value: tail });
+        index += 3;
+      } else {
+        result.push(first);
+        index += 1;
+      }
+    }
+    parent.children = result;
   });
 };
 

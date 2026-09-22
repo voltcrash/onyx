@@ -229,6 +229,22 @@ describe("github markdown compatibility", () => {
     expect(renderMarkdown("$a^2$")).toContain("<math");
   });
 
+  it("renders GitHub alternate inline math delimiters", () => {
+    const html = renderMarkdown("This uses $` and `$ delimiters: $`\\sqrt{3x-1}+(1+x)^2`$.");
+    expect(html).toContain("<math");
+    expect(html).not.toContain("<code>");
+  });
+
+  it("keeps escaped dollar signs as text", () => {
+    expect(renderMarkdown("\\$100")).toContain("$100");
+    expect(renderMarkdown("\\$100")).not.toContain("<math");
+  });
+
+  it("keeps plain inline code as code", () => {
+    expect(renderMarkdown("`code`")).toContain("<code>code</code>");
+    expect(renderMarkdown("`code`")).not.toContain("<math");
+  });
+
   it("renders display math", () => {
     expect(renderMarkdown("$$a^2$$")).toContain("<math");
   });
