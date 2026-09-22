@@ -1331,6 +1331,76 @@ test("hides both native scrollbars only while synced scrolling is active", async
   await expect.poll(scrollbarWidths).toEqual({ source: "auto", rendered: "auto" });
 });
 
+test("morphs the pane handles into a shared draggable divider scrollbar", async ({ page }) => {
+  await page.goto("/");
+  const markdown = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(markdown).toBeEnabled();
+  await markdown.fill(
+    Array.from(
+      { length: 80 },
+      (_, index) => `## Part ${index}\n\nParagraph ${index}.\n\nMore detail for part ${index}.`,
+    ).join("\n\n"),
+  );
+
+  const shell = page.locator(".editor-shell");
+  const rendered = page.locator(".rendered-pane");
+  const scrollbar = page.getByRole("button", { name: "Scroll both panes" });
+  await rendered.evaluate((pane) => {
+    pane.scrollTop = (pane.scrollHeight - pane.clientHeight) * 0.4;
+  });
+
+  await expect(shell).toHaveClass(/sync-scrolling/);
+  await scrollbar.focus();
+  await expect(scrollbar).toHaveCSS("opacity", "1");
+  await expect
+    .poll(() =>
+      shell.evaluate((element) =>
+        Number(getComputedStyle(element).getPropertyValue("--sync-scroll-progress")),
+      ),
+    )
+    .toBeCloseTo(0.4, 1);
+
+  await expect
+    .poll(async () => {
+      const thumb = await scrollbar.boundingBox();
+      const handles = await page.locator(".pane-handle").all();
+      if (!thumb || handles.length !== 2) return Number.POSITIVE_INFINITY;
+      const thumbCenter = thumb.y + thumb.height / 2;
+      const offsets = await Promise.all(
+        handles.map(async (handle) => {
+          const box = await handle.boundingBox();
+          return box ? Math.abs(box.y + box.height / 2 - thumbCenter) : Number.POSITIVE_INFINITY;
+        }),
+      );
+      return Math.max(...offsets);
+    })
+    .toBeLessThan(2);
+
+  const before = await page.evaluate(() => ({
+    source: document.querySelector<HTMLTextAreaElement>(".source-body > textarea")!.scrollTop,
+    rendered: document.querySelector<HTMLElement>(".rendered-pane")!.scrollTop,
+  }));
+  const thumb = await scrollbar.boundingBox();
+  if (!thumb) throw new Error("The shared scrollbar is not laid out");
+  await page.mouse.move(thumb.x + thumb.width / 2, thumb.y + thumb.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(thumb.x + thumb.width / 2, thumb.y + thumb.height / 2 + 100, {
+    steps: 8,
+  });
+  await page.mouse.up();
+
+  await expect
+    .poll(() => page.locator(".source-body > textarea").evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(before.source);
+  await expect
+    .poll(() => rendered.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(before.rendered);
+
+  await scrollbar.evaluate((element) => element.blur());
+  await expect(shell).not.toHaveClass(/sync-scrolling/, { timeout: 2_000 });
+  await expect(page.locator(".pane-handle").first()).toHaveCSS("opacity", "1");
+});
+
 test("moves a pane by dragging its grip beside the divider or with the arrow keys", async ({
   page,
 }) => {
