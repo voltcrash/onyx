@@ -776,6 +776,17 @@
   --callout: var(--danger);
   --callout-bg: var(--danger-bg);
 }
+/* Native disclosure keeps GitHub-style collapsed sections accessible. */
+.prose details {
+  margin: 24px 0;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.prose summary {
+  cursor: pointer;
+  font-weight: 650;
+}
 /* KaTeX emits MathML only, so display math needs the block box from CSS. */
 .prose .katex:has(math[display="block"]) {
   display: block;

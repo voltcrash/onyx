@@ -140,10 +140,14 @@ describe("github markdown compatibility", () => {
     expect(renderMarkdown("<b>bold</b>")).toContain("<b>bold</b>");
   });
 
-  it("documents details/summary handling", () => {
-    // TODO: GitHub passes <details>/<summary> through and renders Markdown
-    // inside; current sanitizer handling is covered further in later commits.
-    const html = renderMarkdown("<details>\n<summary>More</summary>\n\nBody\n\n</details>");
+  it("supports GitHub collapsed sections", () => {
+    const html = renderMarkdown(
+      "<details>\n<summary>More</summary>\n\nBody with **bold**\n\n</details>",
+    );
+    expect(html).toContain("<details>");
+    expect(html).toContain("<summary>More</summary>");
+    expect(html).toContain("Body with");
+    expect(html).toContain("<strong>bold</strong>");
     expect(html).not.toContain("<script");
   });
 
