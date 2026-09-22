@@ -1224,6 +1224,13 @@ test("keeps source and rendered panes synchronized and lets each pane be tucked 
   await expect(page.locator(".rendered-pane h1")).toHaveText("Written on the left");
   await page.getByRole("button", { name: "Hide the rendered pane" }).click();
   await expect(page.locator(".rendered-pane")).toBeHidden();
+  const sourcePaneBox = await page.locator(".source-pane").boundingBox();
+  const sourceEditorBox = await markdown.boundingBox();
+  if (!sourcePaneBox || !sourceEditorBox) throw new Error("The source pane is not laid out");
+  expect(sourceEditorBox.x + sourceEditorBox.width).toBeCloseTo(
+    sourcePaneBox.x + sourcePaneBox.width,
+    0,
+  );
   await page.getByRole("button", { name: "Show the rendered pane" }).click();
   await expect(page.locator(".rendered-pane")).toBeVisible();
 

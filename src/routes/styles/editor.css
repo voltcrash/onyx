@@ -387,7 +387,9 @@
   width: 100%;
   min-height: 0;
   resize: none;
-  padding: 52px clamp(28px, 5vw, 72px) 60px;
+  padding: 52px
+    max(clamp(28px, 5vw, 72px), calc((100% - var(--content-width)) / 2 + clamp(28px, 5vw, 72px)))
+    60px;
   border: 0;
   outline: 0;
   background: transparent;
@@ -397,8 +399,6 @@
   font-variant-ligatures: none;
   line-height: 1.78;
   tab-size: 2;
-  max-width: var(--content-width);
-  margin: 0 auto;
 }
 .hide-leading-scrollbar:not(.panes-swapped) .source-body > textarea,
 .hide-leading-scrollbar.panes-swapped .rendered-pane {
