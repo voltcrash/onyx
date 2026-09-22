@@ -110,6 +110,31 @@ describe("github markdown compatibility", () => {
     expect(html).toContain("same-1");
   });
 
+  it("matches GitHub heading slugs", () => {
+    // Slugs come from rehype-slug (github-slugger), GitHub's own algorithm.
+    expect(renderMarkdown("# Hello World")).toContain('id="user-content-hello-world"');
+    expect(renderMarkdown("# Hello, World!")).toContain('id="user-content-hello-world"');
+    expect(renderMarkdown("# foo_bar")).toContain('id="user-content-foo_bar"');
+    expect(renderMarkdown("# Café")).toContain('id="user-content-café"');
+    expect(renderMarkdown("# 2024 Report")).toContain('id="user-content-2024-report"');
+    expect(renderMarkdown("# Hello **bold**")).toContain('id="user-content-hello-bold"');
+  });
+
+  it("slugs repeated headings with incremental suffixes", () => {
+    const html = renderMarkdown("# Same\n\n# Same\n\n# Same");
+    expect(html).toContain('id="user-content-same"');
+    expect(html).toContain('id="user-content-same-1"');
+    expect(html).toContain('id="user-content-same-2"');
+  });
+
+  it("slugs emoji and hyphenated headings without breaking anchors", () => {
+    const emoji = renderMarkdown("# 🎉 Party");
+    expect(emoji).toContain("party");
+    expect(emoji).not.toContain('🎉"');
+    const hyphens = renderMarkdown("# a -- b");
+    expect(hyphens).toContain('id="user-content-a----b"');
+  });
+
   it("renders footnotes", () => {
     const html = renderMarkdown("Note[^1]\n\n[^1]: Body.");
     expect(html).toContain("fn-1");
