@@ -273,4 +273,21 @@ describe("github markdown compatibility", () => {
     expect(html).toContain("diagram-mermaid");
     expect(html).not.toContain("<script");
   });
+
+  it("recognizes GeoJSON fences with a structural summary", () => {
+    const html = renderMarkdown(
+      '```geojson\n{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[0,0]}}]}\n```',
+    );
+    expect(html).toContain("diagram-geojson");
+    expect(html).toContain("GeoJSON FeatureCollection · 1 feature");
+    expect(html).not.toContain("language-geojson");
+  });
+
+  it("flags malformed GeoJSON while preserving its source", () => {
+    const html = renderMarkdown("```geojson\nnot json\n```");
+    expect(html).toContain("diagram-geojson");
+    expect(html).toContain("diagram-error");
+    expect(html).toContain("Invalid GeoJSON");
+    expect(html).toContain("not json");
+  });
 });

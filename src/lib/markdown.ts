@@ -14,6 +14,7 @@ import { unified, type Plugin } from "unified";
 
 import {
   remarkCallouts,
+  remarkGeoJSON,
   remarkGithubInlineMath,
   remarkInlineMarks,
   remarkMermaid,
@@ -240,6 +241,7 @@ function markdownProcessor() {
       .use(remarkMath)
       .use(remarkGithubInlineMath)
       .use(remarkMermaid)
+      .use(remarkGeoJSON)
       .use(remarkGemoji)
       .use(remarkCallouts)
       .use(remarkWikiLinks)

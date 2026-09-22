@@ -160,6 +160,65 @@ function remarkFencedLanguage(language: string): Plugin<[]> {
 // viewer lazy-loads Mermaid for; without it the source stays readable text.
 export const remarkMermaid = remarkFencedLanguage("mermaid");
 
+// GitHub renders ```geojson fences as maps. Onyx has no map viewer, so valid
+// documents get a deterministic structural summary above their source.
+export function describeGeoJSON(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null) return;
+  const root = value as { features?: unknown; geometry?: { type?: unknown }; type?: unknown };
+  if (typeof root.type !== "string") return;
+  switch (root.type) {
+    case "FeatureCollection": {
+      const count = Array.isArray(root.features) ? root.features.length : 0;
+      return `GeoJSON FeatureCollection · ${count} feature${count === 1 ? "" : "s"}`;
+    }
+    case "Feature":
+      return `GeoJSON Feature · ${typeof root.geometry?.type === "string" ? root.geometry.type : "unknown geometry"}`;
+    case "GeometryCollection": {
+      const count = Array.isArray((root as { geometries?: unknown }).geometries)
+        ? (root as { geometries: unknown[] }).geometries.length
+        : 0;
+      return `GeoJSON GeometryCollection · ${count} geometr${count === 1 ? "y" : "ies"}`;
+    }
+    case "Point":
+    case "MultiPoint":
+    case "LineString":
+    case "MultiLineString":
+    case "Polygon":
+    case "MultiPolygon":
+      return `GeoJSON ${root.type}`;
+    default:
+      return;
+  }
+}
+
+export const remarkGeoJSON: Plugin<[]> = () => (tree) => {
+  visitParents(tree as MdastNode, (parent) => {
+    parent.children = (parent.children ?? []).map((child) => {
+      if (child.type !== "code" || (child.lang ?? "").toLowerCase() !== "geojson") {
+        return child;
+      }
+      const source = child.value ?? "";
+      let summary: string | undefined;
+      try {
+        summary = describeGeoJSON(JSON.parse(source));
+      } catch {
+        summary = undefined;
+      }
+      const node =
+        summary === undefined
+          ? {
+              ...fencedDiagramNode("geojson", `Invalid GeoJSON\n${source}`),
+              data: {
+                hName: "pre",
+                hProperties: { className: ["diagram", "diagram-geojson", "diagram-error"] },
+              },
+            }
+          : fencedDiagramNode("geojson", `${summary}\n${source}`);
+      return { ...node, position: child.position };
+    });
+  });
+};
+
 export const remarkWikiLinks: Plugin<[]> = () => (tree) => {
   visitParents(tree as MdastNode, (parent) => {
     parent.children = (parent.children ?? []).flatMap((child) =>
