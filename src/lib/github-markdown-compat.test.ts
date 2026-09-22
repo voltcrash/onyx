@@ -290,4 +290,20 @@ describe("github markdown compatibility", () => {
     expect(html).toContain("Invalid GeoJSON");
     expect(html).toContain("not json");
   });
+
+  it("recognizes TopoJSON fences separately from GeoJSON", () => {
+    const html = renderMarkdown(
+      '```topojson\n{"type":"Topology","objects":{"example":{"type":"GeometryCollection","geometries":[]}},"arcs":[]}\n```',
+    );
+    expect(html).toContain("diagram-topojson");
+    expect(html).toContain("TopoJSON Topology · 1 object");
+    expect(html).not.toContain("diagram-geojson");
+  });
+
+  it("flags malformed TopoJSON while preserving its source", () => {
+    const html = renderMarkdown('```topojson\n{"type":"Feature"}\n```');
+    expect(html).toContain("diagram-topojson");
+    expect(html).toContain("diagram-error");
+    expect(html).toContain("Invalid TopoJSON");
+  });
 });

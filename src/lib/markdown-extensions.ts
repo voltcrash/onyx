@@ -191,6 +191,45 @@ export function describeGeoJSON(value: unknown): string | undefined {
   }
 }
 
+// GitHub renders ```topojson fences as maps from Topology objects.
+export function describeTopoJSON(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null) return;
+  const root = value as { objects?: unknown; type?: unknown };
+  if (root.type !== "Topology" || typeof root.objects !== "object" || root.objects === null) {
+    return;
+  }
+  const names = Object.keys(root.objects);
+  return `TopoJSON Topology · ${names.length} object${names.length === 1 ? "" : "s"}`;
+}
+
+export const remarkTopoJSON: Plugin<[]> = () => (tree) => {
+  visitParents(tree as MdastNode, (parent) => {
+    parent.children = (parent.children ?? []).map((child) => {
+      if (child.type !== "code" || (child.lang ?? "").toLowerCase() !== "topojson") {
+        return child;
+      }
+      const source = child.value ?? "";
+      let summary: string | undefined;
+      try {
+        summary = describeTopoJSON(JSON.parse(source));
+      } catch {
+        summary = undefined;
+      }
+      const node =
+        summary === undefined
+          ? {
+              ...fencedDiagramNode("topojson", `Invalid TopoJSON\n${source}`),
+              data: {
+                hName: "pre",
+                hProperties: { className: ["diagram", "diagram-topojson", "diagram-error"] },
+              },
+            }
+          : fencedDiagramNode("topojson", `${summary}\n${source}`);
+      return { ...node, position: child.position };
+    });
+  });
+};
+
 export const remarkGeoJSON: Plugin<[]> = () => (tree) => {
   visitParents(tree as MdastNode, (parent) => {
     parent.children = (parent.children ?? []).map((child) => {
