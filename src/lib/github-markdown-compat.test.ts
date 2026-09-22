@@ -127,6 +127,19 @@ describe("github markdown compatibility", () => {
     expect(html).not.toContain("<script");
   });
 
+  it("strips unsafe attributes and protocols from raw HTML", () => {
+    const html = renderMarkdown(
+      '<img src="x" onerror="alert(1)">\n\n<a href="javascript:alert(1)">x</a>\n\n<p onclick="alert(1)">hi</p>',
+    );
+    expect(html).not.toContain("onerror");
+    expect(html).not.toContain("onclick");
+    expect(html).not.toContain("javascript:");
+  });
+
+  it("parses raw HTML before sanitization", () => {
+    expect(renderMarkdown("<b>bold</b>")).toContain("<b>bold</b>");
+  });
+
   it("documents details/summary handling", () => {
     // TODO: GitHub passes <details>/<summary> through and renders Markdown
     // inside; current sanitizer handling is covered further in later commits.

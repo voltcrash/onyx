@@ -1,5 +1,6 @@
 import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
+import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema, type Options } from "rehype-sanitize";
 import rehypeSlug from "rehype-slug";
 import rehypeStringify from "rehype-stringify";
@@ -226,7 +227,12 @@ function markdownProcessor() {
       .use(remarkWikiLinks)
       .use(remarkInlineMarks)
       // Front matter is metadata, not prose, so it is dropped rather than printed.
-      .use(remarkRehype, { clobberPrefix: "", handlers: { toml: noHandler, yaml: noHandler } })
+      .use(remarkRehype, {
+        allowDangerousHtml: true,
+        clobberPrefix: "",
+        handlers: { toml: noHandler, yaml: noHandler },
+      })
+      .use(rehypeRaw)
       .use(rehypeSlug)
       .use(rehypeSanitize, markdownSchema)
   );
