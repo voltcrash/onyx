@@ -7,6 +7,117 @@ test("does not render an obsolete pane toolbar", async ({ page }) => {
   await expect(page.locator(".source-switcher")).toHaveCount(0);
 });
 
+test("navigates relative notes with browser history and rendered fragments", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  const createNote = async (name: string, contents: string): Promise<void> => {
+    await page.getByRole("button", { name: "New file" }).click();
+    const fileName = page.getByRole("textbox", { name: "File name" });
+    await fileName.fill(name);
+    await fileName.press("Enter");
+    await editor.fill(contents);
+    await page.keyboard.press("ControlOrMeta+S");
+    await expect(page.getByText("Unsaved", { exact: true })).toBeHidden();
+    await expect(page.getByText("Saving…", { exact: true })).toBeHidden();
+  };
+
+  const destination = [
+    "# Note C",
+    "",
+    ...Array.from({ length: 30 }, (_, index) => `Filler paragraph ${index + 1}.`),
+    "",
+    "## target heading",
+    "",
+    "C target content.",
+    "",
+    "## target heading",
+    "",
+    "C duplicate content.",
+  ].join("\n");
+  await createNote(
+    "note-a.md",
+    "# Note A\n\n[A to B](note-b.md)\n\n[A to C](note-c.md#target%20heading)\n\n[Missing](missing.md)\n\n[Malformed](bad%ZZ.md)",
+  );
+  await createNote("note-b.md", "# Note B\n\n[B to C](note-c.md)");
+  await createNote("note-c.md", destination);
+
+  await page.getByRole("button", { name: "Note A", exact: true }).click();
+  await expect(editor).toHaveValue(/# Note A/);
+  const relativeLink = page.getByRole("link", { name: "A to B", exact: true });
+  for (const modifiers of [["Control"], ["Shift"], ["Alt"]] as const) {
+    await relativeLink.click({ modifiers: [...modifiers] });
+    await expect(editor).toHaveValue(/# Note A/);
+  }
+  await relativeLink.click({ button: "middle" });
+  await expect(editor).toHaveValue(/# Note A/);
+  const startingHistoryLength = await page.evaluate(() => history.length);
+  const startingUrl = page.url();
+
+  await page.getByRole("link", { name: "A to B", exact: true }).click();
+  await expect(editor).toHaveValue(/# Note B/);
+  await expect(page.locator(".rendered-pane article")).toContainText("B to C");
+  expect(await page.evaluate(() => history.length)).toBe(startingHistoryLength + 1);
+
+  await page.getByRole("link", { name: "B to C", exact: true }).click();
+  await expect(editor).toHaveValue(/# Note C/);
+  await expect(page.locator(".rendered-pane article")).toContainText("C target content.");
+  expect(await page.evaluate(() => history.length)).toBe(startingHistoryLength + 2);
+
+  await page.evaluate(() => history.back());
+  await expect(editor).toHaveValue(/# Note B/);
+  await expect(page.locator(".rendered-pane article")).toContainText("B to C");
+  await page.evaluate(() => history.back());
+  await expect(editor).toHaveValue(/# Note A/);
+  await expect(page.locator(".rendered-pane article")).toContainText("A to C");
+  expect(await page.evaluate(() => history.length)).toBe(startingHistoryLength + 2);
+
+  await page.evaluate(() => history.forward());
+  await expect(editor).toHaveValue(/# Note B/);
+  await page.evaluate(() => history.forward());
+  await expect(editor).toHaveValue(/# Note C/);
+  expect(page.url()).toBe(startingUrl);
+  expect(await page.evaluate(() => history.length)).toBe(startingHistoryLength + 2);
+
+  await page.evaluate(() => history.back());
+  await expect(editor).toHaveValue(/# Note B/);
+  await page.evaluate(() => history.back());
+  await expect(editor).toHaveValue(/# Note A/);
+  const missingLinkHistoryLength = await page.evaluate(() => history.length);
+  await page.getByRole("link", { name: "Missing", exact: true }).click();
+  await expect(editor).toHaveValue(/# Note A/);
+  expect(page.url()).toBe(startingUrl);
+  expect(await page.evaluate(() => history.length)).toBe(missingLinkHistoryLength);
+  await page.getByRole("link", { name: "Malformed", exact: true }).click();
+  await expect(editor).toHaveValue(/# Note A/);
+  expect(await page.evaluate(() => history.length)).toBe(missingLinkHistoryLength);
+  expect(pageErrors.filter((message) => message.includes("URI malformed"))).toEqual([]);
+
+  await page.getByRole("link", { name: "A to C", exact: true }).click();
+  await expect(editor).toHaveValue(/# Note C/);
+  const firstTarget = page.locator(".rendered-pane #user-content-target-heading").first();
+  await expect(firstTarget).toBeVisible();
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const pane = document.querySelector<HTMLElement>(".rendered-pane");
+          const target = document.querySelector<HTMLElement>(
+            ".rendered-pane #user-content-target-heading",
+          );
+          if (!pane || !target) return false;
+          const paneBounds = pane.getBoundingClientRect();
+          const targetBounds = target.getBoundingClientRect();
+          return targetBounds.top >= paneBounds.top && targetBounds.bottom <= paneBounds.bottom;
+        }),
+      { message: "the destination fragment is visible after the full renderer commits" },
+    )
+    .toBe(true);
+});
+
 async function blockNextVaultWrite(page: Page): Promise<void> {
   await page.evaluate(() => {
     const prototype = FileSystemFileHandle.prototype;

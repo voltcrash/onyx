@@ -2,8 +2,10 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   attachmentMarkdown,
   continueListOnEnter,
+  findNoteIdForPath,
   indentEditorLines,
   normalizeAttachmentFolder,
+  parseRelativeNoteLink,
   pasteUrlOverSelection,
   resolveLocalAttachmentUrl,
   rewriteLocalLinks,
@@ -259,5 +261,199 @@ describe("rewriteLocalLinks", () => {
         (path) => moved.get(path),
       ),
     ).toBe("![a](media/a.png)\n```\n![a](attachments/a.png)\n```");
+  });
+});
+
+describe("parseRelativeNoteLink", () => {
+  it("resolves sibling links relative to the current note", () => {
+    expect(parseRelativeNoteLink("other.md", "day.md")).toEqual({ path: "other.md", fragment: "" });
+    expect(parseRelativeNoteLink("./other.md", "day.md")).toEqual({
+      path: "other.md",
+      fragment: "",
+    });
+  });
+
+  it("resolves nested and parent links against the note folder", () => {
+    expect(parseRelativeNoteLink("folder/other.md", "day.md")).toEqual({
+      path: "folder/other.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("../other.md", "folder/day.md")).toEqual({
+      path: "other.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("./folder/other.md", "day.md")).toEqual({
+      path: "folder/other.md",
+      fragment: "",
+    });
+  });
+
+  it("preserves fragments for heading navigation", () => {
+    expect(parseRelativeNoteLink("other.md#some-heading", "day.md")).toEqual({
+      path: "other.md",
+      fragment: "some-heading",
+    });
+    expect(parseRelativeNoteLink("./other.md#some-heading", "folder/day.md")).toEqual({
+      path: "folder/other.md",
+      fragment: "some-heading",
+    });
+  });
+
+  it("leaves fragment-only links for in-note scrolling", () => {
+    expect(parseRelativeNoteLink("#heading", "day.md")).toBeUndefined();
+    expect(parseRelativeNoteLink("#user-content-heading", "day.md")).toBeUndefined();
+  });
+
+  it("leaves external links unchanged", () => {
+    expect(parseRelativeNoteLink("https://example.com/other.md", "day.md")).toBeUndefined();
+    expect(parseRelativeNoteLink("http://example.com/other.md", "day.md")).toBeUndefined();
+    expect(parseRelativeNoteLink("mailto:someone@example.com", "day.md")).toBeUndefined();
+  });
+
+  it("leaves absolute paths and non-Markdown files alone", () => {
+    expect(parseRelativeNoteLink("/other.md", "day.md")).toBeUndefined();
+    expect(parseRelativeNoteLink("image.png", "day.md")).toBeUndefined();
+    expect(parseRelativeNoteLink("missing.pdf", "day.md")).toBeUndefined();
+  });
+
+  it("rejects links that escape the vault root", () => {
+    expect(parseRelativeNoteLink("../other.md", "day.md")).toBeUndefined();
+    expect(parseRelativeNoteLink("../../other.md", "folder/day.md")).toBeUndefined();
+    expect(parseRelativeNoteLink("../../../outside.md", "folder/day.md")).toBeUndefined();
+  });
+
+  it("normalizes dot segments without allowing encoded traversal", () => {
+    expect(parseRelativeNoteLink("folder/../other.md", "day.md")).toEqual({
+      path: "other.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("./folder/../other.md", "day.md")).toEqual({
+      path: "other.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("%2e%2e/other.md", "folder/day.md")).toEqual({
+      path: "other.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("..%2Fother.md", "folder/day.md")).toEqual({
+      path: "other.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("folder/%2e%2e/other.md", "day.md")).toEqual({
+      path: "other.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("%2e%2e/other.md", "day.md")).toBeUndefined();
+  });
+
+  it("fails gracefully for malformed path escapes", () => {
+    expect(() => parseRelativeNoteLink("bad%ZZ.md", "day.md")).not.toThrow();
+    expect(() => parseRelativeNoteLink("bad%.md", "day.md")).not.toThrow();
+    expect(() => parseRelativeNoteLink("bad%2.md", "day.md")).not.toThrow();
+    expect(parseRelativeNoteLink("bad%ZZ.md", "day.md")).toEqual({
+      path: "bad%ZZ.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("bad%.md", "day.md")).toEqual({
+      path: "bad%.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("bad%2.md", "day.md")).toEqual({
+      path: "bad%2.md",
+      fragment: "",
+    });
+  });
+
+  it("resolves paths containing spaces", () => {
+    expect(parseRelativeNoteLink("my note.md", "day.md")).toEqual({
+      path: "my note.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("folder/my note.md", "day.md")).toEqual({
+      path: "folder/my note.md",
+      fragment: "",
+    });
+  });
+
+  it("resolves URL-encoded paths", () => {
+    expect(parseRelativeNoteLink("my%20note.md", "day.md")).toEqual({
+      path: "my note.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("folder%20name/other.md", "day.md")).toEqual({
+      path: "folder name/other.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("other.md#some%20heading", "day.md")).toEqual({
+      path: "other.md",
+      fragment: "some%20heading",
+    });
+  });
+
+  it("resolves special characters and strips note query strings", () => {
+    expect(parseRelativeNoteLink("My Note.md", "day.md")).toEqual({
+      path: "My Note.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("notes/My Note.md", "day.md")).toEqual({
+      path: "notes/My Note.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("Caf%C3%A9.md", "day.md")).toEqual({
+      path: "Café.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("%E6%97%A5%E6%9C%AC%E8%AA%9E.md", "day.md")).toEqual({
+      path: "日本語.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("%F0%9F%9A%80%20launch.md", "day.md")).toEqual({
+      path: "🚀 launch.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("notes/[draft] (v1)'s %25.md", "day.md")).toEqual({
+      path: "notes/[draft] (v1)'s %.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("other%23note.md", "day.md")).toEqual({
+      path: "other#note.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("other.md?foo=bar", "day.md")).toEqual({
+      path: "other.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("other.md?foo=bar#heading", "day.md")).toEqual({
+      path: "other.md",
+      fragment: "heading",
+    });
+  });
+});
+
+describe("findNoteIdForPath", () => {
+  const notes = [
+    { id: "one", sourcePath: "other.md", title: "Other" },
+    { id: "two", sourcePath: "Folder/Other.md", title: "Other" },
+    { id: "three", title: "Untitled fallback" },
+  ];
+
+  it("matches vault paths case-insensitively", () => {
+    expect(findNoteIdForPath(notes, "other.md")).toBe("one");
+    expect(findNoteIdForPath(notes, "OTHER.MD")).toBe("one");
+    expect(findNoteIdForPath(notes, "folder/other.md")).toBe("two");
+  });
+
+  it("prefers an exact-case path before the case-insensitive fallback", () => {
+    const ambiguous = [
+      { id: "different-case", sourcePath: "NOTE.md", title: "NOTE" },
+      { id: "exact", sourcePath: "note.md", title: "note" },
+    ];
+    expect(findNoteIdForPath(ambiguous, "note.md")).toBe("exact");
+    expect(findNoteIdForPath(ambiguous, "NoTe.md")).toBe("different-case");
+  });
+
+  it("returns undefined for nonexistent local notes instead of crashing", () => {
+    expect(findNoteIdForPath(notes, "missing.md")).toBeUndefined();
+    expect(findNoteIdForPath([], "other.md")).toBeUndefined();
   });
 });

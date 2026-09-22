@@ -33,6 +33,70 @@ function stripFrontmatter(value: string): string {
   return value;
 }
 
+export interface RelativeNoteLink {
+  /** Vault-relative path of the destination note, e.g. `folder/other.md`. */
+  path: string;
+  /** Raw fragment after `#`, without the leading `#`; empty when absent. */
+  fragment: string;
+}
+
+/**
+ * Resolves a rendered Markdown link destination to a vault note, after Markdown has
+ * already determined the destination. Returns undefined for anything that is not a
+ * relative `.md` note link: external URLs, `mailto:`, absolute paths, fragment-only
+ * links, and non-Markdown files are left to their default handling.
+ */
+export function parseRelativeNoteLink(
+  destination: string,
+  noteSourcePath: string | undefined,
+): RelativeNoteLink | undefined {
+  const trimmed = destination.trim();
+  if (!trimmed) return;
+  if (trimmed.startsWith("#")) return;
+  if (/^[a-z][a-z\d+.-]*:/i.test(trimmed)) return;
+  if (trimmed.startsWith("/") || trimmed.startsWith("\\")) return;
+  const hashIndex = trimmed.indexOf("#");
+  const fragment = hashIndex === -1 ? "" : trimmed.slice(hashIndex + 1);
+  const beforeHash = hashIndex === -1 ? trimmed : trimmed.slice(0, hashIndex);
+  const queryIndex = beforeHash.indexOf("?");
+  const pathPart = queryIndex === -1 ? beforeHash : beforeHash.slice(0, queryIndex);
+  if (!pathPart || !/\.(?:md|markdown)$/i.test(pathPart)) return;
+  let decodedPath: string;
+  try {
+    decodedPath = decodeURIComponent(pathPart);
+  } catch {
+    decodedPath = pathPart;
+  }
+  const resolved = resolveRelativePath(dirname(noteSourcePath ?? ""), decodedPath);
+  if (!resolved) return;
+  return { path: resolved, fragment };
+}
+
+export interface NotePathCandidate {
+  id: string;
+  sourcePath?: string;
+  title?: string;
+}
+
+/**
+ * Finds the note matching a vault-relative path from `parseRelativeNoteLink`,
+ * comparing case-insensitively like the rest of the vault. Returns undefined when
+ * the destination note does not exist, so callers can fail gracefully.
+ */
+export function findNoteIdForPath(notes: NotePathCandidate[], path: string): string | undefined {
+  const key = path.toLocaleLowerCase();
+  const pathFor = (note: NotePathCandidate): string => {
+    const sourcePath = note.sourcePath?.trim();
+    if (sourcePath) return sourcePath;
+    const fallback = (note.title || "Untitled").replace(/[\\/]+/g, "-").trim() || "Untitled";
+    return `${fallback}.md`;
+  };
+  return (
+    notes.find((note) => pathFor(note) === path) ??
+    notes.find((note) => pathFor(note).toLocaleLowerCase() === key)
+  )?.id;
+}
+
 export function resolveLocalAttachmentUrl(
   destination: string,
   noteSourcePath: string | undefined,

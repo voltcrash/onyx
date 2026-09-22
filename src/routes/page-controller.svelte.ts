@@ -67,9 +67,11 @@ import {
   attachmentMarkdown,
   continueListOnEnter,
   DEFAULT_ATTACHMENT_FOLDER,
+  findNoteIdForPath,
   indentEditorLines,
   wrapSelectionWith,
   normalizeAttachmentFolder,
+  parseRelativeNoteLink,
   pasteUrlOverSelection,
   resolveLocalAttachmentUrl,
   rewriteLocalLinks,
@@ -149,6 +151,7 @@ import type { FolderIcon } from "$lib/folder-icons";
 import { outputFileName } from "$lib/output-utils";
 import type { MarkdownTransferFile } from "$lib/markdown-transfer";
 import { onMount, tick } from "svelte";
+import { pushState as pushAppState, replaceState as replaceAppState } from "$app/navigation";
 
 const NOTE_PAGE_SIZE = 100;
 const PREVIEW_DELAY_MS = 120;
@@ -158,6 +161,20 @@ const DEFERRED_STARTUP_DELAY_MS = 8_000;
 const NARROW_VIEWPORT = "(max-width: 900px)";
 const EDITOR_HISTORY_LIMIT = 200;
 const MARKDOWN_EXTENSION = ".md";
+const SVELTEKIT_STATES_KEY = "sveltekit:states";
+
+function noteIdFromHistoryState(state: unknown): string | undefined {
+  if (!state || typeof state !== "object") return;
+  const record = state as Record<string, unknown>;
+  const pageState =
+    record.onyxNoteId !== undefined
+      ? record
+      : record[SVELTEKIT_STATES_KEY] && typeof record[SVELTEKIT_STATES_KEY] === "object"
+        ? (record[SVELTEKIT_STATES_KEY] as Record<string, unknown>)
+        : undefined;
+  const noteId = pageState?.onyxNoteId;
+  return typeof noteId === "string" && noteId ? noteId : undefined;
+}
 
 const noteFormatPaletteNames: Record<NoteFormat, string> = {
   markdown: "Markdown",
@@ -1179,7 +1196,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const stopThemeWatch = watchSystemTheme(() => {
       if (theme === "system") resolvedTheme = applyTheme(theme);
     });
-    void openVault().finally(scheduleServiceWorkerRegistration);
+    void openVault()
+      .then(() => {
+        try {
+          replaceAppState("", { onyxNoteId: activeNoteId });
+        } catch {
+          // History is best-effort; the app works without it.
+        }
+      })
+      .finally(scheduleServiceWorkerRegistration);
     if (isOnline) scheduleGithubRestore();
     else githubState = "disconnected";
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -1202,16 +1227,23 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden" && markdown !== lastSavedMarkdown) void saveDraft();
     };
+    const onPopState = (event: PopStateEvent) => {
+      const noteId = noteIdFromHistoryState(event.state);
+      if (typeof noteId !== "string" || !noteId || noteId === activeNoteId) return;
+      void selectNote(noteId);
+    };
     window.addEventListener("beforeunload", onBeforeUnload);
     window.addEventListener("keydown", onKeydown);
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
+    window.addEventListener("popstate", onPopState);
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       window.removeEventListener("beforeunload", onBeforeUnload);
       window.removeEventListener("keydown", onKeydown);
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
+      window.removeEventListener("popstate", onPopState);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       narrowQuery?.removeEventListener("change", onViewportChange);
       stopThemeWatch();
@@ -1261,7 +1293,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       githubRestoreTimer = undefined;
     }
     const result = new URLSearchParams(location.search).get("github");
-    if (result) history.replaceState(history.state, "", location.pathname + location.hash);
+    if (result) {
+      try {
+        replaceAppState(`${location.pathname}${location.hash}`, {
+          onyxNoteId: noteIdFromHistoryState(history.state) ?? activeNoteId,
+        });
+      } catch {
+        // History is best-effort; the callback can still be handled.
+      }
+    }
     if (result && result !== "connected") {
       githubMessage =
         result === "configuration"
@@ -1844,6 +1884,83 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
     await loadNote(id);
     recentNoteIds = [id, ...recentNoteIds.filter((recentId) => recentId !== id)].slice(0, 8);
+  }
+
+  async function scrollToNoteFragment(fragment: string): Promise<void> {
+    if (!fragment) return;
+    await tick();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    let decoded = fragment;
+    try {
+      decoded = decodeURIComponent(fragment);
+    } catch {
+      decoded = fragment;
+    }
+    const renderedPane = document.querySelector<HTMLElement>(".rendered-pane");
+    const elementsWithIds = renderedPane?.querySelectorAll<HTMLElement>("[id]");
+    for (const candidate of [
+      decoded,
+      `user-content-${decoded}`,
+      fragment,
+      `user-content-${fragment}`,
+    ]) {
+      if (!candidate) continue;
+      const element =
+        [...(elementsWithIds ?? [])].find(
+          (candidateElement) => candidateElement.id === candidate,
+        ) ?? (renderedPane ? undefined : document.getElementById(candidate));
+      if (element) {
+        element.scrollIntoView();
+        return;
+      }
+    }
+    const normalizedFragment = decoded.trim().toLocaleLowerCase();
+    const heading = [
+      ...(renderedPane?.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6") ?? []),
+    ].find((candidate) => candidate.textContent?.trim().toLocaleLowerCase() === normalizedFragment);
+    heading?.scrollIntoView();
+  }
+
+  /**
+   * Opens a relative Markdown link (`other.md`, `./other.md`, `../other.md`,
+   * `other.md#heading`) as its Onyx note. The rendered click handler already
+   * prevented the browser navigation, so missing notes fail gracefully by doing
+   * nothing instead of hitting a SvelteKit 404.
+   */
+  async function openNoteLink(href: string): Promise<void> {
+    const parsed = parseRelativeNoteLink(href, activeNoteSourcePath);
+    if (!parsed) return;
+    let notes: NoteMetadata[];
+    try {
+      notes = vault ? await vault.listNotes() : paletteNotes;
+    } catch {
+      notes = paletteNotes;
+    }
+    const id = findNoteIdForPath(notes, parsed.path);
+    if (!id) return;
+    if (id === activeNoteId) {
+      if (parsed.fragment) {
+        if (!markdownModule) await loadMarkdownModule().catch(() => undefined);
+        await scrollToNoteFragment(parsed.fragment);
+      }
+      return;
+    }
+    const sourceId = activeNoteId;
+    try {
+      replaceAppState("", { onyxNoteId: sourceId });
+    } catch {
+      // History is best-effort; navigation still works without it.
+    }
+    await selectNote(id);
+    if (activeNoteId !== id) return;
+    try {
+      pushAppState("", { onyxNoteId: id });
+    } catch {
+      // Ignore history failures after a successful navigation.
+    }
+    if (parsed.fragment) {
+      await scrollToNoteFragment(parsed.fragment);
+    }
   }
 
   async function refreshFileTree(): Promise<NoteMetadata[]> {
@@ -4126,6 +4243,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     disconnectGitHub,
     moveNoteFocus,
     selectNote,
+    openNoteLink,
     createFile: createNote,
     createFolder,
     renameFile,

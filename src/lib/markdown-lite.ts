@@ -279,7 +279,16 @@ function renderInline(value: string, resolveLocalUrl?: LocalUrlResolver): string
 function safeHref(destination: string, resolveLocalUrl?: LocalUrlResolver): string | undefined {
   const resolved = resolveLocalUrl?.(destination);
   if (resolved) return escapeHtml(resolved);
-  return /^(?:https?:|mailto:|#|\/)/i.test(destination) ? escapeHtml(destination) : undefined;
+  if (/^(?:https?:|mailto:|#|\/)/i.test(destination)) return escapeHtml(destination);
+  // Preserve relative Markdown note links for the preview click handler, which resolves
+  // them against the current note. Other relative files stay plain text in this fallback.
+  if (
+    !/^[a-z][a-z\d+.-]*:/i.test(destination) &&
+    /\.(?:md|markdown)(?:[?#]|$)/i.test(destination)
+  ) {
+    return escapeHtml(destination);
+  }
+  return undefined;
 }
 
 function escapeHtml(value: string): string {
