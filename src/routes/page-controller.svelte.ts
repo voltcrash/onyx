@@ -145,6 +145,7 @@ import {
   type ThemePreference,
 } from "$lib/theme";
 import { findTextMatches, type FindMatch } from "$lib/find-replace";
+import type { FolderIcon } from "$lib/folder-icons";
 import { outputFileName } from "$lib/output-utils";
 import type { MarkdownTransferFile } from "$lib/markdown-transfer";
 import { onMount, tick } from "svelte";
@@ -2007,6 +2008,40 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       await relocateFolder(path, nextPath);
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The folder could not be renamed.";
+    }
+  }
+
+  async function setFolderIcon(path: string, icon?: FolderIcon): Promise<void> {
+    if (!vault || transferState === "working" || isAttachmentFolderPath(path)) return;
+    try {
+      const existingFolders = await vault.listFolders();
+      const current = existingFolders.find((folder) => folder.path === path);
+      if (!current && !icon) return;
+      if (current?.icon === icon) return;
+      const now = new Date().toISOString();
+      const nextFolders = current
+        ? existingFolders.map((folder) => {
+            if (folder.path !== path) return folder;
+            const next = { ...folder, updatedAt: now };
+            if (icon) next.icon = icon;
+            else delete next.icon;
+            return next;
+          })
+        : [
+            ...existingFolders,
+            {
+              id: crypto.randomUUID(),
+              path,
+              createdAt: now,
+              updatedAt: now,
+              icon,
+            },
+          ];
+      await vault.saveFolders(nextFolders);
+      folders = nextFolders;
+      storageError = "";
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "The folder icon could not be saved.";
     }
   }
 
@@ -4095,6 +4130,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     createFolder,
     renameFile,
     renameFolder,
+    setFolderIcon,
     moveFile,
     moveFolder,
     deleteFile,

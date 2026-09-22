@@ -789,6 +789,30 @@ test("creates, moves, and manages folders and files", async ({ page }) => {
   await page.getByRole("button", { name: "Close trash" }).click();
 });
 
+test("sets and remembers a custom folder icon", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  await page.getByRole("button", { name: "New folder", exact: true }).click();
+  const folderName = page.getByRole("textbox", { name: "Folder name" });
+  await folderName.fill("Ideas");
+  await folderName.press("Enter");
+
+  const folder = page.getByRole("button", { name: "Ideas", exact: true });
+  await folder.click({ button: "right" });
+  const folderMenu = page.getByRole("menu", { name: "File actions" });
+  await folderMenu.getByRole("menuitem", { name: "Set icon", exact: true }).click();
+  const iconMenu = page.getByRole("menu", { name: "Set folder icon" });
+  await iconMenu.getByRole("menuitemradio", { name: "Idea", exact: true }).click();
+
+  await expect(folder).toHaveAttribute("data-folder-icon", "lightbulb");
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Ideas", exact: true })).toHaveAttribute(
+    "data-folder-icon",
+    "lightbulb",
+  );
+});
+
 // Trash lives outside the file tree and opens from the command palette.
 async function openTrash(page: Page) {
   await page.getByRole("button", { name: "Open the command palette" }).click();
@@ -1821,6 +1845,10 @@ test("stores pasted images in the attachments folder with GitHub-style links", a
   );
   await expect(page.locator(".rendered-pane img[src^='blob:']")).toHaveCount(1);
   await expect(page.locator(".attachment-folder-row")).toHaveText("attachments");
+  await expect(page.locator(".attachment-folder-row")).toHaveAttribute(
+    "data-folder-icon",
+    "paperclip",
+  );
   await editor.press("ControlOrMeta+S");
   await expect(page.getByText("Unsaved", { exact: true })).toBeHidden();
   await expect(page.getByText("Saving…", { exact: true })).toBeHidden();
@@ -1854,6 +1882,10 @@ test("stores pasted images in the attachments folder with GitHub-style links", a
     /!\[image-\d{8}-\d{6}\.png\]\(attachments\/image-\d{8}-\d{6}\.png\)$/,
   );
   await expect(page.locator(".attachment-folder-row")).toHaveText("attachments");
+  await expect(page.locator(".attachment-folder-row")).toHaveAttribute(
+    "data-folder-icon",
+    "paperclip",
+  );
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByLabel("Folder", { exact: true }).fill("media");

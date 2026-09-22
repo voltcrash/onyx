@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { ChevronDown, ChevronRight, Copy, Download, ExternalLink, FilePlus2, FileText, Folder, FolderPlus, Image, Paperclip, HardDrive, LoaderCircle, Lock, LockOpen, LogOut, PanelLeft, PanelRight, Pencil, Plus, Search, Settings, Trash2, Type, Undo2, X } from '@lucide/svelte';
+	import { Archive, Bookmark, BriefcaseBusiness, CalendarDays, Camera, ChevronDown, ChevronRight, Code2, Copy, Download, ExternalLink, FilePlus2, FileText, Folder, FolderPlus, HardDrive, Heart, House, Image, Lightbulb, LoaderCircle, Lock, LockOpen, LogOut, Music2, Palette, Paperclip, PanelLeft, PanelRight, Pencil, Plane, Plus, Rocket, Search, Settings, Sparkles, Star, Tag, Trash2, Type, Undo2, X, type LucideIcon } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
+	import { folderIconOptions, isFolderIcon, type FolderIcon } from '$lib/folder-icons';
 	import type { GithubUser } from '$lib/github';
 	import type { VaultDescriptor } from '$lib/storage/registry';
 	import type { AttachmentMetadata, FolderMetadata, NoteMetadata, VaultSearchResult } from '$lib/storage/types';
@@ -69,6 +70,7 @@
 		onCreateFolder: (parentPath: string, name: string) => void;
 		onRenameFile: (id: string, name: string) => void;
 		onRenameFolder: (path: string, name: string) => void;
+		onSetFolderIcon: (path: string, icon?: FolderIcon) => void;
 		onMoveFile: (id: string, folderPath: string) => void;
 		onMoveFolder: (path: string, parentPath: string) => void;
 		onDeleteFile: (id: string) => void;
@@ -105,7 +107,7 @@
 	let {
 		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, attachments, attachmentFolder, attachmentsHidden, onOpenAttachment, onOpenAttachmentInNewTab, onDeleteAttachment, searchQuery, findOpen, findQuery, findReplacement, findMatchCase, findWholeWord, findMatchCount, activeFindMatch, findCanEdit, notePage, notePageCount, saveState, notesLoaded, paletteOpen, searchPending, paletteItems, settingsOpen,
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, wordCount, readingMinutes, contentWidth,
-		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSidebarDragStart, sidebarSide, onSidebarSideChange, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, trashedNotes, trashOpen, onToggleTrash, onRestoreFile, onPurgeFile, onEmptyTrash, onCopyFilePath, onCopyFileAs, onExportFileAs, onSearch,
+		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSidebarDragStart, sidebarSide, onSidebarSideChange, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onSetFolderIcon, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, trashedNotes, trashOpen, onToggleTrash, onRestoreFile, onPurgeFile, onEmptyTrash, onCopyFilePath, onCopyFileAs, onExportFileAs, onSearch,
 		onFindQueryChange, onFindReplacementChange, onFindMatchCaseChange, onFindWholeWordChange, onFindPrevious, onFindNext, onFindReplace, onFindReplaceAll, onCloseFind,
 		onOpenPalette, onClosePalette, onOpenSettings, onOpenStorageSettings, onMoveNoteFocus, onSelectNote, onChangePage,
 		onContentWidthChange
@@ -127,7 +129,7 @@
 		},
 	]);
 	type TreeRow =
-		| { kind: 'folder'; key: string; path: string; label: string; depth: number; expanded: boolean; hasChildren: boolean; attachments: boolean }
+		| { kind: 'folder'; key: string; path: string; label: string; depth: number; expanded: boolean; hasChildren: boolean; attachments: boolean; icon?: FolderIcon | 'paperclip' }
 		| { kind: 'attachment'; key: string; path: string; label: string; depth: number; attachment: AttachmentMetadata }
 		| { kind: 'file'; key: string; path: string; label: string; depth: number; result: VaultSearchResult };
 	type ContextMenu =
@@ -147,7 +149,26 @@
 
 	let collapsedFolders = $state<Set<string>>(new Set());
 	let contextMenu = $state<ContextMenu>();
-	let contextSubmenu = $state<'export' | 'copy'>();
+	const folderIconComponents: Record<FolderIcon, LucideIcon> = {
+		archive: Archive,
+		bookmark: Bookmark,
+		briefcase: BriefcaseBusiness,
+		calendar: CalendarDays,
+		camera: Camera,
+		code: Code2,
+		heart: Heart,
+		home: House,
+		lightbulb: Lightbulb,
+		music: Music2,
+		palette: Palette,
+		plane: Plane,
+		rocket: Rocket,
+		sparkles: Sparkles,
+		star: Star,
+		tag: Tag,
+	};
+
+	let contextSubmenu = $state<'export' | 'copy' | 'folder-icon'>();
 	let naming = $state<NamingState>();
 	let draftName = $state('');
 	let namingInput = $state<HTMLInputElement>();
@@ -204,8 +225,18 @@
 		return basename(path) || path;
 	}
 
+	function folderIconForPath(path: string): FolderIcon | undefined {
+		const icon = folders.find((folder) => folder.path === path)?.icon;
+		return isFolderIcon(icon) ? icon : undefined;
+	}
+
+	function folderIconComponent(icon: FolderIcon | 'paperclip' | undefined): LucideIcon {
+		return icon === 'paperclip' ? Paperclip : icon ? folderIconComponents[icon] : Folder;
+	}
+
 	function buildTreeRows(): TreeRow[] {
 		const folderPaths = new Set<string>();
+		const folderIcons = new Map(folders.map((folder) => [folder.path, folder.icon]));
 		const notesByFolder = new Map<string, VaultSearchResult[]>();
 		const addFolder = (path: string): void => {
 			let current = '';
@@ -244,7 +275,8 @@
 			for (const path of childFolders) {
 				const hasChildren = [...folderPaths].some((candidate) => parentPath(candidate) === path) || Boolean(notesByFolder.get(path)?.length) || Boolean(attachmentsByFolder.get(path)?.length);
 				const expanded = !collapsedFolders.has(path);
-				rows.push({ kind: 'folder', key: `folder:${path}`, path, label: folderLabel(path), depth, expanded, hasChildren, attachments: isAttachmentPath(path) });
+				const customIcon = folderIcons.get(path);
+				rows.push({ kind: 'folder', key: `folder:${path}`, path, label: folderLabel(path), depth, expanded, hasChildren, attachments: isAttachmentPath(path), icon: isFolderIcon(customIcon) ? customIcon : isAttachmentPath(path) ? 'paperclip' : undefined });
 				if (expanded) visit(path, depth + 1);
 			}
 			const childNotes = (notesByFolder.get(parent) ?? []).toSorted((left, right) =>
@@ -596,6 +628,12 @@
 		contextAction(() => onDeleteFolder(menu.path));
 	}
 
+	function contextSetFolderIcon(icon?: FolderIcon): void {
+		const menu = contextMenu;
+		if (menu?.kind !== 'folder') return;
+		contextAction(() => onSetFolderIcon(menu.path, icon));
+	}
+
 	function contextOpenFile(): void {
 		const menu = contextMenu;
 		if (menu?.kind !== 'file') return;
@@ -813,6 +851,24 @@
 	</div>
 {/snippet}
 
+{#snippet folderIconSubmenu()}
+	<div class="file-context-group" role="none" onmouseenter={() => (contextSubmenu = 'folder-icon')} onmouseleave={() => (contextSubmenu = undefined)}>
+		<button role="menuitem" aria-haspopup="menu" aria-expanded={contextSubmenu === 'folder-icon'} disabled={transferState === 'working'} onclick={() => (contextSubmenu = 'folder-icon')}>
+			<Palette size={15} /><span>Set icon</span><ChevronRight size={14} />
+		</button>
+		{#if contextSubmenu === 'folder-icon'}
+			{@const folderPath = contextMenu?.kind === 'folder' ? contextMenu.path : ''}
+			<div class="file-context-menu file-context-submenu folder-icon-submenu" role="menu" aria-label="Set folder icon">
+				<button class="folder-icon-default" role="menuitemradio" aria-checked={folderIconForPath(folderPath) === undefined} title="Use the default folder icon" onclick={() => contextSetFolderIcon()}><Folder size={16} /><span>Default folder icon</span></button>
+				{#each folderIconOptions as option (option.id)}
+					{@const Icon = folderIconComponents[option.id]}
+					<button class="folder-icon-option" role="menuitemradio" aria-checked={folderIconForPath(folderPath) === option.id} aria-label={option.label} title={option.label} onclick={() => contextSetFolderIcon(option.id)}><Icon size={17} /></button>
+				{/each}
+			</div>
+		{/if}
+	</div>
+{/snippet}
+
 <aside class="sidebar" aria-label="Notes" oncontextmenu={openSidebarContextMenu} bind:this={sidebarElement} ontouchstart={handleSidebarTouchStart} ontouchend={handleSidebarTouchEnd} ontouchcancel={() => (touchStart = undefined)}>
 	<div class="notes-heading"><div class="notes-title"><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions"><button class="icon-button search-palette-button" type="button" aria-label="Open the command palette" aria-haspopup="listbox" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Search notes and commands (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><Search size={19} aria-hidden="true" /></button><button class="icon-button sidebar-toggle" onpointerdown={onSidebarDragStart} aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button></div></div>
 	{#if paletteOpen}
@@ -887,22 +943,24 @@
 				{:else}
 					{#each treeRows as row (row.key)}
 						{#if row.kind === 'folder' && row.attachments}
-							<button class="file-tree-row folder-row attachment-folder-row" data-folder-path={row.path} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Attachments — right-click or long-press to rename or delete" onclick={() => handleFolderRowClick(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)} ontouchstart={(event) => { const path = row.path; handleRowTouchStart(event, (x, y) => showFolderContextMenu(path, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd}>
-								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Paperclip size={16} /><span class="file-tree-name">{row.label}</span>
+							{@const Icon = folderIconComponent(row.icon)}
+							<button class="file-tree-row folder-row attachment-folder-row" data-folder-path={row.path} data-folder-icon={row.icon ?? 'paperclip'} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Attachments — right-click or long-press to rename or delete" onclick={() => handleFolderRowClick(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)} ontouchstart={(event) => { const path = row.path; handleRowTouchStart(event, (x, y) => showFolderContextMenu(path, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd}>
+								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Icon size={16} /><span class="file-tree-name">{row.label}</span>
 							</button>
 						{:else if row.kind === 'attachment'}
 							<button class="file file-tree-row attachment-row" data-attachment-path={row.path} style={`--tree-depth: ${row.depth}`} title={`Open ${row.label}`} onclick={() => onOpenAttachment(row.attachment.id)} oncontextmenu={(event) => openAttachmentContextMenu(event, row.attachment)}>
 								{#if row.attachment.type.startsWith('image/')}<Image size={16} />{:else}<Paperclip size={16} />{/if}<span><strong>{row.label}</strong></span>
 							</button>
 						{:else if row.kind === 'folder'}
-							<button class="file-tree-row folder-row" class:drop-target={dropTargetPath === row.path} class:dragging={draggedEntry?.kind === 'folder' && draggedEntry.path === row.path} data-folder-path={row.path} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Drag to move folder — right-click or long-press for options" draggable="true" disabled={transferState === 'working'} onclick={() => handleFolderRowClick(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)} ontouchstart={(event) => { const path = row.path; handleRowTouchStart(event, (x, y) => showFolderContextMenu(path, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd} ondragstart={(event) => startDrag(event, { kind: 'folder', path: row.path })} ondragend={endDrag} ondragover={(event) => keepDropTarget(event, row.path)} ondragleave={(event) => clearDropTarget(event, row.path)} ondrop={(event) => dropOnFolder(event, row.path)}>
-								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Folder size={16} /><span class="file-tree-name">{row.label}</span>
+							{@const Icon = folderIconComponent(row.icon)}
+							<button class="file-tree-row folder-row" class:drop-target={dropTargetPath === row.path} class:dragging={draggedEntry?.kind === 'folder' && draggedEntry.path === row.path} data-folder-path={row.path} data-folder-icon={row.icon ?? 'folder'} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Drag to move folder — right-click or long-press for options" draggable="true" disabled={transferState === 'working'} onclick={() => handleFolderRowClick(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)} ontouchstart={(event) => { const path = row.path; handleRowTouchStart(event, (x, y) => showFolderContextMenu(path, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd} ondragstart={(event) => startDrag(event, { kind: 'folder', path: row.path })} ondragend={endDrag} ondragover={(event) => keepDropTarget(event, row.path)} ondragleave={(event) => clearDropTarget(event, row.path)} ondrop={(event) => dropOnFolder(event, row.path)}>
+								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Icon size={16} /><span class="file-tree-name">{row.label}</span>
 							</button>
 						{:else}
 							<button class="file file-tree-row" class:active={row.result.note.id === activeNoteId} class:dragging={draggedEntry?.kind === 'file' && draggedEntry.id === row.result.note.id} data-file-path={row.path} style={`--tree-depth: ${row.depth}`} aria-current={row.result.note.id === activeNoteId ? 'true' : undefined} title="Drag to move file — right-click or long-press for options" draggable="true" disabled={transferState === 'working'} onkeydown={onMoveNoteFocus} onclick={() => handleFileRowClick(row.result.note.id)} oncontextmenu={(event) => openFileContextMenu(event, row.result)} ontouchstart={(event) => { const result = row.result; handleRowTouchStart(event, (x, y) => showFileContextMenu(result, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd} ondragstart={(event) => startDrag(event, { kind: 'file', id: row.result.note.id, path: row.path })} ondragend={endDrag}>
 												<FileText size={16} /><span>{#if naming?.action === 'rename-file' && naming.id === row.result.note.id}<input class="file-inline-input" bind:this={namingInput} bind:value={draftName} aria-label="File name" spellcheck="false" onblur={commitNaming} onkeydown={handleNamingKeydown} />{:else}<strong>{row.label}</strong>{/if}</span>{#if row.result.note.id === activeNoteId}<i></i>{/if}
 							</button>
-						{/if}
+					{/if}
 					{/each}
 				{/if}
 			</nav>
@@ -917,6 +975,9 @@
 						{#if contextMenu.kind === 'folder'}
 							<div class="file-context-divider"></div>
 							<button role="menuitem" disabled={transferState === 'working'} onclick={contextRenameFolder}><Pencil size={15} /><span>Rename</span></button>
+							{#if !isAttachmentPath(contextMenu.path)}
+								{@render folderIconSubmenu()}
+							{/if}
 							<button role="menuitem" onclick={contextCopyPath}><Copy size={15} /><span>Copy relative path</span></button>
 							<button role="menuitem" class="danger" disabled={transferState === 'working'} onclick={contextDeleteFolder}><Trash2 size={15} /><span>Delete</span></button>
 						{:else}
