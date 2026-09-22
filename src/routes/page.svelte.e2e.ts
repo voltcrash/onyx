@@ -1848,7 +1848,7 @@ test("switches repositories with mouse back and forward buttons", async ({ page 
   await sidebar.hover();
   async function pressMouseButton(button: 3 | 4): Promise<void> {
     await sidebar.evaluate((element, button) => {
-      for (const type of ["mousedown", "mouseup", "auxclick"]) {
+      for (const type of ["pointerdown", "mousedown", "mouseup", "auxclick"]) {
         element.dispatchEvent(new MouseEvent(type, { button, bubbles: true, cancelable: true }));
       }
     }, button);

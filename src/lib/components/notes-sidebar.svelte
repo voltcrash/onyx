@@ -712,11 +712,27 @@
 	function handleSidebarMouseButton(event: MouseEvent): void {
 		if (event.button !== 3 && event.button !== 4) return;
 		if (isSwipeExempt(event.target)) return;
-		// Keep the browser from navigating history for these buttons over the sidebar.
+		// History navigation is the default action of the press on some
+		// platforms and of the release on others, so suppress every stage and
+		// only switch on mousedown to avoid double-stepping.
 		event.preventDefault();
 		if (event.type !== 'mousedown') return;
 		if (switchVaultBy(event.button === 4 ? 1 : -1)) resetSwipeGesture();
 	}
+
+	// Capture every stage of the side-button press; the navigation default can
+	// fire on pointerdown (before mousedown bubbles), and Svelte's delegated
+	// bubble listeners are too late to suppress it.
+	$effect(() => {
+		const element = sidebarElement;
+		if (!element) return;
+		const types = ['pointerdown', 'mousedown', 'mouseup', 'auxclick'] as const;
+		const listener = handleSidebarMouseButton as EventListener;
+		for (const type of types) element.addEventListener(type, listener, { passive: false, capture: true });
+		return () => {
+			for (const type of types) element.removeEventListener(type, listener, { capture: true });
+		};
+	});
 
 	function handleSidebarTouchStart(event: TouchEvent): void {
 		touchStart = event.touches.length === 1 && !isSwipeExempt(event.target) ? { x: event.touches[0].clientX, y: event.touches[0].clientY } : undefined;
@@ -765,7 +781,7 @@
 	</div>
 {/snippet}
 
-<aside class="sidebar" aria-label="Notes" oncontextmenu={openSidebarContextMenu} bind:this={sidebarElement} onmousedown={handleSidebarMouseButton} onmouseup={handleSidebarMouseButton} onauxclick={handleSidebarMouseButton} ontouchstart={handleSidebarTouchStart} ontouchend={handleSidebarTouchEnd} ontouchcancel={() => (touchStart = undefined)}>
+<aside class="sidebar" aria-label="Notes" oncontextmenu={openSidebarContextMenu} bind:this={sidebarElement} ontouchstart={handleSidebarTouchStart} ontouchend={handleSidebarTouchEnd} ontouchcancel={() => (touchStart = undefined)}>
 	<div class="notes-heading"><div class="notes-title"><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions"><button class="icon-button search-palette-button" type="button" aria-label="Open the command palette" aria-haspopup="listbox" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Search notes and commands (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><Search size={19} aria-hidden="true" /></button><button class="icon-button sidebar-toggle" onpointerdown={onSidebarDragStart} aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button></div></div>
 	{#if paletteOpen}
 		<CommandPalette items={paletteItems} controls={paletteControls} query={searchQuery} loading={searchPending} bind:searchInput onQueryChange={onSearch} onClose={onClosePalette} />
