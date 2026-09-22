@@ -596,46 +596,102 @@
 
 	const SWIPE_WHEEL_THRESHOLD = 60;
 	const SWIPE_TOUCH_THRESHOLD = 50;
-	const SWIPE_GESTURE_IDLE_MS = 180;
+	const SWIPE_GESTURE_IDLE_MS = 240;
+	const SWIPE_ANIMATION_MS = 300;
+	const SWIPE_ANIMATION_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
 	let sidebarElement = $state<HTMLElement>();
 	let swipePanel = $state<HTMLElement>();
 	let wheelDistance = 0;
 	let wheelLocked = false;
+	let lastSwipeStep: 1 | -1 | undefined;
 	let wheelIdleTimer: ReturnType<typeof setTimeout> | undefined;
+	let swipeAnimation: Animation | undefined;
+	let shownVaultId = activeVaultId;
 	let touchStart: { x: number; y: number } | undefined;
 
 	function isSwipeExempt(target: EventTarget | null): boolean {
 		return target instanceof Element && Boolean(target.closest('input, textarea, select, [contenteditable], [role="menu"], .file-context-menu'));
 	}
 
-	function switchVaultBy(step: 1 | -1): void {
-		if (transferState === 'working' || vaults.length < 2) return;
+	function prefersReducedMotion(): boolean {
+		return Boolean(globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+	}
+
+	// The transition runs after the new vault renders, so the incoming workspace
+	// slides in instead of the outgoing one flashing mid-swap.
+	function playSwipeTransition(step: 1 | -1): void {
+		const panel = swipePanel;
+		if (!panel || prefersReducedMotion()) return;
+		swipeAnimation?.cancel();
+		void tick().then(() => {
+			if (!panel.isConnected) return;
+			swipeAnimation?.cancel();
+			swipeAnimation = panel.animate(
+				[
+					{ transform: `translateX(${step * 48}px)`, opacity: 0.25 },
+					{ transform: 'translateX(0)', opacity: 1 },
+				],
+				{ duration: SWIPE_ANIMATION_MS, easing: SWIPE_ANIMATION_EASING },
+			);
+			swipeAnimation.onfinish = () => {
+				if (swipeAnimation?.playState === 'finished') swipeAnimation = undefined;
+			};
+		});
+	}
+
+	// Any vault change (swipe, dots, menu) glides in from the direction of travel.
+	$effect(() => {
+		const current = activeVaultId;
+		const previous = shownVaultId;
+		if (current === previous) return;
+		const from = vaults.findIndex((vault) => vault.id === previous);
+		const to = vaults.findIndex((vault) => vault.id === current);
+		shownVaultId = current;
+		if (from === -1 || to === -1 || from === to) return;
+		playSwipeTransition(to > from ? 1 : -1);
+	});
+
+	function resetSwipeGesture(): void {
+		wheelDistance = 0;
+		wheelLocked = false;
+		lastSwipeStep = undefined;
+	}
+
+	function switchVaultBy(step: 1 | -1): boolean {
+		if (transferState === 'working' || vaults.length < 2) return false;
 		const index = vaults.findIndex((vault) => vault.id === activeVaultId);
 		const next = vaults[index + step];
-		if (!next) return;
+		if (!next) return false;
 		onSelectVault(next.id);
-		if (!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-			swipePanel?.animate(
-				[{ transform: `translateX(${step * 28}px)`, opacity: 0 }, { transform: 'translateX(0)', opacity: 1 }],
-				{ duration: 220, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
-			);
-		}
+		return true;
 	}
 
 	function handleSidebarWheel(event: WheelEvent): void {
 		if (Math.abs(event.deltaX) <= Math.abs(event.deltaY) || isSwipeExempt(event.target)) return;
 		event.preventDefault();
-		// One trackpad swipe emits a stream of wheel events plus inertia; switch once per stream.
-		clearTimeout(wheelIdleTimer);
-		wheelIdleTimer = setTimeout(() => {
+		const direction = event.deltaX > 0 ? 1 : -1;
+		// Reversing direction starts a fresh gesture and lifts the single-switch
+		// lock, so swiping straight back in the same trackpad stream switches back.
+		if (wheelDistance !== 0 && Math.sign(wheelDistance) !== direction) {
 			wheelDistance = 0;
 			wheelLocked = false;
-		}, SWIPE_GESTURE_IDLE_MS);
+		} else if (wheelLocked && lastSwipeStep !== undefined && direction !== lastSwipeStep) {
+			wheelLocked = false;
+			wheelDistance = 0;
+		}
+		// One trackpad swipe emits a stream of wheel events plus inertia; allow one
+		// switch per direction per stream, resetting after the stream settles.
+		clearTimeout(wheelIdleTimer);
+		wheelIdleTimer = setTimeout(resetSwipeGesture, SWIPE_GESTURE_IDLE_MS);
 		if (wheelLocked) return;
 		wheelDistance += event.deltaX;
 		if (Math.abs(wheelDistance) < SWIPE_WHEEL_THRESHOLD) return;
+		const step = wheelDistance > 0 ? 1 : -1;
+		// A fresh accumulator means the opposite swipe needs only its own threshold.
+		wheelDistance = 0;
+		if (!switchVaultBy(step)) return;
+		lastSwipeStep = step;
 		wheelLocked = true;
-		switchVaultBy(wheelDistance > 0 ? 1 : -1);
 	}
 
 	// Svelte registers onwheel as passive; preventDefault is needed to stop browser history swipes.
@@ -646,6 +702,35 @@
 		return () => {
 			element.removeEventListener('wheel', handleSidebarWheel);
 			clearTimeout(wheelIdleTimer);
+			swipeAnimation?.cancel();
+			swipeAnimation = undefined;
+		};
+	});
+
+	// Side buttons on multi-button mice (back = 3, forward = 4) step between
+	// workspaces, mirroring the swipe gesture for mouse users.
+	function handleSidebarMouseButton(event: MouseEvent): void {
+		if (event.button !== 3 && event.button !== 4) return;
+		if (isSwipeExempt(event.target)) return;
+		// History navigation is the default action of the press on some
+		// platforms and of the release on others, so suppress every stage and
+		// only switch on mousedown to avoid double-stepping.
+		event.preventDefault();
+		if (event.type !== 'mousedown') return;
+		if (switchVaultBy(event.button === 4 ? 1 : -1)) resetSwipeGesture();
+	}
+
+	// Capture every stage of the side-button press; the navigation default can
+	// fire on pointerdown (before mousedown bubbles), and Svelte's delegated
+	// bubble listeners are too late to suppress it.
+	$effect(() => {
+		const element = sidebarElement;
+		if (!element) return;
+		const types = ['pointerdown', 'mousedown', 'mouseup', 'auxclick'] as const;
+		const listener = handleSidebarMouseButton as EventListener;
+		for (const type of types) element.addEventListener(type, listener, { passive: false, capture: true });
+		return () => {
+			for (const type of types) element.removeEventListener(type, listener, { capture: true });
 		};
 	});
 
@@ -828,7 +913,7 @@
 		</div>
 	{/if}
 	{#if vaults.length > 1 && !paletteOpen}
-		<div class="vault-dots" role="tablist" aria-label="Repositories (swipe the sidebar to switch)">
+		<div class="vault-dots" role="tablist" aria-label="Repositories (swipe the sidebar, or use the mouse back and forward buttons, to switch)">
 			{#each vaults as vault (vault.id)}
 				<button role="tab" aria-selected={vault.id === activeVaultId} aria-label={vault.name} title={vault.name} class:active={vault.id === activeVaultId} disabled={transferState === 'working'} onclick={() => { if (vault.id !== activeVaultId) onSelectVault(vault.id); }}></button>
 			{/each}
