@@ -536,11 +536,15 @@
   margin-left: -22px;
 }
 .prose .task-list-item input {
-  width: 16px;
-  height: 16px;
-  margin: 0 9px 0 0;
+  width: 15px;
+  height: 15px;
+  margin: 0 8px 0 0;
   accent-color: var(--accent);
-  transform: translateY(2px);
+  vertical-align: -2px;
+}
+.prose .task-list-item input:disabled {
+  cursor: default;
+  opacity: 0.85;
 }
 .prose code {
   padding: 2px 5px;
@@ -686,15 +690,15 @@
 }
 .prose th,
 .prose td {
-  padding: 8px 11px;
-  border: 1px solid var(--line-hover);
+  padding: 7px 13px;
+  border: 1px solid var(--line);
 }
 .prose th {
   color: var(--ink-strong);
   background: var(--subtle);
-  font-weight: 650;
+  font-weight: 600;
 }
-.prose tbody tr:nth-child(even) {
+.prose tbody tr:nth-child(2n) {
   background: var(--surface-soft);
 }
 .prose img {
