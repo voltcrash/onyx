@@ -23,6 +23,7 @@
 		attachmentFolder: string;
 		attachmentsHidden: boolean;
 		onOpenAttachment: (id: string) => void;
+		onOpenAttachmentInNewTab: (id: string) => void;
 		onDeleteAttachment: (id: string) => void;
 		searchQuery: string;
 		findOpen: boolean;
@@ -102,7 +103,7 @@
 	}
 
 	let {
-		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, attachments, attachmentFolder, attachmentsHidden, onOpenAttachment, onDeleteAttachment, searchQuery, findOpen, findQuery, findReplacement, findMatchCase, findWholeWord, findMatchCount, activeFindMatch, findCanEdit, notePage, notePageCount, saveState, notesLoaded, paletteOpen, searchPending, paletteItems, settingsOpen,
+		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, attachments, attachmentFolder, attachmentsHidden, onOpenAttachment, onOpenAttachmentInNewTab, onDeleteAttachment, searchQuery, findOpen, findQuery, findReplacement, findMatchCase, findWholeWord, findMatchCount, activeFindMatch, findCanEdit, notePage, notePageCount, saveState, notesLoaded, paletteOpen, searchPending, paletteItems, settingsOpen,
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, wordCount, readingMinutes, contentWidth,
 		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSidebarDragStart, sidebarSide, onSidebarSideChange, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, trashedNotes, trashOpen, onToggleTrash, onRestoreFile, onPurgeFile, onEmptyTrash, onCopyFilePath, onCopyFileAs, onExportFileAs, onSearch,
 		onFindQueryChange, onFindReplacementChange, onFindMatchCaseChange, onFindWholeWordChange, onFindPrevious, onFindNext, onFindReplace, onFindReplaceAll, onCloseFind,
@@ -616,7 +617,7 @@
 	function contextOpenAttachment(): void {
 		const menu = contextMenu;
 		if (menu?.kind !== 'attachment') return;
-		contextAction(() => onOpenAttachment(menu.id));
+		contextAction(() => onOpenAttachmentInNewTab(menu.id));
 	}
 
 	function contextDeleteAttachment(): void {

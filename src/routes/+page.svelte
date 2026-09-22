@@ -2,6 +2,7 @@
 	import MarkdownWorkspace from '$lib/components/markdown-workspace.svelte';
 	import NotesSidebar from '$lib/components/notes-sidebar.svelte';
 	import StatusNotices from '$lib/components/status-notices.svelte';
+	import ImagePreview from '$lib/components/image-preview.svelte';
 	import { createPageController } from './page-controller.svelte.js';
 
 	const page = createPageController();
@@ -12,7 +13,7 @@
 	<meta name="description" content="A fast, local-first Markdown editor with full-text search that works offline." />
 </svelte:head>
 
-<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:palette-open={page.paletteOpen} inert={page.settingsOpen || page.restoreModalOpen}>
+<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:palette-open={page.paletteOpen} inert={page.settingsOpen || page.restoreModalOpen || page.imagePreview !== undefined}>
 	<NotesSidebar
 		vaults={page.vaults}
 		activeVaultId={page.activeVaultId}
@@ -23,7 +24,8 @@
 		attachments={page.vaultAttachments}
 		attachmentFolder={page.attachmentFolder}
 		attachmentsHidden={page.attachmentsHidden}
-		onOpenAttachment={(id) => void page.openAttachment(id)}
+		onOpenAttachment={(id) => void page.previewAttachment(id)}
+		onOpenAttachmentInNewTab={(id) => void page.openAttachmentInNewTab(id)}
 		searchQuery={page.searchQuery}
 		findOpen={page.findOpen}
 		findQuery={page.findQuery}
@@ -148,6 +150,10 @@
 	/>
 	{#if page.sidebarDropSide}<div class="sidebar-drop-target" data-side={page.sidebarDropSide} aria-hidden="true"></div>{/if}
 </div>
+
+{#if page.imagePreview}
+	<ImagePreview name={page.imagePreview.name} src={page.imagePreview.url} onClose={page.closeImagePreview} />
+{/if}
 
 <div class="print-document paper-surface" aria-hidden="true"><article class="prose">{@html page.renderedMarkdown}</article></div>
 

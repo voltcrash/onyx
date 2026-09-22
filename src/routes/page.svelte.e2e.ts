@@ -1768,6 +1768,13 @@ test("deletes one image from the attachments folder without deleting its sibling
   await expect(kept).toBeVisible();
   await expect(trashed).toBeVisible();
 
+  await kept.click();
+  const preview = page.getByRole("dialog", { name: "keep.png" });
+  await expect(preview).toBeVisible();
+  await expect(preview.locator("img")).toHaveAttribute("src", /^blob:/);
+  await page.getByRole("button", { name: "Close image preview" }).click();
+  await expect(preview).toBeHidden();
+
   await trashed.click({ button: "right" });
   const menu = page.getByRole("menu", { name: "File actions" });
   await expect(menu.getByRole("menuitem", { name: "Open in new tab", exact: true })).toBeVisible();
