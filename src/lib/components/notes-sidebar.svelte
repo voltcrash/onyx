@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { ChevronDown, ChevronRight, Copy, Download, FilePlus2, FileText, Folder, FolderPlus, Image, Paperclip, HardDrive, LoaderCircle, Lock, LockOpen, LogOut, PanelLeft, PanelRight, Pencil, Plus, Search, Settings, Trash2, Type, Undo2, X } from '@lucide/svelte';
+	import { ChevronDown, ChevronRight, Copy, Download, ExternalLink, FilePlus2, FileText, Folder, FolderPlus, Image, Paperclip, HardDrive, LoaderCircle, Lock, LockOpen, LogOut, PanelLeft, PanelRight, Pencil, Plus, Search, Settings, Trash2, Type, Undo2, X } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
 	import type { GithubUser } from '$lib/github';
 	import type { VaultDescriptor } from '$lib/storage/registry';
@@ -23,6 +23,8 @@
 		attachmentFolder: string;
 		attachmentsHidden: boolean;
 		onOpenAttachment: (id: string) => void;
+		onOpenAttachmentInNewTab: (id: string) => void;
+		onDeleteAttachment: (id: string) => void;
 		searchQuery: string;
 		findOpen: boolean;
 		findQuery: string;
@@ -101,7 +103,7 @@
 	}
 
 	let {
-		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, attachments, attachmentFolder, attachmentsHidden, onOpenAttachment, searchQuery, findOpen, findQuery, findReplacement, findMatchCase, findWholeWord, findMatchCount, activeFindMatch, findCanEdit, notePage, notePageCount, saveState, notesLoaded, paletteOpen, searchPending, paletteItems, settingsOpen,
+		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, attachments, attachmentFolder, attachmentsHidden, onOpenAttachment, onOpenAttachmentInNewTab, onDeleteAttachment, searchQuery, findOpen, findQuery, findReplacement, findMatchCase, findWholeWord, findMatchCount, activeFindMatch, findCanEdit, notePage, notePageCount, saveState, notesLoaded, paletteOpen, searchPending, paletteItems, settingsOpen,
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, wordCount, readingMinutes, contentWidth,
 		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSidebarDragStart, sidebarSide, onSidebarSideChange, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, trashedNotes, trashOpen, onToggleTrash, onRestoreFile, onPurgeFile, onEmptyTrash, onCopyFilePath, onCopyFileAs, onExportFileAs, onSearch,
 		onFindQueryChange, onFindReplacementChange, onFindMatchCaseChange, onFindWholeWordChange, onFindPrevious, onFindNext, onFindReplace, onFindReplaceAll, onCloseFind,
@@ -132,6 +134,7 @@
 		| { kind: 'root'; x: number; y: number }
 		| { kind: 'sidebar'; x: number; y: number }
 		| { kind: 'folder'; path: string; x: number; y: number }
+		| { kind: 'attachment'; id: string; path: string; x: number; y: number }
 		| { kind: 'file'; id: string; path: string; x: number; y: number };
 	type NamingState =
 		| { action: 'create-file'; parentPath: string }
@@ -293,6 +296,16 @@
 		contextMenu = { kind: 'folder', path, ...menuPositionFromPoint(x, y) };
 	}
 
+	function showAttachmentContextMenu(attachment: AttachmentMetadata, x: number, y: number): void {
+		if (!attachment.type.startsWith('image/')) return;
+		contextMenu = {
+			kind: 'attachment',
+			id: attachment.id,
+			path: attachment.sourcePath ?? attachment.name,
+			...menuPositionFromPoint(x, y),
+		};
+	}
+
 	function showFileContextMenu(result: VaultSearchResult, x: number, y: number): void {
 		contextMenu = { kind: 'file', id: result.note.id, path: notePath(result), ...menuPositionFromPoint(x, y) };
 	}
@@ -318,6 +331,13 @@
 		event.preventDefault();
 		event.stopPropagation();
 		showFolderContextMenu(path, event.clientX, event.clientY);
+	}
+
+	function openAttachmentContextMenu(event: MouseEvent, attachment: AttachmentMetadata): void {
+		if (!attachment.type.startsWith('image/')) return;
+		event.preventDefault();
+		event.stopPropagation();
+		showAttachmentContextMenu(attachment, event.clientX, event.clientY);
 	}
 
 	function openFileContextMenu(event: MouseEvent, result: VaultSearchResult): void {
@@ -566,7 +586,7 @@
 
 	function contextCopyPath(): void {
 		const menu = contextMenu;
-		if (menu?.kind !== 'folder' && menu?.kind !== 'file') return;
+		if (menu?.kind !== 'folder' && menu?.kind !== 'file' && menu?.kind !== 'attachment') return;
 		contextAction(() => onCopyFilePath(menu.path));
 	}
 
@@ -592,6 +612,18 @@
 		const menu = contextMenu;
 		if (menu?.kind !== 'file') return;
 		contextAction(() => onDeleteFile(menu.id));
+	}
+
+	function contextOpenAttachment(): void {
+		const menu = contextMenu;
+		if (menu?.kind !== 'attachment') return;
+		contextAction(() => onOpenAttachmentInNewTab(menu.id));
+	}
+
+	function contextDeleteAttachment(): void {
+		const menu = contextMenu;
+		if (menu?.kind !== 'attachment') return;
+		contextAction(() => onDeleteAttachment(menu.id));
 	}
 
 	const SWIPE_WHEEL_THRESHOLD = 60;
@@ -859,7 +891,7 @@
 								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Paperclip size={16} /><span class="file-tree-name">{row.label}</span>
 							</button>
 						{:else if row.kind === 'attachment'}
-							<button class="file file-tree-row attachment-row" data-attachment-path={row.path} style={`--tree-depth: ${row.depth}`} title={`Open ${row.label}`} onclick={() => onOpenAttachment(row.attachment.id)}>
+							<button class="file file-tree-row attachment-row" data-attachment-path={row.path} style={`--tree-depth: ${row.depth}`} title={`Open ${row.label}`} onclick={() => onOpenAttachment(row.attachment.id)} oncontextmenu={(event) => openAttachmentContextMenu(event, row.attachment)}>
 								{#if row.attachment.type.startsWith('image/')}<Image size={16} />{:else}<Paperclip size={16} />{/if}<span><strong>{row.label}</strong></span>
 							</button>
 						{:else if row.kind === 'folder'}
@@ -891,6 +923,11 @@
 							<div class="file-context-divider"></div>
 							{@render sidebarPositionItems()}
 						{/if}
+					{:else if contextMenu.kind === 'attachment'}
+						<button role="menuitem" disabled={transferState === 'working'} onclick={contextOpenAttachment}><ExternalLink size={15} /><span>Open in new tab</span></button>
+						<button role="menuitem" onclick={contextCopyPath}><Copy size={15} /><span>Copy relative path</span></button>
+						<div class="file-context-divider"></div>
+						<button role="menuitem" class="danger" disabled={transferState === 'working'} onclick={contextDeleteAttachment}><Trash2 size={15} /><span>Delete</span></button>
 					{:else}
 						<button role="menuitem" disabled={transferState === 'working'} onclick={contextOpenFile}><FileText size={15} /><span>Open</span></button>
 						<button role="menuitem" disabled={transferState === 'working'} onclick={contextRenameFile}><Pencil size={15} /><span>Rename</span></button>

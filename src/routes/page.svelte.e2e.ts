@@ -1738,6 +1738,60 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
   await expect(page.getByText("Restored 1 note and 1 attachment from GitHub.")).toBeVisible();
 });
 
+test("deletes one image from the attachments folder without deleting its sibling", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  await page.evaluate(() => {
+    const bytes = Uint8Array.from(
+      atob(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=",
+      ),
+      (character) => character.charCodeAt(0),
+    );
+    const transfer = new DataTransfer();
+    for (const name of ["keep.png", "trash.png"]) {
+      transfer.items.add(new File([bytes], name, { type: "image/png" }));
+    }
+    const input = document.querySelectorAll<HTMLInputElement>(
+      'input.transfer-input[type="file"]',
+    )[1];
+    if (!input) throw new Error("attachment input was not found");
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  const kept = page.locator('.attachment-row[data-attachment-path="attachments/keep.png"]');
+  const trashed = page.locator('.attachment-row[data-attachment-path="attachments/trash.png"]');
+  await expect(kept).toBeVisible();
+  await expect(trashed).toBeVisible();
+
+  await kept.click();
+  const preview = page.getByRole("dialog", { name: "keep.png" });
+  await expect(preview).toBeVisible();
+  await expect(preview.locator("img")).toHaveAttribute("src", /^blob:/);
+  await page.getByRole("button", { name: "Close image preview" }).click();
+  await expect(preview).toBeHidden();
+
+  await trashed.click({ button: "right" });
+  const menu = page.getByRole("menu", { name: "File actions" });
+  await expect(menu.getByRole("menuitem", { name: "Open in new tab", exact: true })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: "Delete", exact: true })).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Delete", exact: true }).click();
+
+  await expect(trashed).toBeHidden();
+  await expect(kept).toBeVisible();
+
+  await kept.click();
+  const keptPreview = page.getByRole("dialog", { name: "keep.png" });
+  await expect(keptPreview).toBeVisible();
+  await keptPreview.getByRole("button", { name: "Delete keep.png", exact: true }).click();
+  await expect(keptPreview).toBeHidden();
+  await expect(kept).toBeHidden();
+});
+
 test("stores pasted images in the attachments folder with GitHub-style links", async ({ page }) => {
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
