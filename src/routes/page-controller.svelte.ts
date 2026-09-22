@@ -1081,18 +1081,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     );
   }
 
-  function needsFullMarkdownParser(source: string): boolean {
-    return (
-      /(^|\n)\s*(?:---\s*$|`{3,}|~{3,}|\|.+\||>\s*\[![A-Z]+\]|<\/?[a-z])/im.test(source) ||
-      /\$\$[\s\S]*?\$\$|\$[^$\n]+\$/.test(source) ||
-      /\[\^[^\]]+\](?::|\s)/.test(source)
-    );
-  }
-
-  function maybeLoadFullMarkdownParser(source: string): void {
-    if (!markdownModule && needsFullMarkdownParser(source)) {
-      void loadMarkdownModule().catch(() => undefined);
-    }
+  // The lite renderer is first-paint only; every Markdown note upgrades to the
+  // full renderer once it loads, which then re-renders via markdownModuleRevision.
+  function ensureFullMarkdownParserLoaded(): void {
+    if (!markdownModule) void loadMarkdownModule().catch(() => undefined);
   }
 
   function applyStoredFontChoices(): void {
@@ -1718,10 +1710,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const sequence = ++noteLoadSequence;
     const note = await currentVault.getNote(id);
     if (!note || note.deletedAt) return;
-    const fullMarkdownParser =
-      !markdownModule && needsFullMarkdownParser(note.markdown)
-        ? loadMarkdownModule().catch(() => undefined)
-        : undefined;
+    const fullMarkdownParser = markdownModule
+      ? undefined
+      : loadMarkdownModule().catch(() => undefined);
     const folder = attachmentFolder;
     const attachments = await Promise.all(
       (await currentVault.listAttachments())
@@ -2590,7 +2581,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
     pendingEditorState = undefined;
     markdown = value;
-    maybeLoadFullMarkdownParser(value);
+    ensureFullMarkdownParserLoaded();
     queuePreview(value);
     queueSave();
   }
