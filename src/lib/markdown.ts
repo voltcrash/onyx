@@ -21,7 +21,10 @@ import {
   remarkSTL,
   remarkTopoJSON,
   remarkWikiLinks,
+  type MarkdownDialect,
 } from "./markdown-extensions.js";
+
+export type { MarkdownDialect };
 
 export { resolveLocalAttachmentUrl, titleFromMarkdown } from "./markdown-utils.js";
 
@@ -40,6 +43,8 @@ export type RemoteImagePolicy = "block" | "allow";
 
 export interface MarkdownRenderOptions {
   remoteImages?: RemoteImagePolicy;
+  /** "github" disables Onyx-only extensions; default "onyx" keeps them. */
+  dialect?: MarkdownDialect;
 }
 
 const CODE_LANGUAGE_LABELS: Record<string, string> = {
@@ -201,7 +206,7 @@ export function renderMarkdownBlocks(
   options: MarkdownRenderOptions = {},
 ): RenderedBlock[] {
   const remoteImagePolicy = options.remoteImages ?? "block";
-  const processor = markdownProcessor()
+  const processor = markdownProcessor(options.dialect ?? "onyx")
     // Generated markup runs after sanitizing, so authored HTML stays constrained by the schema.
     .use(rehypeHighlight)
     .use(addCodeLanguage)
@@ -228,12 +233,15 @@ export function sourceLines(node: MarkdownTreeNode): SourceLines | undefined {
  * The sanitized HTML tree of a note, before math is typeset, so math keeps its TeX source. Output
  * formats other than HTML are written from this tree.
  */
-export function renderMarkdownTree(source: string): MarkdownTreeNode {
-  const processor = markdownProcessor();
+export function renderMarkdownTree(
+  source: string,
+  options: Pick<MarkdownRenderOptions, "dialect"> = {},
+): MarkdownTreeNode {
+  const processor = markdownProcessor(options.dialect ?? "onyx");
   return processor.runSync(processor.parse(source)) as MarkdownTreeNode;
 }
 
-function markdownProcessor() {
+function markdownProcessor(dialect: MarkdownDialect = "onyx") {
   return (
     unified()
       // Core CommonMark/GFM parsing.
@@ -249,11 +257,11 @@ function markdownProcessor() {
       .use(remarkTopoJSON)
       .use(remarkSTL)
       .use(remarkGemoji)
-      .use(remarkCallouts)
+      .use(remarkCallouts, { dialect })
       // Onyx note-taking extensions: wiki links and `==highlight==` marks.
       // GitHub-incompatible by design; keep them out of the layers above.
-      .use(remarkWikiLinks)
-      .use(remarkInlineMarks)
+      .use(remarkWikiLinks, { dialect })
+      .use(remarkInlineMarks, { dialect })
       // Front matter is metadata, not prose, so it is dropped rather than printed.
       .use(remarkRehype, {
         allowDangerousHtml: true,

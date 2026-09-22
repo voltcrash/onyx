@@ -280,6 +280,29 @@ describe("github markdown compatibility", () => {
     expect(html).toContain("onyx-callout");
   });
 
+  it("disables Onyx extensions in the GitHub dialect", () => {
+    const github = { dialect: "github" } as const;
+    expect(renderMarkdown("[[Other Note]]", undefined, github)).not.toContain("wikilink");
+    expect(renderMarkdown("==hi==", undefined, github)).not.toContain("<mark>");
+    expect(renderMarkdown("==hi==", undefined, github)).toContain("==hi==");
+    const callout = renderMarkdown("> [!TODO]\n> Body", undefined, github);
+    expect(callout).not.toContain("onyx-callout");
+    expect(callout).toContain("<blockquote>");
+  });
+
+  it("keeps GitHub syntax active in the GitHub dialect", () => {
+    const github = { dialect: "github" } as const;
+    expect(renderMarkdown("> [!NOTE]\n> Body", undefined, github)).toContain("callout-note");
+    expect(renderMarkdown("~~gone~~", undefined, github)).toContain("<del>gone</del>");
+    expect(renderMarkdown("# Title", undefined, github)).toContain("<h1");
+  });
+
+  it("keeps Onyx extensions enabled by default", () => {
+    expect(renderMarkdown("[[Other Note]]")).toContain("wikilink");
+    expect(renderMarkdown("==hi==")).toContain("<mark>hi</mark>");
+    expect(renderMarkdown("> [!TODO]\n> Body")).toContain("onyx-callout");
+  });
+
   it("sanitizes raw HTML", () => {
     const html = renderMarkdown('<script>alert("xss")</script>');
     expect(html).not.toContain("<script");
