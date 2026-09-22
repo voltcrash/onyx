@@ -319,6 +319,49 @@ describe("parseRelativeNoteLink", () => {
   it("rejects links that escape the vault root", () => {
     expect(parseRelativeNoteLink("../other.md", "day.md")).toBeUndefined();
     expect(parseRelativeNoteLink("../../other.md", "folder/day.md")).toBeUndefined();
+    expect(parseRelativeNoteLink("../../../outside.md", "folder/day.md")).toBeUndefined();
+  });
+
+  it("normalizes dot segments without allowing encoded traversal", () => {
+    expect(parseRelativeNoteLink("folder/../other.md", "day.md")).toEqual({
+      path: "other.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("./folder/../other.md", "day.md")).toEqual({
+      path: "other.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("%2e%2e/other.md", "folder/day.md")).toEqual({
+      path: "other.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("..%2Fother.md", "folder/day.md")).toEqual({
+      path: "other.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("folder/%2e%2e/other.md", "day.md")).toEqual({
+      path: "other.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("%2e%2e/other.md", "day.md")).toBeUndefined();
+  });
+
+  it("fails gracefully for malformed path escapes", () => {
+    expect(() => parseRelativeNoteLink("bad%ZZ.md", "day.md")).not.toThrow();
+    expect(() => parseRelativeNoteLink("bad%.md", "day.md")).not.toThrow();
+    expect(() => parseRelativeNoteLink("bad%2.md", "day.md")).not.toThrow();
+    expect(parseRelativeNoteLink("bad%ZZ.md", "day.md")).toEqual({
+      path: "bad%ZZ.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("bad%.md", "day.md")).toEqual({
+      path: "bad%.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("bad%2.md", "day.md")).toEqual({
+      path: "bad%2.md",
+      fragment: "",
+    });
   });
 
   it("resolves paths containing spaces", () => {
@@ -346,6 +389,45 @@ describe("parseRelativeNoteLink", () => {
       fragment: "some%20heading",
     });
   });
+
+  it("resolves special characters and strips note query strings", () => {
+    expect(parseRelativeNoteLink("My Note.md", "day.md")).toEqual({
+      path: "My Note.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("notes/My Note.md", "day.md")).toEqual({
+      path: "notes/My Note.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("Caf%C3%A9.md", "day.md")).toEqual({
+      path: "Café.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("%E6%97%A5%E6%9C%AC%E8%AA%9E.md", "day.md")).toEqual({
+      path: "日本語.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("%F0%9F%9A%80%20launch.md", "day.md")).toEqual({
+      path: "🚀 launch.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("notes/[draft] (v1)'s %25.md", "day.md")).toEqual({
+      path: "notes/[draft] (v1)'s %.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("other%23note.md", "day.md")).toEqual({
+      path: "other#note.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("other.md?foo=bar", "day.md")).toEqual({
+      path: "other.md",
+      fragment: "",
+    });
+    expect(parseRelativeNoteLink("other.md?foo=bar#heading", "day.md")).toEqual({
+      path: "other.md",
+      fragment: "heading",
+    });
+  });
 });
 
 describe("findNoteIdForPath", () => {
@@ -359,6 +441,15 @@ describe("findNoteIdForPath", () => {
     expect(findNoteIdForPath(notes, "other.md")).toBe("one");
     expect(findNoteIdForPath(notes, "OTHER.MD")).toBe("one");
     expect(findNoteIdForPath(notes, "folder/other.md")).toBe("two");
+  });
+
+  it("prefers an exact-case path before the case-insensitive fallback", () => {
+    const ambiguous = [
+      { id: "different-case", sourcePath: "NOTE.md", title: "NOTE" },
+      { id: "exact", sourcePath: "note.md", title: "note" },
+    ];
+    expect(findNoteIdForPath(ambiguous, "note.md")).toBe("exact");
+    expect(findNoteIdForPath(ambiguous, "NoTe.md")).toBe("different-case");
   });
 
   it("returns undefined for nonexistent local notes instead of crashing", () => {

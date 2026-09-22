@@ -85,12 +85,16 @@ export interface NotePathCandidate {
  */
 export function findNoteIdForPath(notes: NotePathCandidate[], path: string): string | undefined {
   const key = path.toLocaleLowerCase();
-  return notes.find((note) => {
+  const pathFor = (note: NotePathCandidate): string => {
     const sourcePath = note.sourcePath?.trim();
-    if (sourcePath) return sourcePath.toLocaleLowerCase() === key;
+    if (sourcePath) return sourcePath;
     const fallback = (note.title || "Untitled").replace(/[\\/]+/g, "-").trim() || "Untitled";
-    return `${fallback}.md`.toLocaleLowerCase() === key;
-  })?.id;
+    return `${fallback}.md`;
+  };
+  return (
+    notes.find((note) => pathFor(note) === path) ??
+    notes.find((note) => pathFor(note).toLocaleLowerCase() === key)
+  )?.id;
 }
 
 export function resolveLocalAttachmentUrl(
