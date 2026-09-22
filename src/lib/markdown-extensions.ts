@@ -83,6 +83,8 @@ export const remarkWikiLinks: Plugin<[]> = () => (tree) => {
 
 export const remarkCallouts: Plugin<[]> = () => (tree) => {
   visitParents(tree as MdastNode, (parent) => {
+    // GitHub alerts cannot nest; a blockquote inside another blockquote stays plain.
+    const nested = parent.type === "blockquote";
     for (const node of parent.children ?? []) {
       if (node.type !== "blockquote") continue;
       const paragraph = node.children?.[0];
@@ -93,12 +95,14 @@ export const remarkCallouts: Plugin<[]> = () => (tree) => {
       if (!marker) continue;
       const kind = marker[1]!.toLowerCase();
       const githubAlert = (GITHUB_ALERT_TYPES as readonly string[]).includes(kind);
-      const title =
-        marker[2]?.trim() ||
-        (githubAlert
-          ? GITHUB_ALERT_TITLES[kind as GitHubAlertType]
-          : (CALLOUT_TITLES[kind] ?? capitalize(kind)));
-      first.value = rest.join("\n");
+      if (githubAlert && nested) continue;
+      const trailing = marker[2]?.trim() ?? "";
+      // GitHub has no custom alert titles: trailing marker-line text folds into
+      // the body. Onyx-only callouts keep their custom-title behavior.
+      const title = githubAlert
+        ? GITHUB_ALERT_TITLES[kind as GitHubAlertType]
+        : trailing || (CALLOUT_TITLES[kind] ?? capitalize(kind));
+      first.value = githubAlert && trailing ? [trailing, ...rest].join("\n") : rest.join("\n");
       if (!first.value && paragraph!.children!.length === 1) paragraph!.children = [];
       node.data = {
         // Onyx-only callouts keep an extra marker class so GitHub-compatible

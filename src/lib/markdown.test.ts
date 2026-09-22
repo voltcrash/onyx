@@ -161,7 +161,8 @@ A footnote[^1] and math $a^2$.
     expect(html).toContain("\u{1F389}");
     expect(html).toContain('<a class="wikilink" data-wikilink="Other Note">wiki link</a>');
     expect(html).toContain('<blockquote class="callout callout-warning">');
-    expect(html).toContain('<p class="callout-title">Careful</p>');
+    expect(html).toContain('<p class="callout-title">Warning</p>');
+    expect(html).toContain("Careful");
     expect(html).toContain('href="#user-content-fn-1"');
     expect(html).toContain("<math");
   });

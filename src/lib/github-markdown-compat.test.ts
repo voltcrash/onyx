@@ -136,6 +136,39 @@ describe("github markdown compatibility", () => {
     expect(html).toContain("onyx-callout");
   });
 
+  it("folds marker-line text into the alert body instead of a custom title", () => {
+    const html = renderMarkdown("> [!NOTE] Custom title\n> Body");
+    expect(html).toContain('<p class="callout-title">Note</p>');
+    expect(html).not.toContain('<p class="callout-title">Custom title</p>');
+    expect(html).toContain("Custom title");
+  });
+
+  it("renders multiline alerts", () => {
+    const html = renderMarkdown("> [!TIP]\n> First\n> Second");
+    expect(html).toContain("callout-tip");
+    expect(html).toContain("First");
+    expect(html).toContain("Second");
+  });
+
+  it("matches lowercase alert markers", () => {
+    expect(renderMarkdown("> [!note]\n> Body")).toContain("callout-note");
+  });
+
+  it("ignores alert markers that do not start the blockquote", () => {
+    const html = renderMarkdown("> Intro\n>\n> [!NOTE]\n> Body");
+    expect(html).not.toContain("callout-note");
+  });
+
+  it("leaves nested alerts as plain blockquotes", () => {
+    const html = renderMarkdown("> Outer\n>> [!NOTE]\n>> Body");
+    expect(html).not.toContain("callout-note");
+  });
+
+  it("keeps unknown marker names as Onyx-only callouts", () => {
+    const html = renderMarkdown("> [!FOO]\n> Body");
+    expect(html).toContain("onyx-callout");
+  });
+
   it("sanitizes raw HTML", () => {
     const html = renderMarkdown('<script>alert("xss")</script>');
     expect(html).not.toContain("<script");
