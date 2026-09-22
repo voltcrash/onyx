@@ -230,6 +230,38 @@ export const remarkTopoJSON: Plugin<[]> = () => (tree) => {
   });
 };
 
+// GitHub renders ```stl fences (ASCII STL) as 3D models. Onyx has no 3D
+// viewer, so valid solids get a facet summary above their source.
+export function describeSTL(source: string): string | undefined {
+  const normalized = source.trim();
+  if (!/^solid(\s|$)/i.test(normalized) || !/endsolid/i.test(normalized)) return;
+  const facets = normalized.match(/facet\s+normal/gi)?.length ?? 0;
+  return `STL model · ${facets} facet${facets === 1 ? "" : "s"}`;
+}
+
+export const remarkSTL: Plugin<[]> = () => (tree) => {
+  visitParents(tree as MdastNode, (parent) => {
+    parent.children = (parent.children ?? []).map((child) => {
+      if (child.type !== "code" || (child.lang ?? "").toLowerCase() !== "stl") {
+        return child;
+      }
+      const source = child.value ?? "";
+      const summary = describeSTL(source);
+      const node =
+        summary === undefined
+          ? {
+              ...fencedDiagramNode("stl", `Invalid STL\n${source}`),
+              data: {
+                hName: "pre",
+                hProperties: { className: ["diagram", "diagram-stl", "diagram-error"] },
+              },
+            }
+          : fencedDiagramNode("stl", `${summary}\n${source}`);
+      return { ...node, position: child.position };
+    });
+  });
+};
+
 export const remarkGeoJSON: Plugin<[]> = () => (tree) => {
   visitParents(tree as MdastNode, (parent) => {
     parent.children = (parent.children ?? []).map((child) => {

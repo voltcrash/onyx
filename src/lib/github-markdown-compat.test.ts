@@ -306,4 +306,18 @@ describe("github markdown compatibility", () => {
     expect(html).toContain("diagram-error");
     expect(html).toContain("Invalid TopoJSON");
   });
+
+  it("recognizes ASCII STL fences with a facet summary", () => {
+    const html = renderMarkdown("```stl\nsolid cube\nfacet normal 0 0 1\nendsolid cube\n```");
+    expect(html).toContain("diagram-stl");
+    expect(html).toContain("STL model · 1 facet");
+    expect(html).not.toContain("language-stl");
+  });
+
+  it("flags malformed STL while preserving its source", () => {
+    const html = renderMarkdown("```stl\nnot a solid\n```");
+    expect(html).toContain("diagram-stl");
+    expect(html).toContain("diagram-error");
+    expect(html).toContain("Invalid STL");
+  });
 });

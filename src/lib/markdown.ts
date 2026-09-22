@@ -18,6 +18,7 @@ import {
   remarkGithubInlineMath,
   remarkInlineMarks,
   remarkMermaid,
+  remarkSTL,
   remarkTopoJSON,
   remarkWikiLinks,
 } from "./markdown-extensions.js";
@@ -244,6 +245,7 @@ function markdownProcessor() {
       .use(remarkMermaid)
       .use(remarkGeoJSON)
       .use(remarkTopoJSON)
+      .use(remarkSTL)
       .use(remarkGemoji)
       .use(remarkCallouts)
       .use(remarkWikiLinks)
