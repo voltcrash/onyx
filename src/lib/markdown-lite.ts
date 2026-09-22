@@ -238,15 +238,32 @@ function renderInline(value: string, resolveLocalUrl?: LocalUrlResolver): string
         `<a class="wikilink" data-wikilink="${escapeHtml(target.trim())}">${label?.trim() || target.trim()}</a>`,
       ),
   );
-  result = result.replace(/(\*\*|__)(.+?)\1/g, (_, delimiter: string, content: string) =>
-    token(`<strong>${content}</strong>`),
-  );
-  result = result.replace(/~~([^~]+)~~/g, (_, content: string) => token(`<del>${content}</del>`));
-  result = result.replace(/==([^=]+)==/g, (_, content: string) => token(`<mark>${content}</mark>`));
-  result = result.replace(
-    /(?<!\*)\*([^*]+)\*(?!\*)|(?<!_)_([^_]+)_(?!_)/g,
-    (_, first: string, second: string) => token(`<em>${first || second}</em>`),
-  );
+  result = renderEmphasis(result);
+  function renderEmphasis(text: string): string {
+    text = text.replace(
+      /\*\*\*([^*\n]+)\*\*\*|___([^_\n]+)___/g,
+      (_, starContent: string | undefined, underscoreContent: string | undefined) =>
+        `<em><strong>${renderEmphasis(starContent ?? underscoreContent ?? "")}</strong></em>`,
+    );
+    text = text.replace(
+      /(\*\*|__)(.+?)\1/g,
+      (_, _delimiter: string, content: string) => `<strong>${renderEmphasis(content)}</strong>`,
+    );
+    text = text.replace(
+      /~~([^~]+)~~/g,
+      (_, content: string) => `<del>${renderEmphasis(content)}</del>`,
+    );
+    text = text.replace(
+      /==([^=]+)==/g,
+      (_, content: string) => `<mark>${renderEmphasis(content)}</mark>`,
+    );
+    text = text.replace(
+      /(?<!\*)\*([^*]+)\*(?!\*)|(?<!_)_([^_]+)_(?!_)/g,
+      (_, first: string | undefined, second: string | undefined) =>
+        `<em>${renderEmphasis(first ?? second ?? "")}</em>`,
+    );
+    return text;
+  }
   return result.replace(
     new RegExp(`${TOKEN_START}(\\d+)${TOKEN_END}`, "g"),
     (_, index: string) => tokens[Number(index)] ?? "",

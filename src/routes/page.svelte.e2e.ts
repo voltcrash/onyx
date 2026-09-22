@@ -925,6 +925,7 @@ test("renders read-only Markdown in the rendered pane", async ({ page }) => {
   await expect(article).toBeVisible();
   await expect(article.locator("h1")).toHaveText("Formatting tour");
   await expect(article.locator("em")).toHaveText("italic");
+  await expect(article.locator("em")).toHaveCSS("font-synthesis", "style");
   await expect(article.locator("del")).toHaveText("strike");
   await expect(article.locator("mark")).toHaveText("highlight");
   await expect(article.locator("table")).toBeVisible();

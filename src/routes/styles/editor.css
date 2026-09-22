@@ -492,6 +492,9 @@
 .prose strong {
   font-weight: 700;
 }
+.prose em {
+  font-synthesis: style;
+}
 .prose blockquote {
   margin: 27px 0;
   padding: 2px 0 2px 19px;
