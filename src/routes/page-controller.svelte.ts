@@ -154,7 +154,7 @@ import { onMount, tick } from "svelte";
 import { pushState as pushAppState, replaceState as replaceAppState } from "$app/navigation";
 
 const NOTE_PAGE_SIZE = 100;
-const PREVIEW_DELAY_MS = 120;
+const PREVIEW_SETTLE_MS = 160;
 const DEFAULT_CONTENT_WIDTH = 700;
 const DEFERRED_STARTUP_DELAY_MS = 8_000;
 // Matches the single-column breakpoint in the responsive stylesheet.
@@ -358,6 +358,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let noteRevision = $state(0);
   let markdown = $state(initialMarkdown);
   let previewMarkdown = $state(initialMarkdown);
+  let livePreviewMarkdown = $state(initialMarkdown);
   let lastSavedMarkdown = $state(initialMarkdown);
   let results = $state<VaultSearchResult[]>([]);
   let folders = $state<FolderMetadata[]>([]);
@@ -378,7 +379,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let saveRequested = false;
   let searchTimer: number | undefined = $state();
   let searchPending = $state(false);
-  let previewTimer: number | undefined = $state();
+  let previewFrame: number | undefined = $state();
+  let previewSettleTimer: number | undefined = $state();
+  let pendingPreviewMarkdown = initialMarkdown;
+  let previewIsLive = $state(false);
+  let printing = $state(false);
   let searchSequence = 0;
   let editor: HTMLTextAreaElement | undefined = $state();
   let searchInput: HTMLInputElement | undefined = $state();
@@ -474,9 +479,23 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     void markdownModuleRevision;
     return renderMarkdownBlocksForPage(previewMarkdown, resolveAttachmentUrl);
   });
+  const liveRenderedBlocks = $derived(
+    renderLiteMarkdownBlocks(livePreviewMarkdown, resolveAttachmentUrl),
+  );
+  const renderedBlockHtml = $derived(
+    renderedBlocks.filter((block) => block.element).map((block) => block.html),
+  );
+  const liveRenderedBlockHtml = $derived(
+    liveRenderedBlocks.filter((block) => block.element).map((block) => block.html),
+  );
+  const displayedRenderedBlocks = $derived(
+    previewIsLive ? liveRenderedBlockHtml : renderedBlockHtml,
+  );
   const renderedMarkdown = $derived(renderedBlocks.map((block) => block.html).join(""));
   const renderedBlockLines = $derived(
-    renderedBlocks.filter((block) => block.element).map((block) => block.lines),
+    (previewIsLive ? liveRenderedBlocks : renderedBlocks)
+      .filter((block) => block.element)
+      .map((block) => block.lines),
   );
   const noteTitle = $derived(titleFromMarkdown(markdown));
   const markdownLines = $derived(markdown.split("\n"));
@@ -1107,8 +1126,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     );
   }
 
-  // The lite renderer is first-paint only; every Markdown note upgrades to the
-  // full renderer once it loads, which then re-renders via markdownModuleRevision.
+  // The lite renderer handles first paint and active input. The settled preview
+  // upgrades once the full renderer loads via markdownModuleRevision.
   function ensureFullMarkdownParserLoaded(): void {
     if (!markdownModule) void loadMarkdownModule().catch(() => undefined);
   }
@@ -1163,7 +1182,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     primaryModifier = detectPrimaryModifier();
     if (primaryModifier === "control" && markdown === initialMarkdown) {
       markdown = createInitialMarkdown(primaryModifier);
-      previewMarkdown = markdown;
+      updatePreviewImmediately(markdown);
       lastSavedMarkdown = markdown;
     }
     isOnline = navigator.onLine;
@@ -1249,7 +1268,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       stopThemeWatch();
       if (saveTimer) window.clearTimeout(saveTimer);
       if (searchTimer) window.clearTimeout(searchTimer);
-      if (previewTimer) window.clearTimeout(previewTimer);
+      if (previewFrame !== undefined) window.cancelAnimationFrame(previewFrame);
+      if (previewSettleTimer !== undefined) window.clearTimeout(previewSettleTimer);
       if (serviceWorkerTimer) window.clearTimeout(serviceWorkerTimer);
       if (githubRestoreTimer) window.clearTimeout(githubRestoreTimer);
       unsubscribeVault?.();
@@ -1857,7 +1877,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     activeNoteId = "";
     noteRevision = 0;
     markdown = "";
-    previewMarkdown = "";
+    updatePreviewImmediately("");
     lastSavedMarkdown = "";
     resetEditorHistory();
     saveState = "saved";
@@ -2509,7 +2529,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   // Browsers save PDFs through their own print dialog, which the print stylesheet feeds.
   async function savePdf(): Promise<void> {
     await import("./styles/print.css");
-    window.print();
+    updatePreviewImmediately(markdown);
+    printing = true;
+    try {
+      await tick();
+      window.print();
+    } finally {
+      printing = false;
+    }
   }
 
   type NoteSource = { markdown: string; title: string };
@@ -2783,18 +2810,34 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     queueSave();
   }
 
+  // Coalesce bursts of input without waiting for the editor to become idle.
   function queuePreview(value: string): void {
-    if (previewTimer) window.clearTimeout(previewTimer);
-    previewTimer = window.setTimeout(() => {
-      previewTimer = undefined;
-      previewMarkdown = value;
-    }, PREVIEW_DELAY_MS);
+    pendingPreviewMarkdown = value;
+    if (previewSettleTimer !== undefined) window.clearTimeout(previewSettleTimer);
+    previewSettleTimer = window.setTimeout(() => {
+      previewSettleTimer = undefined;
+      if (previewFrame !== undefined) window.cancelAnimationFrame(previewFrame);
+      previewFrame = undefined;
+      previewMarkdown = pendingPreviewMarkdown;
+      previewIsLive = false;
+    }, PREVIEW_SETTLE_MS);
+    if (previewFrame !== undefined) return;
+    previewFrame = window.requestAnimationFrame(() => {
+      previewFrame = undefined;
+      livePreviewMarkdown = pendingPreviewMarkdown;
+      previewIsLive = true;
+    });
   }
 
   function updatePreviewImmediately(value: string): void {
-    if (previewTimer) window.clearTimeout(previewTimer);
-    previewTimer = undefined;
+    if (previewFrame !== undefined) window.cancelAnimationFrame(previewFrame);
+    if (previewSettleTimer !== undefined) window.clearTimeout(previewSettleTimer);
+    previewFrame = undefined;
+    previewSettleTimer = undefined;
+    pendingPreviewMarkdown = value;
+    livePreviewMarkdown = value;
     previewMarkdown = value;
+    previewIsLive = false;
   }
 
   function clampSplitRatio(value: number): number {
@@ -4118,8 +4161,17 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get renderedMarkdown() {
       return renderedMarkdown;
     },
+    get renderedBlocks() {
+      return renderedBlockHtml;
+    },
+    get displayedRenderedBlocks() {
+      return displayedRenderedBlocks;
+    },
     get renderedBlockLines() {
       return renderedBlockLines;
+    },
+    get printing() {
+      return printing;
     },
     get paletteItems() {
       return paletteItems;

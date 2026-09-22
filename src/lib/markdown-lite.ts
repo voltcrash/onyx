@@ -1,6 +1,6 @@
-// Temporary first-paint fallback only. This is not a GitHub Markdown
-// implementation and must never remain authoritative once the full renderer
-// loads. Keep it fast and approximate; do not grow it into a second parser.
+// Temporary first-paint and active-typing fallback. This is not a GitHub
+// Markdown implementation; the full renderer replaces it once input settles.
+// Keep it fast and approximate rather than growing it into a second parser.
 export interface SourceLines {
   start: number;
   end: number;
