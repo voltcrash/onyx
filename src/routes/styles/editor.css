@@ -757,13 +757,23 @@
   margin-bottom: 0;
 }
 .prose .callout-title {
-  margin: 0 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
   color: var(--callout);
   font-family: var(--font-content);
-  font-size: 0.82em;
+  font-size: 0.85em;
   font-weight: 650;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+/* GitHub's five alert kinds stay distinct by title text as well as accent, so
+   meaning never rides on color alone in either theme. */
+.prose
+  :is(.callout-note, .callout-tip, .callout-important, .callout-warning, .callout-caution)
+  > .callout-title {
+  line-height: 1.4;
 }
 .prose :is(.callout-note, .callout-info, .callout-todo, .callout-question) {
   --callout: var(--accent);
