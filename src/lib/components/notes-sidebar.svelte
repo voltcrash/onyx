@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { Archive, Bookmark, BriefcaseBusiness, CalendarDays, Camera, ChevronDown, ChevronRight, Code2, Copy, Download, ExternalLink, FilePlus2, FileText, Folder, FolderPlus, HardDrive, Heart, House, Image, Lightbulb, LoaderCircle, Lock, LockOpen, LogOut, Music2, Palette, Paperclip, PanelLeft, PanelRight, Pencil, Plane, Plus, Rocket, Search, Settings, Sparkles, Star, Tag, Trash2, Type, Undo2, X, type LucideIcon } from '@lucide/svelte';
+	import { Archive, BriefcaseBusiness, CalendarDays, Camera, ChevronDown, ChevronRight, Code2, Copy, Download, ExternalLink, FilePlus2, FileText, Folder, FolderPlus, HardDrive, Heart, House, Image, Lightbulb, LoaderCircle, Lock, LockOpen, LogOut, Music2, Palette, Paperclip, PanelLeft, PanelRight, Pencil, Plane, Plus, Rocket, Search, Settings, Sparkles, Star, Tag, Trash2, Type, Undo2, X, type LucideIcon } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
 	import { folderIconOptions, isFolderIcon, type FolderIcon } from '$lib/folder-icons';
 	import type { GithubUser } from '$lib/github';
@@ -151,7 +151,6 @@
 	let contextMenu = $state<ContextMenu>();
 	const folderIconComponents: Record<FolderIcon, LucideIcon> = {
 		archive: Archive,
-		bookmark: Bookmark,
 		briefcase: BriefcaseBusiness,
 		calendar: CalendarDays,
 		camera: Camera,
