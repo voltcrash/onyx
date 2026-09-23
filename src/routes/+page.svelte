@@ -6,6 +6,40 @@
 	import { createPageController } from './page-controller.svelte.js';
 
 	const page = createPageController();
+	let sidebarResizePointerId: number | undefined;
+	let sidebarResizing = $state(false);
+
+	function startSidebarResize(event: PointerEvent): void {
+		if (event.button !== 0 || !event.isPrimary || sidebarResizePointerId !== undefined) return;
+		event.preventDefault();
+		sidebarResizePointerId = event.pointerId;
+		sidebarResizing = true;
+		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+	}
+
+	function trackSidebarResize(event: PointerEvent): void {
+		if (event.pointerId !== sidebarResizePointerId) return;
+		const bounds = (event.currentTarget as HTMLElement).parentElement?.getBoundingClientRect();
+		if (!bounds) return;
+		page.setSidebarWidth(page.sidebarSide === 'right' ? bounds.right - event.clientX : event.clientX - bounds.left);
+	}
+
+	function endSidebarResize(event: PointerEvent): void {
+		if (event.pointerId !== sidebarResizePointerId) return;
+		sidebarResizePointerId = undefined;
+		sidebarResizing = false;
+		const handle = event.currentTarget as HTMLElement;
+		if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+		page.saveSidebarWidth();
+	}
+
+	function nudgeSidebarResize(event: KeyboardEvent): void {
+		const direction = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+		if (!direction) return;
+		event.preventDefault();
+		page.setSidebarWidth(page.sidebarWidth + direction * (page.sidebarSide === 'right' ? -10 : 10));
+		page.saveSidebarWidth();
+	}
 </script>
 
 <svelte:head>
@@ -13,7 +47,7 @@
 	<meta name="description" content="A fast, local-first Markdown editor with full-text search that works offline." />
 </svelte:head>
 
-<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:palette-open={page.paletteOpen} inert={page.settingsOpen || page.restoreModalOpen || page.imagePreview !== undefined}>
+<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:sidebar-resizing={sidebarResizing} class:palette-open={page.paletteOpen} style={`--sidebar-width: ${page.sidebarWidth}px`} inert={page.settingsOpen || page.restoreModalOpen || page.imagePreview !== undefined}>
 	<NotesSidebar
 		vaults={page.vaults}
 		activeVaultId={page.activeVaultId}
@@ -106,6 +140,7 @@
 		onChangePage={page.changeNotePage}
 		onContentWidthChange={page.setContentWidth}
 	/>
+	<button type="button" class="sidebar-resize" aria-label={`Resize notes sidebar, ${page.sidebarWidth} pixels wide`} title="Drag to resize the sidebar" onpointerdown={startSidebarResize} onpointermove={trackSidebarResize} onpointerup={endSidebarResize} onpointercancel={endSidebarResize} onkeydown={nudgeSidebarResize}></button>
 
 	<MarkdownWorkspace
 		storageNotice={page.storageNotice}

@@ -263,6 +263,47 @@ test("moves the sidebar to the right by holding and dragging its toggle", async 
   await expect(app).toHaveClass(/sidebar-right/);
 });
 
+test("resizes the sidebar on either side and remembers its width", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  const sidebar = page.locator(".sidebar");
+  const separator = page.getByRole("button", { name: /Resize notes sidebar/ });
+  await expect(sidebar).toHaveCSS("width", "258px");
+
+  const dragTo = async (width: number) => {
+    const bounds = await separator.boundingBox();
+    const viewport = page.viewportSize();
+    if (!bounds || !viewport) throw new Error("The sidebar resize handle is not laid out");
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 4);
+    await page.mouse.down();
+    await page.mouse.move(
+      (await page.locator(".app").getAttribute("class"))?.includes("sidebar-right")
+        ? viewport.width - width
+        : width,
+      bounds.y + bounds.height / 4,
+    );
+    await page.mouse.up();
+    await expect(sidebar).toHaveCSS("width", `${width}px`);
+  };
+
+  await dragTo(330);
+  await page.reload();
+  await expect(sidebar).toHaveCSS("width", "330px");
+  await page.evaluate(() => localStorage.setItem("onyx:sidebar-side", "right"));
+  await page.reload();
+  await dragTo(380);
+  await page.reload();
+  await expect(sidebar).toHaveCSS("width", "380px");
+
+  await separator.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(sidebar).toHaveCSS("width", "390px");
+  await page.getByRole("button", { name: "Hide notes sidebar" }).click();
+  await expect(separator).toBeHidden();
+  await page.getByRole("button", { name: "Show notes sidebar" }).click();
+  await expect(sidebar).toHaveCSS("width", "390px");
+});
+
 test("chooses the sidebar position from its context menu", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();

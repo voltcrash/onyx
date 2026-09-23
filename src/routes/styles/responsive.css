@@ -45,6 +45,12 @@
   .sidebar-open.palette-open::after {
     display: none;
   }
+  .sidebar-resize {
+    display: none;
+  }
+  .sidebar-drop-target {
+    width: 258px;
+  }
   .workspace {
     grid-column: 1;
   }

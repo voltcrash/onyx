@@ -237,6 +237,9 @@ type SidebarSide = "left" | "right";
 
 const SIDEBAR_DRAG_HOLD_MS = 300;
 const SIDEBAR_DRAG_SLOP_PX = 6;
+export const DEFAULT_SIDEBAR_WIDTH = 258;
+export const MIN_SIDEBAR_WIDTH = 200;
+export const MAX_SIDEBAR_WIDTH = 480;
 
 interface EditorSelection {
   start: number;
@@ -440,6 +443,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let recentNoteIds = $state<string[]>([]);
   let sidebarCollapsed = $state(false);
   let sidebarSide = $state<SidebarSide>("left");
+  let sidebarWidth = $state(DEFAULT_SIDEBAR_WIDTH);
   let sidebarDropSide = $state<SidebarSide | undefined>();
   let shortcuts = $state<KeyboardShortcuts>(structuredClone(defaultKeyboardShortcuts));
   let primaryModifier = $state<PrimaryModifier>("meta");
@@ -1202,6 +1206,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     };
     narrowQuery?.addEventListener("change", onViewportChange);
     sidebarSide = readLocalStorage("onyx:sidebar-side") === "right" ? "right" : "left";
+    const storedSidebarWidth = Number(readLocalStorage("onyx:sidebar-width"));
+    if (Number.isFinite(storedSidebarWidth)) sidebarWidth = clampSidebarWidth(storedSidebarWidth);
     const storedSplit = Number(readLocalStorage("onyx:split-ratio"));
     if (Number.isFinite(storedSplit)) splitRatio = clampSplitRatio(storedSplit);
     const storedContentWidth = Number(readLocalStorage("onyx:content-width"));
@@ -3843,6 +3849,18 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     writeLocalStorage("onyx:sidebar-side", side);
   }
 
+  function clampSidebarWidth(value: number): number {
+    return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, value));
+  }
+
+  function setSidebarWidth(value: number): void {
+    sidebarWidth = clampSidebarWidth(value);
+  }
+
+  function saveSidebarWidth(): void {
+    writeLocalStorage("onyx:sidebar-width", String(sidebarWidth));
+  }
+
   /** Holding a sidebar toggle picks it up; releasing it over either half of the window docks the sidebar there. */
   function startSidebarDrag(event: PointerEvent): void {
     if (event.button !== 0 || !event.isPrimary) return;
@@ -4248,6 +4266,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get sidebarSide() {
       return sidebarSide;
     },
+    get sidebarWidth() {
+      return sidebarWidth;
+    },
     get sidebarDropSide() {
       return sidebarDropSide;
     },
@@ -4370,6 +4391,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     dismissStorageNotice,
     toggleSidebar,
     setSidebarSide,
+    setSidebarWidth,
+    saveSidebarWidth,
     startSidebarDrag,
     insertSyntax,
     prefixLine,
