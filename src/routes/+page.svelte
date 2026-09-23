@@ -3,9 +3,10 @@
 	import NotesSidebar from '$lib/components/notes-sidebar.svelte';
 	import StatusNotices from '$lib/components/status-notices.svelte';
 	import ImagePreview from '$lib/components/image-preview.svelte';
-	import { createPageController } from './page-controller.svelte.js';
+	import { createPageController, DEFAULT_SIDEBAR_WIDTH } from './page-controller.svelte.js';
 
 	const page = createPageController();
+	const SIDEBAR_SNAP_DISTANCE = 12;
 	let sidebarResizePointerId: number | undefined;
 	let sidebarResizing = $state(false);
 
@@ -21,7 +22,8 @@
 		if (event.pointerId !== sidebarResizePointerId) return;
 		const bounds = (event.currentTarget as HTMLElement).parentElement?.getBoundingClientRect();
 		if (!bounds) return;
-		page.setSidebarWidth(page.sidebarSide === 'right' ? bounds.right - event.clientX : event.clientX - bounds.left);
+		const width = page.sidebarSide === 'right' ? bounds.right - event.clientX : event.clientX - bounds.left;
+		page.setSidebarWidth(Math.abs(width - DEFAULT_SIDEBAR_WIDTH) <= SIDEBAR_SNAP_DISTANCE ? DEFAULT_SIDEBAR_WIDTH : width);
 	}
 
 	function endSidebarResize(event: PointerEvent): void {
@@ -140,7 +142,7 @@
 		onChangePage={page.changeNotePage}
 		onContentWidthChange={page.setContentWidth}
 	/>
-	<button type="button" class="sidebar-resize" aria-label={`Resize notes sidebar, ${page.sidebarWidth} pixels wide`} title="Drag to resize the sidebar" onpointerdown={startSidebarResize} onpointermove={trackSidebarResize} onpointerup={endSidebarResize} onpointercancel={endSidebarResize} onkeydown={nudgeSidebarResize}></button>
+	<button type="button" class="sidebar-resize" aria-label={`Resize notes sidebar, ${page.sidebarWidth} pixels wide`} title="Drag to resize; snaps to the default width" onpointerdown={startSidebarResize} onpointermove={trackSidebarResize} onpointerup={endSidebarResize} onpointercancel={endSidebarResize} onkeydown={nudgeSidebarResize}></button>
 
 	<MarkdownWorkspace
 		storageNotice={page.storageNotice}

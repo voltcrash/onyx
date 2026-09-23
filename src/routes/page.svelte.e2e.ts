@@ -304,6 +304,41 @@ test("resizes the sidebar on either side and remembers its width", async ({ page
   await expect(sidebar).toHaveCSS("width", "390px");
 });
 
+for (const side of ["left", "right"] as const) {
+  test(`snaps the ${side} sidebar to its default width while dragging`, async ({ page }) => {
+    await page.goto("/");
+    if (side === "right") {
+      await page.evaluate(() => localStorage.setItem("onyx:sidebar-side", "right"));
+      await page.reload();
+    }
+    await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+    const sidebar = page.locator(".sidebar");
+    const handle = page.getByRole("button", { name: /Resize notes sidebar/ });
+    const bounds = await handle.boundingBox();
+    const viewport = page.viewportSize();
+    if (!bounds || !viewport) throw new Error("The sidebar resize handle is not laid out");
+    const y = bounds.y + bounds.height / 4;
+    const moveToWidth = (width: number) =>
+      page.mouse.move(side === "right" ? viewport.width - width : width, y);
+
+    await page.mouse.move(bounds.x + bounds.width / 2, y);
+    await page.mouse.down();
+    await moveToWidth(330);
+    await expect(sidebar).toHaveCSS("width", "330px");
+    await moveToWidth(266);
+    await expect(sidebar).toHaveCSS("width", "258px");
+    await moveToWidth(278);
+    await expect(sidebar).toHaveCSS("width", "278px");
+    await moveToWidth(250);
+    await expect(sidebar).toHaveCSS("width", "258px");
+    await page.mouse.up();
+
+    await page.reload();
+    await expect(sidebar).toHaveCSS("width", "258px");
+  });
+}
+
 test("chooses the sidebar position from its context menu", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
