@@ -116,6 +116,33 @@ export class VaultDatabase {
     return this.#get<NoteMetadata>("notes", id);
   }
 
+  async setNotePinned(noteId: string, pinned: boolean): Promise<boolean> {
+    const transaction = this.#database.transaction("notes", "readwrite");
+    const complete = transactionDone(transaction);
+    try {
+      const store = transaction.objectStore("notes");
+      const current = await requestResult<NoteMetadata | undefined>(store.get(noteId));
+      if (!current || (current.pinned === true) === pinned) {
+        await complete;
+        return false;
+      }
+      const next = { ...current };
+      if (pinned) next.pinned = true;
+      else delete next.pinned;
+      store.put(next);
+      await complete;
+      return true;
+    } catch (error) {
+      try {
+        transaction.abort();
+      } catch {
+        // The transaction may already have completed or aborted.
+      }
+      await complete.catch(() => undefined);
+      throw error;
+    }
+  }
+
   getNotes(): Promise<NoteMetadata[]> {
     return this.#getAll<NoteMetadata>("notes");
   }

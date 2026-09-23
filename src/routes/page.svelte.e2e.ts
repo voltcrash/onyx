@@ -924,6 +924,58 @@ test("sets and remembers a custom folder icon", async ({ page }) => {
   );
 });
 
+test("pins folders and individual files and remembers their pins", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await page.getByRole("button", { name: "New folder", exact: true }).click();
+  const folderName = page.getByRole("textbox", { name: "Folder name" });
+  await folderName.fill("Pinned");
+  await folderName.press("Enter");
+  const folder = page.locator('[data-folder-path="Pinned"]');
+  await expect(folder).toBeVisible();
+  await folder.click({ button: "right" });
+  const folderMenu = page.getByRole("menu", { name: "File actions" });
+  await folderMenu.getByRole("menuitemcheckbox", { name: "Pin folder", exact: true }).click();
+  await expect(folder.locator(".folder-pin-indicator")).toBeVisible();
+
+  await folder.click({ button: "right" });
+  await page
+    .getByRole("menu", { name: "File actions" })
+    .getByRole("menuitem", { name: "New file", exact: true })
+    .click();
+  const fileName = page.getByRole("textbox", { name: "File name" });
+  await fileName.fill("Reference.md");
+  await fileName.press("Enter");
+  const file = page.locator('[data-file-path="Pinned/Reference.md"]');
+  await expect(file).toBeVisible();
+  await file.click({ button: "right" });
+  const fileMenu = page.getByRole("menu", { name: "File actions" });
+  await fileMenu.getByRole("menuitemcheckbox", { name: "Pin file", exact: true }).click();
+  await expect(file).toHaveAttribute("data-file-pinned", "true");
+  await expect(file.locator(".file-pin-indicator")).toBeVisible();
+
+  await editor.fill("# Keep this file pinned");
+  await page.keyboard.press("ControlOrMeta+S");
+  await expect(file).toHaveAttribute("data-file-pinned", "true");
+
+  await page.reload();
+  const reloadedFolder = page.locator('[data-folder-path="Pinned"]');
+  const reloadedFile = page.locator('[data-file-path="Pinned/Reference.md"]');
+  await expect(reloadedFolder.locator(".folder-pin-indicator")).toBeVisible();
+  await expect(reloadedFile).toHaveAttribute("data-file-pinned", "true");
+  await expect(reloadedFile.locator(".file-pin-indicator")).toBeVisible();
+
+  await reloadedFile.click({ button: "right" });
+  await page
+    .getByRole("menu", { name: "File actions" })
+    .getByRole("menuitemcheckbox", { name: "Unpin file", exact: true })
+    .click();
+  await expect(reloadedFile).not.toHaveAttribute("data-file-pinned", "true");
+  await expect(reloadedFile.locator(".file-pin-indicator")).toHaveCount(0);
+});
+
 // Trash lives outside the file tree and opens from the command palette.
 async function openTrash(page: Page) {
   await page.getByRole("button", { name: "Open the command palette" }).click();

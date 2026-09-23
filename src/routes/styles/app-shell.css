@@ -1078,6 +1078,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.file > .file-pin-indicator {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
 .file strong,
 .file small {
   display: block;

@@ -12,6 +12,7 @@ export interface NoteMetadata {
   revision: number;
   size: number;
   sourcePath?: string;
+  pinned?: boolean;
   deletedAt?: string;
 }
 

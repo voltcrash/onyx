@@ -2216,6 +2216,18 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
   }
 
+  async function setNotePinned(noteId: string, pinned: boolean): Promise<void> {
+    if (!vault || transferState === "working") return;
+    try {
+      const changed = await vault.setNotePinned(noteId, pinned);
+      if (!changed) return;
+      await refreshFileTree();
+      storageError = "";
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "The file pin could not be saved.";
+    }
+  }
+
   async function moveFile(noteId: string, targetFolder: string): Promise<void> {
     if (!vault || transferState === "working") return;
     if (!(await settleDraft())) return;
@@ -4336,6 +4348,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     renameFolder,
     setFolderIcon,
     setFolderPinned,
+    setNotePinned,
     moveFile,
     moveFolder,
     deleteFile,
