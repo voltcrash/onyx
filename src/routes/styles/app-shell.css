@@ -165,7 +165,7 @@
   z-index: 10;
   top: 0;
   bottom: 0;
-  left: calc(var(--sidebar-width) - 5px);
+  left: calc(var(--sidebar-width) - 10px);
   width: 10px;
   padding: 0;
   border: 0;
@@ -1309,7 +1309,7 @@
   grid-column: 1;
 }
 .sidebar-right .sidebar-resize {
-  right: calc(var(--sidebar-width) - 5px);
+  right: calc(var(--sidebar-width) - 10px);
   left: auto;
 }
 .sidebar-toggle,

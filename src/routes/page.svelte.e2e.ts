@@ -1659,12 +1659,14 @@ for (const layout of ["columns", "rows"] as const) {
     await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
     const shell = page.locator(".editor-shell");
-    const bounds = await shell.boundingBox();
-    if (!bounds) throw new Error("The panes are not laid out");
     const stacked = layout === "rows";
+    if (stacked) await expect(shell).toHaveClass(/panes-stacked/);
+    const bounds = await shell.boundingBox();
+    const resizeBounds = await page.locator(".pane-resize").boundingBox();
+    if (!bounds || !resizeBounds) throw new Error("The pane divider is not laid out");
     const start = stacked
-      ? { x: bounds.x + bounds.width / 4, y: bounds.y + bounds.height / 2 }
-      : { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 4 };
+      ? { x: bounds.x + bounds.width / 4, y: resizeBounds.y + resizeBounds.height / 2 }
+      : { x: resizeBounds.x + resizeBounds.width / 2, y: bounds.y + bounds.height / 4 };
     const moveTo = async (offset: number) => {
       await page.mouse.move(
         stacked ? start.x : bounds.x + offset,
