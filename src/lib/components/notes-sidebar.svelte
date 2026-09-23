@@ -277,7 +277,10 @@
 		const visit = (parent: string, depth: number): void => {
 			const childFolders = [...folderPaths]
 				.filter((path) => parentPath(path) === parent)
-				.sort((left, right) => folderLabel(left).localeCompare(folderLabel(right), undefined, { sensitivity: 'base' }));
+				.sort((left, right) =>
+					Number(folderPinnedForPath(right)) - Number(folderPinnedForPath(left)) ||
+					folderLabel(left).localeCompare(folderLabel(right), undefined, { sensitivity: 'base' }),
+				);
 			for (const path of childFolders) {
 				const hasChildren = [...folderPaths].some((candidate) => parentPath(candidate) === path) || Boolean(notesByFolder.get(path)?.length) || Boolean(attachmentsByFolder.get(path)?.length);
 				const expanded = !collapsedFolders.has(path);
@@ -286,6 +289,7 @@
 				if (expanded) visit(path, depth + 1);
 			}
 			const childNotes = (notesByFolder.get(parent) ?? []).toSorted((left, right) =>
+				Number(right.note.pinned === true) - Number(left.note.pinned === true) ||
 				noteLabel(left).localeCompare(noteLabel(right), undefined, { sensitivity: 'base' }),
 			);
 			for (const result of childNotes) {

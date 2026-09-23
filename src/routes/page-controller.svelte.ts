@@ -510,8 +510,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   );
   const findCanEdit = $derived(saveState !== "loading" && transferState !== "working");
   const notePageCount = $derived(Math.max(1, Math.ceil(results.length / NOTE_PAGE_SIZE)));
+  const orderedResults = $derived(
+    results.toSorted(
+      (left, right) => Number(right.note.pinned === true) - Number(left.note.pinned === true),
+    ),
+  );
   const visibleResults = $derived(
-    results.slice(notePage * NOTE_PAGE_SIZE, (notePage + 1) * NOTE_PAGE_SIZE),
+    orderedResults.slice(notePage * NOTE_PAGE_SIZE, (notePage + 1) * NOTE_PAGE_SIZE),
   );
   const hasContent = $derived(markdown.trim().length > 0);
   // Narrow viewports show one pane at a time, where neither arrangement is visible.
