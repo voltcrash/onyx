@@ -1428,10 +1428,11 @@ async function markerOffsets(page: Page, from: ScrollSide | null, marker: string
 }
 
 test("scrolls each pane to the part of the note shown in the other one", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/");
   const markdown = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(markdown).toBeEnabled();
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(page.locator(".rendered-pane")).toBeVisible();
   // Sections differ in length and shape, so a proportional scroll would drift away from them.
   const sections = Array.from({ length: 30 }, (_, index) => {
     const body = Array.from(
