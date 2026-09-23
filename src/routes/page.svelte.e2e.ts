@@ -263,6 +263,82 @@ test("moves the sidebar to the right by holding and dragging its toggle", async 
   await expect(app).toHaveClass(/sidebar-right/);
 });
 
+test("resizes the sidebar on either side and remembers its width", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  const sidebar = page.locator(".sidebar");
+  const separator = page.getByRole("button", { name: /Resize notes sidebar/ });
+  await expect(sidebar).toHaveCSS("width", "258px");
+
+  const dragTo = async (width: number) => {
+    const bounds = await separator.boundingBox();
+    const viewport = page.viewportSize();
+    if (!bounds || !viewport) throw new Error("The sidebar resize handle is not laid out");
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 4);
+    await page.mouse.down();
+    await page.mouse.move(
+      (await page.locator(".app").getAttribute("class"))?.includes("sidebar-right")
+        ? viewport.width - width
+        : width,
+      bounds.y + bounds.height / 4,
+    );
+    await page.mouse.up();
+    await expect(sidebar).toHaveCSS("width", `${width}px`);
+  };
+
+  await dragTo(330);
+  await page.reload();
+  await expect(sidebar).toHaveCSS("width", "330px");
+  await page.evaluate(() => localStorage.setItem("onyx:sidebar-side", "right"));
+  await page.reload();
+  await dragTo(380);
+  await page.reload();
+  await expect(sidebar).toHaveCSS("width", "380px");
+
+  await separator.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(sidebar).toHaveCSS("width", "390px");
+  await page.getByRole("button", { name: "Hide notes sidebar" }).click();
+  await expect(separator).toBeHidden();
+  await page.getByRole("button", { name: "Show notes sidebar" }).click();
+  await expect(sidebar).toHaveCSS("width", "390px");
+});
+
+for (const side of ["left", "right"] as const) {
+  test(`snaps the ${side} sidebar to its default width while dragging`, async ({ page }) => {
+    await page.goto("/");
+    if (side === "right") {
+      await page.evaluate(() => localStorage.setItem("onyx:sidebar-side", "right"));
+      await page.reload();
+    }
+    await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+    const sidebar = page.locator(".sidebar");
+    const handle = page.getByRole("button", { name: /Resize notes sidebar/ });
+    const bounds = await handle.boundingBox();
+    const viewport = page.viewportSize();
+    if (!bounds || !viewport) throw new Error("The sidebar resize handle is not laid out");
+    const y = bounds.y + bounds.height / 4;
+    const moveToWidth = (width: number) =>
+      page.mouse.move(side === "right" ? viewport.width - width : width, y);
+
+    await page.mouse.move(bounds.x + bounds.width / 2, y);
+    await page.mouse.down();
+    await moveToWidth(330);
+    await expect(sidebar).toHaveCSS("width", "330px");
+    await moveToWidth(266);
+    await expect(sidebar).toHaveCSS("width", "258px");
+    await moveToWidth(278);
+    await expect(sidebar).toHaveCSS("width", "278px");
+    await moveToWidth(250);
+    await expect(sidebar).toHaveCSS("width", "258px");
+    await page.mouse.up();
+
+    await page.reload();
+    await expect(sidebar).toHaveCSS("width", "258px");
+  });
+}
+
 test("chooses the sidebar position from its context menu", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
@@ -1574,6 +1650,50 @@ test("moves a pane by dragging its grip beside the divider or with the arrow key
   );
   expect(await gripOffset("Move the source pane")).toBeGreaterThan(14);
 });
+
+for (const layout of ["columns", "rows"] as const) {
+  test(`snaps the ${layout} divider to an exact 50/50 split while dragging`, async ({ page }) => {
+    await page.goto("/");
+    if (layout === "rows") {
+      await page.evaluate(() => localStorage.setItem("onyx:pane-layout", "rows"));
+      await page.reload();
+    }
+    await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+    const shell = page.locator(".editor-shell");
+    const stacked = layout === "rows";
+    if (stacked) await expect(shell).toHaveClass(/panes-stacked/);
+    const bounds = await shell.boundingBox();
+    const resizeBounds = await page.locator(".pane-resize").boundingBox();
+    if (!bounds || !resizeBounds) throw new Error("The pane divider is not laid out");
+    const start = stacked
+      ? { x: bounds.x + bounds.width / 4, y: resizeBounds.y + resizeBounds.height / 2 }
+      : { x: resizeBounds.x + resizeBounds.width / 2, y: bounds.y + bounds.height / 4 };
+    const moveTo = async (offset: number) => {
+      await page.mouse.move(
+        stacked ? start.x : bounds.x + offset,
+        stacked ? bounds.y + offset : start.y,
+      );
+    };
+    const split = () =>
+      shell.evaluate((element) => Number.parseFloat(element.style.getPropertyValue("--split")));
+    const span = stacked ? bounds.height : bounds.width;
+
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await moveTo(span * 0.3);
+    await expect.poll(split).toBeLessThan(50);
+    await moveTo(span / 2 + 8);
+    await expect.poll(split).toBe(50);
+    await moveTo(span / 2 + 20);
+    await expect.poll(split).toBeGreaterThan(50);
+    await moveTo(span / 2 - 8);
+    await expect.poll(split).toBe(50);
+    await page.mouse.up();
+    await page.reload();
+    await expect.poll(split).toBe(50);
+  });
+}
 
 test("copies and downloads the Markdown source from the file menu", async ({ page }) => {
   await page.goto("/");
