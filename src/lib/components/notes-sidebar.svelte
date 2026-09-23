@@ -859,7 +859,7 @@
 		{#if contextSubmenu === 'folder-icon'}
 			{@const folderPath = contextMenu?.kind === 'folder' ? contextMenu.path : ''}
 			<div class="file-context-menu file-context-submenu folder-icon-submenu" role="menu" aria-label="Set folder icon">
-				<button class="folder-icon-default" role="menuitemradio" aria-checked={folderIconForPath(folderPath) === undefined} title="Use the default folder icon" onclick={() => contextSetFolderIcon()}><Folder size={16} /><span>Default folder icon</span></button>
+				<button class="folder-icon-option" role="menuitemradio" aria-checked={folderIconForPath(folderPath) === undefined} aria-label="Default folder icon" title="Default folder icon" onclick={() => contextSetFolderIcon()}><Folder size={17} /></button>
 				{#each folderIconOptions as option (option.id)}
 					{@const Icon = folderIconComponents[option.id]}
 					<button class="folder-icon-option" role="menuitemradio" aria-checked={folderIconForPath(folderPath) === option.id} aria-label={option.label} title={option.label} onclick={() => contextSetFolderIcon(option.id)}><Icon size={17} /></button>

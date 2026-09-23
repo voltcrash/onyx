@@ -798,9 +798,6 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 2px;
 }
-.folder-icon-submenu .folder-icon-default {
-  grid-column: 1 / -1;
-}
 .folder-icon-submenu .folder-icon-option {
   justify-content: center;
   padding-inline: 4px;
