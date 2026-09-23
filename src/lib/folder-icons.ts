@@ -1,6 +1,5 @@
 export const folderIconOptions = [
   { id: "archive", label: "Archive" },
-  { id: "bookmark", label: "Bookmark" },
   { id: "briefcase", label: "Briefcase" },
   { id: "calendar", label: "Calendar" },
   { id: "camera", label: "Camera" },

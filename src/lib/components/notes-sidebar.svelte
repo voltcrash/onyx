@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { Archive, Bookmark, BriefcaseBusiness, CalendarDays, Camera, ChevronDown, ChevronRight, Code2, Copy, Download, ExternalLink, FilePlus2, FileText, Folder, FolderPlus, HardDrive, Heart, House, Image, Lightbulb, LoaderCircle, Lock, LockOpen, LogOut, Music2, Palette, Paperclip, PanelLeft, PanelRight, Pencil, Plane, Plus, Rocket, Search, Settings, Sparkles, Star, Tag, Trash2, Type, Undo2, X, type LucideIcon } from '@lucide/svelte';
+	import { Archive, BriefcaseBusiness, CalendarDays, Camera, ChevronDown, ChevronRight, Code2, Copy, Download, ExternalLink, FilePlus2, FileText, Folder, FolderPlus, HardDrive, Heart, House, Image, Lightbulb, LoaderCircle, Lock, LockOpen, LogOut, Music2, Palette, Paperclip, PanelLeft, PanelRight, Pencil, Plane, Plus, Rocket, Search, Settings, Sparkles, Star, Tag, Trash2, Type, Undo2, X, type LucideIcon } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
 	import { folderIconOptions, isFolderIcon, type FolderIcon } from '$lib/folder-icons';
 	import type { GithubUser } from '$lib/github';
@@ -151,7 +151,6 @@
 	let contextMenu = $state<ContextMenu>();
 	const folderIconComponents: Record<FolderIcon, LucideIcon> = {
 		archive: Archive,
-		bookmark: Bookmark,
 		briefcase: BriefcaseBusiness,
 		calendar: CalendarDays,
 		camera: Camera,
@@ -859,7 +858,7 @@
 		{#if contextSubmenu === 'folder-icon'}
 			{@const folderPath = contextMenu?.kind === 'folder' ? contextMenu.path : ''}
 			<div class="file-context-menu file-context-submenu folder-icon-submenu" role="menu" aria-label="Set folder icon">
-				<button class="folder-icon-default" role="menuitemradio" aria-checked={folderIconForPath(folderPath) === undefined} title="Use the default folder icon" onclick={() => contextSetFolderIcon()}><Folder size={16} /><span>Default folder icon</span></button>
+				<button class="folder-icon-option" role="menuitemradio" aria-checked={folderIconForPath(folderPath) === undefined} aria-label="Default folder icon" title="Default folder icon" onclick={() => contextSetFolderIcon()}><Folder size={17} /></button>
 				{#each folderIconOptions as option (option.id)}
 					{@const Icon = folderIconComponents[option.id]}
 					<button class="folder-icon-option" role="menuitemradio" aria-checked={folderIconForPath(folderPath) === option.id} aria-label={option.label} title={option.label} onclick={() => contextSetFolderIcon(option.id)}><Icon size={17} /></button>
