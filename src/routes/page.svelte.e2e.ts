@@ -1428,6 +1428,7 @@ async function markerOffsets(page: Page, from: ScrollSide | null, marker: string
 }
 
 test("scrolls each pane to the part of the note shown in the other one", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/");
   const markdown = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(markdown).toBeEnabled();
