@@ -2182,6 +2182,40 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
   }
 
+  async function setFolderPinned(path: string, pinned: boolean): Promise<void> {
+    if (!vault || transferState === "working") return;
+    try {
+      const existingFolders = await vault.listFolders();
+      const current = existingFolders.find((folder) => folder.path === path);
+      if (!current && !pinned) return;
+      if (current?.pinned === pinned) return;
+      const now = new Date().toISOString();
+      const nextFolders = current
+        ? existingFolders.map((folder) => {
+            if (folder.path !== path) return folder;
+            const next = { ...folder, updatedAt: now };
+            if (pinned) next.pinned = true;
+            else delete next.pinned;
+            return next;
+          })
+        : [
+            ...existingFolders,
+            {
+              id: crypto.randomUUID(),
+              path,
+              createdAt: now,
+              updatedAt: now,
+              pinned: true,
+            },
+          ];
+      await vault.saveFolders(nextFolders);
+      folders = nextFolders;
+      storageError = "";
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "The folder pin could not be saved.";
+    }
+  }
+
   async function moveFile(noteId: string, targetFolder: string): Promise<void> {
     if (!vault || transferState === "working") return;
     if (!(await settleDraft())) return;
@@ -4301,6 +4335,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     renameFile,
     renameFolder,
     setFolderIcon,
+    setFolderPinned,
     moveFile,
     moveFolder,
     deleteFile,

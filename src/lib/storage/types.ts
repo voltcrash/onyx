@@ -25,6 +25,7 @@ export interface FolderMetadata {
   createdAt: string;
   updatedAt: string;
   icon?: FolderIcon;
+  pinned?: boolean;
 }
 
 export interface SaveNoteInput {
