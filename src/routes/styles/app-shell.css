@@ -1099,13 +1099,6 @@
   font-size: 10px;
   font-weight: 400;
 }
-.file i {
-  width: 6px;
-  height: 6px;
-  margin-left: auto;
-  border-radius: 50%;
-  background: var(--ok);
-}
 .empty-results {
   display: flex;
   flex-direction: column;
