@@ -1386,6 +1386,7 @@ async function markerOffsets(page: Page, from: ScrollSide | null, marker: string
         const scroller = scrollers[from];
         const range = scroller.scrollHeight - scroller.clientHeight;
         scroller.scrollTop = (markerTop(scroller) * range) / scroller.scrollHeight;
+        scroller.dispatchEvent(new Event("scroll", { bubbles: true }));
       }
       return { source: offset(scrollers.source), rendered: offset(scrollers.rendered) };
     },
