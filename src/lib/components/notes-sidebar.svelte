@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { Archive, BriefcaseBusiness, CalendarDays, Camera, ChevronDown, ChevronRight, Code2, Copy, Download, ExternalLink, FilePlus2, FileText, Folder, FolderPlus, HardDrive, Heart, House, Image, Lightbulb, LoaderCircle, Lock, LockOpen, LogOut, Music2, Palette, Paperclip, PanelLeft, PanelRight, Pencil, Plane, Plus, Rocket, Search, Settings, Sparkles, Star, Tag, Trash2, Type, Undo2, X, type LucideIcon } from '@lucide/svelte';
+	import { Archive, BriefcaseBusiness, CalendarDays, Camera, ChevronDown, ChevronRight, Code2, Copy, Download, ExternalLink, FilePlus2, FileText, Folder, FolderPlus, HardDrive, Heart, House, Image, Lightbulb, LoaderCircle, Lock, LockOpen, LogOut, Music2, Palette, Paperclip, PanelLeft, PanelRight, Pencil, Pin, Plane, Plus, Rocket, Search, Settings, Sparkles, Star, Tag, Trash2, Type, Undo2, X, type LucideIcon } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
 	import { folderIconOptions, isFolderIcon, type FolderIcon } from '$lib/folder-icons';
 	import type { GithubUser } from '$lib/github';
@@ -71,6 +71,8 @@
 		onRenameFile: (id: string, name: string) => void;
 		onRenameFolder: (path: string, name: string) => void;
 		onSetFolderIcon: (path: string, icon?: FolderIcon) => void;
+		onSetFolderPinned: (path: string, pinned: boolean) => void;
+		onSetNotePinned: (id: string, pinned: boolean) => void;
 		onMoveFile: (id: string, folderPath: string) => void;
 		onMoveFolder: (path: string, parentPath: string) => void;
 		onDeleteFile: (id: string) => void;
@@ -107,7 +109,8 @@
 	let {
 		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, attachments, attachmentFolder, attachmentsHidden, onOpenAttachment, onOpenAttachmentInNewTab, onDeleteAttachment, searchQuery, findOpen, findQuery, findReplacement, findMatchCase, findWholeWord, findMatchCount, activeFindMatch, findCanEdit, notePage, notePageCount, saveState, notesLoaded, paletteOpen, searchPending, paletteItems, settingsOpen,
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, wordCount, readingMinutes, contentWidth,
-		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSidebarDragStart, sidebarSide, onSidebarSideChange, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onSetFolderIcon, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, trashedNotes, trashOpen, onToggleTrash, onRestoreFile, onPurgeFile, onEmptyTrash, onCopyFilePath, onCopyFileAs, onExportFileAs, onSearch,
+		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSidebarDragStart, sidebarSide, onSidebarSideChange, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onSetFolderIcon, onSetFolderPinned, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, trashedNotes, trashOpen, onToggleTrash, onRestoreFile, onPurgeFile, onEmptyTrash, onCopyFilePath, onCopyFileAs, onExportFileAs, onSearch,
+		onSetNotePinned,
 		onFindQueryChange, onFindReplacementChange, onFindMatchCaseChange, onFindWholeWordChange, onFindPrevious, onFindNext, onFindReplace, onFindReplaceAll, onCloseFind,
 		onOpenPalette, onClosePalette, onOpenSettings, onOpenStorageSettings, onMoveNoteFocus, onSelectNote, onChangePage,
 		onContentWidthChange
@@ -129,7 +132,7 @@
 		},
 	]);
 	type TreeRow =
-		| { kind: 'folder'; key: string; path: string; label: string; depth: number; expanded: boolean; hasChildren: boolean; attachments: boolean; icon?: FolderIcon | 'paperclip' }
+		| { kind: 'folder'; key: string; path: string; label: string; depth: number; expanded: boolean; hasChildren: boolean; attachments: boolean; pinned: boolean; icon?: FolderIcon | 'paperclip' }
 		| { kind: 'attachment'; key: string; path: string; label: string; depth: number; attachment: AttachmentMetadata }
 		| { kind: 'file'; key: string; path: string; label: string; depth: number; result: VaultSearchResult };
 	type ContextMenu =
@@ -137,7 +140,7 @@
 		| { kind: 'sidebar'; x: number; y: number }
 		| { kind: 'folder'; path: string; x: number; y: number }
 		| { kind: 'attachment'; id: string; path: string; x: number; y: number }
-		| { kind: 'file'; id: string; path: string; x: number; y: number };
+		| { kind: 'file'; id: string; path: string; pinned: boolean; x: number; y: number };
 	type NamingState =
 		| { action: 'create-file'; parentPath: string }
 		| { action: 'create-folder'; parentPath: string }
@@ -229,6 +232,10 @@
 		return isFolderIcon(icon) ? icon : undefined;
 	}
 
+	function folderPinnedForPath(path: string): boolean {
+		return folders.find((folder) => folder.path === path)?.pinned === true;
+	}
+
 	function folderIconComponent(icon: FolderIcon | 'paperclip' | undefined): LucideIcon {
 		return icon === 'paperclip' ? Paperclip : icon ? folderIconComponents[icon] : Folder;
 	}
@@ -270,15 +277,19 @@
 		const visit = (parent: string, depth: number): void => {
 			const childFolders = [...folderPaths]
 				.filter((path) => parentPath(path) === parent)
-				.sort((left, right) => folderLabel(left).localeCompare(folderLabel(right), undefined, { sensitivity: 'base' }));
+				.sort((left, right) =>
+					Number(folderPinnedForPath(right)) - Number(folderPinnedForPath(left)) ||
+					folderLabel(left).localeCompare(folderLabel(right), undefined, { sensitivity: 'base' }),
+				);
 			for (const path of childFolders) {
 				const hasChildren = [...folderPaths].some((candidate) => parentPath(candidate) === path) || Boolean(notesByFolder.get(path)?.length) || Boolean(attachmentsByFolder.get(path)?.length);
 				const expanded = !collapsedFolders.has(path);
 				const customIcon = folderIcons.get(path);
-				rows.push({ kind: 'folder', key: `folder:${path}`, path, label: folderLabel(path), depth, expanded, hasChildren, attachments: isAttachmentPath(path), icon: isFolderIcon(customIcon) ? customIcon : isAttachmentPath(path) ? 'paperclip' : undefined });
+				rows.push({ kind: 'folder', key: `folder:${path}`, path, label: folderLabel(path), depth, expanded, hasChildren, attachments: isAttachmentPath(path), pinned: folderPinnedForPath(path), icon: isFolderIcon(customIcon) ? customIcon : isAttachmentPath(path) ? 'paperclip' : undefined });
 				if (expanded) visit(path, depth + 1);
 			}
 			const childNotes = (notesByFolder.get(parent) ?? []).toSorted((left, right) =>
+				Number(right.note.pinned === true) - Number(left.note.pinned === true) ||
 				noteLabel(left).localeCompare(noteLabel(right), undefined, { sensitivity: 'base' }),
 			);
 			for (const result of childNotes) {
@@ -312,7 +323,7 @@
 
 	function menuPositionFromPoint(x: number, y: number): { x: number; y: number } {
 		const width = 210;
-		const height = 285;
+		const height = 320;
 		return {
 			x: Math.max(8, Math.min(x, globalThis.innerWidth - width - 8)),
 			y: Math.max(8, Math.min(y, globalThis.innerHeight - height - 8)),
@@ -338,7 +349,7 @@
 	}
 
 	function showFileContextMenu(result: VaultSearchResult, x: number, y: number): void {
-		contextMenu = { kind: 'file', id: result.note.id, path: notePath(result), ...menuPositionFromPoint(x, y) };
+		contextMenu = { kind: 'file', id: result.note.id, path: notePath(result), pinned: result.note.pinned === true, ...menuPositionFromPoint(x, y) };
 	}
 
 	function openRootContextMenu(event: MouseEvent): void {
@@ -631,6 +642,18 @@
 		const menu = contextMenu;
 		if (menu?.kind !== 'folder') return;
 		contextAction(() => onSetFolderIcon(menu.path, icon));
+	}
+
+	function contextToggleFolderPinned(): void {
+		const menu = contextMenu;
+		if (menu?.kind !== 'folder') return;
+		contextAction(() => onSetFolderPinned(menu.path, !folderPinnedForPath(menu.path)));
+	}
+
+	function contextToggleNotePinned(): void {
+		const menu = contextMenu;
+		if (menu?.kind !== 'file') return;
+		contextAction(() => onSetNotePinned(menu.id, !menu.pinned));
 	}
 
 	function contextOpenFile(): void {
@@ -944,7 +967,7 @@
 						{#if row.kind === 'folder' && row.attachments}
 							{@const Icon = folderIconComponent(row.icon)}
 							<button class="file-tree-row folder-row attachment-folder-row" data-folder-path={row.path} data-folder-icon={row.icon ?? 'paperclip'} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Attachments — right-click or long-press to rename or delete" onclick={() => handleFolderRowClick(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)} ontouchstart={(event) => { const path = row.path; handleRowTouchStart(event, (x, y) => showFolderContextMenu(path, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd}>
-								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Icon size={16} /><span class="file-tree-name">{row.label}</span>
+								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Icon size={16} /><span class="file-tree-name">{row.label}</span>{#if row.pinned}<Pin class="folder-pin-indicator" size={13} aria-label="Pinned" />{/if}
 							</button>
 						{:else if row.kind === 'attachment'}
 							<button class="file file-tree-row attachment-row" data-attachment-path={row.path} style={`--tree-depth: ${row.depth}`} title={`Open ${row.label}`} onclick={() => onOpenAttachment(row.attachment.id)} oncontextmenu={(event) => openAttachmentContextMenu(event, row.attachment)}>
@@ -953,11 +976,11 @@
 						{:else if row.kind === 'folder'}
 							{@const Icon = folderIconComponent(row.icon)}
 							<button class="file-tree-row folder-row" class:drop-target={dropTargetPath === row.path} class:dragging={draggedEntry?.kind === 'folder' && draggedEntry.path === row.path} data-folder-path={row.path} data-folder-icon={row.icon ?? 'folder'} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Drag to move folder — right-click or long-press for options" draggable="true" disabled={transferState === 'working'} onclick={() => handleFolderRowClick(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)} ontouchstart={(event) => { const path = row.path; handleRowTouchStart(event, (x, y) => showFolderContextMenu(path, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd} ondragstart={(event) => startDrag(event, { kind: 'folder', path: row.path })} ondragend={endDrag} ondragover={(event) => keepDropTarget(event, row.path)} ondragleave={(event) => clearDropTarget(event, row.path)} ondrop={(event) => dropOnFolder(event, row.path)}>
-								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Icon size={16} /><span class="file-tree-name">{row.label}</span>
+								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Icon size={16} /><span class="file-tree-name">{row.label}</span>{#if row.pinned}<Pin class="folder-pin-indicator" size={13} aria-label="Pinned" />{/if}
 							</button>
 						{:else}
-							<button class="file file-tree-row" class:active={row.result.note.id === activeNoteId} class:dragging={draggedEntry?.kind === 'file' && draggedEntry.id === row.result.note.id} data-file-path={row.path} style={`--tree-depth: ${row.depth}`} aria-current={row.result.note.id === activeNoteId ? 'true' : undefined} title="Drag to move file — right-click or long-press for options" draggable="true" disabled={transferState === 'working'} onkeydown={onMoveNoteFocus} onclick={() => handleFileRowClick(row.result.note.id)} oncontextmenu={(event) => openFileContextMenu(event, row.result)} ontouchstart={(event) => { const result = row.result; handleRowTouchStart(event, (x, y) => showFileContextMenu(result, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd} ondragstart={(event) => startDrag(event, { kind: 'file', id: row.result.note.id, path: row.path })} ondragend={endDrag}>
-												<FileText size={16} /><span>{#if naming?.action === 'rename-file' && naming.id === row.result.note.id}<input class="file-inline-input" bind:this={namingInput} bind:value={draftName} aria-label="File name" spellcheck="false" onblur={commitNaming} onkeydown={handleNamingKeydown} />{:else}<strong>{row.label}</strong>{/if}</span>{#if row.result.note.id === activeNoteId}<i></i>{/if}
+							<button class="file file-tree-row" class:active={row.result.note.id === activeNoteId} class:dragging={draggedEntry?.kind === 'file' && draggedEntry.id === row.result.note.id} data-file-path={row.path} data-file-pinned={row.result.note.pinned ? 'true' : undefined} style={`--tree-depth: ${row.depth}`} aria-current={row.result.note.id === activeNoteId ? 'true' : undefined} title="Drag to move file — right-click or long-press for options" draggable="true" disabled={transferState === 'working'} onkeydown={onMoveNoteFocus} onclick={() => handleFileRowClick(row.result.note.id)} oncontextmenu={(event) => openFileContextMenu(event, row.result)} ontouchstart={(event) => { const result = row.result; handleRowTouchStart(event, (x, y) => showFileContextMenu(result, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd} ondragstart={(event) => startDrag(event, { kind: 'file', id: row.result.note.id, path: row.path })} ondragend={endDrag}>
+								<FileText size={16} /><span>{#if naming?.action === 'rename-file' && naming.id === row.result.note.id}<input class="file-inline-input" bind:this={namingInput} bind:value={draftName} aria-label="File name" spellcheck="false" onblur={commitNaming} onkeydown={handleNamingKeydown} />{:else}<strong>{row.label}</strong>{/if}</span>{#if row.result.note.pinned}<Pin class="file-pin-indicator" size={13} aria-label="Pinned" />{/if}
 							</button>
 					{/if}
 					{/each}
@@ -973,6 +996,7 @@
 						<button role="menuitem" disabled={transferState === 'working'} onclick={contextCreateFolder}><FolderPlus size={15} /><span>New folder</span></button>
 						{#if contextMenu.kind === 'folder'}
 							<div class="file-context-divider"></div>
+							<button role="menuitemcheckbox" aria-checked={folderPinnedForPath(contextMenu.path)} disabled={transferState === 'working'} onclick={contextToggleFolderPinned}><Pin size={15} /><span>{folderPinnedForPath(contextMenu.path) ? 'Unpin folder' : 'Pin folder'}</span></button>
 							<button role="menuitem" disabled={transferState === 'working'} onclick={contextRenameFolder}><Pencil size={15} /><span>Rename</span></button>
 							{#if !isAttachmentPath(contextMenu.path)}
 								{@render folderIconSubmenu()}
@@ -990,6 +1014,7 @@
 						<button role="menuitem" class="danger" disabled={transferState === 'working'} onclick={contextDeleteAttachment}><Trash2 size={15} /><span>Delete</span></button>
 					{:else}
 						<button role="menuitem" disabled={transferState === 'working'} onclick={contextOpenFile}><FileText size={15} /><span>Open</span></button>
+						<button role="menuitemcheckbox" aria-checked={contextMenu.pinned} disabled={transferState === 'working'} onclick={contextToggleNotePinned}><Pin size={15} /><span>{contextMenu.pinned ? 'Unpin file' : 'Pin file'}</span></button>
 						<button role="menuitem" disabled={transferState === 'working'} onclick={contextRenameFile}><Pencil size={15} /><span>Rename</span></button>
 						<button role="menuitem" onclick={contextCopyPath}><Copy size={15} /><span>Copy relative path</span></button>
 						<div class="file-context-divider"></div>

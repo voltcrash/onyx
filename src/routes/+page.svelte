@@ -72,6 +72,8 @@
 		onRenameFile={(id, name) => void page.renameFile(id, name)}
 		onRenameFolder={(path, name) => void page.renameFolder(path, name)}
 		onSetFolderIcon={(path, icon) => void page.setFolderIcon(path, icon)}
+		onSetFolderPinned={(path, pinned) => void page.setFolderPinned(path, pinned)}
+		onSetNotePinned={(id, pinned) => void page.setNotePinned(id, pinned)}
 		onMoveFile={(id, folder) => void page.moveFile(id, folder)}
 		onMoveFolder={(path, parent) => void page.moveFolder(path, parent)}
 		onDeleteFile={(id) => void page.deleteFile(id)}

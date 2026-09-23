@@ -248,6 +248,7 @@ export class Vault {
         revision: actualRevision + 1,
         size: new Blob([markdown]).size,
         sourcePath: input.sourcePath ?? existing?.sourcePath,
+        ...(existing?.pinned ? { pinned: true } : {}),
         // Saving a trashed note must not resurrect it; trash state only changes via trash/restore.
         ...(existing?.deletedAt ? { deletedAt: existing.deletedAt } : {}),
       };
@@ -299,6 +300,12 @@ export class Vault {
         (await this.#filesystem.readText(metadata.path));
       return { ...metadata, markdown };
     });
+  }
+
+  async setNotePinned(noteId: string, pinned: boolean): Promise<boolean> {
+    const changed = await this.#withLock(() => this.#database.setNotePinned(noteId, pinned));
+    if (changed) this.#publish({ kind: "note", noteId });
+    return changed;
   }
 
   async listNotes(): Promise<NoteMetadata[]> {

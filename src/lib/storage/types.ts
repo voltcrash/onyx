@@ -12,6 +12,7 @@ export interface NoteMetadata {
   revision: number;
   size: number;
   sourcePath?: string;
+  pinned?: boolean;
   deletedAt?: string;
 }
 
@@ -25,6 +26,7 @@ export interface FolderMetadata {
   createdAt: string;
   updatedAt: string;
   icon?: FolderIcon;
+  pinned?: boolean;
 }
 
 export interface SaveNoteInput {

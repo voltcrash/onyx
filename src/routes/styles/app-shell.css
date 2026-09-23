@@ -680,6 +680,11 @@
 .folder-row > svg {
   color: var(--accent-quiet);
 }
+.folder-row > .folder-pin-indicator {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--accent);
+}
 .file-tree-caret {
   width: 13px;
   height: 16px;
@@ -695,6 +700,7 @@
   background: var(--faint);
 }
 .file-tree-name {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1072,6 +1078,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.file > .file-pin-indicator {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
 .file strong,
 .file small {
   display: block;
@@ -1088,13 +1098,6 @@
   color: var(--faint);
   font-size: 10px;
   font-weight: 400;
-}
-.file i {
-  width: 6px;
-  height: 6px;
-  margin-left: auto;
-  border-radius: 50%;
-  background: var(--ok);
 }
 .empty-results {
   display: flex;

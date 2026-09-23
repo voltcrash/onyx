@@ -924,6 +924,91 @@ test("sets and remembers a custom folder icon", async ({ page }) => {
   );
 });
 
+test("pins folders and individual files and remembers their pins", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await page.getByRole("button", { name: "New folder", exact: true }).click();
+  const folderName = page.getByRole("textbox", { name: "Folder name" });
+  await folderName.fill("Aardvark");
+  await folderName.press("Enter");
+
+  await page.getByRole("button", { name: "New folder", exact: true }).click();
+  const pinnedFolderName = page.getByRole("textbox", { name: "Folder name" });
+  await pinnedFolderName.fill("Pinned");
+  await pinnedFolderName.press("Enter");
+  const folder = page.locator('[data-folder-path="Pinned"]');
+  await expect(folder).toBeVisible();
+  await folder.click({ button: "right" });
+  const folderMenu = page.getByRole("menu", { name: "File actions" });
+  await folderMenu.getByRole("menuitemcheckbox", { name: "Pin folder", exact: true }).click();
+  await expect(folder.locator(".folder-pin-indicator")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.locator("[data-folder-path]").evaluateAll((rows) =>
+        rows
+          .map((row) => row.getAttribute("data-folder-path"))
+          .filter((path): path is string => path !== null)
+          .filter((path) => !path.includes("/")),
+      ),
+    )
+    .toEqual(["Pinned", "Aardvark"]);
+
+  await folder.click({ button: "right" });
+  await page
+    .getByRole("menu", { name: "File actions" })
+    .getByRole("menuitem", { name: "New file", exact: true })
+    .click();
+  const otherFileName = page.getByRole("textbox", { name: "File name" });
+  await otherFileName.fill("Aardvark.md");
+  await otherFileName.press("Enter");
+  const otherFile = page.locator('[data-file-path="Pinned/Aardvark.md"]');
+  await expect(otherFile).toBeVisible();
+
+  await folder.click({ button: "right" });
+  await page
+    .getByRole("menu", { name: "File actions" })
+    .getByRole("menuitem", { name: "New file", exact: true })
+    .click();
+  const fileName = page.getByRole("textbox", { name: "File name" });
+  await fileName.fill("Reference.md");
+  await fileName.press("Enter");
+  const file = page.locator('[data-file-path="Pinned/Reference.md"]');
+  await expect(file).toBeVisible();
+  await file.click({ button: "right" });
+  const fileMenu = page.getByRole("menu", { name: "File actions" });
+  await fileMenu.getByRole("menuitemcheckbox", { name: "Pin file", exact: true }).click();
+  await expect(file).toHaveAttribute("data-file-pinned", "true");
+  await expect(file.locator(".file-pin-indicator")).toBeVisible();
+  await expect
+    .poll(() =>
+      page
+        .locator('[data-file-path^="Pinned/"]')
+        .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-file-path"))),
+    )
+    .toEqual(["Pinned/Reference.md", "Pinned/Aardvark.md"]);
+
+  await editor.fill("# Keep this file pinned");
+  await page.keyboard.press("ControlOrMeta+S");
+  await expect(file).toHaveAttribute("data-file-pinned", "true");
+
+  await page.reload();
+  const reloadedFolder = page.locator('[data-folder-path="Pinned"]');
+  const reloadedFile = page.locator('[data-file-path="Pinned/Reference.md"]');
+  await expect(reloadedFolder.locator(".folder-pin-indicator")).toBeVisible();
+  await expect(reloadedFile).toHaveAttribute("data-file-pinned", "true");
+  await expect(reloadedFile.locator(".file-pin-indicator")).toBeVisible();
+
+  await reloadedFile.click({ button: "right" });
+  await page
+    .getByRole("menu", { name: "File actions" })
+    .getByRole("menuitemcheckbox", { name: "Unpin file", exact: true })
+    .click();
+  await expect(reloadedFile).not.toHaveAttribute("data-file-pinned", "true");
+  await expect(reloadedFile.locator(".file-pin-indicator")).toHaveCount(0);
+});
+
 // Trash lives outside the file tree and opens from the command palette.
 async function openTrash(page: Page) {
   await page.getByRole("button", { name: "Open the command palette" }).click();
@@ -1334,6 +1419,7 @@ async function markerOffsets(page: Page, from: ScrollSide | null, marker: string
         const scroller = scrollers[from];
         const range = scroller.scrollHeight - scroller.clientHeight;
         scroller.scrollTop = (markerTop(scroller) * range) / scroller.scrollHeight;
+        scroller.dispatchEvent(new Event("scroll", { bubbles: true }));
       }
       return { source: offset(scrollers.source), rendered: offset(scrollers.rendered) };
     },
