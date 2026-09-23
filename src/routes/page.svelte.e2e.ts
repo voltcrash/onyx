@@ -1573,6 +1573,48 @@ test("moves a pane by dragging its grip beside the divider or with the arrow key
   expect(await gripOffset("Move the source pane")).toBeGreaterThan(14);
 });
 
+for (const layout of ["columns", "rows"] as const) {
+  test(`snaps the ${layout} divider to an exact 50/50 split while dragging`, async ({ page }) => {
+    await page.goto("/");
+    if (layout === "rows") {
+      await page.evaluate(() => localStorage.setItem("onyx:pane-layout", "rows"));
+      await page.reload();
+    }
+    await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+    const shell = page.locator(".editor-shell");
+    const bounds = await shell.boundingBox();
+    if (!bounds) throw new Error("The panes are not laid out");
+    const stacked = layout === "rows";
+    const start = stacked
+      ? { x: bounds.x + bounds.width / 4, y: bounds.y + bounds.height / 2 }
+      : { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 4 };
+    const moveTo = async (offset: number) => {
+      await page.mouse.move(
+        stacked ? start.x : bounds.x + offset,
+        stacked ? bounds.y + offset : start.y,
+      );
+    };
+    const split = () =>
+      shell.evaluate((element) => Number.parseFloat(element.style.getPropertyValue("--split")));
+    const span = stacked ? bounds.height : bounds.width;
+
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await moveTo(span * 0.3);
+    await expect.poll(split).toBeLessThan(50);
+    await moveTo(span / 2 + 8);
+    await expect.poll(split).toBe(50);
+    await moveTo(span / 2 + 20);
+    await expect.poll(split).toBeGreaterThan(50);
+    await moveTo(span / 2 - 8);
+    await expect.poll(split).toBe(50);
+    await page.mouse.up();
+    await page.reload();
+    await expect.poll(split).toBe(50);
+  });
+}
+
 test("copies and downloads the Markdown source from the file menu", async ({ page }) => {
   await page.goto("/");
   const markdown = page.getByRole("textbox", { name: "Markdown editor" });

@@ -116,6 +116,7 @@
 	let sourceFindMarkup = $derived(
 		sourceFindActive ? highlightFindMatches(markdown, findMatches, activeFindMatch) : '',
 	);
+	const CENTER_SNAP_DISTANCE = 12;
 
 	function syncSourceFindLayer(event?: Event): void {
 		const target = event?.currentTarget instanceof HTMLTextAreaElement ? event.currentTarget : editor;
@@ -130,7 +131,7 @@
 		const span = stacked ? bounds.height : bounds.width;
 		if (!span) return;
 		const offset = stacked ? event.clientY - bounds.top : event.clientX - bounds.left;
-		onResize((offset / span) * 100);
+		onResize(Math.abs(offset - span / 2) <= CENTER_SNAP_DISTANCE ? 50 : (offset / span) * 100);
 	}
 
 	function startResize(event: PointerEvent): void {
@@ -448,7 +449,7 @@
 			</div>
 		</div>
 		<div class="pane-divider">
-			<button type="button" class="pane-resize" class:enabled={bothPanesVisible} aria-label={`Resize the panes, the ${firstPane} pane takes ${Math.round(splitRatio)} percent`} title="Drag to resize, double-click to even out" tabindex={bothPanesVisible ? 0 : -1} onpointerdown={startResize} onpointermove={trackResize} onpointerup={endResize} onpointercancel={endResize} onkeydown={nudgeResize} ondblclick={resetSplit}></button>
+			<button type="button" class="pane-resize" class:enabled={bothPanesVisible} aria-label={`Resize the panes, the ${firstPane} pane takes ${Math.round(splitRatio)} percent`} title="Drag to resize; snaps to center. Double-click to even out" tabindex={bothPanesVisible ? 0 : -1} onpointerdown={startResize} onpointermove={trackResize} onpointerup={endResize} onpointercancel={endResize} onkeydown={nudgeResize} ondblclick={resetSplit}></button>
 			{#if bothPanesVisible}
 				<button type="button" class="pane-grip" class:grip-start={!swapped} aria-label="Move the source pane" title="Drag to move this pane, or use the arrow keys" onpointerdown={(event) => startPaneDrag(event, 'source')} onpointermove={trackPaneDrag} onpointerup={endPaneDrag} onpointercancel={endPaneDrag} onkeydown={(event) => nudgePane(event, 'source')}></button>
 				<button type="button" class="pane-grip" class:grip-start={swapped} aria-label="Move the rendered pane" title="Drag to move this pane, or use the arrow keys" onpointerdown={(event) => startPaneDrag(event, 'rendered')} onpointermove={trackPaneDrag} onpointerup={endPaneDrag} onpointercancel={endPaneDrag} onkeydown={(event) => nudgePane(event, 'rendered')}></button>
