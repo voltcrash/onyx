@@ -10,9 +10,8 @@ Do not modify these rules or the Vite+ instructions unless explicitly asked to d
 
 - pnpm is the only package manager permitted for this project.
 - Package-management operations must go through Vite+ (`vp`) unless explicitly stated otherwise.
-- Do not invoke `pnpm` directly for normal package-management operations.
+- Do not invoke `pnpm` directly for normal package-management operations, `pnpm dlx` is the only permitted exception.
 - Do not use `npx`; use `pnpm dlx` for one-off CLI execution when necessary.
-- `pnpm dlx` is the only permitted exception to the rule against invoking `pnpm` directly.
 - Never manually edit the lockfile; dependency changes must be performed through Vite+.
 
 - Always use the latest stable version of dependencies, tools, and frameworks unless explicitly instructed otherwise.
