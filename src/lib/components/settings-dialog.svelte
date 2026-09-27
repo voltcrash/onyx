@@ -98,8 +98,6 @@
 		{ id: 'themes', label: 'Themes' },
 		{ id: 'shortcuts', label: 'Keyboard shortcuts' },
 		{ id: 'github', label: 'Backup & sync' },
-		{ id: 'repository', label: 'Sync repository' },
-		{ id: 'backup', label: 'Sync status' },
 		{ id: 'storage', label: 'Storage choices' },
 		{ id: 'transfer', label: 'Import & export' },
 		{ id: 'vault', label: 'Vault' }
@@ -140,7 +138,7 @@
 	);
 
 	$effect(() => {
-		if (section === 'repository' && connected && isOnline && !repositoriesLoaded) void loadRepositories();
+		if (section === 'github' && connected && isOnline && !repositoriesLoaded) void loadRepositories();
 		if (section === 'storage' && !usage && usageState === 'idle') void loadUsage();
 	});
 
@@ -444,22 +442,33 @@
 						<div class="settings-account">
 							<span class="github-avatar" aria-hidden="true">{githubUser.login.slice(0, 1)}</span>
 							<span><strong>{githubUser.name || githubUser.login}</strong><small>@{githubUser.login}</small></span>
-							<button disabled={!isOnline} onclick={onDisconnectGithub}><LogOut size={14} /> Disconnect</button>
+						<button disabled={!isOnline} onclick={onDisconnectGithub}><LogOut size={14} /> Disconnect</button>
 						</div>
-					{:else}
-						<div class="settings-account empty">
-							<CloudOff size={22} />
-							<span><strong>Local only</strong><small>{githubMessage || 'Sign in to enable GitHub backup and cross-device sync.'}</small></span>
-							<button class="settings-primary" disabled={!isOnline || githubState === 'loading'} onclick={onConnectGithub}>
-								{#if githubState === 'loading'}<LoaderCircle class="spin" size={14} />{:else}<GithubIcon size={14} />{/if} Sign in with GitHub
+						{#if githubBackup}
+							<h3 class="settings-group-heading">Sync status</h3>
+							<dl class="settings-facts">
+								<div><dt>Repository</dt><dd>{githubBackup.owner}/{githubBackup.repository}</dd></div>
+								<div><dt>GitHub account</dt><dd>@{githubBackup.githubAccountLogin || 'Needs re-selection'}</dd></div>
+								<div><dt>Branch</dt><dd>{githubBackup.branch}</dd></div>
+								<div><dt>Directory</dt><dd>{githubBackup.directory || 'repository root'}</dd></div>
+								<div><dt>Last backup</dt><dd>{formatDate(githubBackup.lastBackedUpAt)}</dd></div>
+								<div><dt>Last commit</dt><dd>{githubBackup.lastCommitSha ? githubBackup.lastCommitSha.slice(0, 7) : 'None yet'}</dd></div>
+								<div><dt>Pending changes</dt><dd>{pendingBackupCount === 0 ? 'Up to date' : `${pendingBackupCount} ${pendingBackupCount === 1 ? 'change' : 'changes'}`}</dd></div>
+							</dl>
+						{/if}
+						<div class="settings-actions">
+							<button class="settings-primary" disabled={!isOnline || !vault || backupState === 'backing-up'} onclick={onBackup}>
+								{#if backupState === 'backing-up'}<LoaderCircle class="spin" size={14} />{:else}<CloudUpload size={14} />{/if} Back up now
 							</button>
+							<button disabled={!isOnline || !vault} onclick={onRestore}><CloudDownload size={14} /> Restore a commit</button>
 						</div>
-					{/if}
-				{:else if section === 'repository'}
-					<h3>Sync repository</h3>
-					{#if !connected}
-						<p class="settings-hint">Sign in with GitHub to choose where this vault is backed up for cross-device restore.</p>
-					{:else}
+						{#if backupMessage}
+							<p class="settings-hint" class:error={backupState === 'error'}>
+								{backupMessage}
+								{#if backupCommitUrl}<a href={backupCommitUrl} target="_blank" rel="noreferrer">View commit <ExternalLink size={12} /></a>{/if}
+							</p>
+						{/if}
+						<h3 class="settings-group-heading">Sync repository</h3>
 						<p class="settings-hint">“{vaultName}” backs up on its own. Only private repositories with write access can be used, and notes are written under the directory below.</p>
 						<div class="settings-field">
 							<label for="settings-repository">Repository</label>
@@ -491,34 +500,15 @@
 								<button class="settings-primary" disabled={!isOnline || !newRepositoryName.trim()} onclick={() => onCreateRepository(newRepositoryName)}>Create and back up</button>
 							</div>
 						</div>
-					{/if}
-				{:else if section === 'backup'}
-					<h3>Backup and sync status</h3>
-					{#if !githubBackup}
-						<p class="settings-hint">“{vaultName}” has no repository yet. Choose one in the Repository section to enable backups for this repository alone.</p>
 					{:else}
-						<dl class="settings-facts">
-							<div><dt>Repository</dt><dd>{githubBackup.owner}/{githubBackup.repository}</dd></div>
-							<div><dt>GitHub account</dt><dd>@{githubBackup.githubAccountLogin || 'Needs re-selection'}</dd></div>
-							<div><dt>Branch</dt><dd>{githubBackup.branch}</dd></div>
-							<div><dt>Directory</dt><dd>{githubBackup.directory || 'repository root'}</dd></div>
-							<div><dt>Last backup</dt><dd>{formatDate(githubBackup.lastBackedUpAt)}</dd></div>
-							<div><dt>Last commit</dt><dd>{githubBackup.lastCommitSha ? githubBackup.lastCommitSha.slice(0, 7) : 'None yet'}</dd></div>
-							<div><dt>Pending changes</dt><dd>{pendingBackupCount === 0 ? 'Up to date' : `${pendingBackupCount} ${pendingBackupCount === 1 ? 'change' : 'changes'}`}</dd></div>
-						</dl>
+						<div class="settings-account empty">
+							<CloudOff size={22} />
+							<span><strong>Local only</strong><small>{githubMessage || 'Sign in to enable GitHub backup and cross-device sync.'}</small></span>
+							<button class="settings-primary" disabled={!isOnline || githubState === 'loading'} onclick={onConnectGithub}>
+								{#if githubState === 'loading'}<LoaderCircle class="spin" size={14} />{:else}<GithubIcon size={14} />{/if} Sign in with GitHub
+							</button>
+						</div>
 					{/if}
-					{#if backupMessage}
-						<p class="settings-hint" class:error={backupState === 'error'}>
-							{backupMessage}
-							{#if backupCommitUrl}<a href={backupCommitUrl} target="_blank" rel="noreferrer">View commit <ExternalLink size={12} /></a>{/if}
-						</p>
-					{/if}
-					<div class="settings-actions">
-						<button class="settings-primary" disabled={!isOnline || !connected || !vault || backupState === 'backing-up'} onclick={onBackup}>
-							{#if backupState === 'backing-up'}<LoaderCircle class="spin" size={14} />{:else}<CloudUpload size={14} />{/if} Back up now
-						</button>
-						<button disabled={!isOnline || !connected || !vault} onclick={onRestore}><CloudDownload size={14} /> Restore a commit</button>
-					</div>
 				{:else if section === 'storage'}
 					<h3>Storage choices</h3>
 					<p class="settings-hint">Onyx always keeps a working vault on this device. Add a folder for accessible local files or GitHub for an off-device backup you can restore elsewhere.</p>
@@ -559,7 +549,7 @@
 						<section class="settings-storage-option">
 							<div><CloudUpload size={18} /><span><strong>GitHub backup and sync</strong><small>Optional off-device history for restoring this vault on another device.</small></span></div>
 							<p class="settings-hint">{connected ? githubBackup ? `Backing up to ${githubBackup.owner}/${githubBackup.repository}.` : 'Signed in. Choose a private repository to finish setup.' : 'Not enabled. Your local vault continues to work normally.'}</p>
-							<div class="settings-actions"><button onclick={() => (section = connected ? githubBackup ? 'backup' : 'repository' : 'github')}>{connected ? githubBackup ? 'View sync status' : 'Choose repository' : 'Learn about GitHub sync'}</button></div>
+							<div class="settings-actions"><button onclick={() => (section = 'github')}>{connected ? 'View backup & sync' : 'Learn about GitHub sync'}</button></div>
 						</section>
 						<div class="settings-actions">
 							<button disabled={usageState === 'loading'} onclick={() => void loadUsage()}><RefreshCw size={14} /> Refresh</button>

@@ -1051,24 +1051,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       group: "Settings",
       label: "GitHub backup & sync settings",
       icon: CloudUpload,
-      keywords: "account sign in backup cross device",
+      keywords:
+        "account sign in backup cross device repository branch directory remote status history commit pending changes",
       run: () => openSettings("github"),
-    },
-    {
-      id: "settings-repository",
-      group: "Settings",
-      label: "Sync repository settings",
-      icon: FolderOutput,
-      keywords: "github repository branch directory remote",
-      run: () => openSettings("repository"),
-    },
-    {
-      id: "settings-backup",
-      group: "Settings",
-      label: "Sync status settings",
-      icon: CloudDownload,
-      keywords: "backup history commit pending changes",
-      run: () => openSettings("backup"),
     },
     {
       id: "storage",
@@ -1387,7 +1372,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!isOnline || !vault || backupState === "backing-up") return;
     if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
     if (!githubBackup) {
-      void openSettings("repository").catch(() => undefined);
+      void openSettings("github").catch(() => undefined);
       return;
     }
     await runBackup(githubBackup);
@@ -1433,7 +1418,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       backupState = "idle";
       backupCommitUrl = "";
       backupMessage = `Backups now target ${state.owner}/${state.repository}.`;
-      settingsSection = "backup";
+      settingsSection = "github";
     } catch (error) {
       showBackupError(error);
     }
