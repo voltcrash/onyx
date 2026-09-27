@@ -3,8 +3,6 @@ export type SettingsSection =
   | "themes"
   | "shortcuts"
   | "github"
-  | "repository"
-  | "backup"
   | "storage"
   | "transfer"
   | "vault";
