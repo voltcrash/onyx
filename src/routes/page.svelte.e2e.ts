@@ -484,8 +484,6 @@ test("opens every settings section from the command palette", async ({ page }) =
     ["settings-themes", "Theme settings", "Themes"],
     ["shortcuts", "Keyboard shortcuts", "Keyboard shortcuts"],
     ["settings-github", "GitHub backup & sync settings", "Backup & sync"],
-    ["settings-repository", "Sync repository settings", "Sync repository"],
-    ["settings-backup", "Sync status settings", "Sync status"],
     ["storage", "Storage choices", "Storage choices"],
     ["settings-transfer", "Import & export settings", "Import & export"],
     ["settings-vault", "Vault settings", "Vault"],
@@ -804,6 +802,9 @@ test("keeps the editor usable and pauses GitHub features offline", async ({ cont
     page.getByText("GitHub settings are paused until your connection returns."),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign in with GitHub" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Sync repository", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Sync status", exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Repository", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Close settings" }).click();
 
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
@@ -1910,9 +1911,12 @@ test("binds a backup repository to the authenticated GitHub account", async ({ p
   await page.goto("/");
   await expect(page.getByText("@octocat").first()).toBeVisible({ timeout: 12_000 });
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await page.getByRole("button", { name: "Sync repository", exact: true }).click();
+  await page.getByRole("button", { name: "Backup & sync", exact: true }).click();
   await page.getByLabel("Repository", { exact: true }).selectOption("octocat/onyx-vault");
   await page.getByRole("button", { name: "Use this repository" }).click();
+  await expect(page.getByRole("heading", { name: "Sync status" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sync repository", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Sync status", exact: true })).toHaveCount(0);
 
   account = { id: 2, login: "hubot" };
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
@@ -1974,7 +1978,7 @@ test("refuses to upload a backup when its repository is public", async ({ page }
   await page.goto("/");
   await expect(page.getByText("@octocat").first()).toBeVisible({ timeout: 12_000 });
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await page.getByRole("button", { name: "Sync repository", exact: true }).click();
+  await page.getByRole("button", { name: "Backup & sync", exact: true }).click();
   await page.getByLabel("Repository", { exact: true }).selectOption("octocat/onyx-vault");
   await page.getByRole("button", { name: "Use this repository" }).click();
 
@@ -2166,7 +2170,7 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
   await page.keyboard.press("ControlOrMeta+S");
   await waitForBlockedVaultWrite(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await page.getByRole("button", { name: "Sync status" }).click();
+  await page.getByRole("button", { name: "Backup & sync", exact: true }).click();
   await page.getByRole("button", { name: "Restore a commit" }).click();
   await expect(page.getByRole("dialog", { name: "Choose a backup commit" })).toBeHidden({
     timeout: 200,
