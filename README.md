@@ -123,7 +123,7 @@ Onyx requests the `repo` scope so it can create private repositories and write b
 - `src/lib/markdown-lite.ts` keeps the first editor render dependency-free; the full parser,
   export/transfer tools, fonts, and dialog styles load only when needed.
 - `src/lib/github.ts` implements repository validation, backup, and restore.
-- `src/service-worker.ts` caches the application shell for offline use.
+- `src/service-worker/index.ts` caches the application shell for offline use.
 
 The app uses SvelteKit, TypeScript, Tailwind CSS, shadcn-svelte, and Vite+. It is configured for
 Vercel deployment.

@@ -1,8 +1,8 @@
 <script lang="ts">
-	import MarkdownWorkspace from '$lib/components/markdown-workspace.svelte';
-	import NotesSidebar from '$lib/components/notes-sidebar.svelte';
-	import StatusNotices from '$lib/components/status-notices.svelte';
-	import ImagePreview from '$lib/components/image-preview.svelte';
+	import MarkdownWorkspace from '#lib/components/markdown-workspace.svelte';
+	import NotesSidebar from '#lib/components/notes-sidebar.svelte';
+	import StatusNotices from '#lib/components/status-notices.svelte';
+	import ImagePreview from '#lib/components/image-preview.svelte';
 	import { createPageController, DEFAULT_SIDEBAR_WIDTH } from './page-controller.svelte.js';
 
 	const page = createPageController();
@@ -214,7 +214,7 @@
 />
 
 {#if page.settingsOpen}
-	{#await import('$lib/components/settings-dialog.svelte') then { default: SettingsDialog }}
+	{#await import('#lib/components/settings-dialog.svelte') then { default: SettingsDialog }}
 		<SettingsDialog
 			vault={page.vault}
 			vaultName={page.vaultName}
@@ -273,7 +273,7 @@
 <input class="transfer-input" bind:this={page.zipInput} type="file" accept=".zip,application/zip" onchange={(event) => void page.importZip(event.currentTarget.files)} />
 
 {#if page.restoreModalOpen}
-	{#await import('$lib/components/restore-dialog.svelte') then { default: RestoreDialog }}
+	{#await import('#lib/components/restore-dialog.svelte') then { default: RestoreDialog }}
 		<RestoreDialog
 			isOnline={page.isOnline}
 			restoreState={page.restoreState}

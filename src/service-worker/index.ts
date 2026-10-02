@@ -1,13 +1,14 @@
-/// <reference lib="webworker" />
-/// <reference types="@sveltejs/kit" />
-
-import { base, build, files, version } from "$service-worker";
-
-declare const self: ServiceWorkerGlobalScope;
+import { version } from "$app/env";
+import { assets, immutable } from "$app/manifest";
+import { asset, resolve } from "$app/paths";
+import { self } from "$app/service-worker";
 
 const CACHE = `onyx-${version}`;
-const APP_SHELL = `${base}/`;
-const PRECACHE = [...build, ...files];
+const APP_SHELL = resolve("/");
+const PRECACHE = [
+  ...immutable.map(({ path }) => `${APP_SHELL}${path}`),
+  ...assets.map(({ path }) => asset(path)),
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll([...PRECACHE, APP_SHELL])));
@@ -47,6 +48,9 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (PRECACHE.includes(url.pathname)) {
-    event.respondWith(caches.match(request).then((cached) => cached ?? fetch(request)));
+    // Vite varies CORS headers by Origin, but these static asset contents are identical.
+    event.respondWith(
+      caches.match(request, { ignoreVary: true }).then((cached) => cached ?? fetch(request)),
+    );
   }
 });

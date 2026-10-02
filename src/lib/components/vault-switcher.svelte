@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { Check, ChevronDown, Plus } from '@lucide/svelte';
-	import type { VaultDescriptor } from '$lib/storage/registry';
+	import type { VaultDescriptor } from '#lib/storage/registry.ts';
 
 	interface Props {
 		vaults: VaultDescriptor[];

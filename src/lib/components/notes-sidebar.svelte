@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { Archive, BriefcaseBusiness, CalendarDays, Camera, ChevronDown, ChevronRight, Code2, Copy, Download, ExternalLink, FilePlus2, FileText, Folder, FolderPlus, HardDrive, Heart, House, Image, Lightbulb, LoaderCircle, Lock, LockOpen, LogOut, Music2, Palette, Paperclip, PanelLeft, PanelRight, Pencil, Pin, Plane, Plus, Rocket, Search, Settings, Sparkles, Star, Tag, Trash2, Type, Undo2, X, type LucideIcon } from '@lucide/svelte';
-	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
-	import { folderIconOptions, isFolderIcon, type FolderIcon } from '$lib/folder-icons';
-	import type { GithubUser } from '$lib/github';
-	import type { VaultDescriptor } from '$lib/storage/registry';
-	import type { AttachmentMetadata, FolderMetadata, NoteMetadata, VaultSearchResult } from '$lib/storage/types';
+	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '#lib/keyboard-shortcuts.ts';
+	import { folderIconOptions, isFolderIcon, type FolderIcon } from '#lib/folder-icons.ts';
+	import type { GithubUser } from '#lib/github.ts';
+	import type { VaultDescriptor } from '#lib/storage/registry.ts';
+	import type { AttachmentMetadata, FolderMetadata, NoteMetadata, VaultSearchResult } from '#lib/storage/types.ts';
 	import GithubIcon from './github-icon.svelte';
 	import VaultSwitcher from './vault-switcher.svelte';
 	import FindReplace from './find-replace.svelte';

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { ChevronDown, ChevronUp, Search, X } from '@lucide/svelte';
-	import { formatShortcut, type PrimaryModifier } from '$lib/keyboard-shortcuts';
+	import { formatShortcut, type PrimaryModifier } from '#lib/keyboard-shortcuts.ts';
 
 	interface Props {
 		query: string;

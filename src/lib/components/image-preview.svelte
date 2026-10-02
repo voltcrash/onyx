@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Trash2, X } from '@lucide/svelte';
-	import { manageModalFocus } from '$lib/modal-focus';
+	import { manageModalFocus } from '#lib/modal-focus.ts';
 
 	interface Props {
 		name: string;
