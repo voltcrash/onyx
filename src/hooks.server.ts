@@ -1,7 +1,7 @@
-import { building } from "$app/environment";
-import { getAuth, isGithubAuthConfigured } from "$lib/server/auth.js";
+import { building } from "$app/env";
+import { getAuth, isGithubAuthConfigured } from "#lib/server/auth.ts";
 import { svelteKitHandler } from "better-auth/svelte-kit";
-import type { Handle } from "@sveltejs/kit";
+import type { Handle } from "@sveltejs/kit/hooks";
 
 const SECURITY_HEADERS = {
   "Cross-Origin-Opener-Policy": "same-origin",

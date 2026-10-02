@@ -59,10 +59,10 @@ import type {
   RestoreState,
   SaveState,
   TransferState,
-} from "$lib/components/app-types";
-import { noteFormats, type NoteFormat } from "$lib/components/note-formats";
-import type { SettingsSection } from "$lib/components/settings-types";
-import { renderMarkdownBlocks as renderLiteMarkdownBlocks } from "$lib/markdown-lite";
+} from "#lib/components/app-types.ts";
+import { noteFormats, type NoteFormat } from "#lib/components/note-formats.ts";
+import type { SettingsSection } from "#lib/components/settings-types.ts";
+import { renderMarkdownBlocks as renderLiteMarkdownBlocks } from "#lib/markdown-lite.ts";
 import {
   attachmentMarkdown,
   continueListOnEnter,
@@ -78,14 +78,14 @@ import {
   titleFromMarkdown,
   toggleCheckboxes,
   type LocalAttachmentUrl,
-} from "$lib/markdown-utils";
+} from "#lib/markdown-utils.ts";
 import {
   browserStorageWarnings,
   detectBrowserStorageSupport,
   persistenceDeniedMessage,
   readLocalStorage,
   writeLocalStorage,
-} from "$lib/browser-storage";
+} from "#lib/browser-storage.ts";
 import {
   applyFontChoices,
   defaultFontCategories,
@@ -99,8 +99,8 @@ import {
   type FontCategory,
   type FontChoices,
   type FontRole,
-} from "$lib/fonts";
-import { loadFont } from "$lib/font-loader";
+} from "#lib/fonts.ts";
+import { loadFont } from "#lib/font-loader.ts";
 import {
   defaultKeyboardShortcuts,
   detectPrimaryModifier,
@@ -113,7 +113,7 @@ import {
   type KeyboardShortcuts,
   type PrimaryModifier,
   type ShortcutAction,
-} from "$lib/keyboard-shortcuts";
+} from "#lib/keyboard-shortcuts.ts";
 import {
   createVaultDescriptor,
   isDefaultVault,
@@ -127,14 +127,14 @@ import {
   type VaultChangeEvent,
   type VaultDescriptor,
   type VaultSearchResult,
-} from "$lib/storage/index";
-import type { GithubBackupCommit, GithubUser } from "$lib/github";
+} from "#lib/storage/index.ts";
+import type { GithubBackupCommit, GithubUser } from "#lib/github.ts";
 import type {
   AttachmentMetadata,
   FolderMetadata,
   GithubBackupState,
   NoteMetadata,
-} from "$lib/storage/types";
+} from "#lib/storage/types.ts";
 import {
   applyColorTheme,
   applyTheme,
@@ -145,13 +145,14 @@ import {
   type ColorTheme,
   type ResolvedTheme,
   type ThemePreference,
-} from "$lib/theme";
-import { findTextMatches, type FindMatch } from "$lib/find-replace";
-import type { FolderIcon } from "$lib/folder-icons";
-import { outputFileName } from "$lib/output-utils";
-import type { MarkdownTransferFile } from "$lib/markdown-transfer";
-import { onMount, tick } from "svelte";
-import { pushState as pushAppState, replaceState as replaceAppState } from "$app/navigation";
+} from "#lib/theme.ts";
+import { findTextMatches, type FindMatch } from "#lib/find-replace.ts";
+import type { FolderIcon } from "#lib/folder-icons.ts";
+import { outputFileName } from "#lib/output-utils.ts";
+import type { MarkdownTransferFile } from "#lib/markdown-transfer.ts";
+import { onMount, tick, untrack } from "svelte";
+import { goto } from "$app/navigation";
+import { page } from "$app/state";
 
 const NOTE_PAGE_SIZE = 100;
 const PREVIEW_SETTLE_MS = 160;
@@ -161,20 +162,6 @@ const DEFERRED_STARTUP_DELAY_MS = 8_000;
 const NARROW_VIEWPORT = "(max-width: 900px)";
 const EDITOR_HISTORY_LIMIT = 200;
 const MARKDOWN_EXTENSION = ".md";
-const SVELTEKIT_STATES_KEY = "sveltekit:states";
-
-function noteIdFromHistoryState(state: unknown): string | undefined {
-  if (!state || typeof state !== "object") return;
-  const record = state as Record<string, unknown>;
-  const pageState =
-    record.onyxNoteId !== undefined
-      ? record
-      : record[SVELTEKIT_STATES_KEY] && typeof record[SVELTEKIT_STATES_KEY] === "object"
-        ? (record[SVELTEKIT_STATES_KEY] as Record<string, unknown>)
-        : undefined;
-  const noteId = pageState?.onyxNoteId;
-  return typeof noteId === "string" && noteId ? noteId : undefined;
-}
 
 const noteFormatPaletteNames: Record<NoteFormat, string> = {
   markdown: "Markdown",
@@ -216,20 +203,20 @@ const noteFormatExportIcons = {
   pdf: Printer,
 };
 
-type GithubModule = typeof import("$lib/github");
-type LazyStylesModule = typeof import("$lib/lazy-styles");
-type MarkdownModule = typeof import("$lib/markdown");
-type MarkdownOutputModule = typeof import("$lib/markdown-output");
+type GithubModule = typeof import("#lib/github.ts");
+type LazyStylesModule = typeof import("#lib/lazy-styles.ts");
+type MarkdownModule = typeof import("#lib/markdown.ts");
+type MarkdownOutputModule = typeof import("#lib/markdown-output.ts");
 
 let githubModulePromise: Promise<GithubModule> | undefined;
 let lazyStylesModulePromise: Promise<LazyStylesModule> | undefined;
 
 function loadGithubModule(): Promise<GithubModule> {
-  return (githubModulePromise ??= import("$lib/github"));
+  return (githubModulePromise ??= import("#lib/github.ts"));
 }
 
 function loadLazyStylesModule(): Promise<LazyStylesModule> {
-  return (lazyStylesModulePromise ??= import("$lib/lazy-styles"));
+  return (lazyStylesModulePromise ??= import("#lib/lazy-styles.ts"));
 }
 
 type SidebarState = { collapsed: boolean; open: boolean };
@@ -1090,7 +1077,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   ]);
 
   function loadMarkdownModule(): Promise<MarkdownModule> {
-    return (markdownModulePromise ??= import("$lib/markdown").then((module) => {
+    return (markdownModulePromise ??= import("#lib/markdown.ts").then((module) => {
       markdownModule = module;
       markdownModuleRevision += 1;
       return module;
@@ -1098,7 +1085,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function loadMarkdownOutputModule(): Promise<MarkdownOutputModule> {
-    return (markdownOutputModulePromise ??= import("$lib/markdown-output").then((module) => {
+    return (markdownOutputModulePromise ??= import("#lib/markdown-output.ts").then((module) => {
       void loadMarkdownModule().catch(() => undefined);
       return module;
     }));
@@ -1168,6 +1155,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     startupShell.remove();
   }
 
+  $effect(() => {
+    const noteId = page.state.onyxNoteId;
+    untrack(() => {
+      if (typeof noteId !== "string" || !noteId || noteId === activeNoteId) return;
+      void selectNote(noteId);
+    });
+  });
+
   onMount(() => {
     revealStartupShell();
     const registry = readVaultRegistry();
@@ -1212,9 +1207,14 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       if (theme === "system") resolvedTheme = applyTheme(theme);
     });
     void openVault()
-      .then(() => {
+      .then(async () => {
         try {
-          replaceAppState("", { onyxNoteId: activeNoteId });
+          await goto("", {
+            shallow: true,
+            replace: true,
+            reset: false,
+            state: { onyxNoteId: activeNoteId },
+          });
         } catch {
           // History is best-effort; the app works without it.
         }
@@ -1242,23 +1242,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden" && markdown !== lastSavedMarkdown) void saveDraft();
     };
-    const onPopState = (event: PopStateEvent) => {
-      const noteId = noteIdFromHistoryState(event.state);
-      if (typeof noteId !== "string" || !noteId || noteId === activeNoteId) return;
-      void selectNote(noteId);
-    };
     window.addEventListener("beforeunload", onBeforeUnload);
     window.addEventListener("keydown", onKeydown);
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
-    window.addEventListener("popstate", onPopState);
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       window.removeEventListener("beforeunload", onBeforeUnload);
       window.removeEventListener("keydown", onKeydown);
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
-      window.removeEventListener("popstate", onPopState);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       narrowQuery?.removeEventListener("change", onViewportChange);
       stopThemeWatch();
@@ -1277,7 +1270,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function registerServiceWorker(): void {
     if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker.register("/service-worker.js").catch(() => undefined);
+      void navigator.serviceWorker
+        .register("/service-worker.js", { type: "module" })
+        .catch(() => undefined);
     }
   }
 
@@ -1311,8 +1306,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const result = new URLSearchParams(location.search).get("github");
     if (result) {
       try {
-        replaceAppState(`${location.pathname}${location.hash}`, {
-          onyxNoteId: noteIdFromHistoryState(history.state) ?? activeNoteId,
+        await goto(`${location.pathname}${location.hash}`, {
+          shallow: true,
+          replace: true,
+          reset: false,
+          state: { onyxNoteId: page.state.onyxNoteId ?? activeNoteId },
         });
       } catch {
         // History is best-effort; the callback can still be handled.
@@ -1963,14 +1961,19 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
     const sourceId = activeNoteId;
     try {
-      replaceAppState("", { onyxNoteId: sourceId });
+      await goto("", {
+        shallow: true,
+        replace: true,
+        reset: false,
+        state: { onyxNoteId: sourceId },
+      });
     } catch {
       // History is best-effort; navigation still works without it.
     }
     await selectNote(id);
     if (activeNoteId !== id) return;
     try {
-      pushAppState("", { onyxNoteId: id });
+      await goto("", { shallow: true, reset: false, state: { onyxNoteId: id } });
     } catch {
       // Ignore history failures after a successful navigation.
     }
@@ -2517,7 +2520,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   async function importFolder(files: FileList | null): Promise<void> {
     if (!files?.length) return;
-    const { readMarkdownFolder } = await import("$lib/markdown-transfer");
+    const { readMarkdownFolder } = await import("#lib/markdown-transfer.ts");
     await runImport(readMarkdownFolder(files));
     if (folderInput) folderInput.value = "";
   }
@@ -2527,7 +2530,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!file) return;
     transferState = "working";
     try {
-      const { readMarkdownZip } = await import("$lib/markdown-transfer");
+      const { readMarkdownZip } = await import("#lib/markdown-transfer.ts");
       const entries = await readMarkdownZip(file);
       transferState = "idle";
       await runImport(entries);
@@ -2546,7 +2549,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       return;
     }
     try {
-      const { importMarkdownFiles } = await import("$lib/markdown-transfer");
+      const { importMarkdownFiles } = await import("#lib/markdown-transfer.ts");
       await importMarkdownFiles(vault, files);
       searchQuery = "";
       const notes = await vault.listNotes();
@@ -2720,7 +2723,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       return;
     }
     try {
-      const { createMarkdownExport, createMarkdownZip } = await import("$lib/markdown-transfer");
+      const { createMarkdownExport, createMarkdownZip } = await import("#lib/markdown-transfer.ts");
       const files = await createMarkdownExport(vault);
       const archive = await createMarkdownZip(files);
       downloadBlob(archive, `onyx-markdown-${new Date().toISOString().slice(0, 10)}.zip`);
@@ -2750,7 +2753,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         transferState = "idle";
         return;
       }
-      const { createMarkdownExport, writeMarkdownFolder } = await import("$lib/markdown-transfer");
+      const { createMarkdownExport, writeMarkdownFolder } =
+        await import("#lib/markdown-transfer.ts");
       const files = await createMarkdownExport(vault);
       await writeMarkdownFolder(directory, files);
       transferState = "idle";

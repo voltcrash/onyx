@@ -5,17 +5,17 @@
 		FolderInput, FolderOutput, HardDrive, LoaderCircle, LogOut, Monitor, Moon, RefreshCw, ShieldCheck,
 		Sun, Trash2, TriangleAlert, WifiOff, X
 	} from '@lucide/svelte';
-	import { listGithubRepositories, type GithubRepository, type GithubUser } from '$lib/github';
-	import { defaultFontChoices, fontCategories as fontCategoryOptions, fontOptionsFor, fontRoles, type FontCategories, type FontCategory, type FontChoices, type FontRole } from '$lib/fonts';
-	import { colorThemeOptions, type ColorTheme, type ResolvedTheme, type ThemePreference } from '$lib/theme';
-	import { persistenceDeniedMessage } from '$lib/browser-storage';
+	import { listGithubRepositories, type GithubRepository, type GithubUser } from '#lib/github.ts';
+	import { defaultFontChoices, fontCategories as fontCategoryOptions, fontOptionsFor, fontRoles, type FontCategories, type FontCategory, type FontChoices, type FontRole } from '#lib/fonts.ts';
+	import { colorThemeOptions, type ColorTheme, type ResolvedTheme, type ThemePreference } from '#lib/theme.ts';
+	import { persistenceDeniedMessage } from '#lib/browser-storage.ts';
 	import {
 		formatShortcut, shortcutActions, shortcutFromEvent, shortcutParts, shortcutsEqual,
 		type KeyboardShortcut, type KeyboardShortcuts, type PrimaryModifier, type ShortcutAction
-	} from '$lib/keyboard-shortcuts';
-	import type { Vault } from '$lib/storage/vault';
-	import type { GithubBackupState, VaultStorageUsage } from '$lib/storage/types';
-	import { manageModalFocus } from '$lib/modal-focus';
+	} from '#lib/keyboard-shortcuts.ts';
+	import type { Vault } from '#lib/storage/vault.ts';
+	import type { GithubBackupState, VaultStorageUsage } from '#lib/storage/types.ts';
+	import { manageModalFocus } from '#lib/modal-focus.ts';
 	import GithubIcon from './github-icon.svelte';
 	import type { SettingsSection } from './settings-types';
 

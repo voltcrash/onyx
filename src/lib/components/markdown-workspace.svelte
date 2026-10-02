@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, PanelLeft, PencilLine, X } from '@lucide/svelte';
-	import { highlightFindMatches, type FindMatch } from '$lib/find-replace';
-	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '$lib/keyboard-shortcuts';
-	import type { ColorTheme, ResolvedTheme } from '$lib/theme';
-	import type { SourceLines } from '$lib/markdown-lite';
-	import { elementAnchors, scrollAnchors, syncedScrollTop, textareaAnchors, type ScrollAnchor } from '$lib/scroll-sync';
+	import { highlightFindMatches, type FindMatch } from '#lib/find-replace.ts';
+	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '#lib/keyboard-shortcuts.ts';
+	import type { ColorTheme, ResolvedTheme } from '#lib/theme.ts';
+	import type { SourceLines } from '#lib/markdown-lite.ts';
+	import { elementAnchors, scrollAnchors, syncedScrollTop, textareaAnchors, type ScrollAnchor } from '#lib/scroll-sync.ts';
 	import type { PaneEdge, PaneLayout, PaneOrder, SaveState, TransferState } from './app-types';
 
 	interface Props {

@@ -1,4 +1,4 @@
-import { env } from "$env/dynamic/private";
+import { BETTER_AUTH_SECRET, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET } from "$app/env/private";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 
 const SESSION_LENGTH_SECONDS = 7 * 24 * 60 * 60;
@@ -7,17 +7,15 @@ let authInstance: ReturnType<typeof createAuth> | undefined;
 
 export function isGithubAuthConfigured(): boolean {
   return Boolean(
-    env.BETTER_AUTH_SECRET?.trim() &&
-    env.GITHUB_CLIENT_ID?.trim() &&
-    env.GITHUB_CLIENT_SECRET?.trim(),
+    BETTER_AUTH_SECRET?.trim() && GITHUB_CLIENT_ID?.trim() && GITHUB_CLIENT_SECRET?.trim(),
   );
 }
 
 export function getAuth(): ReturnType<typeof createAuth> {
   if (authInstance) return authInstance;
-  const secret = env.BETTER_AUTH_SECRET?.trim();
-  const clientId = env.GITHUB_CLIENT_ID?.trim();
-  const clientSecret = env.GITHUB_CLIENT_SECRET?.trim();
+  const secret = BETTER_AUTH_SECRET?.trim();
+  const clientId = GITHUB_CLIENT_ID?.trim();
+  const clientSecret = GITHUB_CLIENT_SECRET?.trim();
   if (!secret || !clientId || !clientSecret) {
     throw new Error("GitHub authentication is not configured");
   }
