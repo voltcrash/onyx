@@ -68,10 +68,8 @@ export function renderMarkdownBlocks(
       const language = fence[2]!.trim().split(/\s+/)[0] ?? "";
       index += 1;
       const content: string[] = [];
-      while (
-        index < lines.length &&
-        !lines[index]!.match(new RegExp(`^\\s*${marker[0]}{${marker.length},}`))
-      ) {
+      const closing = new RegExp(`^\\s*${marker[0]}{${marker.length},}`);
+      while (index < lines.length && !closing.test(lines[index]!)) {
         content.push(lines[index]!);
         index += 1;
       }
