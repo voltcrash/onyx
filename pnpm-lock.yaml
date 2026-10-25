@@ -18,8 +18,8 @@ importers:
   .:
     dependencies:
       '@zip.js/zip.js':
-        specifier: ^2.10.0
-        version: 2.10.0
+        specifier: ^2.24.0
+        version: 2.24.0
       better-auth:
         specifier: ^1.7.12
         version: 1.7.12(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(@voidzero-dev/vite-plus-core@0.2.9(esbuild@0.28.2)(jiti@2.7.0)(typescript@6.0.3))(svelte@5.57.2))(@voidzero-dev/vite-plus-core@0.2.9(esbuild@0.28.2)(jiti@2.7.0)(typescript@6.0.3))(svelte@5.57.2)(typescript@6.0.3))(svelte@5.57.2)(vitest@4.1.10)
@@ -1345,8 +1345,8 @@ packages:
   '@yuku-toolchain/types@0.5.43':
     resolution: {integrity: sha512-kSpvPntnXw5+lYjO71ffBEnQ5ycQ74KGIYknh0TS4xeyCuBkOqxyJumxZkMhLBBUCLjDAbx2+Icnr3Zh4ftjpQ==}
 
-  '@zip.js/zip.js@2.10.0':
-    resolution: {integrity: sha512-xRGsVpZiZlp/C/NkTAZHYE+gEhDZXJzvquuAmanDaGl3H81gQ1Di6xItqygySp8RlrzBf1GGW98LDLz0LaC6qA==}
+  '@zip.js/zip.js@2.24.0':
+    resolution: {integrity: sha512-WlaVKzdqBK+RF3bdiXZWbdCnvGB6PdO4IHC1mn/2Yfl3bASgqUNegnU3+PNg61iecwoPfUi5BgLUPqBukXpyWw==}
     engines: {bun: '>=0.7.0', deno: '>=1.0.0', node: '>=18.0.0'}
 
   abbrev@3.0.1:
@@ -3262,7 +3262,7 @@ snapshots:
 
   '@yuku-toolchain/types@0.5.43': {}
 
-  '@zip.js/zip.js@2.10.0': {}
+  '@zip.js/zip.js@2.24.0': {}
 
   abbrev@3.0.1: {}
 
