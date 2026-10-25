@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { createSearchPostings, type SearchDocument } from "./database.js";
+import {
+  createSearchPostings,
+  diffSearchPostings,
+  type SearchDocument,
+  type SearchPosting,
+} from "./database.js";
 
 describe("createSearchPostings", () => {
   it("indexes Unicode terms and tracks field weights", () => {
@@ -37,5 +42,24 @@ describe("createSearchPostings", () => {
         },
       ]),
     );
+  });
+});
+
+describe("diffSearchPostings", () => {
+  const posting = (term: string, bodyMatches: number): SearchPosting => ({
+    term,
+    noteId: "note-1",
+    titleMatches: 0,
+    bodyMatches,
+    tagMatches: 0,
+  });
+
+  it("writes only new or changed terms and removes vanished ones", () => {
+    expect(
+      diffSearchPostings(
+        [posting("kept", 1), posting("changed", 1), posting("gone", 2)],
+        [posting("kept", 1), posting("changed", 2), posting("added", 1)],
+      ),
+    ).toEqual({ removed: ["gone"], written: [posting("changed", 2), posting("added", 1)] });
   });
 });
