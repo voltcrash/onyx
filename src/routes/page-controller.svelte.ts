@@ -1649,27 +1649,29 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       appendNativeDirectoryNotice();
       unsubscribeVault?.();
       unsubscribeVault = vault.subscribe(queueRemoteVaultSync);
-      let notes = await vault.listNotes();
-      folders = await vault.listFolders();
-      if (notes.length === 0) {
+      let tree = await vault.listFileTree();
+      folders = tree.folders;
+      const createFirstNote = tree.notes.length === 0;
+      if (createFirstNote) {
         const legacyDraft =
           activeVault && isDefaultVault(activeVault) ? await readLegacyDraft() : "";
         const contents = legacyDraft || createInitialMarkdown(primaryModifier);
-        const firstNote = await vault.saveNote({
+        await vault.saveNote({
           title: titleFromMarkdown(contents),
           markdown: contents,
         });
-        notes = [firstNote];
       }
-      await vault.purgeExpiredTrash().catch(() => []);
-      notes = await vault.listNotes();
-      await loadNote(notes[0].id);
-      vaultAttachments = await vault.listAttachments();
-      trashedNotes = await vault.listTrashedNotes();
+      const purged = await vault.purgeExpiredTrash().catch(() => []);
+      if (createFirstNote || purged.length > 0) tree = await vault.listFileTree();
+      await loadNote(tree.notes[0]!.id);
+      vaultAttachments = tree.attachments;
+      trashedNotes = tree.trashedNotes;
       await runSearch("");
       if (searchQuery.trim()) await runSearch(searchQuery);
-      githubBackup = await vault.getGithubBackupState();
-      pendingBackupCount = await vault.countPendingBackupOperations();
+      [githubBackup, pendingBackupCount] = await Promise.all([
+        vault.getGithubBackupState(),
+        vault.countPendingBackupOperations(),
+      ]);
       if (detectBrowserStorageSupport().persistentStorage) void ensurePersistentStorage();
     } catch (error) {
       storageError = error instanceof Error ? error.message : "Your notes could not be opened.";
@@ -1840,7 +1842,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       remoteSyncRequested = false;
       const changes = remoteChanges.splice(0);
       if (!vault) continue;
-      const notes = await vault.listNotes();
+      const tree = await vault.listFileTree();
+      const notes = tree.notes;
       const activeChanged = changes.some(
         (change) => change.kind === "vault" || change.noteId === activeNoteId,
       );
@@ -1859,10 +1862,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       }
       await runSearch(searchQuery);
       paletteNotes = notes;
-      vaultAttachments = await vault.listAttachments();
-      trashedNotes = await vault.listTrashedNotes();
-      githubBackup = await vault.getGithubBackupState();
-      pendingBackupCount = await vault.countPendingBackupOperations();
+      vaultAttachments = tree.attachments;
+      trashedNotes = tree.trashedNotes;
+      [githubBackup, pendingBackupCount] = await Promise.all([
+        vault.getGithubBackupState(),
+        vault.countPendingBackupOperations(),
+      ]);
     }
   }
 
@@ -1986,13 +1991,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   async function refreshFileTree(): Promise<NoteMetadata[]> {
     if (!vault) return [];
-    const notes = await vault.listNotes();
-    folders = await vault.listFolders();
-    vaultAttachments = await vault.listAttachments();
-    trashedNotes = await vault.listTrashedNotes();
-    paletteNotes = notes;
+    const tree = await vault.listFileTree();
+    folders = tree.folders;
+    vaultAttachments = tree.attachments;
+    trashedNotes = tree.trashedNotes;
+    paletteNotes = tree.notes;
     await runSearch(searchQuery);
-    return notes;
+    return tree.notes;
   }
 
   async function createNote(parent = "", requestedName = ""): Promise<void> {

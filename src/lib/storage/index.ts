@@ -39,4 +39,5 @@ export type {
   VaultSearchResult,
   VaultStorageUsage,
   VaultFileStorageStatus,
+  VaultFileTree,
 } from "./types.js";

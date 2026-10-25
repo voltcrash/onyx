@@ -26,6 +26,7 @@ import type {
   VaultSearchResult,
   VaultStorageUsage,
   VaultFileStorageStatus,
+  VaultFileTree,
   VaultChangeEvent,
   VaultOperationContext,
   VaultOperationOptions,
@@ -309,20 +310,27 @@ export class Vault {
   }
 
   async listNotes(): Promise<NoteMetadata[]> {
-    return this.#withLock(async () => {
-      const notes = await this.#database.getNotes();
-      return notes
-        .filter((note) => !note.deletedAt)
-        .sort((left, right) => compareDescending(left.updatedAt, right.updatedAt));
-    });
+    return this.#withLock(async () => activeNotes(await this.#database.getNotes()));
   }
 
   async listTrashedNotes(): Promise<NoteMetadata[]> {
+    return this.#withLock(async () => trashedNotes(await this.#database.getNotes()));
+  }
+
+  /** Reads the notes, trash, folders, and attachments under one lock and one metadata read. */
+  listFileTree(): Promise<VaultFileTree> {
     return this.#withLock(async () => {
-      const notes = await this.#database.getNotes();
-      return notes
-        .filter((note) => Boolean(note.deletedAt))
-        .sort((left, right) => compareDescending(left.deletedAt ?? "", right.deletedAt ?? ""));
+      const [notes, attachments, folders] = await Promise.all([
+        this.#database.getNotes(),
+        this.#database.getAttachments(),
+        this.#database.getFileFolders(),
+      ]);
+      return {
+        notes: activeNotes(notes),
+        trashedNotes: trashedNotes(notes),
+        folders,
+        attachments: untrashedAttachments(notes, attachments),
+      };
     });
   }
 
@@ -650,8 +658,7 @@ export class Vault {
         this.#database.getNotes(),
         this.#database.getAttachments(),
       ]);
-      const trashedIds = new Set(notes.filter((note) => note.deletedAt).map((note) => note.id));
-      return attachments.filter((attachment) => !trashedIds.has(attachment.noteId));
+      return untrashedAttachments(notes, attachments);
     });
   }
 
@@ -1167,6 +1174,26 @@ export class Vault {
 // ISO timestamps sort as plain strings, which is far cheaper than a locale-aware comparison.
 function compareDescending(left: string, right: string): number {
   return left < right ? 1 : left > right ? -1 : 0;
+}
+
+function activeNotes(notes: NoteMetadata[]): NoteMetadata[] {
+  return notes
+    .filter((note) => !note.deletedAt)
+    .sort((left, right) => compareDescending(left.updatedAt, right.updatedAt));
+}
+
+function trashedNotes(notes: NoteMetadata[]): NoteMetadata[] {
+  return notes
+    .filter((note) => Boolean(note.deletedAt))
+    .sort((left, right) => compareDescending(left.deletedAt ?? "", right.deletedAt ?? ""));
+}
+
+function untrashedAttachments(
+  notes: NoteMetadata[],
+  attachments: AttachmentMetadata[],
+): AttachmentMetadata[] {
+  const trashedIds = new Set(notes.filter((note) => note.deletedAt).map((note) => note.id));
+  return attachments.filter((attachment) => !trashedIds.has(attachment.noteId));
 }
 
 async function inferNotes(files: VaultRestoreFile[], restoredAt: string): Promise<NoteMetadata[]> {
