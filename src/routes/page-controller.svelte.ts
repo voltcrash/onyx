@@ -119,6 +119,7 @@ import {
 import {
   createVaultDescriptor,
   isDefaultVault,
+  listedSearchResult,
   normalizeVaultName,
   readVaultRegistry,
   suggestedRepositoryName,
@@ -135,6 +136,7 @@ import type {
   AttachmentMetadata,
   FolderMetadata,
   GithubBackupState,
+  Note,
   NoteMetadata,
 } from "#lib/storage/types.ts";
 import {
@@ -377,6 +379,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let previewIsLive = $state(false);
   let printing = $state(false);
   let searchSequence = 0;
+  let settledSearchSequence = 0;
   let editor: HTMLTextAreaElement | undefined = $state();
   let searchInput: HTMLInputElement | undefined = $state();
   let findOpen = $state(false);
@@ -2830,7 +2833,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
           storageError = "";
         }
         appendNativeDirectoryNotice();
-        await runSearch(searchQuery);
+        await refreshResultsAfterSave(savedNote);
         pendingBackupCount = await vault.countPendingBackupOperations();
       } catch (error) {
         saveRequested = false;
@@ -3499,6 +3502,29 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }, 120);
   }
 
+  // Without a query only the saved note's entry changes, so it is replaced rather than
+  // re-reading every indexed note.
+  async function refreshResultsAfterSave(saved: Note): Promise<void> {
+    const searchInFlight = settledSearchSequence !== searchSequence;
+    if (searchQuery.trim() || !notesLoaded || searchTimer !== undefined || searchInFlight) {
+      await runSearch(searchQuery);
+      return;
+    }
+    const { markdown: contents, ...note } = saved;
+    const others = results.filter((result) => result.note.id !== note.id);
+    results = note.deletedAt
+      ? others
+      : [listedSearchResult(note, contents), ...others].sort((left, right) =>
+          left.note.updatedAt < right.note.updatedAt
+            ? 1
+            : left.note.updatedAt > right.note.updatedAt
+              ? -1
+              : 0,
+        );
+    notePage = 0;
+    searchPending = false;
+  }
+
   async function runSearch(query: string): Promise<void> {
     if (!vault) return;
     searchPending = Boolean(query.trim());
@@ -3509,6 +3535,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       notePage = 0;
       notesLoaded = true;
       searchPending = false;
+      settledSearchSequence = sequence;
     }
   }
 

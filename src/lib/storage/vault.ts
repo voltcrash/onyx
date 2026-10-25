@@ -1171,6 +1171,11 @@ export class Vault {
   }
 }
 
+/** The entry an unfiltered search lists for a note, so one saved note can be updated in place. */
+export function listedSearchResult(note: NoteMetadata, markdown: string): VaultSearchResult {
+  return { note, excerpt: excerpt(normalizeSearchText(markdown), ""), score: 0 };
+}
+
 /** The UTF-8 size of `value`, as a Blob of it would report, without copying it. */
 export function utf8ByteLength(value: string): number {
   let bytes = 0;
