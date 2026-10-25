@@ -62,7 +62,14 @@ import type {
 } from "#lib/components/app-types.ts";
 import { noteFormats, type NoteFormat } from "#lib/components/note-formats.ts";
 import type { SettingsSection } from "#lib/components/settings-types.ts";
-import { renderMarkdownBlocks as renderLiteMarkdownBlocks } from "#lib/markdown-lite.ts";
+import {
+  renderMarkdownBlocks as renderLiteMarkdownBlocks,
+  type RenderedBlock,
+} from "#lib/markdown-lite.ts";
+import {
+  createMarkdownRenderWorker,
+  type MarkdownRenderWorker,
+} from "#lib/markdown-render-worker.ts";
 import {
   attachmentMarkdown,
   continueListOnEnter,
@@ -240,6 +247,13 @@ interface EditorSelection {
 interface EditorHistoryEntry {
   markdown: string;
   selection?: EditorSelection;
+}
+
+interface WorkerPreview {
+  source: string;
+  attachments: LocalAttachmentUrl[];
+  noteSourcePath: string | undefined;
+  blocks: RenderedBlock[];
 }
 
 interface ImagePreviewState {
@@ -445,12 +459,17 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let applyingEditorHistory = false;
   let noteList: HTMLElement | undefined = $state();
   let activeNoteSourcePath: string | undefined = $state();
-  let localAttachmentUrls = $state<LocalAttachmentUrl[]>([]);
+  // Replaced rather than mutated, so a render can be matched to the list it resolved against.
+  let localAttachmentUrls = $state.raw<LocalAttachmentUrl[]>([]);
   let imagePreview = $state<ImagePreviewState>();
   let imagePreviewRequest = 0;
   let markdownModule: MarkdownModule | undefined;
   let markdownModulePromise: Promise<MarkdownModule> | undefined;
   let markdownModuleRevision = $state(0);
+  // Undefined until first needed, and null once workers prove unavailable.
+  let renderWorker: MarkdownRenderWorker | null | undefined;
+  let workerPreview = $state.raw<WorkerPreview>();
+  let pendingWorkerPreview: (Omit<WorkerPreview, "blocks"> & { done: Promise<void> }) | undefined;
   let markdownOutputModulePromise: Promise<MarkdownOutputModule> | undefined;
   let dialogStylesPromise: Promise<void> | undefined;
   let serviceWorkerTimer: number | undefined;
@@ -472,6 +491,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   const wordCount = $derived(countWords(markdown));
   const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
   const renderedBlocks = $derived.by(() => {
+    const preview = workerPreview;
+    if (preview && workerPreviewMatches(preview, previewMarkdown)) return preview.blocks;
     void markdownModuleRevision;
     return renderMarkdownBlocksForPage(previewMarkdown, resolveAttachmentUrl);
   });
@@ -1102,21 +1123,96 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     ));
   }
 
+  // While the worker renders, the lite renderer stands in; the full renderer only runs on
+  // the main thread when workers are unavailable.
   function renderMarkdownBlocksForPage(
     source: string,
     resolveLocalUrl: (destination: string) => string | undefined,
   ) {
     return (
-      markdownModule?.renderMarkdownBlocks(source, resolveLocalUrl) ??
-      renderLiteMarkdownBlocks(source, resolveLocalUrl)
+      (renderWorker === null
+        ? markdownModule?.renderMarkdownBlocks(source, resolveLocalUrl)
+        : undefined) ?? renderLiteMarkdownBlocks(source, resolveLocalUrl)
     );
   }
 
-  // The lite renderer handles first paint and active input. The settled preview
-  // upgrades once the full renderer loads via markdownModuleRevision.
+  function markdownRenderWorker(): MarkdownRenderWorker | undefined {
+    if (renderWorker === undefined) renderWorker = createMarkdownRenderWorker() ?? null;
+    if (renderWorker?.failed) renderWorker = null;
+    return renderWorker ?? undefined;
+  }
+
+  function workerPreviewMatches(
+    preview: Omit<WorkerPreview, "blocks">,
+    source: string,
+    attachments = localAttachmentUrls,
+    noteSourcePath = activeNoteSourcePath,
+  ): boolean {
+    return (
+      preview.source === source &&
+      preview.attachments === attachments &&
+      preview.noteSourcePath === noteSourcePath
+    );
+  }
+
+  /**
+   * Renders a note in the worker so the main thread stays free while it parses. Resolves once
+   * the result is ready to show, or once the main-thread renderer has loaded in its place.
+   */
+  async function renderFullPreview(
+    source: string,
+    attachments = localAttachmentUrls,
+    noteSourcePath = activeNoteSourcePath,
+  ): Promise<void> {
+    if (workerPreview && workerPreviewMatches(workerPreview, source, attachments, noteSourcePath)) {
+      return;
+    }
+    const pending = pendingWorkerPreview;
+    if (pending && workerPreviewMatches(pending, source, attachments, noteSourcePath)) {
+      return pending.done;
+    }
+    const done = renderInWorker(source, attachments, noteSourcePath);
+    const request = { source, attachments, noteSourcePath, done };
+    pendingWorkerPreview = request;
+    try {
+      await done;
+    } finally {
+      if (pendingWorkerPreview === request) pendingWorkerPreview = undefined;
+    }
+  }
+
+  async function renderInWorker(
+    source: string,
+    attachments: LocalAttachmentUrl[],
+    noteSourcePath: string | undefined,
+  ): Promise<void> {
+    const worker = markdownRenderWorker();
+    if (worker) {
+      try {
+        const blocks = await worker.render({ source, noteSourcePath, attachments });
+        if (blocks) workerPreview = { source, attachments, noteSourcePath, blocks };
+        return;
+      } catch {
+        renderWorker = null;
+        workerPreview = undefined;
+      }
+    }
+    await loadMarkdownModule().catch(() => undefined);
+  }
+
+  // The lite renderer handles first paint and active input; the settled preview upgrades once
+  // the full render is ready.
   function ensureFullMarkdownParserLoaded(): void {
+    if (markdownRenderWorker()) return;
     if (!markdownModule) void loadMarkdownModule().catch(() => undefined);
   }
+
+  $effect(() => {
+    const source = previewMarkdown;
+    const attachments = localAttachmentUrls;
+    const noteSourcePath = activeNoteSourcePath;
+    untrack(() => void renderFullPreview(source, attachments, noteSourcePath));
+  });
 
   function applyStoredFontChoices(): void {
     const storedFonts = readFontChoices();
@@ -1267,6 +1363,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       if (serviceWorkerTimer) window.clearTimeout(serviceWorkerTimer);
       if (githubRestoreTimer) window.clearTimeout(githubRestoreTimer);
       unsubscribeVault?.();
+      renderWorker?.dispose();
+      renderWorker = null;
       releaseLocalAttachmentUrls();
       closeImagePreview();
       vault?.close();
@@ -1782,9 +1880,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const sequence = ++noteLoadSequence;
     const note = await currentVault.getNote(id);
     if (!note || note.deletedAt) return;
-    const fullMarkdownParser = markdownModule
-      ? undefined
-      : loadMarkdownModule().catch(() => undefined);
     const folder = attachmentFolder;
     const attachments = await Promise.all(
       (await currentVault.listAttachments())
@@ -1795,7 +1890,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         )
         .map((attachment) => currentVault.getAttachment(attachment.id)),
     );
-    if (fullMarkdownParser) await fullMarkdownParser;
     const nextUrls = attachments.flatMap((attachment): LocalAttachmentUrl[] =>
       attachment
         ? [
@@ -1809,6 +1903,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
           ]
         : [],
     );
+    // Rendering before the switch shows the note fully formatted instead of upgrading it.
+    if (sequence === noteLoadSequence) {
+      await renderFullPreview(note.markdown, nextUrls, note.sourcePath);
+    }
     if (sequence !== noteLoadSequence) {
       for (const attachment of nextUrls) URL.revokeObjectURL(attachment.url);
       return;
@@ -1964,7 +2062,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!id) return;
     if (id === activeNoteId) {
       if (parsed.fragment) {
-        if (!markdownModule) await loadMarkdownModule().catch(() => undefined);
+        await renderFullPreview(previewMarkdown);
         await scrollToNoteFragment(parsed.fragment);
       }
       return;
@@ -2585,6 +2683,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   async function savePdf(): Promise<void> {
     await import("./styles/print.css");
     updatePreviewImmediately(markdown);
+    await renderFullPreview(markdown);
     printing = true;
     try {
       await tick();
