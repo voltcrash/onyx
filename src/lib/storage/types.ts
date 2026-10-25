@@ -172,6 +172,14 @@ export interface VaultSearchResult {
   score: number;
 }
 
+/** What the file tree shows, read together so it reflects one moment. */
+export interface VaultFileTree {
+  notes: NoteMetadata[];
+  trashedNotes: NoteMetadata[];
+  folders: FolderMetadata[];
+  attachments: AttachmentMetadata[];
+}
+
 export interface VaultOptions {
   databaseName?: string;
   directoryName?: string;

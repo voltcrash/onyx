@@ -18,6 +18,12 @@ describe("titleFromMarkdown", () => {
   it("supports YAML's alternate closing marker", () => {
     expect(titleFromMarkdown("---\ntitle: Hidden\n...\n\n# Heading")).toBe("Heading");
   });
+
+  it("falls back when front matter is all there is, and keeps unclosed front matter", () => {
+    expect(titleFromMarkdown("---\ntitle: Hidden\n---\n\n")).toBe("Untitled");
+    expect(titleFromMarkdown("\r\n---\r\ntitle: Open")).toBe("---");
+    expect(titleFromMarkdown("\r\n\r\n  ## *Windows* title  \r\nBody")).toBe("Windows title");
+  });
 });
 
 describe("renderMarkdown", () => {

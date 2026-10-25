@@ -175,11 +175,12 @@ export class VaultDatabase {
       transaction.objectStore("noteContents").put({ noteId: note.id, markdown });
       transaction.objectStore("searchDocuments").put(searchDocument);
       const postings = transaction.objectStore("searchPostings");
-      const previousKeys = await requestResult<IDBValidKey[]>(
-        postings.index("noteId").getAllKeys(note.id),
+      const previous = await requestResult<SearchPosting[]>(
+        postings.index("noteId").getAll(note.id),
       );
-      for (const key of previousKeys) postings.delete(key);
-      for (const posting of searchPostings) postings.put(posting);
+      const changes = diffSearchPostings(previous, searchPostings);
+      for (const term of changes.removed) postings.delete([term, note.id]);
+      for (const posting of changes.written) postings.put(posting);
       transaction.objectStore("backupQueue").put(operation);
       await advanceVaultVersion(transaction);
       await complete;
@@ -355,6 +356,13 @@ export class VaultDatabase {
 
   getBackupOperations(): Promise<BackupOperation[]> {
     return this.#getAll<BackupOperation>("backupQueue", "createdAt");
+  }
+
+  async countBackupOperations(): Promise<number> {
+    const transaction = this.#database.transaction("backupQueue", "readonly");
+    const count = await requestResult<number>(transaction.objectStore("backupQueue").count());
+    await transactionDone(transaction);
+    return count;
   }
 
   async removeBackupOperations(ids: string[]): Promise<void> {
@@ -654,6 +662,30 @@ async function advanceVaultVersion(transaction: IDBTransaction): Promise<void> {
     settings.get(VAULT_VERSION_KEY),
   );
   settings.put({ key: VAULT_VERSION_KEY, value: (current?.value ?? 0) + 1 });
+}
+
+/**
+ * The postings an edit actually changes. A save usually touches a few terms, so rewriting only
+ * those keeps a long note's index from being deleted and rebuilt on every keystroke-driven save.
+ */
+export function diffSearchPostings(
+  previous: SearchPosting[],
+  next: SearchPosting[],
+): { removed: string[]; written: SearchPosting[] } {
+  const previousByTerm = new Map(previous.map((posting) => [posting.term, posting]));
+  const written: SearchPosting[] = [];
+  for (const posting of next) {
+    const existing = previousByTerm.get(posting.term);
+    previousByTerm.delete(posting.term);
+    if (
+      existing?.titleMatches !== posting.titleMatches ||
+      existing.bodyMatches !== posting.bodyMatches ||
+      existing.tagMatches !== posting.tagMatches
+    ) {
+      written.push(posting);
+    }
+  }
+  return { removed: [...previousByTerm.keys()], written };
 }
 
 export function createSearchPostings(document: SearchDocument): SearchPosting[] {

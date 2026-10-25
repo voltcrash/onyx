@@ -20,6 +20,12 @@ describe("findTextMatches", () => {
       { start: 11, end: 15 },
     ]);
   });
+
+  it("treats astral letters beside a match as part of the word", () => {
+    expect(
+      findTextMatches("𝐀note note𝐀 😀note", "note", { matchCase: true, wholeWord: true }),
+    ).toEqual([{ start: 16, end: 20 }]);
+  });
 });
 
 describe("highlightFindMatches", () => {

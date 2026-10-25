@@ -26,6 +26,7 @@ import type {
   VaultSearchResult,
   VaultStorageUsage,
   VaultFileStorageStatus,
+  VaultFileTree,
   VaultChangeEvent,
   VaultOperationContext,
   VaultOperationOptions,
@@ -246,7 +247,7 @@ export class Vault {
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
         revision: actualRevision + 1,
-        size: new Blob([markdown]).size,
+        size: utf8ByteLength(markdown),
         sourcePath: input.sourcePath ?? existing?.sourcePath,
         ...(existing?.pinned ? { pinned: true } : {}),
         // Saving a trashed note must not resurrect it; trash state only changes via trash/restore.
@@ -309,20 +310,27 @@ export class Vault {
   }
 
   async listNotes(): Promise<NoteMetadata[]> {
-    return this.#withLock(async () => {
-      const notes = await this.#database.getNotes();
-      return notes
-        .filter((note) => !note.deletedAt)
-        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-    });
+    return this.#withLock(async () => activeNotes(await this.#database.getNotes()));
   }
 
   async listTrashedNotes(): Promise<NoteMetadata[]> {
+    return this.#withLock(async () => trashedNotes(await this.#database.getNotes()));
+  }
+
+  /** Reads the notes, trash, folders, and attachments under one lock and one metadata read. */
+  listFileTree(): Promise<VaultFileTree> {
     return this.#withLock(async () => {
-      const notes = await this.#database.getNotes();
-      return notes
-        .filter((note) => Boolean(note.deletedAt))
-        .sort((left, right) => (right.deletedAt ?? "").localeCompare(left.deletedAt ?? ""));
+      const [notes, attachments, folders] = await Promise.all([
+        this.#database.getNotes(),
+        this.#database.getAttachments(),
+        this.#database.getFileFolders(),
+      ]);
+      return {
+        notes: activeNotes(notes),
+        trashedNotes: trashedNotes(notes),
+        folders,
+        attachments: untrashedAttachments(notes, attachments),
+      };
     });
   }
 
@@ -565,7 +573,7 @@ export class Vault {
           createdAt: importedAt,
           updatedAt: importedAt,
           revision: 1,
-          size: new Blob([input.markdown]).size,
+          size: utf8ByteLength(input.markdown),
           sourcePath: input.sourcePath,
         });
         importedFiles.push({
@@ -650,8 +658,7 @@ export class Vault {
         this.#database.getNotes(),
         this.#database.getAttachments(),
       ]);
-      const trashedIds = new Set(notes.filter((note) => note.deletedAt).map((note) => note.id));
-      return attachments.filter((attachment) => !trashedIds.has(attachment.noteId));
+      return untrashedAttachments(notes, attachments);
     });
   }
 
@@ -862,7 +869,7 @@ export class Vault {
           .filter((document) => requiredTags.every((tag) => document.tags.includes(tag)))
           .map((document) => scoreDocument(document, [], metadataById.get(document.noteId), []))
           .filter((result): result is VaultSearchResult => result !== undefined)
-          .sort((left, right) => right.note.updatedAt.localeCompare(left.note.updatedAt));
+          .sort((left, right) => compareDescending(left.note.updatedAt, right.note.updatedAt));
       }
 
       const postingsByTerm = await Promise.all(
@@ -895,7 +902,8 @@ export class Vault {
         .filter((result): result is VaultSearchResult => result !== undefined)
         .sort(
           (left, right) =>
-            right.score - left.score || right.note.updatedAt.localeCompare(left.note.updatedAt),
+            right.score - left.score ||
+            compareDescending(left.note.updatedAt, right.note.updatedAt),
         );
     });
   }
@@ -962,6 +970,11 @@ export class Vault {
 
   getPendingBackupOperations(): Promise<BackupOperation[]> {
     return this.#withLock(() => this.#database.getBackupOperations());
+  }
+
+  /** Counts queued backup operations without reading them. */
+  countPendingBackupOperations(): Promise<number> {
+    return this.#withLock(() => this.#database.countBackupOperations());
   }
 
   async createBackupSnapshot(options: VaultOperationOptions = {}): Promise<VaultBackupSnapshot> {
@@ -1156,6 +1169,55 @@ export class Vault {
     }
     throw error;
   }
+}
+
+/** The entry an unfiltered search lists for a note, so one saved note can be updated in place. */
+export function listedSearchResult(note: NoteMetadata, markdown: string): VaultSearchResult {
+  return { note, excerpt: excerpt(normalizeSearchText(markdown), ""), score: 0 };
+}
+
+/** The UTF-8 size of `value`, as a Blob of it would report, without copying it. */
+export function utf8ByteLength(value: string): number {
+  let bytes = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code < 0x80) bytes += 1;
+    else if (code < 0x800) bytes += 2;
+    else if (code >= 0xd800 && code <= 0xdbff && isLowSurrogate(value.charCodeAt(index + 1))) {
+      bytes += 4;
+      index += 1;
+    } else bytes += 3;
+  }
+  return bytes;
+}
+
+function isLowSurrogate(code: number): boolean {
+  return code >= 0xdc00 && code <= 0xdfff;
+}
+
+// ISO timestamps sort as plain strings, which is far cheaper than a locale-aware comparison.
+function compareDescending(left: string, right: string): number {
+  return left < right ? 1 : left > right ? -1 : 0;
+}
+
+function activeNotes(notes: NoteMetadata[]): NoteMetadata[] {
+  return notes
+    .filter((note) => !note.deletedAt)
+    .sort((left, right) => compareDescending(left.updatedAt, right.updatedAt));
+}
+
+function trashedNotes(notes: NoteMetadata[]): NoteMetadata[] {
+  return notes
+    .filter((note) => Boolean(note.deletedAt))
+    .sort((left, right) => compareDescending(left.deletedAt ?? "", right.deletedAt ?? ""));
+}
+
+function untrashedAttachments(
+  notes: NoteMetadata[],
+  attachments: AttachmentMetadata[],
+): AttachmentMetadata[] {
+  const trashedIds = new Set(notes.filter((note) => note.deletedAt).map((note) => note.id));
+  return attachments.filter((attachment) => !trashedIds.has(attachment.noteId));
 }
 
 async function inferNotes(files: VaultRestoreFile[], restoredAt: string): Promise<NoteMetadata[]> {

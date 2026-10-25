@@ -62,10 +62,19 @@ import type {
 } from "#lib/components/app-types.ts";
 import { noteFormats, type NoteFormat } from "#lib/components/note-formats.ts";
 import type { SettingsSection } from "#lib/components/settings-types.ts";
-import { renderMarkdownBlocks as renderLiteMarkdownBlocks } from "#lib/markdown-lite.ts";
+import {
+  renderMarkdownBlocks as renderLiteMarkdownBlocks,
+  type RenderedBlock,
+} from "#lib/markdown-lite.ts";
+import {
+  createMarkdownRenderWorker,
+  type MarkdownRenderWorker,
+} from "#lib/markdown-render-worker.ts";
 import {
   attachmentMarkdown,
   continueListOnEnter,
+  countLines,
+  countWords,
   DEFAULT_ATTACHMENT_FOLDER,
   findNoteIdForPath,
   indentEditorLines,
@@ -117,6 +126,7 @@ import {
 import {
   createVaultDescriptor,
   isDefaultVault,
+  listedSearchResult,
   normalizeVaultName,
   readVaultRegistry,
   suggestedRepositoryName,
@@ -133,6 +143,7 @@ import type {
   AttachmentMetadata,
   FolderMetadata,
   GithubBackupState,
+  Note,
   NoteMetadata,
 } from "#lib/storage/types.ts";
 import {
@@ -236,6 +247,13 @@ interface EditorSelection {
 interface EditorHistoryEntry {
   markdown: string;
   selection?: EditorSelection;
+}
+
+interface WorkerPreview {
+  source: string;
+  attachments: LocalAttachmentUrl[];
+  noteSourcePath: string | undefined;
+  blocks: RenderedBlock[];
 }
 
 interface ImagePreviewState {
@@ -375,6 +393,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let previewIsLive = $state(false);
   let printing = $state(false);
   let searchSequence = 0;
+  let settledSearchSequence = 0;
   let editor: HTMLTextAreaElement | undefined = $state();
   let searchInput: HTMLInputElement | undefined = $state();
   let findOpen = $state(false);
@@ -440,12 +459,17 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let applyingEditorHistory = false;
   let noteList: HTMLElement | undefined = $state();
   let activeNoteSourcePath: string | undefined = $state();
-  let localAttachmentUrls = $state<LocalAttachmentUrl[]>([]);
+  // Replaced rather than mutated, so a render can be matched to the list it resolved against.
+  let localAttachmentUrls = $state.raw<LocalAttachmentUrl[]>([]);
   let imagePreview = $state<ImagePreviewState>();
   let imagePreviewRequest = 0;
   let markdownModule: MarkdownModule | undefined;
   let markdownModulePromise: Promise<MarkdownModule> | undefined;
   let markdownModuleRevision = $state(0);
+  // Undefined until first needed, and null once workers prove unavailable.
+  let renderWorker: MarkdownRenderWorker | null | undefined;
+  let workerPreview = $state.raw<WorkerPreview>();
+  let pendingWorkerPreview: (Omit<WorkerPreview, "blocks"> & { done: Promise<void> }) | undefined;
   let markdownOutputModulePromise: Promise<MarkdownOutputModule> | undefined;
   let dialogStylesPromise: Promise<void> | undefined;
   let serviceWorkerTimer: number | undefined;
@@ -464,9 +488,11 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   const activeVault = $derived(
     vaults.find((candidate) => candidate.id === activeVaultId) ?? vaults[0],
   );
-  const wordCount = $derived(markdown.trim() ? markdown.trim().split(/\s+/).length : 0);
+  const wordCount = $derived(countWords(markdown));
   const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
   const renderedBlocks = $derived.by(() => {
+    const preview = workerPreview;
+    if (preview && workerPreviewMatches(preview, previewMarkdown)) return preview.blocks;
     void markdownModuleRevision;
     return renderMarkdownBlocksForPage(previewMarkdown, resolveAttachmentUrl);
   });
@@ -489,7 +515,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       .map((block) => block.lines),
   );
   const noteTitle = $derived(titleFromMarkdown(markdown));
-  const markdownLines = $derived(markdown.split("\n"));
+  const markdownLineCount = $derived(countLines(markdown));
   const findMatches = $derived.by(() =>
     findTextMatches(markdown, findQuery, {
       matchCase: findMatchCase,
@@ -1097,21 +1123,96 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     ));
   }
 
+  // While the worker renders, the lite renderer stands in; the full renderer only runs on
+  // the main thread when workers are unavailable.
   function renderMarkdownBlocksForPage(
     source: string,
     resolveLocalUrl: (destination: string) => string | undefined,
   ) {
     return (
-      markdownModule?.renderMarkdownBlocks(source, resolveLocalUrl) ??
-      renderLiteMarkdownBlocks(source, resolveLocalUrl)
+      (renderWorker === null
+        ? markdownModule?.renderMarkdownBlocks(source, resolveLocalUrl)
+        : undefined) ?? renderLiteMarkdownBlocks(source, resolveLocalUrl)
     );
   }
 
-  // The lite renderer handles first paint and active input. The settled preview
-  // upgrades once the full renderer loads via markdownModuleRevision.
+  function markdownRenderWorker(): MarkdownRenderWorker | undefined {
+    if (renderWorker === undefined) renderWorker = createMarkdownRenderWorker() ?? null;
+    if (renderWorker?.failed) renderWorker = null;
+    return renderWorker ?? undefined;
+  }
+
+  function workerPreviewMatches(
+    preview: Omit<WorkerPreview, "blocks">,
+    source: string,
+    attachments = localAttachmentUrls,
+    noteSourcePath = activeNoteSourcePath,
+  ): boolean {
+    return (
+      preview.source === source &&
+      preview.attachments === attachments &&
+      preview.noteSourcePath === noteSourcePath
+    );
+  }
+
+  /**
+   * Renders a note in the worker so the main thread stays free while it parses. Resolves once
+   * the result is ready to show, or once the main-thread renderer has loaded in its place.
+   */
+  async function renderFullPreview(
+    source: string,
+    attachments = localAttachmentUrls,
+    noteSourcePath = activeNoteSourcePath,
+  ): Promise<void> {
+    if (workerPreview && workerPreviewMatches(workerPreview, source, attachments, noteSourcePath)) {
+      return;
+    }
+    const pending = pendingWorkerPreview;
+    if (pending && workerPreviewMatches(pending, source, attachments, noteSourcePath)) {
+      return pending.done;
+    }
+    const done = renderInWorker(source, attachments, noteSourcePath);
+    const request = { source, attachments, noteSourcePath, done };
+    pendingWorkerPreview = request;
+    try {
+      await done;
+    } finally {
+      if (pendingWorkerPreview === request) pendingWorkerPreview = undefined;
+    }
+  }
+
+  async function renderInWorker(
+    source: string,
+    attachments: LocalAttachmentUrl[],
+    noteSourcePath: string | undefined,
+  ): Promise<void> {
+    const worker = markdownRenderWorker();
+    if (worker) {
+      try {
+        const blocks = await worker.render({ source, noteSourcePath, attachments });
+        if (blocks) workerPreview = { source, attachments, noteSourcePath, blocks };
+        return;
+      } catch {
+        renderWorker = null;
+        workerPreview = undefined;
+      }
+    }
+    await loadMarkdownModule().catch(() => undefined);
+  }
+
+  // The lite renderer handles first paint and active input; the settled preview upgrades once
+  // the full render is ready.
   function ensureFullMarkdownParserLoaded(): void {
+    if (markdownRenderWorker()) return;
     if (!markdownModule) void loadMarkdownModule().catch(() => undefined);
   }
+
+  $effect(() => {
+    const source = previewMarkdown;
+    const attachments = localAttachmentUrls;
+    const noteSourcePath = activeNoteSourcePath;
+    untrack(() => void renderFullPreview(source, attachments, noteSourcePath));
+  });
 
   function applyStoredFontChoices(): void {
     const storedFonts = readFontChoices();
@@ -1262,6 +1363,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       if (serviceWorkerTimer) window.clearTimeout(serviceWorkerTimer);
       if (githubRestoreTimer) window.clearTimeout(githubRestoreTimer);
       unsubscribeVault?.();
+      renderWorker?.dispose();
+      renderWorker = null;
       releaseLocalAttachmentUrls();
       closeImagePreview();
       vault?.close();
@@ -1447,7 +1550,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       await vault.clear();
       resetEditorAfterVaultClear();
       await runSearch("");
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
     } finally {
       clearingVault = false;
     }
@@ -1507,7 +1610,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     try {
       const result = await (await loadGithubModule()).backupVaultToGithub(vault, configuration);
       githubBackup = result.state;
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
       backupState = "success";
       backupCommitUrl = result.commitUrl ?? "";
       backupMessage = result.commitUrl
@@ -1604,7 +1707,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         await loadGithubModule()
       ).restoreVaultFromGithub(vault, restoreConfiguration(), selectedRestoreSha);
       githubBackup = result.state;
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
       const notes = await vault.listNotes();
       folders = await vault.listFolders();
       searchQuery = "";
@@ -1647,27 +1750,29 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       appendNativeDirectoryNotice();
       unsubscribeVault?.();
       unsubscribeVault = vault.subscribe(queueRemoteVaultSync);
-      let notes = await vault.listNotes();
-      folders = await vault.listFolders();
-      if (notes.length === 0) {
+      let tree = await vault.listFileTree();
+      folders = tree.folders;
+      const createFirstNote = tree.notes.length === 0;
+      if (createFirstNote) {
         const legacyDraft =
           activeVault && isDefaultVault(activeVault) ? await readLegacyDraft() : "";
         const contents = legacyDraft || createInitialMarkdown(primaryModifier);
-        const firstNote = await vault.saveNote({
+        await vault.saveNote({
           title: titleFromMarkdown(contents),
           markdown: contents,
         });
-        notes = [firstNote];
       }
-      await vault.purgeExpiredTrash().catch(() => []);
-      notes = await vault.listNotes();
-      await loadNote(notes[0].id);
-      vaultAttachments = await vault.listAttachments();
-      trashedNotes = await vault.listTrashedNotes();
+      const purged = await vault.purgeExpiredTrash().catch(() => []);
+      if (createFirstNote || purged.length > 0) tree = await vault.listFileTree();
+      await loadNote(tree.notes[0]!.id);
+      vaultAttachments = tree.attachments;
+      trashedNotes = tree.trashedNotes;
       await runSearch("");
       if (searchQuery.trim()) await runSearch(searchQuery);
-      githubBackup = await vault.getGithubBackupState();
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      [githubBackup, pendingBackupCount] = await Promise.all([
+        vault.getGithubBackupState(),
+        vault.countPendingBackupOperations(),
+      ]);
       if (detectBrowserStorageSupport().persistentStorage) void ensurePersistentStorage();
     } catch (error) {
       storageError = error instanceof Error ? error.message : "Your notes could not be opened.";
@@ -1775,9 +1880,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     const sequence = ++noteLoadSequence;
     const note = await currentVault.getNote(id);
     if (!note || note.deletedAt) return;
-    const fullMarkdownParser = markdownModule
-      ? undefined
-      : loadMarkdownModule().catch(() => undefined);
     const folder = attachmentFolder;
     const attachments = await Promise.all(
       (await currentVault.listAttachments())
@@ -1788,7 +1890,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         )
         .map((attachment) => currentVault.getAttachment(attachment.id)),
     );
-    if (fullMarkdownParser) await fullMarkdownParser;
     const nextUrls = attachments.flatMap((attachment): LocalAttachmentUrl[] =>
       attachment
         ? [
@@ -1802,6 +1903,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
           ]
         : [],
     );
+    // Rendering before the switch shows the note fully formatted instead of upgrading it.
+    if (sequence === noteLoadSequence) {
+      await renderFullPreview(note.markdown, nextUrls, note.sourcePath);
+    }
     if (sequence !== noteLoadSequence) {
       for (const attachment of nextUrls) URL.revokeObjectURL(attachment.url);
       return;
@@ -1838,7 +1943,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       remoteSyncRequested = false;
       const changes = remoteChanges.splice(0);
       if (!vault) continue;
-      const notes = await vault.listNotes();
+      const tree = await vault.listFileTree();
+      const notes = tree.notes;
       const activeChanged = changes.some(
         (change) => change.kind === "vault" || change.noteId === activeNoteId,
       );
@@ -1857,10 +1963,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       }
       await runSearch(searchQuery);
       paletteNotes = notes;
-      vaultAttachments = await vault.listAttachments();
-      trashedNotes = await vault.listTrashedNotes();
-      githubBackup = await vault.getGithubBackupState();
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      vaultAttachments = tree.attachments;
+      trashedNotes = tree.trashedNotes;
+      [githubBackup, pendingBackupCount] = await Promise.all([
+        vault.getGithubBackupState(),
+        vault.countPendingBackupOperations(),
+      ]);
     }
   }
 
@@ -1954,7 +2062,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!id) return;
     if (id === activeNoteId) {
       if (parsed.fragment) {
-        if (!markdownModule) await loadMarkdownModule().catch(() => undefined);
+        await renderFullPreview(previewMarkdown);
         await scrollToNoteFragment(parsed.fragment);
       }
       return;
@@ -1984,13 +2092,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   async function refreshFileTree(): Promise<NoteMetadata[]> {
     if (!vault) return [];
-    const notes = await vault.listNotes();
-    folders = await vault.listFolders();
-    vaultAttachments = await vault.listAttachments();
-    trashedNotes = await vault.listTrashedNotes();
-    paletteNotes = notes;
+    const tree = await vault.listFileTree();
+    folders = tree.folders;
+    vaultAttachments = tree.attachments;
+    trashedNotes = tree.trashedNotes;
+    paletteNotes = tree.notes;
     await runSearch(searchQuery);
-    return notes;
+    return tree.notes;
   }
 
   async function createNote(parent = "", requestedName = ""): Promise<void> {
@@ -2375,7 +2483,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         if (notes[0]) await loadNote(notes[0].id);
         else resetActiveNote();
       }
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
       storageError = "";
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The file could not be deleted.";
@@ -2413,7 +2521,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       } else if (activeNoteId) {
         await loadNote(activeNoteId);
       }
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
       storageError = "";
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The folder could not be deleted.";
@@ -2440,7 +2548,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         }
       }
       await refreshFileTree();
-      pendingBackupCount = (await currentVault.getPendingBackupOperations()).length;
+      pendingBackupCount = await currentVault.countPendingBackupOperations();
       storageError = "";
     } catch (error) {
       storageError =
@@ -2457,7 +2565,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       await refreshFileTree();
       trashOpen = false;
       await selectNote(noteId);
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
       storageError = "";
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The file could not be restored.";
@@ -2483,7 +2591,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         if (notes[0]) await loadNote(notes[0].id);
         else resetActiveNote();
       }
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
       storageError = "";
     } catch (error) {
       storageError =
@@ -2503,7 +2611,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     try {
       await vault.emptyTrash();
       await refreshFileTree();
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
       storageError = "";
     } catch (error) {
       storageError = error instanceof Error ? error.message : "Trash could not be emptied.";
@@ -2555,7 +2663,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       const notes = await vault.listNotes();
       await loadNote(notes[0].id);
       await runSearch("");
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
       transferState = "idle";
     } catch {
       showTransferError();
@@ -2575,6 +2683,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   async function savePdf(): Promise<void> {
     await import("./styles/print.css");
     updatePreviewImmediately(markdown);
+    await renderFullPreview(markdown);
     printing = true;
     try {
       await tick();
@@ -2823,8 +2932,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
           storageError = "";
         }
         appendNativeDirectoryNotice();
-        await runSearch(searchQuery);
-        pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+        await refreshResultsAfterSave(savedNote);
+        pendingBackupCount = await vault.countPendingBackupOperations();
       } catch (error) {
         saveRequested = false;
         if (activeNoteId === noteId) {
@@ -3270,7 +3379,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         `${separator}${snippets.join("\n")}`,
       );
       vaultAttachments = await currentVault.listAttachments();
-      pendingBackupCount = (await currentVault.getPendingBackupOperations()).length;
+      pendingBackupCount = await currentVault.countPendingBackupOperations();
       storageError = "";
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The file could not be attached.";
@@ -3355,7 +3464,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       writeLocalStorage(attachmentPreferenceKey("attachment-folder"), next);
       if (activeNoteId) await loadNote(activeNoteId);
       await refreshFileTree();
-      pendingBackupCount = (await currentVault.getPendingBackupOperations()).length;
+      pendingBackupCount = await currentVault.countPendingBackupOperations();
       storageError = "";
       return true;
     } catch (error) {
@@ -3492,6 +3601,29 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }, 120);
   }
 
+  // Without a query only the saved note's entry changes, so it is replaced rather than
+  // re-reading every indexed note.
+  async function refreshResultsAfterSave(saved: Note): Promise<void> {
+    const searchInFlight = settledSearchSequence !== searchSequence;
+    if (searchQuery.trim() || !notesLoaded || searchTimer !== undefined || searchInFlight) {
+      await runSearch(searchQuery);
+      return;
+    }
+    const { markdown: contents, ...note } = saved;
+    const others = results.filter((result) => result.note.id !== note.id);
+    results = note.deletedAt
+      ? others
+      : [listedSearchResult(note, contents), ...others].sort((left, right) =>
+          left.note.updatedAt < right.note.updatedAt
+            ? 1
+            : left.note.updatedAt > right.note.updatedAt
+              ? -1
+              : 0,
+        );
+    notePage = 0;
+    searchPending = false;
+  }
+
   async function runSearch(query: string): Promise<void> {
     if (!vault) return;
     searchPending = Boolean(query.trim());
@@ -3502,6 +3634,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       notePage = 0;
       notesLoaded = true;
       searchPending = false;
+      settledSearchSequence = sequence;
     }
   }
 
@@ -4204,8 +4337,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get markdown() {
       return markdown;
     },
-    get markdownLines() {
-      return markdownLines;
+    get markdownLineCount() {
+      return markdownLineCount;
     },
     get wordCount() {
       return wordCount;

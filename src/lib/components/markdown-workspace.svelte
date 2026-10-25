@@ -20,7 +20,7 @@
 		displayedRenderedBlocks: string[];
 		scrollSync: boolean;
 		markdown: string;
-		markdownLines: string[];
+		markdownLineCount: number;
 		findOpen: boolean;
 		findQuery: string;
 		findMatches: FindMatch[];
@@ -56,7 +56,7 @@
 	}
 
 	let {
-		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedBlocks, displayedRenderedBlocks, scrollSync, markdown, markdownLines, findOpen, findQuery, findMatches, activeFindMatch,
+		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedBlocks, displayedRenderedBlocks, scrollSync, markdown, markdownLineCount, findOpen, findQuery, findMatches, activeFindMatch,
 		saveState, transferState, hasContent, shortcuts, primaryModifier,
 		editor = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
 		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onNoteLink
@@ -116,6 +116,15 @@
 	let sourceFindMarkup = $derived(
 		sourceFindActive ? highlightFindMatches(markdown, findMatches, activeFindMatch) : '',
 	);
+	// Keyed by their markup, so adding or removing a block moves the others instead of re-rendering them.
+	let keyedRenderedBlocks = $derived.by(() => {
+		const seen = new Map<string, number>();
+		return displayedRenderedBlocks.map((html) => {
+			const repeat = seen.get(html) ?? 0;
+			seen.set(html, repeat + 1);
+			return { key: repeat ? `${repeat}:${html}` : html, html };
+		});
+	});
 	const CENTER_SNAP_DISTANCE = 12;
 
 	function syncSourceFindLayer(event?: Event): void {
@@ -291,7 +300,7 @@
 		} else {
 			points = proseAnchors(scroller);
 		}
-		return scrollAnchors(points, markdownLines.length, scroller.scrollHeight);
+		return scrollAnchors(points, markdownLineCount, scroller.scrollHeight);
 	}
 
 	// The following pane eases toward where it should be rather than jumping there every frame.
@@ -470,8 +479,8 @@
 		<div bind:this={renderedPaneElement} class="rendered-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} onmousemove={handleRenderedMouseMove} onmousedown={handleRenderedMouseDown} onclick={handleRenderedClick} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
 			{#if hasContent}
 				<article class="prose">
-					{#each displayedRenderedBlocks as block}
-						{@html block}
+					{#each keyedRenderedBlocks as block (block.key)}
+						{@html block.html}
 					{/each}
 				</article>
 			{:else}

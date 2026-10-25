@@ -5,32 +5,75 @@ export interface LocalAttachmentUrl {
 }
 
 export function titleFromMarkdown(value: string, fallback = "Untitled"): string {
-  const firstLine =
-    stripFrontmatter(value)
-      .split("\n")
-      .find((line) => line.trim())
-      ?.trim() ?? "";
-  const title = firstLine
+  const title = firstContentLine(value)
     .replace(/^#{1,6}\s*/, "")
     .replace(/[*_`~[\]]/g, "")
     .trim();
   return title.slice(0, 80) || fallback;
 }
 
-function stripFrontmatter(value: string): string {
-  const lines = value.split(/\r?\n/);
-  let firstContentLine = 0;
-  while (firstContentLine < lines.length && !lines[firstContentLine]!.trim()) firstContentLine += 1;
-  const opening = lines[firstContentLine]?.trim();
-  if (opening !== "---" && opening !== "+++") return value;
-
-  for (let index = firstContentLine + 1; index < lines.length; index += 1) {
-    const line = lines[index]!.trim();
-    if (line === opening || (opening === "---" && line === "...")) {
-      return lines.slice(index + 1).join("\n");
+/** The first non-blank line after any front matter, read without splitting the whole note. */
+function firstContentLine(value: string): string {
+  let opening = "";
+  let inFrontmatter = false;
+  let start = 0;
+  while (start <= value.length) {
+    const newline = value.indexOf("\n", start);
+    const end = newline === -1 ? value.length : newline;
+    const line = value.slice(start, end).trim();
+    start = end + 1;
+    if (inFrontmatter) {
+      if (line === opening || (opening === "---" && line === "...")) inFrontmatter = false;
+      continue;
     }
+    if (!line) continue;
+    if (!opening && (line === "---" || line === "+++")) {
+      opening = line;
+      inFrontmatter = true;
+      continue;
+    }
+    return line;
   }
-  return value;
+  // Unclosed front matter is treated as ordinary text.
+  return inFrontmatter ? opening : "";
+}
+
+/** Counts whitespace-separated words, matching `value.trim().split(/\s+/)`, without allocating. */
+export function countWords(value: string): number {
+  let count = 0;
+  let inWord = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const whitespace = isWhitespace(value.charCodeAt(index));
+    if (!whitespace && !inWord) count += 1;
+    inWord = !whitespace;
+  }
+  return count;
+}
+
+/** Counts lines, matching `value.split("\n").length`, without allocating. */
+export function countLines(value: string): number {
+  let count = 1;
+  for (let index = value.indexOf("\n"); index !== -1; index = value.indexOf("\n", index + 1)) {
+    count += 1;
+  }
+  return count;
+}
+
+// The characters `\s` matches.
+function isWhitespace(code: number): boolean {
+  if (code <= 0x20) return code === 0x20 || (code >= 0x09 && code <= 0x0d);
+  if (code < 0xa0) return false;
+  return (
+    code === 0xa0 ||
+    code === 0x1680 ||
+    (code >= 0x2000 && code <= 0x200a) ||
+    code === 0x2028 ||
+    code === 0x2029 ||
+    code === 0x202f ||
+    code === 0x205f ||
+    code === 0x3000 ||
+    code === 0xfeff
+  );
 }
 
 export interface RelativeNoteLink {

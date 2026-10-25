@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { Vault } from "./vault.js";
+import { utf8ByteLength, Vault } from "./vault.js";
 
 describe("Vault saves", () => {
   it("keeps a note in IndexedDB when OPFS is over quota", async () => {
@@ -24,5 +24,21 @@ describe("Vault saves", () => {
       expect.any(Array),
       expect.any(Object),
     );
+  });
+});
+
+describe("utf8ByteLength", () => {
+  it("matches the size of a Blob holding the same text", () => {
+    for (const value of [
+      "",
+      "ascii",
+      "café",
+      "日本語",
+      "😀 emoji",
+      "lone \ud800 high",
+      "lone \udc00 low",
+    ]) {
+      expect(utf8ByteLength(value)).toBe(new Blob([value]).size);
+    }
   });
 });

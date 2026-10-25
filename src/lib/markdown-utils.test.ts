@@ -2,6 +2,8 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   attachmentMarkdown,
   continueListOnEnter,
+  countLines,
+  countWords,
   findNoteIdForPath,
   indentEditorLines,
   normalizeAttachmentFolder,
@@ -455,5 +457,23 @@ describe("findNoteIdForPath", () => {
   it("returns undefined for nonexistent local notes instead of crashing", () => {
     expect(findNoteIdForPath(notes, "missing.md")).toBeUndefined();
     expect(findNoteIdForPath([], "other.md")).toBeUndefined();
+  });
+});
+
+describe("countWords and countLines", () => {
+  it("match splitting the text on whitespace and newlines", () => {
+    const samples = [
+      "",
+      "   ",
+      "one",
+      "  two  words ",
+      "tabs\tand\nnew\r\nlines\n\n",
+      "non\u00a0breaking\u3000ideographic\u2028separators\ufeff",
+      "emoji 😀 and accents café",
+    ];
+    for (const sample of samples) {
+      expect(countWords(sample)).toBe(sample.trim() ? sample.trim().split(/\s+/).length : 0);
+      expect(countLines(sample)).toBe(sample.split("\n").length);
+    }
   });
 });

@@ -205,23 +205,19 @@ export function renderMarkdownBlocks(
   resolveLocalUrl?: LocalUrlResolver,
   options: MarkdownRenderOptions = {},
 ): RenderedBlock[] {
-  const remoteImagePolicy = options.remoteImages ?? "block";
-  const processor = markdownProcessor(options.dialect ?? "onyx")
-    // Generated markup runs after sanitizing, so authored HTML stays constrained by the schema.
-    .use(rehypeHighlight)
-    .use(addCodeLanguage)
-    .use(rehypeKatex, { output: "mathml" })
-    .use(prefixInternalLinks);
-  if (resolveLocalUrl || remoteImagePolicy === "block") {
-    processor.use(resolveMarkdownUrls, resolveLocalUrl, remoteImagePolicy);
+  const processor = htmlProcessor(options.dialect ?? "onyx");
+  const previousUrls = activeUrls;
+  activeUrls = { resolve: resolveLocalUrl, remoteImages: options.remoteImages ?? "block" };
+  try {
+    const tree = processor.runSync(processor.parse(source)) as MarkdownTreeNode;
+    return (tree.children ?? []).map((node) => ({
+      html: String(processor.stringify(node as Parameters<typeof processor.stringify>[0])),
+      element: node.type === "element",
+      lines: sourceLines(node),
+    }));
+  } finally {
+    activeUrls = previousUrls;
   }
-  processor.use(rehypeStringify);
-  const tree = processor.runSync(processor.parse(source)) as MarkdownTreeNode;
-  return (tree.children ?? []).map((node) => ({
-    html: String(processor.stringify(node as Parameters<typeof processor.stringify>[0])),
-    element: node.type === "element",
-    lines: sourceLines(node),
-  }));
 }
 
 export function sourceLines(node: MarkdownTreeNode): SourceLines | undefined {
@@ -237,8 +233,43 @@ export function renderMarkdownTree(
   source: string,
   options: Pick<MarkdownRenderOptions, "dialect"> = {},
 ): MarkdownTreeNode {
-  const processor = markdownProcessor(options.dialect ?? "onyx");
+  const processor = treeProcessor(options.dialect ?? "onyx");
   return processor.runSync(processor.parse(source)) as MarkdownTreeNode;
+}
+
+// Building a pipeline registers every highlight grammar, so each one is built once and reused.
+const treeProcessors = new Map<MarkdownDialect, ReturnType<typeof markdownProcessor>>();
+const htmlProcessors = new Map<MarkdownDialect, ReturnType<typeof createHtmlProcessor>>();
+
+function treeProcessor(dialect: MarkdownDialect) {
+  let processor = treeProcessors.get(dialect);
+  if (!processor) {
+    processor = markdownProcessor(dialect).freeze();
+    treeProcessors.set(dialect, processor);
+  }
+  return processor;
+}
+
+function htmlProcessor(dialect: MarkdownDialect) {
+  let processor = htmlProcessors.get(dialect);
+  if (!processor) {
+    processor = createHtmlProcessor(dialect).freeze();
+    htmlProcessors.set(dialect, processor);
+  }
+  return processor;
+}
+
+function createHtmlProcessor(dialect: MarkdownDialect) {
+  return (
+    markdownProcessor(dialect)
+      // Generated markup runs after sanitizing, so authored HTML stays constrained by the schema.
+      .use(rehypeHighlight)
+      .use(addCodeLanguage)
+      .use(rehypeKatex, { output: "mathml" })
+      .use(prefixInternalLinks)
+      .use(resolveMarkdownUrls)
+      .use(rehypeStringify)
+  );
 }
 
 function markdownProcessor(dialect: MarkdownDialect = "onyx") {
@@ -357,11 +388,15 @@ const prefixInternalLinks: Plugin<[]> = () => (tree) => {
   });
 };
 
-const resolveMarkdownUrls: Plugin<[LocalUrlResolver | undefined, RemoteImagePolicy]> = (
-  resolve,
-  remoteImagePolicy,
-) => {
+// Cached pipelines are shared, so each synchronous render supplies its URL handling here.
+let activeUrls: { resolve?: LocalUrlResolver; remoteImages: RemoteImagePolicy } = {
+  remoteImages: "block",
+};
+
+const resolveMarkdownUrls: Plugin<[]> = () => {
   return (tree) => {
+    const { resolve, remoteImages: remoteImagePolicy } = activeUrls;
+    if (!resolve && remoteImagePolicy !== "block") return;
     const root = tree as MarkdownTreeNode;
     visit(root, (node) => {
       const property = node.tagName === "img" ? "src" : node.tagName === "a" ? "href" : undefined;

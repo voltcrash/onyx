@@ -1,4 +1,4 @@
-export { Vault } from "./vault.js";
+export { listedSearchResult, Vault } from "./vault.js";
 export { VaultConflictError } from "./types.js";
 export {
   createVaultDescriptor,
@@ -39,4 +39,5 @@ export type {
   VaultSearchResult,
   VaultStorageUsage,
   VaultFileStorageStatus,
+  VaultFileTree,
 } from "./types.js";

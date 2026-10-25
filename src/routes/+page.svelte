@@ -156,7 +156,7 @@
 		displayedRenderedBlocks={page.displayedRenderedBlocks}
 		scrollSync={page.scrollSync}
 		markdown={page.markdown}
-		markdownLines={page.markdownLines}
+		markdownLineCount={page.markdownLineCount}
 		findOpen={page.findOpen}
 		findQuery={page.findQuery}
 		findMatches={page.findMatches}

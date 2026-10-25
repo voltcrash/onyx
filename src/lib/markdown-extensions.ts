@@ -97,7 +97,7 @@ export const remarkInlineMarks: Plugin<[MarkdownExtensionOptions?]> = (options) 
 export const remarkGithubInlineMath: Plugin<[]> = () => (tree) => {
   visitParents(tree as MdastNode, (parent) => {
     const children = parent.children ?? [];
-    if (children.length < 3) return;
+    if (children.length < 3 || !children.some((child) => child.type === "inlineCode")) return;
     const result: MdastNode[] = [];
     let index = 0;
     while (index < children.length) {
@@ -155,15 +155,10 @@ function fencedDiagramNode(language: string, source: string): MdastNode {
 function remarkFencedLanguage(language: string): Plugin<[]> {
   return () => (tree) => {
     visitParents(tree as MdastNode, (parent) => {
-      parent.children = (parent.children ?? []).map((child) => {
-        if (child.type !== "code" || (child.lang ?? "").toLowerCase() !== language) {
-          return child;
-        }
-        return {
-          ...fencedDiagramNode(language, child.value ?? ""),
-          position: child.position,
-        };
-      });
+      replaceFencedCode(parent, language, (child) => ({
+        ...fencedDiagramNode(language, child.value ?? ""),
+        position: child.position,
+      }));
     });
   };
 }
@@ -216,10 +211,7 @@ export function describeTopoJSON(value: unknown): string | undefined {
 
 export const remarkTopoJSON: Plugin<[]> = () => (tree) => {
   visitParents(tree as MdastNode, (parent) => {
-    parent.children = (parent.children ?? []).map((child) => {
-      if (child.type !== "code" || (child.lang ?? "").toLowerCase() !== "topojson") {
-        return child;
-      }
+    replaceFencedCode(parent, "topojson", (child) => {
       const source = child.value ?? "";
       let summary: string | undefined;
       try {
@@ -260,10 +252,7 @@ export function describeSTL(source: string): string | undefined {
 
 export const remarkSTL: Plugin<[]> = () => (tree) => {
   visitParents(tree as MdastNode, (parent) => {
-    parent.children = (parent.children ?? []).map((child) => {
-      if (child.type !== "code" || (child.lang ?? "").toLowerCase() !== "stl") {
-        return child;
-      }
+    replaceFencedCode(parent, "stl", (child) => {
       const source = child.value ?? "";
       const summary = describeSTL(source);
       const node =
@@ -283,10 +272,7 @@ export const remarkSTL: Plugin<[]> = () => (tree) => {
 
 export const remarkGeoJSON: Plugin<[]> = () => (tree) => {
   visitParents(tree as MdastNode, (parent) => {
-    parent.children = (parent.children ?? []).map((child) => {
-      if (child.type !== "code" || (child.lang ?? "").toLowerCase() !== "geojson") {
-        return child;
-      }
+    replaceFencedCode(parent, "geojson", (child) => {
       const source = child.value ?? "";
       let summary: string | undefined;
       try {
@@ -313,7 +299,9 @@ export const remarkWikiLinks: Plugin<[MarkdownExtensionOptions?]> = (options) =>
   // Wiki links are Onyx-only; the GitHub dialect leaves them as text.
   if (options?.dialect === "github") return;
   visitParents(tree as MdastNode, (parent) => {
-    parent.children = (parent.children ?? []).flatMap((child) =>
+    const children = parent.children ?? [];
+    if (!children.some((child) => child.type === "text" && child.value?.includes("[["))) return;
+    parent.children = children.flatMap((child) =>
       child.type === "text" ? splitWikiLinks(child.value ?? "") : [child],
     );
   });
@@ -366,6 +354,21 @@ export const remarkCallouts: Plugin<[MarkdownExtensionOptions?]> = (options) => 
     }
   });
 };
+
+/** Swaps fenced code in `language` among a parent's children, leaving other parents untouched. */
+function replaceFencedCode(
+  parent: MdastNode,
+  language: string,
+  replace: (child: MdastNode) => MdastNode,
+): void {
+  const children = parent.children ?? [];
+  for (let index = 0; index < children.length; index += 1) {
+    const child = children[index]!;
+    if (child.type === "code" && (child.lang ?? "").toLowerCase() === language) {
+      children[index] = replace(child);
+    }
+  }
+}
 
 function visitParents(node: MdastNode, callback: (node: MdastNode) => void): void {
   if (OPAQUE_PARENTS.has(node.type) || !node.children) return;
