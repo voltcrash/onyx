@@ -20,7 +20,7 @@
 		displayedRenderedBlocks: string[];
 		scrollSync: boolean;
 		markdown: string;
-		markdownLines: string[];
+		markdownLineCount: number;
 		findOpen: boolean;
 		findQuery: string;
 		findMatches: FindMatch[];
@@ -56,7 +56,7 @@
 	}
 
 	let {
-		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedBlocks, displayedRenderedBlocks, scrollSync, markdown, markdownLines, findOpen, findQuery, findMatches, activeFindMatch,
+		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedBlocks, displayedRenderedBlocks, scrollSync, markdown, markdownLineCount, findOpen, findQuery, findMatches, activeFindMatch,
 		saveState, transferState, hasContent, shortcuts, primaryModifier,
 		editor = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
 		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onNoteLink
@@ -291,7 +291,7 @@
 		} else {
 			points = proseAnchors(scroller);
 		}
-		return scrollAnchors(points, markdownLines.length, scroller.scrollHeight);
+		return scrollAnchors(points, markdownLineCount, scroller.scrollHeight);
 	}
 
 	// The following pane eases toward where it should be rather than jumping there every frame.

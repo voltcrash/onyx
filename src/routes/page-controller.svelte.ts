@@ -66,6 +66,8 @@ import { renderMarkdownBlocks as renderLiteMarkdownBlocks } from "#lib/markdown-
 import {
   attachmentMarkdown,
   continueListOnEnter,
+  countLines,
+  countWords,
   DEFAULT_ATTACHMENT_FOLDER,
   findNoteIdForPath,
   indentEditorLines,
@@ -464,7 +466,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   const activeVault = $derived(
     vaults.find((candidate) => candidate.id === activeVaultId) ?? vaults[0],
   );
-  const wordCount = $derived(markdown.trim() ? markdown.trim().split(/\s+/).length : 0);
+  const wordCount = $derived(countWords(markdown));
   const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
   const renderedBlocks = $derived.by(() => {
     void markdownModuleRevision;
@@ -489,7 +491,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       .map((block) => block.lines),
   );
   const noteTitle = $derived(titleFromMarkdown(markdown));
-  const markdownLines = $derived(markdown.split("\n"));
+  const markdownLineCount = $derived(countLines(markdown));
   const findMatches = $derived.by(() =>
     findTextMatches(markdown, findQuery, {
       matchCase: findMatchCase,
@@ -4204,8 +4206,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     get markdown() {
       return markdown;
     },
-    get markdownLines() {
-      return markdownLines;
+    get markdownLineCount() {
+      return markdownLineCount;
     },
     get wordCount() {
       return wordCount;

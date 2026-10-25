@@ -38,6 +38,44 @@ function firstContentLine(value: string): string {
   return inFrontmatter ? opening : "";
 }
 
+/** Counts whitespace-separated words, matching `value.trim().split(/\s+/)`, without allocating. */
+export function countWords(value: string): number {
+  let count = 0;
+  let inWord = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const whitespace = isWhitespace(value.charCodeAt(index));
+    if (!whitespace && !inWord) count += 1;
+    inWord = !whitespace;
+  }
+  return count;
+}
+
+/** Counts lines, matching `value.split("\n").length`, without allocating. */
+export function countLines(value: string): number {
+  let count = 1;
+  for (let index = value.indexOf("\n"); index !== -1; index = value.indexOf("\n", index + 1)) {
+    count += 1;
+  }
+  return count;
+}
+
+// The characters `\s` matches.
+function isWhitespace(code: number): boolean {
+  if (code <= 0x20) return code === 0x20 || (code >= 0x09 && code <= 0x0d);
+  if (code < 0xa0) return false;
+  return (
+    code === 0xa0 ||
+    code === 0x1680 ||
+    (code >= 0x2000 && code <= 0x200a) ||
+    code === 0x2028 ||
+    code === 0x2029 ||
+    code === 0x202f ||
+    code === 0x205f ||
+    code === 0x3000 ||
+    code === 0xfeff
+  );
+}
+
 export interface RelativeNoteLink {
   /** Vault-relative path of the destination note, e.g. `folder/other.md`. */
   path: string;
