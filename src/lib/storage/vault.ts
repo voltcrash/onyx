@@ -313,7 +313,7 @@ export class Vault {
       const notes = await this.#database.getNotes();
       return notes
         .filter((note) => !note.deletedAt)
-        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+        .sort((left, right) => compareDescending(left.updatedAt, right.updatedAt));
     });
   }
 
@@ -322,7 +322,7 @@ export class Vault {
       const notes = await this.#database.getNotes();
       return notes
         .filter((note) => Boolean(note.deletedAt))
-        .sort((left, right) => (right.deletedAt ?? "").localeCompare(left.deletedAt ?? ""));
+        .sort((left, right) => compareDescending(left.deletedAt ?? "", right.deletedAt ?? ""));
     });
   }
 
@@ -862,7 +862,7 @@ export class Vault {
           .filter((document) => requiredTags.every((tag) => document.tags.includes(tag)))
           .map((document) => scoreDocument(document, [], metadataById.get(document.noteId), []))
           .filter((result): result is VaultSearchResult => result !== undefined)
-          .sort((left, right) => right.note.updatedAt.localeCompare(left.note.updatedAt));
+          .sort((left, right) => compareDescending(left.note.updatedAt, right.note.updatedAt));
       }
 
       const postingsByTerm = await Promise.all(
@@ -895,7 +895,8 @@ export class Vault {
         .filter((result): result is VaultSearchResult => result !== undefined)
         .sort(
           (left, right) =>
-            right.score - left.score || right.note.updatedAt.localeCompare(left.note.updatedAt),
+            right.score - left.score ||
+            compareDescending(left.note.updatedAt, right.note.updatedAt),
         );
     });
   }
@@ -1156,6 +1157,11 @@ export class Vault {
     }
     throw error;
   }
+}
+
+// ISO timestamps sort as plain strings, which is far cheaper than a locale-aware comparison.
+function compareDescending(left: string, right: string): number {
+  return left < right ? 1 : left > right ? -1 : 0;
 }
 
 async function inferNotes(files: VaultRestoreFile[], restoredAt: string): Promise<NoteMetadata[]> {
