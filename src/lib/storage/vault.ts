@@ -965,6 +965,11 @@ export class Vault {
     return this.#withLock(() => this.#database.getBackupOperations());
   }
 
+  /** Counts queued backup operations without reading them. */
+  countPendingBackupOperations(): Promise<number> {
+    return this.#withLock(() => this.#database.countBackupOperations());
+  }
+
   async createBackupSnapshot(options: VaultOperationOptions = {}): Promise<VaultBackupSnapshot> {
     return this.#withLock(async () => {
       for (let attempt = 0; attempt < 3; attempt += 1) {

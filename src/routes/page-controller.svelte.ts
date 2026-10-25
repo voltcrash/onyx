@@ -1449,7 +1449,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       await vault.clear();
       resetEditorAfterVaultClear();
       await runSearch("");
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
     } finally {
       clearingVault = false;
     }
@@ -1509,7 +1509,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     try {
       const result = await (await loadGithubModule()).backupVaultToGithub(vault, configuration);
       githubBackup = result.state;
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
       backupState = "success";
       backupCommitUrl = result.commitUrl ?? "";
       backupMessage = result.commitUrl
@@ -1606,7 +1606,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         await loadGithubModule()
       ).restoreVaultFromGithub(vault, restoreConfiguration(), selectedRestoreSha);
       githubBackup = result.state;
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
       const notes = await vault.listNotes();
       folders = await vault.listFolders();
       searchQuery = "";
@@ -1669,7 +1669,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       await runSearch("");
       if (searchQuery.trim()) await runSearch(searchQuery);
       githubBackup = await vault.getGithubBackupState();
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
       if (detectBrowserStorageSupport().persistentStorage) void ensurePersistentStorage();
     } catch (error) {
       storageError = error instanceof Error ? error.message : "Your notes could not be opened.";
@@ -1862,7 +1862,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       vaultAttachments = await vault.listAttachments();
       trashedNotes = await vault.listTrashedNotes();
       githubBackup = await vault.getGithubBackupState();
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
     }
   }
 
@@ -2377,7 +2377,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         if (notes[0]) await loadNote(notes[0].id);
         else resetActiveNote();
       }
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
       storageError = "";
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The file could not be deleted.";
@@ -2415,7 +2415,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       } else if (activeNoteId) {
         await loadNote(activeNoteId);
       }
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
       storageError = "";
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The folder could not be deleted.";
@@ -2442,7 +2442,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         }
       }
       await refreshFileTree();
-      pendingBackupCount = (await currentVault.getPendingBackupOperations()).length;
+      pendingBackupCount = await currentVault.countPendingBackupOperations();
       storageError = "";
     } catch (error) {
       storageError =
@@ -2459,7 +2459,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       await refreshFileTree();
       trashOpen = false;
       await selectNote(noteId);
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
       storageError = "";
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The file could not be restored.";
@@ -2485,7 +2485,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         if (notes[0]) await loadNote(notes[0].id);
         else resetActiveNote();
       }
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
       storageError = "";
     } catch (error) {
       storageError =
@@ -2505,7 +2505,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     try {
       await vault.emptyTrash();
       await refreshFileTree();
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
       storageError = "";
     } catch (error) {
       storageError = error instanceof Error ? error.message : "Trash could not be emptied.";
@@ -2557,7 +2557,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       const notes = await vault.listNotes();
       await loadNote(notes[0].id);
       await runSearch("");
-      pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+      pendingBackupCount = await vault.countPendingBackupOperations();
       transferState = "idle";
     } catch {
       showTransferError();
@@ -2826,7 +2826,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         }
         appendNativeDirectoryNotice();
         await runSearch(searchQuery);
-        pendingBackupCount = (await vault.getPendingBackupOperations()).length;
+        pendingBackupCount = await vault.countPendingBackupOperations();
       } catch (error) {
         saveRequested = false;
         if (activeNoteId === noteId) {
@@ -3272,7 +3272,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
         `${separator}${snippets.join("\n")}`,
       );
       vaultAttachments = await currentVault.listAttachments();
-      pendingBackupCount = (await currentVault.getPendingBackupOperations()).length;
+      pendingBackupCount = await currentVault.countPendingBackupOperations();
       storageError = "";
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The file could not be attached.";
@@ -3357,7 +3357,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       writeLocalStorage(attachmentPreferenceKey("attachment-folder"), next);
       if (activeNoteId) await loadNote(activeNoteId);
       await refreshFileTree();
-      pendingBackupCount = (await currentVault.getPendingBackupOperations()).length;
+      pendingBackupCount = await currentVault.countPendingBackupOperations();
       storageError = "";
       return true;
     } catch (error) {

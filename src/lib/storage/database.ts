@@ -357,6 +357,13 @@ export class VaultDatabase {
     return this.#getAll<BackupOperation>("backupQueue", "createdAt");
   }
 
+  async countBackupOperations(): Promise<number> {
+    const transaction = this.#database.transaction("backupQueue", "readonly");
+    const count = await requestResult<number>(transaction.objectStore("backupQueue").count());
+    await transactionDone(transaction);
+    return count;
+  }
+
   async removeBackupOperations(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     const transaction = this.#database.transaction(["backupQueue", "settings"], "readwrite");
