@@ -18,12 +18,28 @@ function isWordCharacter(value: string | undefined): boolean {
   return Boolean(value && wordCharacter.test(value));
 }
 
+function isHighSurrogate(value: string, index: number): boolean {
+  const code = value.charCodeAt(index);
+  return code >= 0xd800 && code <= 0xdbff;
+}
+
+function isLowSurrogate(value: string, index: number): boolean {
+  const code = value.charCodeAt(index);
+  return code >= 0xdc00 && code <= 0xdfff;
+}
+
+// Reads one code point beside the match rather than copying the text around it.
 function hasWordCharacterBefore(value: string, index: number): boolean {
-  return isWordCharacter(Array.from(value.slice(0, index)).at(-1));
+  if (index <= 0) return false;
+  const start =
+    isLowSurrogate(value, index - 1) && isHighSurrogate(value, index - 2) ? index - 2 : index - 1;
+  const codePoint = value.codePointAt(start);
+  return codePoint !== undefined && isWordCharacter(String.fromCodePoint(codePoint));
 }
 
 function hasWordCharacterAfter(value: string, index: number): boolean {
-  return isWordCharacter(Array.from(value.slice(index))[0]);
+  const codePoint = value.codePointAt(index);
+  return codePoint !== undefined && isWordCharacter(String.fromCodePoint(codePoint));
 }
 
 function isWholeWord(value: string, start: number, end: number): boolean {
