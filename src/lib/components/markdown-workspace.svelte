@@ -116,6 +116,15 @@
 	let sourceFindMarkup = $derived(
 		sourceFindActive ? highlightFindMatches(markdown, findMatches, activeFindMatch) : '',
 	);
+	// Keyed by their markup, so adding or removing a block moves the others instead of re-rendering them.
+	let keyedRenderedBlocks = $derived.by(() => {
+		const seen = new Map<string, number>();
+		return displayedRenderedBlocks.map((html) => {
+			const repeat = seen.get(html) ?? 0;
+			seen.set(html, repeat + 1);
+			return { key: repeat ? `${repeat}:${html}` : html, html };
+		});
+	});
 	const CENTER_SNAP_DISTANCE = 12;
 
 	function syncSourceFindLayer(event?: Event): void {
@@ -470,8 +479,8 @@
 		<div bind:this={renderedPaneElement} class="rendered-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} onmousemove={handleRenderedMouseMove} onmousedown={handleRenderedMouseDown} onclick={handleRenderedClick} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
 			{#if hasContent}
 				<article class="prose">
-					{#each displayedRenderedBlocks as block}
-						{@html block}
+					{#each keyedRenderedBlocks as block (block.key)}
+						{@html block.html}
 					{/each}
 				</article>
 			{:else}
