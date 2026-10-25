@@ -247,7 +247,7 @@ export class Vault {
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
         revision: actualRevision + 1,
-        size: new Blob([markdown]).size,
+        size: utf8ByteLength(markdown),
         sourcePath: input.sourcePath ?? existing?.sourcePath,
         ...(existing?.pinned ? { pinned: true } : {}),
         // Saving a trashed note must not resurrect it; trash state only changes via trash/restore.
@@ -573,7 +573,7 @@ export class Vault {
           createdAt: importedAt,
           updatedAt: importedAt,
           revision: 1,
-          size: new Blob([input.markdown]).size,
+          size: utf8ByteLength(input.markdown),
           sourcePath: input.sourcePath,
         });
         importedFiles.push({
@@ -1169,6 +1169,25 @@ export class Vault {
     }
     throw error;
   }
+}
+
+/** The UTF-8 size of `value`, as a Blob of it would report, without copying it. */
+export function utf8ByteLength(value: string): number {
+  let bytes = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code < 0x80) bytes += 1;
+    else if (code < 0x800) bytes += 2;
+    else if (code >= 0xd800 && code <= 0xdbff && isLowSurrogate(value.charCodeAt(index + 1))) {
+      bytes += 4;
+      index += 1;
+    } else bytes += 3;
+  }
+  return bytes;
+}
+
+function isLowSurrogate(code: number): boolean {
+  return code >= 0xdc00 && code <= 0xdfff;
 }
 
 // ISO timestamps sort as plain strings, which is far cheaper than a locale-aware comparison.
