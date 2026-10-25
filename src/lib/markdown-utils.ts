@@ -5,32 +5,37 @@ export interface LocalAttachmentUrl {
 }
 
 export function titleFromMarkdown(value: string, fallback = "Untitled"): string {
-  const firstLine =
-    stripFrontmatter(value)
-      .split("\n")
-      .find((line) => line.trim())
-      ?.trim() ?? "";
-  const title = firstLine
+  const title = firstContentLine(value)
     .replace(/^#{1,6}\s*/, "")
     .replace(/[*_`~[\]]/g, "")
     .trim();
   return title.slice(0, 80) || fallback;
 }
 
-function stripFrontmatter(value: string): string {
-  const lines = value.split(/\r?\n/);
-  let firstContentLine = 0;
-  while (firstContentLine < lines.length && !lines[firstContentLine]!.trim()) firstContentLine += 1;
-  const opening = lines[firstContentLine]?.trim();
-  if (opening !== "---" && opening !== "+++") return value;
-
-  for (let index = firstContentLine + 1; index < lines.length; index += 1) {
-    const line = lines[index]!.trim();
-    if (line === opening || (opening === "---" && line === "...")) {
-      return lines.slice(index + 1).join("\n");
+/** The first non-blank line after any front matter, read without splitting the whole note. */
+function firstContentLine(value: string): string {
+  let opening = "";
+  let inFrontmatter = false;
+  let start = 0;
+  while (start <= value.length) {
+    const newline = value.indexOf("\n", start);
+    const end = newline === -1 ? value.length : newline;
+    const line = value.slice(start, end).trim();
+    start = end + 1;
+    if (inFrontmatter) {
+      if (line === opening || (opening === "---" && line === "...")) inFrontmatter = false;
+      continue;
     }
+    if (!line) continue;
+    if (!opening && (line === "---" || line === "+++")) {
+      opening = line;
+      inFrontmatter = true;
+      continue;
+    }
+    return line;
   }
-  return value;
+  // Unclosed front matter is treated as ordinary text.
+  return inFrontmatter ? opening : "";
 }
 
 export interface RelativeNoteLink {
