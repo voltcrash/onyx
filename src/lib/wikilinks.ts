@@ -92,7 +92,7 @@ export function linksToNote<T extends LinkableNote>(
   target: T,
   notes: T[],
 ): boolean {
-  if (!markdown.includes(fileStem(noteFilePath(target))) && !markdown.includes("](")) return false;
+  if (!markdown.includes("[[") && !markdown.includes("](")) return false;
   const prose = stripCode(markdown);
   for (const match of prose.matchAll(WIKI_LINK)) {
     if (match[1]) continue;

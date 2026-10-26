@@ -63,6 +63,11 @@ describe("linksToNote", () => {
     expect(linksToNote("[[Plan]]", "Ideas.md", ideas, notes)).toBe(false);
   });
 
+  it("finds backlinks with the same case-insensitive matching as navigation", () => {
+    expect(linksToNote("See [[ideas#Next|next steps]].", "Plan.md", ideas, notes)).toBe(true);
+    expect(linksToNote("[[PROJECTS/PLAN]]", "Ideas.md", notes[0]!, notes)).toBe(true);
+  });
+
   it("blanks code while keeping line positions", () => {
     expect(stripCode("a `b` c\n```\nx\n```\nd")).toBe("a   c\n\n\n\nd");
   });
