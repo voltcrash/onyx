@@ -107,6 +107,7 @@ import type { FolderIcon } from "#lib/folder-icons.ts";
 import { createNoteOutput, downloadBlob, type NoteSource } from "#lib/note-output.ts";
 import {
   basename,
+  decodePath,
   fileStem,
   isPathWithin,
   joinPath,
@@ -1274,12 +1275,7 @@ export function createPageController() {
     if (!fragment) return;
     await tick();
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    let decoded = fragment;
-    try {
-      decoded = decodeURIComponent(fragment);
-    } catch {
-      decoded = fragment;
-    }
+    const decoded = decodePath(fragment);
     const renderedPane = document.querySelector<HTMLElement>(".rendered-pane");
     const elementsWithIds = renderedPane?.querySelectorAll<HTMLElement>("[id]");
     for (const candidate of [

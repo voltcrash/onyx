@@ -3,6 +3,7 @@ import { BlobReader, BlobWriter, ZipReader, ZipWriter, type Entry } from "@zip.j
 import { titleFromMarkdown } from "./markdown-utils.js";
 import {
   basename,
+  decodePath,
   encodePath,
   fileStem,
   hasControlCharacters,
@@ -614,14 +615,6 @@ async function rewriteMarkdownLinks(
 function resolveLinkPath(directory: string, destination: string): string | undefined {
   if (/^(?:[a-z][a-z\d+.-]*:|[\\/])/i.test(destination)) return;
   return resolveRelativePath(directory, destination);
-}
-
-function decodePath(path: string): string {
-  try {
-    return decodeURIComponent(path);
-  } catch {
-    return path;
-  }
 }
 
 function normalizeExportPath(sourcePath: string | undefined, fallback: string): string {

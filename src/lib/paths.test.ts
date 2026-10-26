@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   basename,
+  decodePath,
   encodePath,
   fileStem,
   hasControlCharacters,
@@ -70,6 +71,11 @@ describe("relative paths", () => {
     expect(relativePath("notes", "notes/a.png")).toBe("a.png");
     expect(relativePath("", "a/b.png")).toBe("a/b.png");
     expect(relativePath("a", "a")).toBe("../a");
+  });
+
+  it("decodes escapes and leaves malformed ones alone", () => {
+    expect(decodePath("my%20notes/a%231.md")).toBe("my notes/a#1.md");
+    expect(decodePath("100%.md")).toBe("100%.md");
   });
 
   it("encodes each segment but keeps separators", () => {

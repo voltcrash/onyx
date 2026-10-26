@@ -69,6 +69,15 @@ export function relativePath(fromDirectory: string, to: string): string {
   return [...from.slice(shared).map(() => ".."), ...target.slice(shared)].join("/");
 }
 
+/** Decodes percent-escapes, or returns the value unchanged when it is not validly encoded. */
+export function decodePath(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export function encodePath(path: string): string {
   return path
     .split("/")

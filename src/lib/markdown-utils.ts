@@ -1,4 +1,11 @@
-import { basename, encodePath, parentPath, relativePath, resolveRelativePath } from "./paths.js";
+import {
+  basename,
+  decodePath,
+  encodePath,
+  parentPath,
+  relativePath,
+  resolveRelativePath,
+} from "./paths.js";
 
 export interface LocalAttachmentUrl {
   name: string;
@@ -106,12 +113,7 @@ export function parseRelativeNoteLink(
   const queryIndex = beforeHash.indexOf("?");
   const pathPart = queryIndex === -1 ? beforeHash : beforeHash.slice(0, queryIndex);
   if (!pathPart || !/\.(?:md|markdown)$/i.test(pathPart)) return;
-  let decodedPath: string;
-  try {
-    decodedPath = decodeURIComponent(pathPart);
-  } catch {
-    decodedPath = pathPart;
-  }
+  const decodedPath = decodePath(pathPart);
   const resolved = resolveRelativePath(parentPath(noteSourcePath ?? ""), decodedPath);
   if (!resolved) return;
   return { path: resolved, fragment };
@@ -151,12 +153,7 @@ export function resolveLocalAttachmentUrl(
   const suffixIndex = destination.search(/[?#]/);
   const path = suffixIndex === -1 ? destination : destination.slice(0, suffixIndex);
   const suffix = suffixIndex === -1 ? "" : destination.slice(suffixIndex);
-  let decodedPath: string;
-  try {
-    decodedPath = decodeURIComponent(path);
-  } catch {
-    decodedPath = path;
-  }
+  const decodedPath = decodePath(path);
   const resolvedPath = resolveRelativePath(parentPath(noteSourcePath ?? ""), decodedPath);
   if (!resolvedPath) return;
   const attachment =
@@ -239,12 +236,7 @@ export function rewriteLocalLinks(
           const suffixIndex = destination.search(/[?#]/);
           const path = suffixIndex === -1 ? destination : destination.slice(0, suffixIndex);
           const suffix = suffixIndex === -1 ? "" : destination.slice(suffixIndex);
-          let decoded: string;
-          try {
-            decoded = decodeURIComponent(path);
-          } catch {
-            decoded = path;
-          }
+          const decoded = decodePath(path);
           const resolved = resolveRelativePath(previousDirectory, decoded);
           const target = resolved ? mapPath(resolved) : undefined;
           if (!target) return match;
