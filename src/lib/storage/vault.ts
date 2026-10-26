@@ -6,6 +6,7 @@ import {
 } from "./database.js";
 import { detectBrowserStorageSupport } from "../browser-storage.js";
 import { normalizeAttachmentFolder, titleFromMarkdown } from "../markdown-utils.js";
+import { isPathWithin, movePath } from "../paths.js";
 import { VaultCoordination } from "./coordination.js";
 import { MirroredVaultFilesystem, VaultFilesystem } from "./filesystem.js";
 import type {
@@ -38,15 +39,6 @@ const DEFAULT_DIRECTORY_NAME = "onyx";
 
 /** Trashed notes are permanently deleted after 30 days. */
 export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
-
-function isPathWithin(path: string, parent: string): boolean {
-  return !parent || path === parent || path.startsWith(`${parent}/`);
-}
-
-function moveSourcePath(path: string, from: string, to: string): string {
-  const suffix = path.slice(from.length).replace(/^\/+/, "");
-  return to ? (suffix ? `${to}/${suffix}` : to) : suffix;
-}
 
 export class Vault {
   readonly #database: VaultDatabase;
@@ -720,9 +712,7 @@ export class Vault {
       const moved = attachments.flatMap((attachment) => {
         const sourcePath = attachment.sourcePath;
         if (!sourcePath || sourcePath === from || !isPathWithin(sourcePath, from)) return [];
-        return [
-          { ...attachment, sourcePath: moveSourcePath(sourcePath, from, to), updatedAt: now },
-        ];
+        return [{ ...attachment, sourcePath: movePath(sourcePath, from, to), updatedAt: now }];
       });
       const occupied = new Set(
         attachments
@@ -843,7 +833,7 @@ export class Vault {
         if (pinnedFolder && isPathWithin(sourcePath, pinnedFolder)) return attachment;
         return {
           ...attachment,
-          sourcePath: moveSourcePath(sourcePath, from, to),
+          sourcePath: movePath(sourcePath, from, to),
           updatedAt: now,
         };
       });
