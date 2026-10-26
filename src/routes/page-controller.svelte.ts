@@ -1,55 +1,4 @@
-import {
-  ArrowLeftRight,
-  Bold,
-  Braces,
-  Eye,
-  EyeOff,
-  FolderPen,
-  ImagePlus,
-  CloudDownload,
-  Code2,
-  Columns2,
-  Copy,
-  CloudUpload,
-  Download,
-  FileArchive,
-  FilePlus2,
-  FileText,
-  FolderInput,
-  FolderOutput,
-  HardDrive,
-  Heading2,
-  Highlighter,
-  Italic,
-  Link,
-  List,
-  ListChecks,
-  ListOrdered,
-  Keyboard,
-  Monitor,
-  MessageSquareWarning,
-  Minus,
-  Moon,
-  Pilcrow,
-  PanelLeft,
-  PanelLeftClose,
-  PanelRight,
-  Lock,
-  ArrowDownUp,
-  PanelRightClose,
-  Printer,
-  Rows2,
-  Save,
-  Search,
-  Settings,
-  Sigma,
-  Sun,
-  Strikethrough,
-  Trash2,
-  Type,
-  Quote,
-  type LucideIcon,
-} from "@lucide/svelte";
+import { FileText } from "@lucide/svelte";
 import type {
   BackupState,
   GithubState,
@@ -60,7 +9,7 @@ import type {
   SaveState,
   TransferState,
 } from "#lib/components/app-types.ts";
-import { noteFormats, type NoteFormat } from "#lib/components/note-formats.ts";
+import type { NoteFormat } from "#lib/components/note-formats.ts";
 import type { SettingsSection } from "#lib/components/settings-types.ts";
 import { renderMarkdownBlocks as renderLiteMarkdownBlocks } from "#lib/markdown-lite.ts";
 import {
@@ -153,6 +102,7 @@ import {
 import type { FindMatch } from "#lib/find-replace.ts";
 import { createFindReplace } from "./find-replace.svelte.ts";
 import { createPreviewRenderer } from "./preview-renderer.svelte.ts";
+import { paletteCommands, type PaletteActions, type PaletteCommand } from "./palette-commands.ts";
 import type { FolderIcon } from "#lib/folder-icons.ts";
 import { outputFileName } from "#lib/output-utils.ts";
 import {
@@ -186,46 +136,6 @@ const PREVIEW_SETTLE_MS = 160;
 const DEFERRED_STARTUP_DELAY_MS = 8_000;
 // Matches the single-column breakpoint in the responsive stylesheet.
 const NARROW_VIEWPORT = "(max-width: 900px)";
-
-const noteFormatPaletteNames: Record<NoteFormat, string> = {
-  markdown: "Markdown",
-  html: "HTML",
-  text: "plain text",
-  "rich-text": "rich text",
-  pdf: "PDF",
-};
-
-const noteFormatPaletteKeywords: Record<NoteFormat, string> = {
-  markdown: "markdown md source",
-  html: "html web page source",
-  text: "plain text txt",
-  "rich-text": "rtf rich text formatted word document email paste",
-  pdf: "pdf paper print",
-};
-
-const noteFormatExportLabels: Record<NoteFormat, string> = {
-  markdown: "Download this note as Markdown",
-  html: "Download this note as HTML",
-  text: "Download this note as plain text",
-  "rich-text": "Download this note as rich text",
-  pdf: "Save this note as a PDF",
-};
-
-const noteFormatExportIds: Record<NoteFormat, string> = {
-  markdown: "download-markdown",
-  html: "download-html",
-  text: "download-text",
-  "rich-text": "download-rtf",
-  pdf: "save-pdf",
-};
-
-const noteFormatExportIcons = {
-  markdown: FileText,
-  html: Code2,
-  text: Type,
-  "rich-text": Pilcrow,
-  pdf: Printer,
-};
 
 type GithubModule = typeof import("#lib/github.ts");
 type LazyStylesModule = typeof import("#lib/lazy-styles.ts");
@@ -498,498 +408,67 @@ export function createPageController() {
     ];
   });
 
-  function noteTransferPaletteItems() {
-    return noteFormats.flatMap((format) => {
-      const name = noteFormatPaletteNames[format.id];
-      const keywords = noteFormatPaletteKeywords[format.id];
-      const items = [];
-      if (format.id !== "pdf" && format.copyable) {
-        const copyFormat = format.id as Exclude<NoteFormat, "pdf">;
-        items.push({
-          id: `copy-${copyFormat}`,
-          group: "Transfer",
-          label: `Copy this note as ${name}`,
-          icon: Copy,
-          keywords: `clipboard ${keywords}`,
-          disabled: !hasContent,
-          run: () => void copyNoteAs(activeNoteId, copyFormat),
-        });
-      }
-      items.push({
-        id: noteFormatExportIds[format.id],
-        group: "Transfer",
-        label: noteFormatExportLabels[format.id],
-        icon: noteFormatExportIcons[format.id],
-        keywords: `export ${keywords} save`,
-        disabled: !hasContent,
-        run: () => void exportNoteAs(activeNoteId, format.id),
-      });
-      return items;
-    });
-  }
-
-  interface PaletteCommand {
-    id: string;
-    group: string;
-    label: string;
-    hint?: string;
-    keywords?: string;
-    aliases?: string[];
-    shortcut?: string;
-    icon: LucideIcon;
-    disabled?: boolean;
-    run: () => void;
-  }
+  const paletteActions: PaletteActions = {
+    shortcutLabel,
+    createNote: () => createNote(),
+    saveDraft,
+    toggleTrash,
+    emptyTrash,
+    attachFile: () => attachmentInput?.click(),
+    setAttachmentsHidden,
+    openSettings,
+    openFind: () => find.open(),
+    insertSyntax,
+    prefixLine,
+    toggleCheckboxAtCaret,
+    toggleSourcePane,
+    toggleRenderedPane,
+    swapPanes,
+    togglePaneLayout,
+    toggleScrollSync,
+    toggleSidebar,
+    setSidebarSide,
+    setTheme,
+    beginBackup,
+    openRestore,
+    importFolder: () => folderInput?.click(),
+    importZip: () => zipInput?.click(),
+    exportFolder,
+    exportZip,
+    resetFonts,
+    resetShortcuts,
+    ensurePersistentStorage,
+    copyNoteAs,
+    exportNoteAs,
+  };
 
   const paletteItems = $derived<PaletteCommand[]>([
     ...paletteNoteItems,
-    {
-      id: "new-note",
-      group: "Actions",
-      label: "New note",
-      shortcut: shortcutLabel("newNote"),
-      icon: FilePlus2,
-      keywords: "create add page",
-      aliases: ["create note", "quick note"],
-      disabled: transferState === "working",
-      run: () => void createNote(),
-    },
-    {
-      id: "save",
-      group: "Actions",
-      label: "Save note",
-      shortcut: shortcutLabel("saveNote"),
-      icon: Save,
-      keywords: "write store",
-      disabled: saveState === "saving" || transferState === "working",
-      run: () => void saveDraft(),
-    },
-    {
-      id: "open-trash",
-      group: "View",
-      label: trashOpen ? "Close trash" : "Open trash",
-      shortcut: shortcutLabel("openTrash"),
-      hint: trashedNotes.length ? `${trashedNotes.length}` : undefined,
-      icon: Trash2,
-      keywords: "trash deleted restore bin",
-      disabled: transferState === "working",
-      run: () => toggleTrash(),
-    },
-    {
-      id: "empty-trash",
-      group: "Actions",
-      label: "Empty trash",
-      hint: trashedNotes.length ? `${trashedNotes.length}` : undefined,
-      icon: Trash2,
-      keywords: "trash deleted restore purge permanent delete",
-      disabled: transferState === "working" || trashedNotes.length === 0,
-      run: () => void emptyTrash(),
-    },
-    {
-      id: "attach-file",
-      group: "Actions",
-      label: "Add image or file",
-      icon: ImagePlus,
-      keywords: "attach attachment photo picture image upload insert file",
-      aliases: ["insert image", "add photo"],
-      disabled: transferState === "working" || !activeNoteId,
-      run: () => attachmentInput?.click(),
-    },
-    {
-      id: "toggle-attachments-folder",
-      group: "View",
-      label: attachmentsHidden ? "Show attachments folder" : "Hide attachments folder",
-      hint: attachmentFolder,
-      icon: attachmentsHidden ? Eye : EyeOff,
-      keywords: "attachments images files folder sidebar hide show toggle",
-      run: () => setAttachmentsHidden(!attachmentsHidden),
-    },
-    {
-      id: "rename-attachments-folder",
-      group: "Actions",
-      label: "Rename attachments folder",
-      hint: attachmentFolder,
-      icon: FolderPen,
-      keywords: "attachments images files folder rename move settings",
-      run: () => void openSettings("editor"),
-    },
-    {
-      id: "find-in-note",
-      group: "Actions",
-      label: "Find in note",
-      shortcut: shortcutLabel("findInNote"),
-      icon: Search,
-      keywords: "find replace current note text",
-      run: () => find.open(),
-    },
-    {
-      id: "bold",
-      group: "Formatting",
-      label: "Bold",
-      shortcut: shortcutLabel("bold"),
-      icon: Bold,
-      keywords: "strong emphasis format",
-      run: () => insertSyntax("**", "**", "bold text"),
-    },
-    {
-      id: "italic",
-      group: "Formatting",
-      label: "Italic",
-      shortcut: shortcutLabel("italic"),
-      icon: Italic,
-      keywords: "emphasis slant format",
-      run: () => insertSyntax("_", "_", "italic text"),
-    },
-    {
-      id: "strikethrough",
-      group: "Formatting",
-      label: "Strikethrough",
-      icon: Strikethrough,
-      keywords: "strike delete format",
-      run: () => insertSyntax("~~", "~~", "struck text"),
-    },
-    {
-      id: "highlight",
-      group: "Formatting",
-      label: "Highlight",
-      icon: Highlighter,
-      keywords: "mark emphasize format",
-      run: () => insertSyntax("==", "==", "highlighted text"),
-    },
-    {
-      id: "heading",
-      group: "Formatting",
-      label: "Heading",
-      icon: Heading2,
-      keywords: "title header format",
-      run: () => prefixLine("## "),
-    },
-    {
-      id: "bulleted-list",
-      group: "Formatting",
-      label: "Bulleted list",
-      icon: List,
-      keywords: "unordered list format",
-      run: () => prefixLine("- "),
-    },
-    {
-      id: "numbered-list",
-      group: "Formatting",
-      label: "Numbered list",
-      icon: ListOrdered,
-      keywords: "ordered list format",
-      run: () => prefixLine("1. "),
-    },
-    {
-      id: "task-list",
-      group: "Formatting",
-      label: "Task list",
-      icon: ListChecks,
-      keywords: "checklist todo checkbox format",
-      run: () => prefixLine("- [ ] "),
-    },
-    {
-      id: "toggle-checkbox",
-      group: "Formatting",
-      label: "Toggle checkbox",
-      shortcut: shortcutLabel("toggleCheckbox"),
-      icon: ListChecks,
-      keywords: "checklist todo checkbox check uncheck toggle",
-      run: () => toggleCheckboxAtCaret(),
-    },
-    {
-      id: "quote",
-      group: "Formatting",
-      label: "Quote",
-      icon: Quote,
-      keywords: "blockquote format",
-      run: () => prefixLine("> "),
-    },
-    {
-      id: "callout",
-      group: "Formatting",
-      label: "Callout",
-      icon: MessageSquareWarning,
-      keywords: "note admonition alert format",
-      run: () => prefixLine("> [!NOTE]\n> "),
-    },
-    {
-      id: "inline-code",
-      group: "Formatting",
-      label: "Inline code",
-      icon: Code2,
-      keywords: "code format",
-      run: () => insertSyntax("`", "`", "code"),
-    },
-    {
-      id: "code-block",
-      group: "Formatting",
-      label: "Code block",
-      icon: Braces,
-      keywords: "fenced code format",
-      run: () => insertSyntax("```\n", "\n```", "code block"),
-    },
-    {
-      id: "link",
-      group: "Formatting",
-      label: "Link",
-      icon: Link,
-      keywords: "url hyperlink format",
-      run: () => insertSyntax("[", "](https://)", "link text"),
-    },
-    {
-      id: "divider",
-      group: "Formatting",
-      label: "Divider",
-      icon: Minus,
-      keywords: "horizontal rule separator format",
-      run: () => prefixLine("---\n"),
-    },
-    {
-      id: "math",
-      group: "Formatting",
-      label: "Math",
-      icon: Sigma,
-      keywords: "equation latex formula format",
-      run: () => insertSyntax("$$\n", "\n$$", "equation"),
-    },
-    {
-      id: "toggle-source-pane",
-      group: "View",
-      label: sourcePaneVisible ? "Hide source pane" : "Show source pane",
-      icon: PanelLeftClose,
-      keywords: "write markdown source left pane",
-      disabled: !singlePaneMode && sourcePaneVisible && !renderedPaneVisible,
-      run: () => toggleSourcePane(),
-    },
-    {
-      id: "toggle-rendered-pane",
-      group: "View",
-      label: renderedPaneVisible ? "Hide rendered pane" : "Show rendered pane",
-      shortcut: shortcutLabel("togglePreview"),
-      icon: PanelRightClose,
-      keywords: "rendered preview right pane",
-      disabled: !singlePaneMode && renderedPaneVisible && !sourcePaneVisible,
-      run: () => toggleRenderedPane(),
-    },
-    {
-      id: "swap-panes",
-      group: "View",
-      label: "Swap the pane positions",
-      icon: ArrowLeftRight,
-      keywords: "move switch sides order panes",
-      disabled: singlePaneMode,
-      run: () => swapPanes(),
-    },
-    {
-      id: "toggle-pane-layout",
-      group: "View",
-      label: effectivePaneLayout === "rows" ? "Place the panes side by side" : "Stack the panes",
-      icon: effectivePaneLayout === "rows" ? Columns2 : Rows2,
-      keywords: "split horizontal vertical stack columns rows layout",
-      disabled: singlePaneMode,
-      run: () => togglePaneLayout(),
-    },
-    {
-      id: "toggle-scroll-sync",
-      group: "View",
-      label: scrollSync ? "Turn off synced scrolling" : "Turn on synced scrolling",
-      icon: ArrowDownUp,
-      keywords: "auto scroll sync link panes follow source rendered",
-      disabled: singlePaneMode,
-      run: () => toggleScrollSync(),
-    },
-    {
-      id: "toggle-sidebar",
-      group: "View",
-      label: sidebarCollapsed ? "Show the notes sidebar" : "Hide the notes sidebar",
-      shortcut: shortcutLabel("toggleSidebar"),
-      icon: PanelLeft,
-      keywords: "panel files list",
-      run: () => toggleSidebar(),
-    },
-    {
-      id: "sidebar-left",
-      group: "View",
-      label: "Sidebar position: Left",
-      icon: PanelLeft,
-      keywords: "panel side position dock move",
-      disabled: sidebarSide === "left",
-      run: () => setSidebarSide("left"),
-    },
-    {
-      id: "sidebar-right",
-      group: "View",
-      label: "Sidebar position: Right",
-      icon: PanelRight,
-      keywords: "panel side position dock move",
-      disabled: sidebarSide === "right",
-      run: () => setSidebarSide("right"),
-    },
-    {
-      id: "theme-light",
-      group: "Themes",
-      label: "Use light mode",
-      icon: Sun,
-      keywords: "bright day colour color theme",
-      disabled: theme === "light",
-      run: () => setTheme("light"),
-    },
-    {
-      id: "theme-dark",
-      group: "Themes",
-      label: "Use dark mode",
-      icon: Moon,
-      keywords: "night colour color theme",
-      disabled: theme === "dark",
-      run: () => setTheme("dark"),
-    },
-    {
-      id: "theme-system",
-      group: "Themes",
-      label: "Use system mode",
-      icon: Monitor,
-      keywords: "automatic os operating system colour color theme",
-      disabled: theme === "system",
-      run: () => setTheme("system"),
-    },
-    {
-      id: "backup",
-      group: "Backup & sync",
-      label: "Back up for cross-device sync",
-      icon: CloudUpload,
-      keywords: "commit push sync",
-      disabled: !isOnline || githubState !== "connected",
-      run: () => void beginBackup(),
-    },
-    {
-      id: "restore",
-      group: "Backup & sync",
-      label: "Restore from a GitHub commit",
-      icon: CloudDownload,
-      keywords: "download history rollback",
-      disabled: !isOnline || githubState !== "connected",
-      run: () => void openRestore(),
-    },
-    {
-      id: "import-folder",
-      group: "Transfer",
-      label: "Import a Markdown folder",
-      icon: FolderInput,
-      keywords: "open files load",
-      run: () => folderInput?.click(),
-    },
-    {
-      id: "import-zip",
-      group: "Transfer",
-      label: "Import a ZIP archive",
-      icon: FileArchive,
-      keywords: "open files load",
-      run: () => zipInput?.click(),
-    },
-    {
-      id: "export-folder",
-      group: "Transfer",
-      label: "Export to a folder",
-      icon: FolderOutput,
-      keywords: "save files write",
-      run: () => void exportFolder(),
-    },
-    ...noteTransferPaletteItems(),
-    {
-      id: "export-zip",
-      group: "Transfer",
-      label: "Export a ZIP archive",
-      icon: Download,
-      keywords: "save download backup",
-      run: () => void exportZip(),
-    },
-    {
-      id: "settings",
-      group: "Settings",
-      label: "Editor settings",
-      icon: Settings,
-      keywords: "preferences options writing fonts typeface editor",
-      aliases: ["preferences", "configuration"],
-      run: () => openSettings("editor"),
-    },
-    {
-      id: "reset-fonts",
-      group: "Settings",
-      label: "Restore default fonts",
-      icon: Type,
-      keywords: "editor typography reset appearance",
-      disabled: fontsAreDefault,
-      run: resetFonts,
-    },
-    {
-      id: "settings-themes",
-      group: "Settings",
-      label: "Theme settings",
-      icon: Sun,
-      keywords: "appearance color mode light dark system",
-      aliases: ["appearance", "color scheme"],
-      run: () => openSettings("themes"),
-    },
-    {
-      id: "shortcuts",
-      group: "Settings",
-      label: "Keyboard shortcuts",
-      shortcut: shortcutLabel("openShortcuts"),
-      icon: Keyboard,
-      keywords: "help keys reference",
-      run: () => openSettings("shortcuts"),
-    },
-    {
-      id: "reset-shortcuts",
-      group: "Settings",
-      label: "Restore default keyboard shortcuts",
-      icon: Keyboard,
-      keywords: "keys reset defaults customize",
-      disabled: shortcutsAreDefault,
-      run: resetShortcuts,
-    },
-    {
-      id: "settings-github",
-      group: "Settings",
-      label: "GitHub backup & sync settings",
-      icon: CloudUpload,
-      keywords:
-        "account sign in backup cross device repository branch directory remote status history commit pending changes",
-      run: () => openSettings("github"),
-    },
-    {
-      id: "storage",
-      group: "Settings",
-      label: "Storage choices",
-      icon: HardDrive,
-      keywords: "space quota usage persistent folder opfs",
-      run: () => openSettings("storage"),
-    },
-    {
-      id: "request-persistent-storage",
-      group: "Settings",
-      label: "Request persistent storage",
-      icon: HardDrive,
-      keywords: "storage browser keep notes safe durable",
-      run: () => void ensurePersistentStorage(),
-    },
-    {
-      id: "settings-transfer",
-      group: "Settings",
-      label: "Import & export settings",
-      icon: ArrowLeftRight,
-      keywords: "markdown zip folder transfer files",
-      run: () => openSettings("transfer"),
-    },
-    {
-      id: "settings-vault",
-      group: "Settings",
-      label: "Vault settings",
-      icon: Lock,
-      keywords: "delete clear notes vault data",
-      run: () => openSettings("vault"),
-    },
+    ...paletteCommands(
+      {
+        activeNoteId,
+        attachmentFolder,
+        attachmentsHidden,
+        effectivePaneLayout,
+        fontsAreDefault,
+        githubState,
+        hasContent,
+        isOnline,
+        renderedPaneVisible,
+        saveState,
+        scrollSync,
+        shortcutsAreDefault,
+        sidebarCollapsed,
+        sidebarSide,
+        singlePaneMode,
+        sourcePaneVisible,
+        theme,
+        transferState,
+        trashOpen,
+        trashedCount: trashedNotes.length,
+      },
+      paletteActions,
+    ),
   ]);
 
   function loadMarkdownOutputModule(): Promise<MarkdownOutputModule> {
