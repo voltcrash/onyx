@@ -1,6 +1,16 @@
 import { BlobReader, BlobWriter, ZipReader, ZipWriter, type Entry } from "@zip.js/zip.js";
 
 import { titleFromMarkdown } from "./markdown-utils.js";
+import {
+  basename,
+  encodePath,
+  fileStem,
+  hasControlCharacters,
+  isMarkdownPath,
+  parentPath,
+  relativePath,
+  resolveRelativePath,
+} from "./paths.js";
 import type { Vault } from "./storage/vault.js";
 
 const BYTES_PER_MEBIBYTE = 1024 * 1024;
@@ -153,10 +163,7 @@ export async function importMarkdownFiles(
       })),
       markdown: note.text,
       sourcePath: note.file.path,
-      title: titleFromMarkdown(
-        note.text,
-        basename(note.file.path).replace(/\.(?:md|markdown)$/i, "") || "Untitled",
-      ),
+      title: titleFromMarkdown(note.text, fileStem(note.file.path)),
     })),
   );
 }
@@ -496,14 +503,6 @@ function createLimitedBlobWriter(
   };
 }
 
-function hasControlCharacters(value: string): boolean {
-  for (const character of value) {
-    const code = character.charCodeAt(0);
-    if (code < 32 || code === 127) return true;
-  }
-  return false;
-}
-
 function findAttachmentOwner(
   path: string,
   notes: Array<{ file: MarkdownTransferFile; text: string }>,
@@ -518,10 +517,10 @@ function findAttachmentOwner(
 
 function referencedPaths(markdown: string, notePath: string): Set<string> {
   const references = new Set<string>();
-  const directory = dirname(notePath);
+  const directory = parentPath(notePath);
   for (const destination of markdownLinkDestinations(markdown)) {
     const withoutSuffix = destination.split(/[?#]/, 1)[0];
-    const resolved = resolveRelativePath(directory, decodePath(withoutSuffix));
+    const resolved = resolveLinkPath(directory, decodePath(withoutSuffix));
     if (resolved) references.add(resolved);
   }
   return references;
@@ -571,13 +570,13 @@ async function rewriteMarkdownLinks(
   lookup: ExportPathLookup,
 ): Promise<string> {
   const markdown = await contents.text();
-  const directory = dirname(sourceNotePath);
-  const exportDirectory = dirname(exportNotePath);
+  const directory = parentPath(sourceNotePath);
+  const exportDirectory = parentPath(exportNotePath);
   const rewrite = (destination: string): string | undefined => {
     const suffixIndex = destination.search(/[?#]/);
     const path = suffixIndex === -1 ? destination : destination.slice(0, suffixIndex);
     const suffix = suffixIndex === -1 ? "" : destination.slice(suffixIndex);
-    const resolved = resolveRelativePath(directory, decodePath(path));
+    const resolved = resolveLinkPath(directory, decodePath(path));
     if (!resolved) return;
 
     let exportPath: string | undefined;
@@ -590,7 +589,7 @@ async function rewriteMarkdownLinks(
       exportPath = lookup.attachmentsByName.get(pathKey(basename(resolved)));
     }
     if (!exportPath) return;
-    return `${encodeTransferPath(relativePath(exportDirectory, exportPath))}${suffix}`;
+    return `${encodePath(relativePath(exportDirectory, exportPath))}${suffix}`;
   };
 
   const withInlineLinks = markdown.replace(
@@ -612,40 +611,9 @@ async function rewriteMarkdownLinks(
   );
 }
 
-function resolveRelativePath(directory: string, destination: string): string | undefined {
-  if (
-    !destination ||
-    destination.includes("\\") ||
-    /^(?:[a-z][a-z\d+.-]*:|[\\/])/i.test(destination)
-  ) {
-    return;
-  }
-  const parts: string[] = [];
-  for (const part of `${directory}/${destination}`.split("/")) {
-    if (!part || part === ".") continue;
-    if (part === "..") {
-      if (parts.length === 0) return;
-      parts.pop();
-    } else {
-      parts.push(part);
-    }
-  }
-  return parts.join("/") || undefined;
-}
-
-function relativePath(directory: string, target: string): string {
-  const fromParts = directory ? directory.split("/") : [];
-  const targetParts = target.split("/");
-  let common = 0;
-  while (fromParts[common] && fromParts[common] === targetParts[common]) common += 1;
-  return [...fromParts.slice(common).map(() => ".."), ...targetParts.slice(common)].join("/");
-}
-
-function encodeTransferPath(path: string): string {
-  return path
-    .split("/")
-    .map((part) => encodeURIComponent(part))
-    .join("/");
+function resolveLinkPath(directory: string, destination: string): string | undefined {
+  if (/^(?:[a-z][a-z\d+.-]*:|[\\/])/i.test(destination)) return;
+  return resolveRelativePath(directory, destination);
 }
 
 function decodePath(path: string): string {
@@ -695,19 +663,11 @@ function hasExistingAncestor(path: string, paths: Set<string>): boolean {
 }
 
 function commonDirectoryDepth(left: string, right: string): number {
-  const leftParts = dirname(left).split("/");
-  const rightParts = dirname(right).split("/");
+  const leftParts = parentPath(left).split("/");
+  const rightParts = parentPath(right).split("/");
   let depth = 0;
   while (leftParts[depth] && leftParts[depth] === rightParts[depth]) depth += 1;
   return depth;
-}
-
-function dirname(path: string): string {
-  return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
-}
-
-function basename(path: string): string {
-  return path.slice(path.lastIndexOf("/") + 1);
 }
 
 function safeName(value: string): string {
@@ -738,8 +698,4 @@ function contentType(path: string): string {
       webp: "image/webp",
     }[extension] ?? "application/octet-stream"
   );
-}
-
-function isMarkdownPath(path: string): boolean {
-  return /\.(?:md|markdown)$/i.test(path);
 }
