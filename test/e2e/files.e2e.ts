@@ -212,8 +212,15 @@ test("moves deleted notes to trash, restores them, and deletes them forever", as
   await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await expect(restored).toBeHidden();
   await openTrash(page);
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Delete Trashme forever", exact: true }).click();
+  const confirmDialog = page.getByRole("alertdialog", { name: "Delete forever?" });
+  await expect(confirmDialog).toContainText("“Trashme”");
+  await expect(confirmDialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(confirmDialog).toBeHidden();
+  await expect(page.getByRole("button", { name: "Restore Trashme", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Delete Trashme forever", exact: true }).click();
+  await confirmDialog.getByRole("button", { name: "Delete forever" }).click();
   await expect(page.getByRole("button", { name: "Restore Trashme", exact: true })).toBeHidden();
   await expect(page.getByText("Trash is empty")).toBeVisible();
   await page.getByRole("button", { name: "Close trash" }).click();
@@ -231,8 +238,11 @@ test("moves deleted notes to trash, restores them, and deletes them forever", as
   await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await expect(second).toBeHidden();
   await openTrash(page);
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Empty trash", exact: true }).click();
+  await page
+    .getByRole("alertdialog", { name: "Empty trash?" })
+    .getByRole("button", { name: "Empty trash" })
+    .click();
   await expect(page.getByText("Trash is empty")).toBeVisible();
 });
 

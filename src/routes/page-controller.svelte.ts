@@ -102,6 +102,7 @@ import {
 import type { FindMatch } from "#lib/find-replace.ts";
 import { createFindReplace } from "./find-replace.svelte.ts";
 import { createPreviewRenderer } from "./preview-renderer.svelte.ts";
+import { createConfirmation } from "./confirmation.svelte.ts";
 import { paletteCommands, type PaletteActions, type PaletteCommand } from "./palette-commands.ts";
 import type { FolderIcon } from "#lib/folder-icons.ts";
 import { createNoteOutput, downloadBlob, type NoteSource } from "#lib/note-output.ts";
@@ -469,6 +470,7 @@ export function createPageController() {
   ]);
 
   const noteOutput = createNoteOutput(() => preview.loadMarkdownModule());
+  const confirmation = createConfirmation(() => loadDialogStyles());
 
   function loadDialogStyles(): Promise<void> {
     return (dialogStylesPromise ??= loadLazyStylesModule().then((module) =>
@@ -1834,12 +1836,14 @@ export function createPageController() {
     if (!vault || transferState === "working") return;
     const note = await vault.getNote(noteId);
     if (!note) return;
-    if (
-      !window.confirm(
-        `Permanently delete “${fileStem(noteFilePath(note))}”? This cannot be undone.`,
-      )
-    )
-      return;
+    const confirmed = await confirmation.ask({
+      eyebrow: "Trash",
+      title: "Delete forever?",
+      message: `“${fileStem(noteFilePath(note))}” and its attachments will be permanently deleted. This cannot be undone.`,
+      confirmLabel: "Delete forever",
+      danger: true,
+    });
+    if (!confirmed) return;
     if (!(await settleDraft())) return;
     try {
       await vault.purgeNote(noteId);
@@ -1859,12 +1863,15 @@ export function createPageController() {
 
   async function emptyTrash(): Promise<void> {
     if (!vault || transferState === "working" || trashedNotes.length === 0) return;
-    if (
-      !window.confirm(
-        `Permanently delete ${trashedNotes.length} ${trashedNotes.length === 1 ? "note" : "notes"} in Trash? This cannot be undone.`,
-      )
-    )
-      return;
+    const count = trashedNotes.length;
+    const confirmed = await confirmation.ask({
+      eyebrow: "Trash",
+      title: "Empty trash?",
+      message: `${count} ${count === 1 ? "note" : "notes"} in Trash will be permanently deleted. This cannot be undone.`,
+      confirmLabel: "Empty trash",
+      danger: true,
+    });
+    if (!confirmed) return;
     if (!(await settleDraft())) return;
     try {
       await vault.emptyTrash();
@@ -3477,6 +3484,11 @@ export function createPageController() {
     dismissBackupMessage() {
       backupMessage = "";
     },
+    get confirmation() {
+      return confirmation.request;
+    },
+    confirmAction: confirmation.confirm,
+    cancelAction: confirmation.cancel,
     get transferMessage() {
       return transferMessage;
     },

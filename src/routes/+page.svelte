@@ -215,6 +215,22 @@
 	onDismissTransfer={page.dismissTransferMessage}
 />
 
+{#if page.confirmation}
+	{#await import('#lib/components/confirm-dialog.svelte') then { default: ConfirmDialog }}
+		{#key page.confirmation.id}
+			<ConfirmDialog
+				eyebrow={page.confirmation.eyebrow}
+				title={page.confirmation.title}
+				message={page.confirmation.message}
+				confirmLabel={page.confirmation.confirmLabel}
+				danger={page.confirmation.danger}
+				onConfirm={page.confirmAction}
+				onCancel={page.cancelAction}
+			/>
+		{/key}
+	{/await}
+{/if}
+
 {#if page.settingsOpen}
 	{#await import('#lib/components/settings-dialog.svelte') then { default: SettingsDialog }}
 		<SettingsDialog
