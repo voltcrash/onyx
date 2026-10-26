@@ -78,6 +78,8 @@ export interface GithubBackupState {
   directory: string;
   lastCommitSha?: string;
   lastBackedUpAt?: string;
+  /** Back up pending changes on their own, shortly after editing stops. */
+  autoBackup?: boolean;
   updatedAt: string;
 }
 
