@@ -36,12 +36,6 @@ export function createFindReplace(host: FindReplaceHost) {
     matches.length > 0 ? Math.min(Math.max(matchIndex, 0), matches.length - 1) : -1,
   );
 
-  function keepInputFocused(): void {
-    requestAnimationFrame(() => {
-      if (open && input && document.activeElement !== input) input.focus();
-    });
-  }
-
   function focusMatch(index: number, sequence = navigationSequence): void {
     if (!open || sequence !== navigationSequence) return;
     const match = matches[index];
@@ -54,9 +48,7 @@ export function createFindReplace(host: FindReplaceHost) {
       return;
     }
 
-    target.focus();
     target.revealRange(match.start, match.end);
-    keepInputFocused();
   }
 
   function queueNavigation(): void {
