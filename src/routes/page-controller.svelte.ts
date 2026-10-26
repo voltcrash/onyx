@@ -224,6 +224,7 @@ export function createPageController() {
   let restoreBranch = $state("main");
   let restoreDirectory = $state("vault");
   let transferState = $state<TransferState>("idle");
+  let transferMessage = $state("");
   let folderInput: HTMLInputElement | undefined = $state();
   let zipInput: HTMLInputElement | undefined = $state();
   let attachmentInput: HTMLInputElement | undefined = $state();
@@ -1887,22 +1888,28 @@ export function createPageController() {
 
   async function importFolder(files: FileList | null): Promise<void> {
     if (!files?.length) return;
-    const { readMarkdownFolder } = await import("#lib/markdown-transfer.ts");
-    await runImport(readMarkdownFolder(files));
-    if (folderInput) folderInput.value = "";
+    try {
+      const { readMarkdownFolder } = await import("#lib/markdown-transfer.ts");
+      await runImport(readMarkdownFolder(files));
+    } catch (error) {
+      showTransferError(error, "The folder could not be imported.");
+    } finally {
+      if (folderInput) folderInput.value = "";
+    }
   }
 
   async function importZip(files: FileList | null): Promise<void> {
     const file = files?.[0];
     if (!file) return;
     transferState = "working";
+    transferMessage = "";
     try {
       const { readMarkdownZip } = await import("#lib/markdown-transfer.ts");
       const entries = await readMarkdownZip(file);
       transferState = "idle";
       await runImport(entries);
-    } catch {
-      showTransferError();
+    } catch (error) {
+      showTransferError(error, "The ZIP archive could not be imported.");
     } finally {
       if (zipInput) zipInput.value = "";
     }
@@ -1911,6 +1918,7 @@ export function createPageController() {
   async function runImport(files: MarkdownTransferFile[]): Promise<void> {
     if (!vault || transferState === "working") return;
     transferState = "working";
+    transferMessage = "";
     if (!(await settleDraft())) {
       transferState = "idle";
       return;
@@ -1924,8 +1932,8 @@ export function createPageController() {
       await runSearch("");
       pendingBackupCount = await vault.countPendingBackupOperations();
       transferState = "idle";
-    } catch {
-      showTransferError();
+    } catch (error) {
+      showTransferError(error, "The notes could not be imported.");
     }
   }
 
@@ -1954,8 +1962,8 @@ export function createPageController() {
     try {
       await write();
       transferState = "idle";
-    } catch {
-      transferState = "error";
+    } catch (error) {
+      showTransferError(error, "The clipboard could not be written.");
     }
   }
 
@@ -1980,6 +1988,7 @@ export function createPageController() {
   async function exportZip(): Promise<void> {
     if (!vault || transferState === "working") return;
     transferState = "working";
+    transferMessage = "";
     if (!(await settleDraft())) {
       transferState = "idle";
       return;
@@ -1990,8 +1999,8 @@ export function createPageController() {
       const archive = await createMarkdownZip(files);
       downloadBlob(archive, `onyx-markdown-${new Date().toISOString().slice(0, 10)}.zip`);
       transferState = "idle";
-    } catch {
-      showTransferError();
+    } catch (error) {
+      showTransferError(error, "The ZIP archive could not be created.");
     }
   }
 
@@ -2005,12 +2014,16 @@ export function createPageController() {
       }
     ).showDirectoryPicker;
     if (!picker) {
-      transferState = "error";
+      showTransferError(
+        undefined,
+        "This browser cannot export to a folder. Export a ZIP archive instead.",
+      );
       return;
     }
     try {
       const directory = await picker.call(window, { mode: "readwrite" });
       transferState = "working";
+      transferMessage = "";
       if (!(await settleDraft())) {
         transferState = "idle";
         return;
@@ -2022,12 +2035,13 @@ export function createPageController() {
       transferState = "idle";
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      showTransferError();
+      showTransferError(error, "The notes could not be exported to that folder.");
     }
   }
 
-  function showTransferError(): void {
+  function showTransferError(error: unknown, fallback: string): void {
     transferState = "error";
+    transferMessage = error instanceof Error && error.message ? error.message : fallback;
   }
 
   async function settleDraft(): Promise<boolean> {
@@ -2350,8 +2364,8 @@ export function createPageController() {
   function writeEditorClipboard(text: string): boolean {
     const clipboard = navigator.clipboard;
     if (!clipboard || typeof clipboard.writeText !== "function") return false;
-    void Promise.resolve(clipboard.writeText(text)).catch(() => {
-      transferState = "error";
+    void Promise.resolve(clipboard.writeText(text)).catch((error: unknown) => {
+      showTransferError(error, "The clipboard could not be written.");
     });
     return true;
   }
@@ -3464,6 +3478,12 @@ export function createPageController() {
     formatCommitDate,
     dismissBackupMessage() {
       backupMessage = "";
+    },
+    get transferMessage() {
+      return transferMessage;
+    },
+    dismissTransferMessage() {
+      transferMessage = "";
     },
   };
 }

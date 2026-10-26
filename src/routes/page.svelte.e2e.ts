@@ -2027,6 +2027,38 @@ test("imports a Markdown folder and exports its structure and attachments as ZIP
   await expect(page.getByText("Exported 3 files to ZIP.")).toHaveCount(0);
 });
 
+test("explains why an import failed", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+  await page.locator('input[type="file"][webkitdirectory]').evaluate((element) => {
+    const input = element as HTMLInputElement;
+    const transfer = new DataTransfer();
+    const note = new File(["# Escape"], "escape.md", { type: "text/markdown" });
+    Object.defineProperty(note, "webkitRelativePath", { value: "import/../../escape.md" });
+    transfer.items.add(note);
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const notice = page.getByRole("alert").filter({ hasText: "Unsafe transfer path" });
+  await expect(notice).toBeVisible();
+
+  await page.locator('input[type="file"][accept^=".zip"]').evaluate((element) => {
+    const input = element as HTMLInputElement;
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(["not a zip archive"], "broken.zip", { type: "application/zip" }));
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await expect(notice).toBeHidden();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss import and export status" }).click();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+});
+
 test("restores a selected GitHub commit into the local vault", async ({ page }) => {
   const commitSha = "a".repeat(40);
   const treeSha = "b".repeat(40);
