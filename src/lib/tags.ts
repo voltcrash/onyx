@@ -1,8 +1,8 @@
+import { stripCode } from "./wikilinks.js";
+
 // A tag starts after whitespace or at a line start, so URL fragments, entities and heading markers
 // are not tags. It needs one non-digit, which keeps issue references like #42 as plain text.
 const INLINE_TAG = /(?<=^|\s)#([\p{L}\p{N}_/-]*[\p{L}_/-][\p{L}\p{N}_/-]*)/gu;
-const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
-const INLINE_CODE = /(`+)[\s\S]*?\1/g;
 const FRONTMATTER_TAGS = /^tags?:\s*(.*)$/i;
 
 /** Normalizes a tag for storage and matching: lower case, no leading `#` or trailing `/`. */
@@ -48,17 +48,8 @@ export function extractTags(markdown: string): string[] {
     }
   }
 
-  let fence: string | undefined;
-  for (; index < lines.length; index += 1) {
-    const line = lines[index]!;
-    const marker = line.match(FENCE)?.[1];
-    if (marker) {
-      if (!fence) fence = marker;
-      else if (marker[0] === fence[0] && marker.length >= fence.length) fence = undefined;
-      continue;
-    }
-    if (fence) continue;
-    for (const match of line.replace(INLINE_CODE, " ").matchAll(INLINE_TAG)) add(match[1]!);
+  for (const match of stripCode(lines.slice(index).join("\n")).matchAll(INLINE_TAG)) {
+    add(match[1]!);
   }
   return [...tags].sort();
 }
