@@ -11,6 +11,7 @@ const DATABASE_VERSION = 4;
 const VAULT_VERSION_KEY = "vaultVersion";
 const NATIVE_DIRECTORY_HANDLE_KEY = "nativeDirectoryHandle";
 const FILE_FOLDERS_KEY = "fileFolders";
+const DERIVED_TAGS_KEY = "derivedTagsVersion";
 
 export interface SearchDocument {
   noteId: string;
@@ -286,6 +287,45 @@ export class VaultDatabase {
       noteContents: new Map(noteContents.map((contents) => [contents.noteId, contents.markdown])),
       version: versionRecord?.value ?? 0,
     };
+  }
+
+  getDerivedTagsVersion(): Promise<number> {
+    return this.#getSetting<number>(DERIVED_TAGS_KEY).then((version) => version ?? 0);
+  }
+
+  /**
+   * Rewrites notes' derived tags and search entries, then records `version`. A note saved since
+   * its entry was computed keeps its newer tags.
+   */
+  async updateDerivedTags(
+    entries: Array<{
+      note: NoteMetadata;
+      searchDocument: SearchDocument;
+      searchPostings: SearchPosting[];
+    }>,
+    version: number,
+  ): Promise<void> {
+    const transaction = this.#database.transaction(
+      ["notes", "searchDocuments", "searchPostings", "settings"],
+      "readwrite",
+    );
+    const complete = transactionDone(transaction);
+    const notes = transaction.objectStore("notes");
+    const postings = transaction.objectStore("searchPostings");
+    for (const { note, searchDocument, searchPostings } of entries) {
+      const current = await requestResult<NoteMetadata | undefined>(notes.get(note.id));
+      if (current?.revision !== note.revision) continue;
+      notes.put(note);
+      transaction.objectStore("searchDocuments").put(searchDocument);
+      const previous = await requestResult<SearchPosting[]>(
+        postings.index("noteId").getAll(note.id),
+      );
+      const changes = diffSearchPostings(previous, searchPostings);
+      for (const term of changes.removed) postings.delete([term, note.id]);
+      for (const posting of changes.written) postings.put(posting);
+    }
+    transaction.objectStore("settings").put({ key: DERIVED_TAGS_KEY, value: version });
+    await complete;
   }
 
   getVaultVersion(): Promise<number> {

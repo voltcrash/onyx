@@ -34,7 +34,6 @@ export interface SaveNoteInput {
   expectedRevision?: number;
   title: string;
   markdown: string;
-  tags?: string[];
   sourcePath?: string;
 }
 
