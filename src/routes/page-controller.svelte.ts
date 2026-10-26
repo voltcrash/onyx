@@ -174,6 +174,13 @@ import {
 } from "#lib/paths.ts";
 import type { MarkdownTransferFile } from "#lib/markdown-transfer.ts";
 import { createInitialMarkdown } from "./welcome-note.ts";
+import {
+  clampContentWidth,
+  clampSidebarWidth,
+  clampSplitRatio,
+  DEFAULT_CONTENT_WIDTH,
+  DEFAULT_SIDEBAR_WIDTH,
+} from "#lib/layout.ts";
 import { EditorHistory, type EditorSelection } from "#lib/editor-history.ts";
 import { onMount, tick, untrack } from "svelte";
 import { goto } from "$app/navigation";
@@ -181,7 +188,6 @@ import { page } from "$app/state";
 
 const NOTE_PAGE_SIZE = 100;
 const PREVIEW_SETTLE_MS = 160;
-const DEFAULT_CONTENT_WIDTH = 700;
 const DEFERRED_STARTUP_DELAY_MS = 8_000;
 // Matches the single-column breakpoint in the responsive stylesheet.
 const NARROW_VIEWPORT = "(max-width: 900px)";
@@ -247,9 +253,6 @@ type SidebarSide = "left" | "right";
 
 const SIDEBAR_DRAG_HOLD_MS = 300;
 const SIDEBAR_DRAG_SLOP_PX = 6;
-export const DEFAULT_SIDEBAR_WIDTH = 258;
-export const MIN_SIDEBAR_WIDTH = 200;
-export const MAX_SIDEBAR_WIDTH = 480;
 
 interface WorkerPreview {
   source: string;
@@ -2894,20 +2897,12 @@ export function createPageController() {
     previewIsLive = false;
   }
 
-  function clampSplitRatio(value: number): number {
-    return Math.min(80, Math.max(20, value));
-  }
-
   function setSplitRatio(value: number): void {
     splitRatio = clampSplitRatio(value);
   }
 
   function saveSplitRatio(): void {
     writeLocalStorage("onyx:split-ratio", splitRatio.toFixed(1));
-  }
-
-  function clampContentWidth(value: number): number {
-    return Math.min(1_200, Math.max(480, Math.round(value / 20) * 20));
   }
 
   function setContentWidth(value: number): void {
@@ -3849,10 +3844,6 @@ export function createPageController() {
   function setSidebarSide(side: SidebarSide): void {
     sidebarSide = side;
     writeLocalStorage("onyx:sidebar-side", side);
-  }
-
-  function clampSidebarWidth(value: number): number {
-    return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, value));
   }
 
   function setSidebarWidth(value: number): void {

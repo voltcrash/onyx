@@ -3,10 +3,10 @@
 	import NotesSidebar from '#lib/components/notes-sidebar.svelte';
 	import StatusNotices from '#lib/components/status-notices.svelte';
 	import ImagePreview from '#lib/components/image-preview.svelte';
-	import { createPageController, DEFAULT_SIDEBAR_WIDTH } from './page-controller.svelte.js';
+	import { snapSidebarWidth } from '#lib/layout.ts';
+	import { createPageController } from './page-controller.svelte.js';
 
 	const page = createPageController();
-	const SIDEBAR_SNAP_DISTANCE = 12;
 	let sidebarResizePointerId: number | undefined;
 	let sidebarResizing = $state(false);
 
@@ -23,7 +23,7 @@
 		const bounds = (event.currentTarget as HTMLElement).parentElement?.getBoundingClientRect();
 		if (!bounds) return;
 		const width = page.sidebarSide === 'right' ? bounds.right - event.clientX : event.clientX - bounds.left;
-		page.setSidebarWidth(Math.abs(width - DEFAULT_SIDEBAR_WIDTH) <= SIDEBAR_SNAP_DISTANCE ? DEFAULT_SIDEBAR_WIDTH : width);
+		page.setSidebarWidth(snapSidebarWidth(width));
 	}
 
 	function endSidebarResize(event: PointerEvent): void {
