@@ -73,28 +73,3 @@ export function findTextMatches(
   }
   return matches;
 }
-
-export function escapeFindText(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-export function highlightFindMatches(
-  value: string,
-  matches: FindMatch[],
-  activeIndex: number,
-): string {
-  if (matches.length === 0) return escapeFindText(value);
-  let output = "";
-  let cursor = 0;
-  matches.forEach((match, index) => {
-    output += escapeFindText(value.slice(cursor, match.start));
-    output += `<mark class="find-match${index === activeIndex ? " find-match-current" : ""}">${escapeFindText(value.slice(match.start, match.end))}</mark>`;
-    cursor = match.end;
-  });
-  return `${output}${escapeFindText(value.slice(cursor))}`;
-}
