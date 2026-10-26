@@ -81,10 +81,6 @@
 		return renderedNoteHref(event);
 	}
 
-	function handleRenderedMouseMove(event: MouseEvent): void {
-		if (renderedNoteHref(event)) event.stopPropagation();
-	}
-
 	function handleRenderedMouseDown(event: MouseEvent): void {
 		if (renderedNoteLink(event)) event.preventDefault();
 	}
@@ -476,7 +472,8 @@
 				<button class="pane-handle" title={`Show the ${secondPane} pane`} aria-label={`Show the ${secondPane} pane`} aria-expanded="false" onclick={toggleSecondPane}><RestoreIcon size={15} /></button>
 			{/if}
 		</div>
-		<div bind:this={renderedPaneElement} class="rendered-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} onmousemove={handleRenderedMouseMove} onmousedown={handleRenderedMouseDown} onclick={handleRenderedClick} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
+		<!-- Note links open inside Onyx; SvelteKit preloading them as routes throws on malformed hrefs. -->
+		<div bind:this={renderedPaneElement} class="rendered-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} data-sveltekit-preload-data="false" data-sveltekit-preload-code="false" onmousedown={handleRenderedMouseDown} onclick={handleRenderedClick} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
 			{#if hasContent}
 				<article class="prose">
 					{#each keyedRenderedBlocks as block (block.key)}

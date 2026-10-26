@@ -140,9 +140,10 @@
   .prose {
     padding: 36px 25px 80px;
   }
-  .backup-notice {
+  .status-notices {
     right: 12px;
     left: 12px;
+    align-items: stretch;
     max-width: none;
   }
 }

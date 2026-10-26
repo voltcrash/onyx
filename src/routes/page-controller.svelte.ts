@@ -1,55 +1,4 @@
-import {
-  ArrowLeftRight,
-  Bold,
-  Braces,
-  Eye,
-  EyeOff,
-  FolderPen,
-  ImagePlus,
-  CloudDownload,
-  Code2,
-  Columns2,
-  Copy,
-  CloudUpload,
-  Download,
-  FileArchive,
-  FilePlus2,
-  FileText,
-  FolderInput,
-  FolderOutput,
-  HardDrive,
-  Heading2,
-  Highlighter,
-  Italic,
-  Link,
-  List,
-  ListChecks,
-  ListOrdered,
-  Keyboard,
-  Monitor,
-  MessageSquareWarning,
-  Minus,
-  Moon,
-  Pilcrow,
-  PanelLeft,
-  PanelLeftClose,
-  PanelRight,
-  Lock,
-  ArrowDownUp,
-  PanelRightClose,
-  Printer,
-  Rows2,
-  Save,
-  Search,
-  Settings,
-  Sigma,
-  Sun,
-  Strikethrough,
-  Trash2,
-  Type,
-  Quote,
-  type LucideIcon,
-} from "@lucide/svelte";
+import { FileText } from "@lucide/svelte";
 import type {
   BackupState,
   GithubState,
@@ -60,16 +9,9 @@ import type {
   SaveState,
   TransferState,
 } from "#lib/components/app-types.ts";
-import { noteFormats, type NoteFormat } from "#lib/components/note-formats.ts";
+import type { NoteFormat } from "#lib/components/note-formats.ts";
 import type { SettingsSection } from "#lib/components/settings-types.ts";
-import {
-  renderMarkdownBlocks as renderLiteMarkdownBlocks,
-  type RenderedBlock,
-} from "#lib/markdown-lite.ts";
-import {
-  createMarkdownRenderWorker,
-  type MarkdownRenderWorker,
-} from "#lib/markdown-render-worker.ts";
+import { renderMarkdownBlocks as renderLiteMarkdownBlocks } from "#lib/markdown-lite.ts";
 import {
   attachmentMarkdown,
   continueListOnEnter,
@@ -157,67 +99,48 @@ import {
   type ResolvedTheme,
   type ThemePreference,
 } from "#lib/theme.ts";
-import { findTextMatches, type FindMatch } from "#lib/find-replace.ts";
+import type { FindMatch } from "#lib/find-replace.ts";
+import { createFindReplace } from "./find-replace.svelte.ts";
+import { createPreviewRenderer } from "./preview-renderer.svelte.ts";
+import { paletteCommands, type PaletteActions, type PaletteCommand } from "./palette-commands.ts";
 import type { FolderIcon } from "#lib/folder-icons.ts";
-import { outputFileName } from "#lib/output-utils.ts";
+import { createNoteOutput, downloadBlob, type NoteSource } from "#lib/note-output.ts";
+import {
+  basename,
+  decodePath,
+  fileStem,
+  isPathWithin,
+  joinPath,
+  movePath,
+  normalizeFileName,
+  normalizeFolderName,
+  noteFilePath,
+  noteFolderPath,
+  parentPath,
+} from "#lib/paths.ts";
 import type { MarkdownTransferFile } from "#lib/markdown-transfer.ts";
+import { createInitialMarkdown } from "./welcome-note.ts";
+import { startSidebarDrag, type SidebarSide } from "#lib/sidebar-drag.ts";
+import {
+  clampContentWidth,
+  clampSidebarWidth,
+  clampSplitRatio,
+  DEFAULT_CONTENT_WIDTH,
+  DEFAULT_SIDEBAR_WIDTH,
+} from "#lib/layout.ts";
+import { EditorHistory, type EditorSelection } from "#lib/editor-history.ts";
 import { onMount, tick, untrack } from "svelte";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 
 const NOTE_PAGE_SIZE = 100;
 const PREVIEW_SETTLE_MS = 160;
-const DEFAULT_CONTENT_WIDTH = 700;
 const DEFERRED_STARTUP_DELAY_MS = 8_000;
 // Matches the single-column breakpoint in the responsive stylesheet.
 const NARROW_VIEWPORT = "(max-width: 900px)";
-const EDITOR_HISTORY_LIMIT = 200;
-const MARKDOWN_EXTENSION = ".md";
-
-const noteFormatPaletteNames: Record<NoteFormat, string> = {
-  markdown: "Markdown",
-  html: "HTML",
-  text: "plain text",
-  "rich-text": "rich text",
-  pdf: "PDF",
-};
-
-const noteFormatPaletteKeywords: Record<NoteFormat, string> = {
-  markdown: "markdown md source",
-  html: "html web page source",
-  text: "plain text txt",
-  "rich-text": "rtf rich text formatted word document email paste",
-  pdf: "pdf paper print",
-};
-
-const noteFormatExportLabels: Record<NoteFormat, string> = {
-  markdown: "Download this note as Markdown",
-  html: "Download this note as HTML",
-  text: "Download this note as plain text",
-  "rich-text": "Download this note as rich text",
-  pdf: "Save this note as a PDF",
-};
-
-const noteFormatExportIds: Record<NoteFormat, string> = {
-  markdown: "download-markdown",
-  html: "download-html",
-  text: "download-text",
-  "rich-text": "download-rtf",
-  pdf: "save-pdf",
-};
-
-const noteFormatExportIcons = {
-  markdown: FileText,
-  html: Code2,
-  text: Type,
-  "rich-text": Pilcrow,
-  pdf: Printer,
-};
 
 type GithubModule = typeof import("#lib/github.ts");
 type LazyStylesModule = typeof import("#lib/lazy-styles.ts");
-type MarkdownModule = typeof import("#lib/markdown.ts");
-type MarkdownOutputModule = typeof import("#lib/markdown-output.ts");
 
 let githubModulePromise: Promise<GithubModule> | undefined;
 let lazyStylesModulePromise: Promise<LazyStylesModule> | undefined;
@@ -231,30 +154,6 @@ function loadLazyStylesModule(): Promise<LazyStylesModule> {
 }
 
 type SidebarState = { collapsed: boolean; open: boolean };
-type SidebarSide = "left" | "right";
-
-const SIDEBAR_DRAG_HOLD_MS = 300;
-const SIDEBAR_DRAG_SLOP_PX = 6;
-export const DEFAULT_SIDEBAR_WIDTH = 258;
-export const MIN_SIDEBAR_WIDTH = 200;
-export const MAX_SIDEBAR_WIDTH = 480;
-
-interface EditorSelection {
-  start: number;
-  end: number;
-}
-
-interface EditorHistoryEntry {
-  markdown: string;
-  selection?: EditorSelection;
-}
-
-interface WorkerPreview {
-  source: string;
-  attachments: LocalAttachmentUrl[];
-  noteSourcePath: string | undefined;
-  blocks: RenderedBlock[];
-}
 
 interface ImagePreviewState {
   id: string;
@@ -262,101 +161,7 @@ interface ImagePreviewState {
   url: string;
 }
 
-function pathParts(path: string): string[] {
-  return path.split("/").filter(Boolean);
-}
-
-function parentPath(path: string): string {
-  return pathParts(path).slice(0, -1).join("/");
-}
-
-function joinPath(parent: string, name: string): string {
-  return [...pathParts(parent), name].join("/");
-}
-
-function isPathWithin(path: string, parent: string): boolean {
-  return !parent || path === parent || path.startsWith(`${parent}/`);
-}
-
-function movePath(path: string, from: string, to: string): string {
-  const suffix = path.slice(from.length).replace(/^\/+/, "");
-  return suffix ? joinPath(to, suffix) : to;
-}
-
-function basename(path: string): string {
-  return pathParts(path).at(-1) ?? "";
-}
-
-function noteFilePath(note: Pick<NoteMetadata, "sourcePath" | "title">): string {
-  const sourcePath = note.sourcePath?.trim();
-  if (sourcePath) return sourcePath;
-  const fallback = (note.title || "Untitled").replace(/[\\/]+/g, "-").trim() || "Untitled";
-  return `${fallback}${MARKDOWN_EXTENSION}`;
-}
-
-function noteFolderPath(note: Pick<NoteMetadata, "sourcePath" | "title">): string {
-  return parentPath(noteFilePath(note));
-}
-
-function fileStem(path: string): string {
-  return basename(path).replace(/\.(?:md|markdown)$/i, "") || "Untitled";
-}
-
-function hasControlCharacters(value: string): boolean {
-  for (const character of value) {
-    if (character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127) return true;
-  }
-  return false;
-}
-
-function normalizeFileName(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed || trimmed === "." || trimmed === ".." || /[\\/]/.test(trimmed)) {
-    throw new Error("File names cannot be empty or contain slashes.");
-  }
-  if (hasControlCharacters(trimmed)) {
-    throw new Error("File names cannot contain control characters.");
-  }
-  return /\.(?:md|markdown)$/i.test(trimmed) ? trimmed : `${trimmed}${MARKDOWN_EXTENSION}`;
-}
-
-function normalizeFolderName(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed || trimmed === "." || trimmed === ".." || /[\\/]/.test(trimmed)) {
-    throw new Error("Folder names cannot be empty or contain slashes.");
-  }
-  if (hasControlCharacters(trimmed)) {
-    throw new Error("Folder names cannot contain control characters.");
-  }
-  return trimmed;
-}
-
 export function createPageController() {
-  function createInitialMarkdown(primaryModifier: PrimaryModifier): string {
-    const commandPaletteShortcut = primaryModifier === "meta" ? "⌘ K" : "Ctrl + K";
-    const saveShortcut = primaryModifier === "meta" ? "⌘ S" : "Ctrl + S";
-    const previewShortcut = primaryModifier === "meta" ? "⌘ ⇧ P" : "Ctrl + Shift + P";
-    return `# Welcome to Onyx
-
-Onyx is a quiet place to think in Markdown. Your work stays on this device and saves automatically as you write.
-
-## Find anything quickly
-
-Create as many notes as you need. Search checks every title and every word, while the index stays on this device.
-
-> Good tools disappear into the work.
-
-### Today’s notes
-
-- [x] Open a fresh page
-- [ ] Capture the next idea
-- [ ] Shape it into something useful
-
-Onyx starts in private browser storage (OPFS) without an account. In browsers that support choosing persistent folders, you can mirror this vault to one from **Settings → Storage choices**. GitHub sign-in is optional and only enables backup and cross-device restore.
-
-Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\` to save now, or \`${previewShortcut}\` to toggle the rendered pane. Press \`?\` for every shortcut.`;
-  }
-
   const initialMarkdown = createInitialMarkdown("meta");
 
   let vault = $state<Vault>();
@@ -396,17 +201,6 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let settledSearchSequence = 0;
   let editor: HTMLTextAreaElement | undefined = $state();
   let searchInput: HTMLInputElement | undefined = $state();
-  let findOpen = $state(false);
-  let findQuery = $state("");
-  let findReplacement = $state("");
-  let findMatchCase = $state(false);
-  let findWholeWord = $state(false);
-  let findMatchIndex = $state(-1);
-  let findInput: HTMLInputElement | undefined = $state();
-  let findReplaceInput: HTMLInputElement | undefined = $state();
-  let findOpener: HTMLElement | undefined = $state();
-  let findSidebarState: SidebarState | undefined;
-  let findNavigationSequence = 0;
   let sidebarOpen = $state(false);
   let storageError = $state("");
   let storageNotice = $state("");
@@ -431,6 +225,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let restoreBranch = $state("main");
   let restoreDirectory = $state("vault");
   let transferState = $state<TransferState>("idle");
+  let transferMessage = $state("");
   let folderInput: HTMLInputElement | undefined = $state();
   let zipInput: HTMLInputElement | undefined = $state();
   let attachmentInput: HTMLInputElement | undefined = $state();
@@ -453,24 +248,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   let sidebarDropSide = $state<SidebarSide | undefined>();
   let shortcuts = $state<KeyboardShortcuts>(structuredClone(defaultKeyboardShortcuts));
   let primaryModifier = $state<PrimaryModifier>("meta");
-  let undoStack: EditorHistoryEntry[] = [];
-  let redoStack: EditorHistoryEntry[] = [];
-  let pendingEditorState: EditorHistoryEntry | undefined;
-  let applyingEditorHistory = false;
+  const editorHistory = new EditorHistory();
   let noteList: HTMLElement | undefined = $state();
   let activeNoteSourcePath: string | undefined = $state();
   // Replaced rather than mutated, so a render can be matched to the list it resolved against.
   let localAttachmentUrls = $state.raw<LocalAttachmentUrl[]>([]);
   let imagePreview = $state<ImagePreviewState>();
   let imagePreviewRequest = 0;
-  let markdownModule: MarkdownModule | undefined;
-  let markdownModulePromise: Promise<MarkdownModule> | undefined;
-  let markdownModuleRevision = $state(0);
-  // Undefined until first needed, and null once workers prove unavailable.
-  let renderWorker: MarkdownRenderWorker | null | undefined;
-  let workerPreview = $state.raw<WorkerPreview>();
-  let pendingWorkerPreview: (Omit<WorkerPreview, "blocks"> & { done: Promise<void> }) | undefined;
-  let markdownOutputModulePromise: Promise<MarkdownOutputModule> | undefined;
   let dialogStylesPromise: Promise<void> | undefined;
   let serviceWorkerTimer: number | undefined;
   let githubRestoreTimer: number | undefined;
@@ -490,12 +274,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   );
   const wordCount = $derived(countWords(markdown));
   const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
-  const renderedBlocks = $derived.by(() => {
-    const preview = workerPreview;
-    if (preview && workerPreviewMatches(preview, previewMarkdown)) return preview.blocks;
-    void markdownModuleRevision;
-    return renderMarkdownBlocksForPage(previewMarkdown, resolveAttachmentUrl);
+  const preview = createPreviewRenderer({
+    source: () => previewMarkdown,
+    attachments: () => localAttachmentUrls,
+    noteSourcePath: () => activeNoteSourcePath,
+    resolveAttachmentUrl,
   });
+  const renderedBlocks = $derived(preview.blocks);
   const liveRenderedBlocks = $derived(
     renderLiteMarkdownBlocks(livePreviewMarkdown, resolveAttachmentUrl),
   );
@@ -516,16 +301,28 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   );
   const noteTitle = $derived(titleFromMarkdown(markdown));
   const markdownLineCount = $derived(countLines(markdown));
-  const findMatches = $derived.by(() =>
-    findTextMatches(markdown, findQuery, {
-      matchCase: findMatchCase,
-      wholeWord: findWholeWord,
-    }),
-  );
-  const activeFindMatch = $derived(
-    findMatches.length > 0 ? Math.min(Math.max(findMatchIndex, 0), findMatches.length - 1) : -1,
-  );
   const findCanEdit = $derived(saveState !== "loading" && transferState !== "working");
+  const find = createFindReplace({
+    markdown: () => markdown,
+    canEdit: () => findCanEdit,
+    editor: () => editor,
+    editorSelection: () => getEditorSelection(),
+    rememberEditorState,
+    updateMarkdown: (value) => updateMarkdown(value),
+    revealSource: () => {
+      if (singlePaneMode && !sourcePaneVisible) showOnlyPane("source");
+    },
+    openSidebar: () => {
+      const previous = { collapsed: sidebarCollapsed, open: sidebarOpen };
+      sidebarCollapsed = false;
+      if (window.innerWidth <= 900) sidebarOpen = true;
+      return () => {
+        sidebarCollapsed = previous.collapsed;
+        sidebarOpen = previous.open;
+      };
+    },
+    restoreFocus: restoreModalFocus,
+  });
   const notePageCount = $derived(Math.max(1, Math.ceil(results.length / NOTE_PAGE_SIZE)));
   const orderedResults = $derived(
     results.toSorted(
@@ -608,611 +405,76 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     ];
   });
 
-  function noteTransferPaletteItems() {
-    return noteFormats.flatMap((format) => {
-      const name = noteFormatPaletteNames[format.id];
-      const keywords = noteFormatPaletteKeywords[format.id];
-      const items = [];
-      if (format.id !== "pdf" && format.copyable) {
-        const copyFormat = format.id as Exclude<NoteFormat, "pdf">;
-        items.push({
-          id: `copy-${copyFormat}`,
-          group: "Transfer",
-          label: `Copy this note as ${name}`,
-          icon: Copy,
-          keywords: `clipboard ${keywords}`,
-          disabled: !hasContent,
-          run: () => void copyNoteAs(activeNoteId, copyFormat),
-        });
-      }
-      items.push({
-        id: noteFormatExportIds[format.id],
-        group: "Transfer",
-        label: noteFormatExportLabels[format.id],
-        icon: noteFormatExportIcons[format.id],
-        keywords: `export ${keywords} save`,
-        disabled: !hasContent,
-        run: () => void exportNoteAs(activeNoteId, format.id),
-      });
-      return items;
-    });
-  }
-
-  interface PaletteCommand {
-    id: string;
-    group: string;
-    label: string;
-    hint?: string;
-    keywords?: string;
-    aliases?: string[];
-    shortcut?: string;
-    icon: LucideIcon;
-    disabled?: boolean;
-    run: () => void;
-  }
+  const paletteActions: PaletteActions = {
+    shortcutLabel,
+    createNote: () => createNote(),
+    saveDraft,
+    toggleTrash,
+    emptyTrash,
+    attachFile: () => attachmentInput?.click(),
+    setAttachmentsHidden,
+    openSettings,
+    openFind: () => find.open(),
+    insertSyntax,
+    prefixLine,
+    toggleCheckboxAtCaret,
+    toggleSourcePane,
+    toggleRenderedPane,
+    swapPanes,
+    togglePaneLayout,
+    toggleScrollSync,
+    toggleSidebar,
+    setSidebarSide,
+    setTheme,
+    beginBackup,
+    openRestore,
+    importFolder: () => folderInput?.click(),
+    importZip: () => zipInput?.click(),
+    exportFolder,
+    exportZip,
+    resetFonts,
+    resetShortcuts,
+    ensurePersistentStorage,
+    copyNoteAs,
+    exportNoteAs,
+  };
 
   const paletteItems = $derived<PaletteCommand[]>([
     ...paletteNoteItems,
-    {
-      id: "new-note",
-      group: "Actions",
-      label: "New note",
-      shortcut: shortcutLabel("newNote"),
-      icon: FilePlus2,
-      keywords: "create add page",
-      aliases: ["create note", "quick note"],
-      disabled: transferState === "working",
-      run: () => void createNote(),
-    },
-    {
-      id: "save",
-      group: "Actions",
-      label: "Save note",
-      shortcut: shortcutLabel("saveNote"),
-      icon: Save,
-      keywords: "write store",
-      disabled: saveState === "saving" || transferState === "working",
-      run: () => void saveDraft(),
-    },
-    {
-      id: "open-trash",
-      group: "View",
-      label: trashOpen ? "Close trash" : "Open trash",
-      shortcut: shortcutLabel("openTrash"),
-      hint: trashedNotes.length ? `${trashedNotes.length}` : undefined,
-      icon: Trash2,
-      keywords: "trash deleted restore bin",
-      disabled: transferState === "working",
-      run: () => toggleTrash(),
-    },
-    {
-      id: "empty-trash",
-      group: "Actions",
-      label: "Empty trash",
-      hint: trashedNotes.length ? `${trashedNotes.length}` : undefined,
-      icon: Trash2,
-      keywords: "trash deleted restore purge permanent delete",
-      disabled: transferState === "working" || trashedNotes.length === 0,
-      run: () => void emptyTrash(),
-    },
-    {
-      id: "attach-file",
-      group: "Actions",
-      label: "Add image or file",
-      icon: ImagePlus,
-      keywords: "attach attachment photo picture image upload insert file",
-      aliases: ["insert image", "add photo"],
-      disabled: transferState === "working" || !activeNoteId,
-      run: () => attachmentInput?.click(),
-    },
-    {
-      id: "toggle-attachments-folder",
-      group: "View",
-      label: attachmentsHidden ? "Show attachments folder" : "Hide attachments folder",
-      hint: attachmentFolder,
-      icon: attachmentsHidden ? Eye : EyeOff,
-      keywords: "attachments images files folder sidebar hide show toggle",
-      run: () => setAttachmentsHidden(!attachmentsHidden),
-    },
-    {
-      id: "rename-attachments-folder",
-      group: "Actions",
-      label: "Rename attachments folder",
-      hint: attachmentFolder,
-      icon: FolderPen,
-      keywords: "attachments images files folder rename move settings",
-      run: () => void openSettings("editor"),
-    },
-    {
-      id: "find-in-note",
-      group: "Actions",
-      label: "Find in note",
-      shortcut: shortcutLabel("findInNote"),
-      icon: Search,
-      keywords: "find replace current note text",
-      run: () => openFind(),
-    },
-    {
-      id: "bold",
-      group: "Formatting",
-      label: "Bold",
-      shortcut: shortcutLabel("bold"),
-      icon: Bold,
-      keywords: "strong emphasis format",
-      run: () => insertSyntax("**", "**", "bold text"),
-    },
-    {
-      id: "italic",
-      group: "Formatting",
-      label: "Italic",
-      shortcut: shortcutLabel("italic"),
-      icon: Italic,
-      keywords: "emphasis slant format",
-      run: () => insertSyntax("_", "_", "italic text"),
-    },
-    {
-      id: "strikethrough",
-      group: "Formatting",
-      label: "Strikethrough",
-      icon: Strikethrough,
-      keywords: "strike delete format",
-      run: () => insertSyntax("~~", "~~", "struck text"),
-    },
-    {
-      id: "highlight",
-      group: "Formatting",
-      label: "Highlight",
-      icon: Highlighter,
-      keywords: "mark emphasize format",
-      run: () => insertSyntax("==", "==", "highlighted text"),
-    },
-    {
-      id: "heading",
-      group: "Formatting",
-      label: "Heading",
-      icon: Heading2,
-      keywords: "title header format",
-      run: () => prefixLine("## "),
-    },
-    {
-      id: "bulleted-list",
-      group: "Formatting",
-      label: "Bulleted list",
-      icon: List,
-      keywords: "unordered list format",
-      run: () => prefixLine("- "),
-    },
-    {
-      id: "numbered-list",
-      group: "Formatting",
-      label: "Numbered list",
-      icon: ListOrdered,
-      keywords: "ordered list format",
-      run: () => prefixLine("1. "),
-    },
-    {
-      id: "task-list",
-      group: "Formatting",
-      label: "Task list",
-      icon: ListChecks,
-      keywords: "checklist todo checkbox format",
-      run: () => prefixLine("- [ ] "),
-    },
-    {
-      id: "toggle-checkbox",
-      group: "Formatting",
-      label: "Toggle checkbox",
-      shortcut: shortcutLabel("toggleCheckbox"),
-      icon: ListChecks,
-      keywords: "checklist todo checkbox check uncheck toggle",
-      run: () => toggleCheckboxAtCaret(),
-    },
-    {
-      id: "quote",
-      group: "Formatting",
-      label: "Quote",
-      icon: Quote,
-      keywords: "blockquote format",
-      run: () => prefixLine("> "),
-    },
-    {
-      id: "callout",
-      group: "Formatting",
-      label: "Callout",
-      icon: MessageSquareWarning,
-      keywords: "note admonition alert format",
-      run: () => prefixLine("> [!NOTE]\n> "),
-    },
-    {
-      id: "inline-code",
-      group: "Formatting",
-      label: "Inline code",
-      icon: Code2,
-      keywords: "code format",
-      run: () => insertSyntax("`", "`", "code"),
-    },
-    {
-      id: "code-block",
-      group: "Formatting",
-      label: "Code block",
-      icon: Braces,
-      keywords: "fenced code format",
-      run: () => insertSyntax("```\n", "\n```", "code block"),
-    },
-    {
-      id: "link",
-      group: "Formatting",
-      label: "Link",
-      icon: Link,
-      keywords: "url hyperlink format",
-      run: () => insertSyntax("[", "](https://)", "link text"),
-    },
-    {
-      id: "divider",
-      group: "Formatting",
-      label: "Divider",
-      icon: Minus,
-      keywords: "horizontal rule separator format",
-      run: () => prefixLine("---\n"),
-    },
-    {
-      id: "math",
-      group: "Formatting",
-      label: "Math",
-      icon: Sigma,
-      keywords: "equation latex formula format",
-      run: () => insertSyntax("$$\n", "\n$$", "equation"),
-    },
-    {
-      id: "toggle-source-pane",
-      group: "View",
-      label: sourcePaneVisible ? "Hide source pane" : "Show source pane",
-      icon: PanelLeftClose,
-      keywords: "write markdown source left pane",
-      disabled: !singlePaneMode && sourcePaneVisible && !renderedPaneVisible,
-      run: () => toggleSourcePane(),
-    },
-    {
-      id: "toggle-rendered-pane",
-      group: "View",
-      label: renderedPaneVisible ? "Hide rendered pane" : "Show rendered pane",
-      shortcut: shortcutLabel("togglePreview"),
-      icon: PanelRightClose,
-      keywords: "rendered preview right pane",
-      disabled: !singlePaneMode && renderedPaneVisible && !sourcePaneVisible,
-      run: () => toggleRenderedPane(),
-    },
-    {
-      id: "swap-panes",
-      group: "View",
-      label: "Swap the pane positions",
-      icon: ArrowLeftRight,
-      keywords: "move switch sides order panes",
-      disabled: singlePaneMode,
-      run: () => swapPanes(),
-    },
-    {
-      id: "toggle-pane-layout",
-      group: "View",
-      label: effectivePaneLayout === "rows" ? "Place the panes side by side" : "Stack the panes",
-      icon: effectivePaneLayout === "rows" ? Columns2 : Rows2,
-      keywords: "split horizontal vertical stack columns rows layout",
-      disabled: singlePaneMode,
-      run: () => togglePaneLayout(),
-    },
-    {
-      id: "toggle-scroll-sync",
-      group: "View",
-      label: scrollSync ? "Turn off synced scrolling" : "Turn on synced scrolling",
-      icon: ArrowDownUp,
-      keywords: "auto scroll sync link panes follow source rendered",
-      disabled: singlePaneMode,
-      run: () => toggleScrollSync(),
-    },
-    {
-      id: "toggle-sidebar",
-      group: "View",
-      label: sidebarCollapsed ? "Show the notes sidebar" : "Hide the notes sidebar",
-      shortcut: shortcutLabel("toggleSidebar"),
-      icon: PanelLeft,
-      keywords: "panel files list",
-      run: () => toggleSidebar(),
-    },
-    {
-      id: "sidebar-left",
-      group: "View",
-      label: "Sidebar position: Left",
-      icon: PanelLeft,
-      keywords: "panel side position dock move",
-      disabled: sidebarSide === "left",
-      run: () => setSidebarSide("left"),
-    },
-    {
-      id: "sidebar-right",
-      group: "View",
-      label: "Sidebar position: Right",
-      icon: PanelRight,
-      keywords: "panel side position dock move",
-      disabled: sidebarSide === "right",
-      run: () => setSidebarSide("right"),
-    },
-    {
-      id: "theme-light",
-      group: "Themes",
-      label: "Use light mode",
-      icon: Sun,
-      keywords: "bright day colour color theme",
-      disabled: theme === "light",
-      run: () => setTheme("light"),
-    },
-    {
-      id: "theme-dark",
-      group: "Themes",
-      label: "Use dark mode",
-      icon: Moon,
-      keywords: "night colour color theme",
-      disabled: theme === "dark",
-      run: () => setTheme("dark"),
-    },
-    {
-      id: "theme-system",
-      group: "Themes",
-      label: "Use system mode",
-      icon: Monitor,
-      keywords: "automatic os operating system colour color theme",
-      disabled: theme === "system",
-      run: () => setTheme("system"),
-    },
-    {
-      id: "backup",
-      group: "Backup & sync",
-      label: "Back up for cross-device sync",
-      icon: CloudUpload,
-      keywords: "commit push sync",
-      disabled: !isOnline || githubState !== "connected",
-      run: () => void beginBackup(),
-    },
-    {
-      id: "restore",
-      group: "Backup & sync",
-      label: "Restore from a GitHub commit",
-      icon: CloudDownload,
-      keywords: "download history rollback",
-      disabled: !isOnline || githubState !== "connected",
-      run: () => void openRestore(),
-    },
-    {
-      id: "import-folder",
-      group: "Transfer",
-      label: "Import a Markdown folder",
-      icon: FolderInput,
-      keywords: "open files load",
-      run: () => folderInput?.click(),
-    },
-    {
-      id: "import-zip",
-      group: "Transfer",
-      label: "Import a ZIP archive",
-      icon: FileArchive,
-      keywords: "open files load",
-      run: () => zipInput?.click(),
-    },
-    {
-      id: "export-folder",
-      group: "Transfer",
-      label: "Export to a folder",
-      icon: FolderOutput,
-      keywords: "save files write",
-      run: () => void exportFolder(),
-    },
-    ...noteTransferPaletteItems(),
-    {
-      id: "export-zip",
-      group: "Transfer",
-      label: "Export a ZIP archive",
-      icon: Download,
-      keywords: "save download backup",
-      run: () => void exportZip(),
-    },
-    {
-      id: "settings",
-      group: "Settings",
-      label: "Editor settings",
-      icon: Settings,
-      keywords: "preferences options writing fonts typeface editor",
-      aliases: ["preferences", "configuration"],
-      run: () => openSettings("editor"),
-    },
-    {
-      id: "reset-fonts",
-      group: "Settings",
-      label: "Restore default fonts",
-      icon: Type,
-      keywords: "editor typography reset appearance",
-      disabled: fontsAreDefault,
-      run: resetFonts,
-    },
-    {
-      id: "settings-themes",
-      group: "Settings",
-      label: "Theme settings",
-      icon: Sun,
-      keywords: "appearance color mode light dark system",
-      aliases: ["appearance", "color scheme"],
-      run: () => openSettings("themes"),
-    },
-    {
-      id: "shortcuts",
-      group: "Settings",
-      label: "Keyboard shortcuts",
-      shortcut: shortcutLabel("openShortcuts"),
-      icon: Keyboard,
-      keywords: "help keys reference",
-      run: () => openSettings("shortcuts"),
-    },
-    {
-      id: "reset-shortcuts",
-      group: "Settings",
-      label: "Restore default keyboard shortcuts",
-      icon: Keyboard,
-      keywords: "keys reset defaults customize",
-      disabled: shortcutsAreDefault,
-      run: resetShortcuts,
-    },
-    {
-      id: "settings-github",
-      group: "Settings",
-      label: "GitHub backup & sync settings",
-      icon: CloudUpload,
-      keywords:
-        "account sign in backup cross device repository branch directory remote status history commit pending changes",
-      run: () => openSettings("github"),
-    },
-    {
-      id: "storage",
-      group: "Settings",
-      label: "Storage choices",
-      icon: HardDrive,
-      keywords: "space quota usage persistent folder opfs",
-      run: () => openSettings("storage"),
-    },
-    {
-      id: "request-persistent-storage",
-      group: "Settings",
-      label: "Request persistent storage",
-      icon: HardDrive,
-      keywords: "storage browser keep notes safe durable",
-      run: () => void ensurePersistentStorage(),
-    },
-    {
-      id: "settings-transfer",
-      group: "Settings",
-      label: "Import & export settings",
-      icon: ArrowLeftRight,
-      keywords: "markdown zip folder transfer files",
-      run: () => openSettings("transfer"),
-    },
-    {
-      id: "settings-vault",
-      group: "Settings",
-      label: "Vault settings",
-      icon: Lock,
-      keywords: "delete clear notes vault data",
-      run: () => openSettings("vault"),
-    },
+    ...paletteCommands(
+      {
+        activeNoteId,
+        attachmentFolder,
+        attachmentsHidden,
+        effectivePaneLayout,
+        fontsAreDefault,
+        githubState,
+        hasContent,
+        isOnline,
+        renderedPaneVisible,
+        saveState,
+        scrollSync,
+        shortcutsAreDefault,
+        sidebarCollapsed,
+        sidebarSide,
+        singlePaneMode,
+        sourcePaneVisible,
+        theme,
+        transferState,
+        trashOpen,
+        trashedCount: trashedNotes.length,
+      },
+      paletteActions,
+    ),
   ]);
 
-  function loadMarkdownModule(): Promise<MarkdownModule> {
-    return (markdownModulePromise ??= import("#lib/markdown.ts").then((module) => {
-      markdownModule = module;
-      markdownModuleRevision += 1;
-      return module;
-    }));
-  }
-
-  function loadMarkdownOutputModule(): Promise<MarkdownOutputModule> {
-    return (markdownOutputModulePromise ??= import("#lib/markdown-output.ts").then((module) => {
-      void loadMarkdownModule().catch(() => undefined);
-      return module;
-    }));
-  }
+  const noteOutput = createNoteOutput(() => preview.loadMarkdownModule());
 
   function loadDialogStyles(): Promise<void> {
     return (dialogStylesPromise ??= loadLazyStylesModule().then((module) =>
       module.loadDialogStyles(),
     ));
   }
-
-  // While the worker renders, the lite renderer stands in; the full renderer only runs on
-  // the main thread when workers are unavailable.
-  function renderMarkdownBlocksForPage(
-    source: string,
-    resolveLocalUrl: (destination: string) => string | undefined,
-  ) {
-    return (
-      (renderWorker === null
-        ? markdownModule?.renderMarkdownBlocks(source, resolveLocalUrl)
-        : undefined) ?? renderLiteMarkdownBlocks(source, resolveLocalUrl)
-    );
-  }
-
-  function markdownRenderWorker(): MarkdownRenderWorker | undefined {
-    if (renderWorker === undefined) renderWorker = createMarkdownRenderWorker() ?? null;
-    if (renderWorker?.failed) renderWorker = null;
-    return renderWorker ?? undefined;
-  }
-
-  function workerPreviewMatches(
-    preview: Omit<WorkerPreview, "blocks">,
-    source: string,
-    attachments = localAttachmentUrls,
-    noteSourcePath = activeNoteSourcePath,
-  ): boolean {
-    return (
-      preview.source === source &&
-      preview.attachments === attachments &&
-      preview.noteSourcePath === noteSourcePath
-    );
-  }
-
-  /**
-   * Renders a note in the worker so the main thread stays free while it parses. Resolves once
-   * the result is ready to show, or once the main-thread renderer has loaded in its place.
-   */
-  async function renderFullPreview(
-    source: string,
-    attachments = localAttachmentUrls,
-    noteSourcePath = activeNoteSourcePath,
-  ): Promise<void> {
-    if (workerPreview && workerPreviewMatches(workerPreview, source, attachments, noteSourcePath)) {
-      return;
-    }
-    const pending = pendingWorkerPreview;
-    if (pending && workerPreviewMatches(pending, source, attachments, noteSourcePath)) {
-      return pending.done;
-    }
-    const done = renderInWorker(source, attachments, noteSourcePath);
-    const request = { source, attachments, noteSourcePath, done };
-    pendingWorkerPreview = request;
-    try {
-      await done;
-    } finally {
-      if (pendingWorkerPreview === request) pendingWorkerPreview = undefined;
-    }
-  }
-
-  async function renderInWorker(
-    source: string,
-    attachments: LocalAttachmentUrl[],
-    noteSourcePath: string | undefined,
-  ): Promise<void> {
-    const worker = markdownRenderWorker();
-    if (worker) {
-      try {
-        const blocks = await worker.render({ source, noteSourcePath, attachments });
-        if (blocks) workerPreview = { source, attachments, noteSourcePath, blocks };
-        return;
-      } catch {
-        renderWorker = null;
-        workerPreview = undefined;
-      }
-    }
-    await loadMarkdownModule().catch(() => undefined);
-  }
-
-  // The lite renderer handles first paint and active input; the settled preview upgrades once
-  // the full render is ready.
-  function ensureFullMarkdownParserLoaded(): void {
-    if (markdownRenderWorker()) return;
-    if (!markdownModule) void loadMarkdownModule().catch(() => undefined);
-  }
-
-  $effect(() => {
-    const source = previewMarkdown;
-    const attachments = localAttachmentUrls;
-    const noteSourcePath = activeNoteSourcePath;
-    untrack(() => void renderFullPreview(source, attachments, noteSourcePath));
-  });
 
   function applyStoredFontChoices(): void {
     const storedFonts = readFontChoices();
@@ -1363,8 +625,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       if (serviceWorkerTimer) window.clearTimeout(serviceWorkerTimer);
       if (githubRestoreTimer) window.clearTimeout(githubRestoreTimer);
       unsubscribeVault?.();
-      renderWorker?.dispose();
-      renderWorker = null;
+      preview.dispose();
       releaseLocalAttachmentUrls();
       closeImagePreview();
       vault?.close();
@@ -1498,7 +759,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   function restoreModalFocus(opener: HTMLElement | undefined): void {
     if (!opener) return;
     requestAnimationFrame(() => {
-      if (paletteOpen || findOpen || settingsOpen) return;
+      if (paletteOpen || find.isOpen || settingsOpen) return;
       if (opener.isConnected) opener.focus();
     });
   }
@@ -1584,7 +845,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     updatePreviewImmediately("");
     saveState = "saved";
     storageError = "";
-    resetEditorHistory();
+    editorHistory.reset();
   }
 
   async function createBackupRepository(name: string): Promise<void> {
@@ -1905,7 +1166,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     );
     // Rendering before the switch shows the note fully formatted instead of upgrading it.
     if (sequence === noteLoadSequence) {
-      await renderFullPreview(note.markdown, nextUrls, note.sourcePath);
+      await preview.render(note.markdown, nextUrls, note.sourcePath);
     }
     if (sequence !== noteLoadSequence) {
       for (const attachment of nextUrls) URL.revokeObjectURL(attachment.url);
@@ -1919,7 +1180,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     markdown = note.markdown;
     updatePreviewImmediately(note.markdown);
     lastSavedMarkdown = note.markdown;
-    resetEditorHistory();
+    editorHistory.reset();
     saveState = "saved";
     storageError = "";
     sidebarOpen = false;
@@ -1935,7 +1196,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       .finally(() => {
         if (remoteSyncRun === run) remoteSyncRun = undefined;
       })
-      .catch(() => undefined);
+      .catch(() => {
+        storageError = "Changes made in another tab could not be loaded. Reload Onyx to see them.";
+      });
   }
 
   async function syncRemoteVault(): Promise<void> {
@@ -1981,7 +1244,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     markdown = "";
     updatePreviewImmediately("");
     lastSavedMarkdown = "";
-    resetEditorHistory();
+    editorHistory.reset();
     saveState = "saved";
   }
 
@@ -2012,12 +1275,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!fragment) return;
     await tick();
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    let decoded = fragment;
-    try {
-      decoded = decodeURIComponent(fragment);
-    } catch {
-      decoded = fragment;
-    }
+    const decoded = decodePath(fragment);
     const renderedPane = document.querySelector<HTMLElement>(".rendered-pane");
     const elementsWithIds = renderedPane?.querySelectorAll<HTMLElement>("[id]");
     for (const candidate of [
@@ -2062,7 +1320,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     if (!id) return;
     if (id === activeNoteId) {
       if (parsed.fragment) {
-        await renderFullPreview(previewMarkdown);
+        await preview.render(previewMarkdown);
         await scrollToNoteFragment(parsed.fragment);
       }
       return;
@@ -2544,7 +1802,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
             if (candidate.sourcePath === attachment.sourcePath) URL.revokeObjectURL(candidate.url);
           }
           localAttachmentUrls = retained;
-          markdownModuleRevision += 1;
+          preview.invalidate();
         }
       }
       await refreshFileTree();
@@ -2628,22 +1886,28 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   async function importFolder(files: FileList | null): Promise<void> {
     if (!files?.length) return;
-    const { readMarkdownFolder } = await import("#lib/markdown-transfer.ts");
-    await runImport(readMarkdownFolder(files));
-    if (folderInput) folderInput.value = "";
+    try {
+      const { readMarkdownFolder } = await import("#lib/markdown-transfer.ts");
+      await runImport(readMarkdownFolder(files));
+    } catch (error) {
+      showTransferError(error, "The folder could not be imported.");
+    } finally {
+      if (folderInput) folderInput.value = "";
+    }
   }
 
   async function importZip(files: FileList | null): Promise<void> {
     const file = files?.[0];
     if (!file) return;
     transferState = "working";
+    transferMessage = "";
     try {
       const { readMarkdownZip } = await import("#lib/markdown-transfer.ts");
       const entries = await readMarkdownZip(file);
       transferState = "idle";
       await runImport(entries);
-    } catch {
-      showTransferError();
+    } catch (error) {
+      showTransferError(error, "The ZIP archive could not be imported.");
     } finally {
       if (zipInput) zipInput.value = "";
     }
@@ -2652,6 +1916,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   async function runImport(files: MarkdownTransferFile[]): Promise<void> {
     if (!vault || transferState === "working") return;
     transferState = "working";
+    transferMessage = "";
     if (!(await settleDraft())) {
       transferState = "idle";
       return;
@@ -2665,25 +1930,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       await runSearch("");
       pendingBackupCount = await vault.countPendingBackupOperations();
       transferState = "idle";
-    } catch {
-      showTransferError();
+    } catch (error) {
+      showTransferError(error, "The notes could not be imported.");
     }
-  }
-
-  function downloadBlob(blob: Blob, name: string): void {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = name;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   // Browsers save PDFs through their own print dialog, which the print stylesheet feeds.
   async function savePdf(): Promise<void> {
     await import("./styles/print.css");
     updatePreviewImmediately(markdown);
-    await renderFullPreview(markdown);
+    await preview.render(markdown);
     printing = true;
     try {
       await tick();
@@ -2693,71 +1949,10 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     }
   }
 
-  type NoteSource = { markdown: string; title: string };
-
-  function activeNoteSource(): NoteSource {
-    return { markdown, title: noteTitle };
-  }
-
   async function noteSource(id: string): Promise<NoteSource | undefined> {
-    if (id === activeNoteId) return activeNoteSource();
+    if (id === activeNoteId) return { markdown, title: noteTitle };
     const note = await vault?.getNote(id);
     return note && { markdown: note.markdown, title: titleFromMarkdown(note.markdown) };
-  }
-
-  async function copyMarkdown(source = activeNoteSource()): Promise<void> {
-    await navigator.clipboard.writeText(source.markdown);
-  }
-
-  function downloadMarkdown(source = activeNoteSource()): void {
-    downloadBlob(
-      new Blob([source.markdown.endsWith("\n") ? source.markdown : `${source.markdown}\n`], {
-        type: "text/markdown",
-      }),
-      outputFileName(source.title, "md"),
-    );
-  }
-
-  async function copyText(source = activeNoteSource()): Promise<void> {
-    const output = await loadMarkdownOutputModule();
-    await navigator.clipboard.writeText(output.markdownToPlainText(source.markdown));
-  }
-
-  async function downloadText(source = activeNoteSource()): Promise<void> {
-    const output = await loadMarkdownOutputModule();
-    downloadBlob(
-      new Blob([`${output.markdownToPlainText(source.markdown)}\n`], { type: "text/plain" }),
-      outputFileName(source.title, "txt"),
-    );
-  }
-
-  async function copyRichText(source = activeNoteSource()): Promise<void> {
-    const [html, output] = await Promise.all([
-      exportedHtml(source.markdown),
-      loadMarkdownOutputModule(),
-    ]);
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        "text/html": new Blob([html], { type: "text/html" }),
-        "text/plain": new Blob([output.markdownToPlainText(source.markdown)], {
-          type: "text/plain",
-        }),
-      }),
-    ]);
-  }
-
-  async function downloadRtf(source = activeNoteSource()): Promise<void> {
-    const output = await loadMarkdownOutputModule();
-    downloadBlob(
-      new Blob([output.markdownToRtf(source.markdown)], { type: "application/rtf" }),
-      outputFileName(source.title, "rtf"),
-    );
-  }
-
-  // Exports keep the note's own attachment paths, because in-app blob URLs die with the tab.
-  async function exportedHtml(source: string): Promise<string> {
-    const markdownModule = await loadMarkdownModule();
-    return markdownModule.renderMarkdown(source, undefined, { remoteImages: "allow" });
   }
 
   async function copyToClipboard(write: () => Promise<void>): Promise<void> {
@@ -2765,51 +1960,15 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     try {
       await write();
       transferState = "idle";
-    } catch {
-      transferState = "error";
+    } catch (error) {
+      showTransferError(error, "The clipboard could not be written.");
     }
   }
-
-  async function copyHtml(source = activeNoteSource()): Promise<void> {
-    const [html, output] = await Promise.all([
-      exportedHtml(source.markdown),
-      loadMarkdownOutputModule(),
-    ]);
-    await navigator.clipboard.writeText(output.formatHtmlSource(html));
-  }
-
-  async function downloadHtml(source = activeNoteSource()): Promise<void> {
-    const [body, output] = await Promise.all([
-      exportedHtml(source.markdown),
-      loadMarkdownOutputModule(),
-    ]);
-    const html = output.createHtmlDocument({
-      title: source.title,
-      body: output.formatHtmlSource(body),
-    });
-    downloadBlob(new Blob([html], { type: "text/html" }), outputFileName(source.title, "html"));
-  }
-
-  const noteCopiers: Record<Exclude<NoteFormat, "pdf">, (source: NoteSource) => Promise<void>> = {
-    markdown: copyMarkdown,
-    text: copyText,
-    "rich-text": copyRichText,
-    html: copyHtml,
-  };
-  const noteExporters: Record<
-    Exclude<NoteFormat, "pdf">,
-    (source: NoteSource) => void | Promise<void>
-  > = {
-    markdown: downloadMarkdown,
-    text: downloadText,
-    "rich-text": downloadRtf,
-    html: downloadHtml,
-  };
 
   async function copyNoteAs(id: string, format: Exclude<NoteFormat, "pdf">): Promise<void> {
     await copyToClipboard(async () => {
       const source = await noteSource(id);
-      if (source) await noteCopiers[format](source);
+      if (source) await noteOutput.copy(source, format);
     });
   }
 
@@ -2821,12 +1980,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       return;
     }
     const source = await noteSource(id);
-    if (source) await noteExporters[format](source);
+    if (source) await noteOutput.download(source, format);
   }
 
   async function exportZip(): Promise<void> {
     if (!vault || transferState === "working") return;
     transferState = "working";
+    transferMessage = "";
     if (!(await settleDraft())) {
       transferState = "idle";
       return;
@@ -2837,8 +1997,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       const archive = await createMarkdownZip(files);
       downloadBlob(archive, `onyx-markdown-${new Date().toISOString().slice(0, 10)}.zip`);
       transferState = "idle";
-    } catch {
-      showTransferError();
+    } catch (error) {
+      showTransferError(error, "The ZIP archive could not be created.");
     }
   }
 
@@ -2852,12 +2012,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       }
     ).showDirectoryPicker;
     if (!picker) {
-      transferState = "error";
+      showTransferError(
+        undefined,
+        "This browser cannot export to a folder. Export a ZIP archive instead.",
+      );
       return;
     }
     try {
       const directory = await picker.call(window, { mode: "readwrite" });
       transferState = "working";
+      transferMessage = "";
       if (!(await settleDraft())) {
         transferState = "idle";
         return;
@@ -2869,12 +2033,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       transferState = "idle";
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      showTransferError();
+      showTransferError(error, "The notes could not be exported to that folder.");
     }
   }
 
-  function showTransferError(): void {
+  function showTransferError(error: unknown, fallback: string): void {
     transferState = "error";
+    transferMessage = error instanceof Error && error.message ? error.message : fallback;
   }
 
   async function settleDraft(): Promise<boolean> {
@@ -2948,19 +2113,13 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
 
   function updateMarkdown(value: string, options: { recordHistory?: boolean } = {}): void {
     if (value === markdown) {
-      pendingEditorState = undefined;
+      editorHistory.clearPending();
       return;
     }
-    if (options.recordHistory !== false && !applyingEditorHistory) {
-      pushUndo(
-        pendingEditorState?.markdown === markdown
-          ? pendingEditorState
-          : { markdown, selection: getEditorSelection() },
-      );
-    }
-    pendingEditorState = undefined;
+    if (options.recordHistory === false) editorHistory.clearPending();
+    else editorHistory.record({ markdown, selection: getEditorSelection() });
     markdown = value;
-    ensureFullMarkdownParserLoaded();
+    preview.ensureFullParser();
     queuePreview(value);
     queueSave();
   }
@@ -2995,20 +2154,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     previewIsLive = false;
   }
 
-  function clampSplitRatio(value: number): number {
-    return Math.min(80, Math.max(20, value));
-  }
-
   function setSplitRatio(value: number): void {
     splitRatio = clampSplitRatio(value);
   }
 
   function saveSplitRatio(): void {
     writeLocalStorage("onyx:split-ratio", splitRatio.toFixed(1));
-  }
-
-  function clampContentWidth(value: number): number {
-    return Math.min(1_200, Math.max(480, Math.round(value / 20) * 20));
   }
 
   function setContentWidth(value: number): void {
@@ -3089,16 +2240,9 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     writeLocalStorage("onyx:scroll-sync", String(scrollSync));
   }
 
-  function resetEditorHistory(): void {
-    undoStack = [];
-    redoStack = [];
-    pendingEditorState = undefined;
-  }
-
   function captureEditorState(): void {
     const selection = getEditorSelection();
-    if (!selection || pendingEditorState?.markdown === markdown) return;
-    pendingEditorState = { markdown, selection };
+    if (selection) editorHistory.capture({ markdown, selection });
   }
 
   function handleEditorBeforeInput(event: InputEvent): void {
@@ -3158,33 +2302,21 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   }
 
   function rememberEditorState(selection = getEditorSelection()): void {
-    if (selection) pendingEditorState = { markdown, selection };
-  }
-
-  function pushUndo(entry: EditorHistoryEntry): void {
-    undoStack.push(entry);
-    if (undoStack.length > EDITOR_HISTORY_LIMIT) undoStack.shift();
-    redoStack = [];
+    if (selection) editorHistory.remember({ markdown, selection });
   }
 
   function undo(): boolean {
-    const entry = undoStack.pop();
+    const entry = editorHistory.undo({ markdown, selection: getEditorSelection() });
     if (!entry) return false;
-    redoStack.push({ markdown, selection: getEditorSelection() });
-    applyingEditorHistory = true;
     updateMarkdown(entry.markdown, { recordHistory: false });
-    applyingEditorHistory = false;
     if (entry.selection) restoreEditorSelection(entry.selection);
     return true;
   }
 
   function redo(): boolean {
-    const entry = redoStack.pop();
+    const entry = editorHistory.redo({ markdown, selection: getEditorSelection() });
     if (!entry) return false;
-    undoStack.push({ markdown, selection: getEditorSelection() });
-    applyingEditorHistory = true;
     updateMarkdown(entry.markdown, { recordHistory: false });
-    applyingEditorHistory = false;
     if (entry.selection) restoreEditorSelection(entry.selection);
     return true;
   }
@@ -3230,8 +2362,8 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
   function writeEditorClipboard(text: string): boolean {
     const clipboard = navigator.clipboard;
     if (!clipboard || typeof clipboard.writeText !== "function") return false;
-    void Promise.resolve(clipboard.writeText(text)).catch(() => {
-      transferState = "error";
+    void Promise.resolve(clipboard.writeText(text)).catch((error: unknown) => {
+      showTransferError(error, "The clipboard could not be written.");
     });
     return true;
   }
@@ -3672,179 +2804,18 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     });
   }
 
-  function keepFindInputFocused(): void {
-    requestAnimationFrame(() => {
-      if (findOpen && findInput && document.activeElement !== findInput) findInput.focus();
-    });
-  }
-
-  function focusFindMatch(index: number, sequence = findNavigationSequence): void {
-    if (!findOpen || sequence !== findNavigationSequence) return;
-    const match = findMatches[index];
-    if (!match) return;
-
-    if (singlePaneMode && !sourcePaneVisible) showOnlyPane("source");
-    if (!editor) {
-      void tick().then(() => focusFindMatch(index, sequence));
-      return;
-    }
-
-    const target = editor;
-    target.focus({ preventScroll: true });
-    target.setSelectionRange(match.start, match.end);
-    const line = markdown.slice(0, match.start).split("\n").length - 1;
-    const lineHeight = Number.parseFloat(getComputedStyle(target).lineHeight) || 24;
-    const paddingTop = Number.parseFloat(getComputedStyle(target).paddingTop) || 0;
-    const targetTop = paddingTop + line * lineHeight;
-    if (target.scrollHeight > target.clientHeight) {
-      target.scrollTop = Math.max(
-        0,
-        Math.min(target.scrollHeight - target.clientHeight, targetTop - target.clientHeight / 2),
-      );
-    } else {
-      // On touch layouts the textarea grows with its text and the page scrolls instead.
-      const top = target.getBoundingClientRect().top + window.scrollY + targetTop;
-      window.scrollTo({ top: Math.max(0, top - window.innerHeight / 2) });
-    }
-    keepFindInputFocused();
-  }
-
-  function queueFindNavigation(): void {
-    const sequence = ++findNavigationSequence;
-    void tick().then(() => {
-      if (sequence !== findNavigationSequence || !findOpen || activeFindMatch < 0) return;
-      focusFindMatch(activeFindMatch, sequence);
-    });
-  }
-
-  function setFindQuery(value: string): void {
-    findQuery = value;
-    findMatchIndex = value ? 0 : -1;
-    queueFindNavigation();
-  }
-
-  function setFindReplacement(value: string): void {
-    findReplacement = value;
-  }
-
-  function setFindMatchCase(value: boolean): void {
-    findMatchCase = value;
-    findMatchIndex = findQuery ? 0 : -1;
-    queueFindNavigation();
-  }
-
-  function setFindWholeWord(value: boolean): void {
-    findWholeWord = value;
-    findMatchIndex = findQuery ? 0 : -1;
-    queueFindNavigation();
-  }
-
-  function moveFindMatch(direction: 1 | -1): void {
-    if (findMatches.length === 0) return;
-    const current = activeFindMatch < 0 ? (direction > 0 ? -1 : 0) : activeFindMatch;
-    findMatchIndex = (current + direction + findMatches.length) % findMatches.length;
-    queueFindNavigation();
-  }
-
-  function toggleFind(): void {
-    if (findOpen) {
-      closeFind();
-      return;
-    }
-    openFind();
-  }
-
-  function openFind(): void {
-    if (findOpen) {
-      requestAnimationFrame(() => {
-        findInput?.focus();
-        findInput?.select();
-      });
-      return;
-    }
-    findOpener = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
-    const selection = getEditorSelection();
-    if (selection && selection.start !== selection.end) {
-      findQuery = markdown.slice(selection.start, selection.end);
-    }
-    findMatchIndex = findQuery ? 0 : -1;
-    findSidebarState = { collapsed: sidebarCollapsed, open: sidebarOpen };
-    sidebarCollapsed = false;
-    if (window.innerWidth <= 900) sidebarOpen = true;
-    findOpen = true;
-    const sequence = ++findNavigationSequence;
-    void tick().then(() => {
-      if (sequence !== findNavigationSequence || !findOpen) return;
-      findInput?.focus();
-      findInput?.select();
-      if (activeFindMatch >= 0) focusFindMatch(activeFindMatch, sequence);
-    });
-  }
-
-  function closeFind(): void {
-    if (!findOpen) return;
-    const previousSidebarState = findSidebarState;
-    findSidebarState = undefined;
-    findOpen = false;
-    findNavigationSequence += 1;
-    if (previousSidebarState) {
-      sidebarCollapsed = previousSidebarState.collapsed;
-      sidebarOpen = previousSidebarState.open;
-    }
-    const opener = findOpener;
-    findOpener = undefined;
-    restoreModalFocus(opener);
-  }
-
-  function replaceFind(): void {
-    const match = findMatches[activeFindMatch];
-    if (!match || !findCanEdit) return;
-    rememberEditorState({ start: match.start, end: match.end });
-    const nextValue = markdown.slice(0, match.start) + findReplacement + markdown.slice(match.end);
-    const nextMatches = findTextMatches(nextValue, findQuery, {
-      matchCase: findMatchCase,
-      wholeWord: findWholeWord,
-    });
-    const nextIndex = nextMatches.findIndex(
-      (candidate) => candidate.start >= match.start + findReplacement.length,
-    );
-    updateMarkdown(nextValue);
-    findMatchIndex = nextMatches.length === 0 ? -1 : nextIndex >= 0 ? nextIndex : 0;
-    queueFindNavigation();
-  }
-
-  function replaceAllFind(): void {
-    if (findMatches.length === 0 || !findCanEdit) return;
-    const matches = findMatches;
-    rememberEditorState({
-      start: matches[0]!.start,
-      end: matches.at(-1)!.end,
-    });
-    let nextValue = markdown;
-    for (let index = matches.length - 1; index >= 0; index -= 1) {
-      const match = matches[index]!;
-      nextValue = `${nextValue.slice(0, match.start)}${findReplacement}${nextValue.slice(match.end)}`;
-    }
-    const nextMatches = findTextMatches(nextValue, findQuery, {
-      matchCase: findMatchCase,
-      wholeWord: findWholeWord,
-    });
-    updateMarkdown(nextValue);
-    findMatchIndex = nextMatches.length > 0 ? 0 : -1;
-    queueFindNavigation();
-  }
-
   function handleShortcut(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;
     if (
-      findOpen &&
+      find.isOpen &&
       !event.altKey &&
       (event.key === "F3" ||
         (event.key.toLowerCase() === "g" &&
           (primaryModifier === "meta" ? event.metaKey : event.ctrlKey)))
     ) {
       event.preventDefault();
-      moveFindMatch(event.shiftKey ? -1 : 1);
+      if (event.shiftKey) find.previous();
+      else find.next();
       return;
     }
     // Tab indents code and lists instead of leaving the editor.
@@ -3896,7 +2867,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     event.preventDefault();
 
     if (action === "commandPalette") togglePalette();
-    else if (action === "findInNote") toggleFind();
+    else if (action === "findInNote") find.toggle();
     else if (action === "saveNote" && transferState !== "working") void saveDraft();
     else if (action === "newNote" && transferState !== "working") void createNote();
     else if (action === "searchNotes" || action === "focusSearch") focusSearch();
@@ -3912,7 +2883,7 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       else if (restoreModalOpen && restoreState !== "restoring") restoreModalOpen = false;
       else if (settingsOpen) closeSettings();
       else if (paletteOpen) closePalette();
-      else if (findOpen) closeFind();
+      else if (find.isOpen) find.close();
       else if (sidebarOpen) sidebarOpen = false;
       else if (searchQuery) resetPaletteSearch();
     }
@@ -3971,74 +2942,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     writeLocalStorage("onyx:sidebar-side", side);
   }
 
-  function clampSidebarWidth(value: number): number {
-    return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, value));
-  }
-
   function setSidebarWidth(value: number): void {
     sidebarWidth = clampSidebarWidth(value);
   }
 
   function saveSidebarWidth(): void {
     writeLocalStorage("onyx:sidebar-width", String(sidebarWidth));
-  }
-
-  /** Holding a sidebar toggle picks it up; releasing it over either half of the window docks the sidebar there. */
-  function startSidebarDrag(event: PointerEvent): void {
-    if (event.button !== 0 || !event.isPrimary) return;
-    const startX = event.clientX;
-    const startY = event.clientY;
-    let dragging = false;
-    const holdTimer = window.setTimeout(() => {
-      dragging = true;
-      sidebarDropSide = sidebarSide;
-    }, SIDEBAR_DRAG_HOLD_MS);
-    const onMove = (moveEvent: PointerEvent) => {
-      if (moveEvent.pointerId !== event.pointerId) return;
-      if (dragging) {
-        moveEvent.preventDefault();
-        sidebarDropSide = moveEvent.clientX > window.innerWidth / 2 ? "right" : "left";
-      } else if (
-        Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) > SIDEBAR_DRAG_SLOP_PX
-      ) {
-        finish();
-      }
-    };
-    const onUp = (upEvent: PointerEvent) => {
-      if (upEvent.pointerId !== event.pointerId) return;
-      if (dragging && sidebarDropSide) {
-        setSidebarSide(sidebarDropSide);
-        // The release would otherwise land as a click and toggle the sidebar.
-        window.addEventListener("click", swallowClick, { capture: true, once: true });
-        window.setTimeout(
-          () => window.removeEventListener("click", swallowClick, { capture: true }),
-          0,
-        );
-      }
-      finish();
-    };
-    const onCancel = (cancelEvent: PointerEvent) => {
-      if (cancelEvent.pointerId === event.pointerId) finish();
-    };
-    const onContextMenu = (menuEvent: Event) => {
-      if (dragging) menuEvent.preventDefault();
-    };
-    function swallowClick(clickEvent: Event): void {
-      clickEvent.preventDefault();
-      clickEvent.stopPropagation();
-    }
-    function finish(): void {
-      window.clearTimeout(holdTimer);
-      sidebarDropSide = undefined;
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onCancel);
-      window.removeEventListener("contextmenu", onContextMenu);
-    }
-    window.addEventListener("pointermove", onMove, { passive: false });
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onCancel);
-    window.addEventListener("contextmenu", onContextMenu);
   }
 
   function setTheme(preference: ThemePreference): void {
@@ -4152,31 +3061,28 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       return searchPending;
     },
     get findOpen() {
-      return findOpen;
-    },
-    set findOpen(value: boolean) {
-      findOpen = value;
+      return find.isOpen;
     },
     get findQuery() {
-      return findQuery;
+      return find.query;
     },
     get findReplacement() {
-      return findReplacement;
+      return find.replacement;
     },
     get findMatchCase() {
-      return findMatchCase;
+      return find.matchCase;
     },
     get findWholeWord() {
-      return findWholeWord;
+      return find.wholeWord;
     },
     get findMatchCount() {
-      return findMatches.length;
+      return find.matches.length;
     },
     get activeFindMatch() {
-      return activeFindMatch;
+      return find.activeMatch;
     },
     get findMatches(): FindMatch[] {
-      return findMatches;
+      return find.matches;
     },
     get findCanEdit() {
       return findCanEdit;
@@ -4410,16 +3316,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
       searchInput = value;
     },
     get findInput() {
-      return findInput;
+      return find.input;
     },
     set findInput(value: HTMLInputElement | undefined) {
-      findInput = value;
+      find.input = value;
     },
     get findReplaceInput() {
-      return findReplaceInput;
+      return find.replaceInput;
     },
     set findReplaceInput(value: HTMLInputElement | undefined) {
-      findReplaceInput = value;
+      find.replaceInput = value;
     },
     get noteList() {
       return noteList;
@@ -4471,16 +3377,16 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     renameVault,
     createNote,
     queueSearch,
-    openFind,
-    closeFind,
-    setFindQuery,
-    setFindReplacement,
-    setFindMatchCase,
-    setFindWholeWord,
-    previousFindMatch: () => moveFindMatch(-1),
-    nextFindMatch: () => moveFindMatch(1),
-    replaceFind,
-    replaceAllFind,
+    openFind: find.open,
+    closeFind: find.close,
+    setFindQuery: find.setQuery,
+    setFindReplacement: find.setReplacement,
+    setFindMatchCase: find.setMatchCase,
+    setFindWholeWord: find.setWholeWord,
+    previousFindMatch: find.previous,
+    nextFindMatch: find.next,
+    replaceFind: find.replace,
+    replaceAllFind: find.replaceAll,
     openPalette,
     closePalette,
     openSettings,
@@ -4515,7 +3421,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     setSidebarSide,
     setSidebarWidth,
     saveSidebarWidth,
-    startSidebarDrag,
+    startSidebarDrag: (event: PointerEvent) =>
+      startSidebarDrag(event, {
+        side: () => sidebarSide,
+        setDropSide: (side) => (sidebarDropSide = side),
+        dock: setSidebarSide,
+      }),
     insertSyntax,
     prefixLine,
     setSplitRatio,
@@ -4565,6 +3476,12 @@ Press \`${commandPaletteShortcut}\` for the command palette, \`${saveShortcut}\`
     formatCommitDate,
     dismissBackupMessage() {
       backupMessage = "";
+    },
+    get transferMessage() {
+      return transferMessage;
+    },
+    dismissTransferMessage() {
+      transferMessage = "";
     },
   };
 }

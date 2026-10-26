@@ -16,6 +16,9 @@ export interface VaultRegistry {
 
 const REGISTRY_KEY = "onyx:vaults";
 const ACTIVE_VAULT_KEY = "onyx:active-vault";
+// Holds a registry that could not be read, so saving the fallback cannot erase the only record of
+// where other vaults live.
+export const UNREADABLE_REGISTRY_KEY = "onyx:vaults:unreadable";
 const MAX_VAULT_NAME_LENGTH = 60;
 
 // The first vault keeps the original database and directory names so existing notes stay put.
@@ -36,7 +39,11 @@ export function isDefaultVault(vault: VaultDescriptor): boolean {
 }
 
 export function readVaultRegistry(): VaultRegistry {
-  const vaults = parseVaults(readLocalStorage(REGISTRY_KEY));
+  const stored = readLocalStorage(REGISTRY_KEY);
+  const { vaults, complete } = parseVaults(stored);
+  if (stored && !complete && readLocalStorage(UNREADABLE_REGISTRY_KEY) === undefined) {
+    writeLocalStorage(UNREADABLE_REGISTRY_KEY, stored);
+  }
   const activeId = readLocalStorage(ACTIVE_VAULT_KEY) ?? "";
   return {
     activeId: vaults.some((vault) => vault.id === activeId) ? activeId : vaults[0].id,
@@ -92,17 +99,23 @@ export function vaultOptions(vault: VaultDescriptor): VaultOptions {
   return { databaseName: vault.databaseName, directoryName: vault.directoryName };
 }
 
-function parseVaults(value: string | undefined): [VaultDescriptor, ...VaultDescriptor[]] {
-  if (!value) return [defaultVaultDescriptor()];
+function parseVaults(value: string | undefined): {
+  vaults: [VaultDescriptor, ...VaultDescriptor[]];
+  complete: boolean;
+} {
+  const fallback = { vaults: [defaultVaultDescriptor()] as [VaultDescriptor], complete: false };
+  if (!value) return { ...fallback, complete: true };
   try {
     const parsed: unknown = JSON.parse(value);
-    if (!Array.isArray(parsed)) return [defaultVaultDescriptor()];
+    if (!Array.isArray(parsed)) return fallback;
     const vaults = parsed.filter(isVaultDescriptor);
-    return vaults.length > 0
-      ? (vaults as [VaultDescriptor, ...VaultDescriptor[]])
-      : [defaultVaultDescriptor()];
+    if (vaults.length === 0) return fallback;
+    return {
+      vaults: vaults as [VaultDescriptor, ...VaultDescriptor[]],
+      complete: vaults.length === parsed.length,
+    };
   } catch {
-    return [defaultVaultDescriptor()];
+    return fallback;
   }
 }
 
