@@ -54,6 +54,8 @@
 		onEditorDrop: (event: DragEvent) => void;
 		onNoteLink?: (href: string) => void;
 		onWikiLink?: (target: string) => void;
+		backlinks?: Array<{ id: string; title: string }>;
+		onOpenBacklink?: (id: string) => void;
 		onTag?: (tag: string) => void;
 	}
 
@@ -61,7 +63,7 @@
 		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedBlocks, displayedRenderedBlocks, scrollSync, markdown, markdownLineCount, findOpen, findQuery, findMatches, activeFindMatch,
 		saveState, transferState, hasContent, shortcuts, primaryModifier,
 		editor = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
-		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onNoteLink, onWikiLink, onTag
+		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onNoteLink, onWikiLink, onTag, backlinks = [], onOpenBacklink
 	}: Props = $props();
 
 	type RenderedLink = { open: () => void };
@@ -487,6 +489,16 @@
 						{@html block.html}
 					{/each}
 				</article>
+				{#if backlinks.length > 0}
+					<nav class="backlinks" aria-labelledby="backlinks-title">
+						<h2 id="backlinks-title">Linked from</h2>
+						<ul>
+							{#each backlinks as backlink (backlink.id)}
+								<li><button type="button" onclick={() => onOpenBacklink?.(backlink.id)}>{backlink.title || 'Untitled'}</button></li>
+							{/each}
+						</ul>
+					</nav>
+				{/if}
 			{:else}
 				<div class="preview-empty"><PencilLine size={26} /><strong>Nothing here yet</strong><span>Start writing in the source pane.</span></div>
 			{/if}

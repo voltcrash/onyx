@@ -191,6 +191,8 @@
 		onNoteLink={(href) => void page.openNoteLink(href)}
 		onWikiLink={(target) => void page.openWikiLink(target)}
 		onTag={page.openTag}
+		backlinks={page.backlinks}
+		onOpenBacklink={(id) => void page.openBacklink(id)}
 	/>
 	{#if page.sidebarDropSide}<div class="sidebar-drop-target" data-side={page.sidebarDropSide} aria-hidden="true"></div>{/if}
 </div>

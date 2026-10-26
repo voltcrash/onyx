@@ -235,6 +235,8 @@ export function createPageController() {
   let attachmentsHidden = $state(false);
   let vaultAttachments = $state<AttachmentMetadata[]>([]);
   let trashedNotes = $state<NoteMetadata[]>([]);
+  let backlinks = $state.raw<NoteMetadata[]>([]);
+  let backlinksSequence = 0;
   let trashOpen = $state(false);
   let theme = $state<ThemePreference>("system");
   let resolvedTheme = $state<ResolvedTheme>("light");
@@ -1347,6 +1349,28 @@ export function createPageController() {
     });
     if (confirmed) await createNote(parentPath(name), fileName);
   }
+
+  // Backlinks only supplement the note, so a failed lookup shows none rather than an error.
+  async function refreshBacklinks(): Promise<void> {
+    const currentVault = vault;
+    const noteId = activeNoteId;
+    const sequence = ++backlinksSequence;
+    let next: NoteMetadata[] = [];
+    if (currentVault && noteId) {
+      try {
+        next = await currentVault.listBacklinks(noteId);
+      } catch {
+        next = [];
+      }
+    }
+    if (sequence === backlinksSequence) backlinks = next;
+  }
+
+  $effect(() => {
+    void activeNoteId;
+    void paletteNotes;
+    untrack(() => void refreshBacklinks());
+  });
 
   function openTag(tag: string): void {
     openPalette();
@@ -3438,6 +3462,10 @@ export function createPageController() {
     openNoteLink,
     openWikiLink,
     openTag,
+    get backlinks() {
+      return backlinks;
+    },
+    openBacklink: (id: string) => navigateToNote(id),
     createFile: createNote,
     createFolder,
     renameFile,

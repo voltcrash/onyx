@@ -59,3 +59,25 @@ test("filters notes by a tag from the rendered note or the palette", async ({ pa
   await expect(page.getByRole("option", { name: /Roadmap/ })).toBeVisible();
   await expect(page.getByRole("option", { name: /Standup/ })).toHaveCount(0);
 });
+
+test("lists the notes that link to the open note", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+
+  await createNote(page, "Garden.md", "# Garden\n\nTomatoes and beans.");
+  await createNote(page, "Journal.md", "# Journal\n\nWorked in the [[Garden]].");
+  await createNote(page, "Plan.md", "# Plan\n\n[Garden notes](Garden.md) and `[[Garden]]`.");
+  await createNote(page, "Recipes.md", "# Recipes\n\nNothing about plants.");
+
+  await page.locator(".note-list").getByRole("button", { name: "Garden", exact: true }).click();
+  await expect(editor).toHaveValue(/# Garden/);
+  const backlinks = page.getByRole("navigation", { name: "Linked from" });
+  await expect(backlinks.getByRole("button")).toHaveText(["Journal", "Plan"]);
+
+  await backlinks.getByRole("button", { name: "Journal" }).click();
+  await expect(editor).toHaveValue(/# Journal/);
+  await expect(page.getByRole("navigation", { name: "Linked from" })).toHaveCount(0);
+  await page.goBack();
+  await expect(editor).toHaveValue(/# Garden/);
+});
