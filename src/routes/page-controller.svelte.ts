@@ -174,6 +174,7 @@ import {
 } from "#lib/paths.ts";
 import type { MarkdownTransferFile } from "#lib/markdown-transfer.ts";
 import { createInitialMarkdown } from "./welcome-note.ts";
+import { EditorHistory, type EditorSelection } from "#lib/editor-history.ts";
 import { onMount, tick, untrack } from "svelte";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
@@ -184,7 +185,6 @@ const DEFAULT_CONTENT_WIDTH = 700;
 const DEFERRED_STARTUP_DELAY_MS = 8_000;
 // Matches the single-column breakpoint in the responsive stylesheet.
 const NARROW_VIEWPORT = "(max-width: 900px)";
-const EDITOR_HISTORY_LIMIT = 200;
 
 const noteFormatPaletteNames: Record<NoteFormat, string> = {
   markdown: "Markdown",
@@ -250,16 +250,6 @@ const SIDEBAR_DRAG_SLOP_PX = 6;
 export const DEFAULT_SIDEBAR_WIDTH = 258;
 export const MIN_SIDEBAR_WIDTH = 200;
 export const MAX_SIDEBAR_WIDTH = 480;
-
-interface EditorSelection {
-  start: number;
-  end: number;
-}
-
-interface EditorHistoryEntry {
-  markdown: string;
-  selection?: EditorSelection;
-}
 
 interface WorkerPreview {
   source: string;
@@ -371,10 +361,7 @@ export function createPageController() {
   let sidebarDropSide = $state<SidebarSide | undefined>();
   let shortcuts = $state<KeyboardShortcuts>(structuredClone(defaultKeyboardShortcuts));
   let primaryModifier = $state<PrimaryModifier>("meta");
-  let undoStack: EditorHistoryEntry[] = [];
-  let redoStack: EditorHistoryEntry[] = [];
-  let pendingEditorState: EditorHistoryEntry | undefined;
-  let applyingEditorHistory = false;
+  const editorHistory = new EditorHistory();
   let noteList: HTMLElement | undefined = $state();
   let activeNoteSourcePath: string | undefined = $state();
   // Replaced rather than mutated, so a render can be matched to the list it resolved against.
@@ -1502,7 +1489,7 @@ export function createPageController() {
     updatePreviewImmediately("");
     saveState = "saved";
     storageError = "";
-    resetEditorHistory();
+    editorHistory.reset();
   }
 
   async function createBackupRepository(name: string): Promise<void> {
@@ -1837,7 +1824,7 @@ export function createPageController() {
     markdown = note.markdown;
     updatePreviewImmediately(note.markdown);
     lastSavedMarkdown = note.markdown;
-    resetEditorHistory();
+    editorHistory.reset();
     saveState = "saved";
     storageError = "";
     sidebarOpen = false;
@@ -1899,7 +1886,7 @@ export function createPageController() {
     markdown = "";
     updatePreviewImmediately("");
     lastSavedMarkdown = "";
-    resetEditorHistory();
+    editorHistory.reset();
     saveState = "saved";
   }
 
@@ -2866,17 +2853,11 @@ export function createPageController() {
 
   function updateMarkdown(value: string, options: { recordHistory?: boolean } = {}): void {
     if (value === markdown) {
-      pendingEditorState = undefined;
+      editorHistory.clearPending();
       return;
     }
-    if (options.recordHistory !== false && !applyingEditorHistory) {
-      pushUndo(
-        pendingEditorState?.markdown === markdown
-          ? pendingEditorState
-          : { markdown, selection: getEditorSelection() },
-      );
-    }
-    pendingEditorState = undefined;
+    if (options.recordHistory === false) editorHistory.clearPending();
+    else editorHistory.record({ markdown, selection: getEditorSelection() });
     markdown = value;
     ensureFullMarkdownParserLoaded();
     queuePreview(value);
@@ -3007,16 +2988,9 @@ export function createPageController() {
     writeLocalStorage("onyx:scroll-sync", String(scrollSync));
   }
 
-  function resetEditorHistory(): void {
-    undoStack = [];
-    redoStack = [];
-    pendingEditorState = undefined;
-  }
-
   function captureEditorState(): void {
     const selection = getEditorSelection();
-    if (!selection || pendingEditorState?.markdown === markdown) return;
-    pendingEditorState = { markdown, selection };
+    if (selection) editorHistory.capture({ markdown, selection });
   }
 
   function handleEditorBeforeInput(event: InputEvent): void {
@@ -3076,33 +3050,21 @@ export function createPageController() {
   }
 
   function rememberEditorState(selection = getEditorSelection()): void {
-    if (selection) pendingEditorState = { markdown, selection };
-  }
-
-  function pushUndo(entry: EditorHistoryEntry): void {
-    undoStack.push(entry);
-    if (undoStack.length > EDITOR_HISTORY_LIMIT) undoStack.shift();
-    redoStack = [];
+    if (selection) editorHistory.remember({ markdown, selection });
   }
 
   function undo(): boolean {
-    const entry = undoStack.pop();
+    const entry = editorHistory.undo({ markdown, selection: getEditorSelection() });
     if (!entry) return false;
-    redoStack.push({ markdown, selection: getEditorSelection() });
-    applyingEditorHistory = true;
     updateMarkdown(entry.markdown, { recordHistory: false });
-    applyingEditorHistory = false;
     if (entry.selection) restoreEditorSelection(entry.selection);
     return true;
   }
 
   function redo(): boolean {
-    const entry = redoStack.pop();
+    const entry = editorHistory.redo({ markdown, selection: getEditorSelection() });
     if (!entry) return false;
-    undoStack.push({ markdown, selection: getEditorSelection() });
-    applyingEditorHistory = true;
     updateMarkdown(entry.markdown, { recordHistory: false });
-    applyingEditorHistory = false;
     if (entry.selection) restoreEditorSelection(entry.selection);
     return true;
   }
