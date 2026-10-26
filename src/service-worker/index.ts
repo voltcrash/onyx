@@ -36,7 +36,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then(async (response) => {
-          if (response.ok) {
+          if (response.ok && url.pathname === APP_SHELL) {
             const cache = await caches.open(CACHE);
             await cache.put(APP_SHELL, response.clone());
           }
