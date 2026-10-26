@@ -814,6 +814,17 @@
   text-underline-offset: 3px;
   cursor: pointer;
 }
+.prose a.tag {
+  padding: 0.05em 0.4em;
+  border-radius: 999px;
+  background: var(--selection);
+  color: var(--accent-link);
+  font-size: 0.88em;
+  text-decoration: none;
+}
+.prose a.tag:hover {
+  text-decoration: underline;
+}
 .prose .callout {
   --callout: var(--line-hover);
   --callout-bg: var(--subtle);

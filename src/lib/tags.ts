@@ -2,7 +2,7 @@ import { stripCode } from "./wikilinks.js";
 
 // A tag starts after whitespace or at a line start, so URL fragments, entities and heading markers
 // are not tags. It needs one non-digit, which keeps issue references like #42 as plain text.
-const INLINE_TAG = /(?<=^|\s)#([\p{L}\p{N}_/-]*[\p{L}_/-][\p{L}\p{N}_/-]*)/gu;
+export const INLINE_TAG = /(?<=^|\s)#([\p{L}\p{N}_/-]*[\p{L}_/-][\p{L}\p{N}_/-]*)/gu;
 const FRONTMATTER_TAGS = /^tags?:\s*(.*)$/i;
 
 /** Normalizes a tag for storage and matching: lower case, no leading `#` or trailing `/`. */

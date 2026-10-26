@@ -1,4 +1,6 @@
 import type { Plugin } from "unified";
+import { INLINE_TAG, normalizeTag } from "./tags.js";
+import { wikiLinkHref } from "./wikilinks.js";
 
 /**
  * Markdown extensions in three layers: GitHub writing extensions (alerts,
@@ -307,6 +309,19 @@ export const remarkWikiLinks: Plugin<[MarkdownExtensionOptions?]> = (options) =>
   });
 };
 
+export const remarkTags: Plugin<[MarkdownExtensionOptions?]> = (options) => (tree) => {
+  // Tags are Onyx-only; the GitHub dialect leaves them as text.
+  if (options?.dialect === "github") return;
+  visitParents(tree as MdastNode, (parent) => {
+    if (parent.type === "link" || parent.type === "wikiLink" || parent.type === "tag") return;
+    const children = parent.children ?? [];
+    if (!children.some((child) => child.type === "text" && child.value?.includes("#"))) return;
+    parent.children = children.flatMap((child) =>
+      child.type === "text" ? splitTags(child.value ?? "") : [child],
+    );
+  });
+};
+
 export const remarkCallouts: Plugin<[MarkdownExtensionOptions?]> = (options) => (tree) => {
   // In the GitHub dialect only GitHub alert types transform; Onyx-only kinds
   // stay plain blockquotes, matching GitHub's treatment of unknown markers.
@@ -395,9 +410,32 @@ function splitWikiLinks(value: string): MdastNode[] {
         hProperties: {
           className: embed ? ["wikilink", "wikilink-embed"] : ["wikilink"],
           dataWikilink: target!.trim(),
+          ...(embed ? {} : { href: wikiLinkHref(target!) }),
         },
       },
       children: [{ type: "text", value: (label ?? target)!.trim() }],
+    });
+  }
+  if (cursor === 0) return [{ type: "text", value }];
+  if (cursor < value.length) nodes.push({ type: "text", value: value.slice(cursor) });
+  return nodes;
+}
+
+function splitTags(value: string): MdastNode[] {
+  const nodes: MdastNode[] = [];
+  let cursor = 0;
+  for (const match of value.matchAll(INLINE_TAG)) {
+    const tag = normalizeTag(match[1]!);
+    if (!tag) continue;
+    if (match.index > cursor) nodes.push({ type: "text", value: value.slice(cursor, match.index) });
+    cursor = match.index + match[0].length;
+    nodes.push({
+      type: "tag",
+      data: {
+        hName: "a",
+        hProperties: { className: ["tag"], dataTag: tag, href: `?tag=${encodeURIComponent(tag)}` },
+      },
+      children: [{ type: "text", value: match[0] }],
     });
   }
   if (cursor === 0) return [{ type: "text", value }];

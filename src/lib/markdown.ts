@@ -19,6 +19,7 @@ import {
   remarkInlineMarks,
   remarkMermaid,
   remarkSTL,
+  remarkTags,
   remarkTopoJSON,
   remarkWikiLinks,
   type MarkdownDialect,
@@ -109,7 +110,7 @@ const markdownSchema: Options = {
   ],
   attributes: {
     ...defaultSchema.attributes,
-    a: allowClasses("a", [/^wikilink/], "dataWikilink"),
+    a: allowClasses("a", [/^wikilink/, "tag"], "dataWikilink", "dataTag"),
     blockquote: allowClasses("blockquote", [/^callout/, "onyx-callout"]),
     code: allowClasses("code", ["math-inline", "math-display"]),
     div: allowClasses("div", ["math", "math-display"]),
@@ -292,6 +293,7 @@ function markdownProcessor(dialect: MarkdownDialect = "onyx") {
       // Onyx note-taking extensions: wiki links and `==highlight==` marks.
       // GitHub-incompatible by design; keep them out of the layers above.
       .use(remarkWikiLinks, { dialect })
+      .use(remarkTags, { dialect })
       .use(remarkInlineMarks, { dialect })
       // Front matter is metadata, not prose, so it is dropped rather than printed.
       .use(remarkRehype, {
