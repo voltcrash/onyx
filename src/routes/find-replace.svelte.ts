@@ -1,11 +1,12 @@
 import type { EditorSelection } from "#lib/editor-history.ts";
 import { findTextMatches } from "#lib/find-replace.ts";
+import type { MarkdownEditor } from "#lib/markdown-editor.ts";
 import { tick } from "svelte";
 
 export interface FindReplaceHost {
   markdown(): string;
   canEdit(): boolean;
-  editor(): HTMLTextAreaElement | undefined;
+  editor(): MarkdownEditor | undefined;
   editorSelection(): EditorSelection | undefined;
   rememberEditorState(selection: EditorSelection): void;
   updateMarkdown(value: string): void;
@@ -53,22 +54,8 @@ export function createFindReplace(host: FindReplaceHost) {
       return;
     }
 
-    target.focus({ preventScroll: true });
-    target.setSelectionRange(match.start, match.end);
-    const line = host.markdown().slice(0, match.start).split("\n").length - 1;
-    const lineHeight = Number.parseFloat(getComputedStyle(target).lineHeight) || 24;
-    const paddingTop = Number.parseFloat(getComputedStyle(target).paddingTop) || 0;
-    const targetTop = paddingTop + line * lineHeight;
-    if (target.scrollHeight > target.clientHeight) {
-      target.scrollTop = Math.max(
-        0,
-        Math.min(target.scrollHeight - target.clientHeight, targetTop - target.clientHeight / 2),
-      );
-    } else {
-      // On touch layouts the textarea grows with its text and the page scrolls instead.
-      const top = target.getBoundingClientRect().top + window.scrollY + targetTop;
-      window.scrollTo({ top: Math.max(0, top - window.innerHeight / 2) });
-    }
+    target.focus();
+    target.revealRange(match.start, match.end);
     keepInputFocused();
   }
 

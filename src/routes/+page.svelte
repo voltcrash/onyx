@@ -181,10 +181,8 @@
 		onResizeEnd={page.saveSplitRatio}
 		onPlacePane={page.placePane}
 		onReload={() => location.reload()}
-		onMarkdownChange={page.updateMarkdown}
-		onEditorBeforeInput={page.handleEditorBeforeInput}
-		onEditorCopy={page.handleEditorCopy}
-		onEditorCut={page.handleEditorCut}
+		onMarkdownChange={page.handleEditorChange}
+		onEditorHistory={page.handleEditorHistory}
 		onEditorPaste={page.handleEditorPaste}
 		onEditorDragOver={page.handleEditorDragOver}
 		onEditorDrop={page.handleEditorDrop}

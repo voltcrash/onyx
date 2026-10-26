@@ -14,13 +14,11 @@ import type { SettingsSection } from "#lib/components/settings-types.ts";
 import { renderMarkdownBlocks as renderLiteMarkdownBlocks } from "#lib/markdown-lite.ts";
 import {
   attachmentMarkdown,
-  continueListOnEnter,
   countLines,
   countWords,
   DEFAULT_ATTACHMENT_FOLDER,
   findNoteIdForPath,
   indentEditorLines,
-  wrapSelectionWith,
   normalizeAttachmentFolder,
   parseRelativeNoteLink,
   pasteUrlOverSelection,
@@ -131,6 +129,7 @@ import {
   DEFAULT_SIDEBAR_WIDTH,
 } from "#lib/layout.ts";
 import { EditorHistory, type EditorSelection } from "#lib/editor-history.ts";
+import type { MarkdownEditor } from "#lib/markdown-editor.ts";
 import { onMount, tick, untrack } from "svelte";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
@@ -202,7 +201,7 @@ export function createPageController() {
   let printing = $state(false);
   let searchSequence = 0;
   let settledSearchSequence = 0;
-  let editor: HTMLTextAreaElement | undefined = $state();
+  let editor: MarkdownEditor | undefined = $state();
   let searchInput: HTMLInputElement | undefined = $state();
   let sidebarOpen = $state(false);
   let storageError = $state("");
@@ -2397,42 +2396,21 @@ export function createPageController() {
     if (selection) editorHistory.capture({ markdown, selection });
   }
 
-  function handleEditorBeforeInput(event: InputEvent): void {
-    captureEditorState();
-    if (event.isComposing) return;
-    const target = event.currentTarget;
-    if (!(target instanceof HTMLTextAreaElement)) return;
-    if (event.inputType === "insertText" && typeof event.data === "string") {
-      if (target.selectionStart === target.selectionEnd) return;
-      const wrapped = wrapSelectionWith(
-        target.value,
-        target.selectionStart,
-        target.selectionEnd,
-        event.data,
-      );
-      if (!wrapped) return;
-      event.preventDefault();
-      // Placed synchronously so no deferred caret restore can race later input.
-      target.value = wrapped.value;
-      target.setSelectionRange(wrapped.start, wrapped.end);
-      updateMarkdown(wrapped.value);
-      return;
-    }
-    if (event.inputType !== "insertLineBreak" && event.inputType !== "insertParagraph") return;
-    if (target.selectionStart !== target.selectionEnd) return;
-    const continued = continueListOnEnter(target.value, target.selectionStart);
-    if (!continued) return;
-    event.preventDefault();
-    // Placed synchronously so no deferred caret restore can race later input.
-    target.value = continued.value;
-    target.setSelectionRange(continued.caret, continued.caret);
-    updateMarkdown(continued.value);
+  /** An edit typed into the editor, with the selection it started from. */
+  function handleEditorChange(value: string, before: EditorSelection): void {
+    editorHistory.remember({ markdown, selection: before });
+    updateMarkdown(value);
+  }
+
+  function handleEditorHistory(direction: "undo" | "redo"): void {
+    if (direction === "undo") undo();
+    else redo();
   }
 
   function isEditorTarget(target: EventTarget | null): boolean {
     if (!editor) return false;
-    if (target === null) return editor === document.activeElement;
-    return target === editor || (target instanceof Node && editor.contains(target));
+    if (target === null) return editor.hasFocus;
+    return target instanceof Node && editor.contains(target);
   }
 
   function getEditorSelection(
@@ -2484,17 +2462,17 @@ export function createPageController() {
   }
 
   function runEditorIndent(target: EventTarget | null, outdent: boolean): boolean {
-    if (!(target instanceof HTMLTextAreaElement)) return false;
+    if (!editor || !isEditorTarget(target)) return false;
     const edit = indentEditorLines(
-      target.value,
-      target.selectionStart,
-      target.selectionEnd,
+      editor.value,
+      editor.selectionStart,
+      editor.selectionEnd,
       outdent ? -1 : 1,
     );
     captureEditorState();
     // Placed synchronously so no deferred caret restore can race later input.
-    target.value = edit.value;
-    target.setSelectionRange(edit.start, edit.end);
+    editor.value = edit.value;
+    editor.setSelectionRange(edit.start, edit.end);
     updateMarkdown(edit.value);
     return true;
   }
@@ -2538,31 +2516,6 @@ export function createPageController() {
     editor.focus();
     editor.select();
     return true;
-  }
-
-  function handleEditorCopy(event: ClipboardEvent): void {
-    const selection = getEditorSelection(event.currentTarget);
-    if (!selection || selection.start === selection.end) return;
-    const text = markdown.slice(selection.start, selection.end);
-    if (event.clipboardData) {
-      event.preventDefault();
-      event.clipboardData.setData("text/plain", text);
-    } else {
-      writeEditorClipboard(text);
-    }
-  }
-
-  function handleEditorCut(event: ClipboardEvent): void {
-    const selection = getEditorSelection(event.currentTarget);
-    if (!selection || selection.start === selection.end) return;
-    const text = markdown.slice(selection.start, selection.end);
-    if (event.clipboardData) {
-      event.preventDefault();
-      event.clipboardData.setData("text/plain", text);
-    } else if (!writeEditorClipboard(text)) {
-      return;
-    }
-    replaceEditorSelection(selection, "");
   }
 
   function handleEditorPaste(event: ClipboardEvent): void {
@@ -2612,9 +2565,8 @@ export function createPageController() {
   }
 
   function dropSelection(event: DragEvent): EditorSelection | undefined {
-    if (!(event.currentTarget instanceof HTMLTextAreaElement) || !editor) return;
-    // Textareas expose no caret-from-point API, so drops land at the current selection.
-    return { start: editor.selectionStart, end: editor.selectionEnd };
+    const position = editor?.positionAt(event.clientX, event.clientY);
+    return position === undefined ? undefined : { start: position, end: position };
   }
 
   async function attachFiles(files: File[], selection?: EditorSelection): Promise<void> {
@@ -2958,6 +2910,7 @@ export function createPageController() {
 
   function handleShortcut(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;
+    if (editor?.disabled && isEditorTarget(event.target)) return;
     if (
       find.isOpen &&
       !event.altKey &&
@@ -3458,7 +3411,7 @@ export function createPageController() {
     get editor() {
       return editor;
     },
-    set editor(value: HTMLTextAreaElement | undefined) {
+    set editor(value: MarkdownEditor | undefined) {
       editor = value;
     },
     get searchInput() {
@@ -3598,9 +3551,8 @@ export function createPageController() {
     copyNoteAs,
     exportNoteAs,
     toggleScrollSync,
-    handleEditorBeforeInput,
-    handleEditorCopy,
-    handleEditorCut,
+    handleEditorChange,
+    handleEditorHistory,
     handleEditorPaste,
     handleEditorDragOver,
     handleEditorDrop,
