@@ -62,14 +62,7 @@ import type {
 } from "#lib/components/app-types.ts";
 import { noteFormats, type NoteFormat } from "#lib/components/note-formats.ts";
 import type { SettingsSection } from "#lib/components/settings-types.ts";
-import {
-  renderMarkdownBlocks as renderLiteMarkdownBlocks,
-  type RenderedBlock,
-} from "#lib/markdown-lite.ts";
-import {
-  createMarkdownRenderWorker,
-  type MarkdownRenderWorker,
-} from "#lib/markdown-render-worker.ts";
+import { renderMarkdownBlocks as renderLiteMarkdownBlocks } from "#lib/markdown-lite.ts";
 import {
   attachmentMarkdown,
   continueListOnEnter,
@@ -159,6 +152,7 @@ import {
 } from "#lib/theme.ts";
 import type { FindMatch } from "#lib/find-replace.ts";
 import { createFindReplace } from "./find-replace.svelte.ts";
+import { createPreviewRenderer } from "./preview-renderer.svelte.ts";
 import type { FolderIcon } from "#lib/folder-icons.ts";
 import { outputFileName } from "#lib/output-utils.ts";
 import {
@@ -235,7 +229,6 @@ const noteFormatExportIcons = {
 
 type GithubModule = typeof import("#lib/github.ts");
 type LazyStylesModule = typeof import("#lib/lazy-styles.ts");
-type MarkdownModule = typeof import("#lib/markdown.ts");
 type MarkdownOutputModule = typeof import("#lib/markdown-output.ts");
 
 let githubModulePromise: Promise<GithubModule> | undefined;
@@ -254,13 +247,6 @@ type SidebarSide = "left" | "right";
 
 const SIDEBAR_DRAG_HOLD_MS = 300;
 const SIDEBAR_DRAG_SLOP_PX = 6;
-
-interface WorkerPreview {
-  source: string;
-  attachments: LocalAttachmentUrl[];
-  noteSourcePath: string | undefined;
-  blocks: RenderedBlock[];
-}
 
 interface ImagePreviewState {
   id: string;
@@ -361,13 +347,6 @@ export function createPageController() {
   let localAttachmentUrls = $state.raw<LocalAttachmentUrl[]>([]);
   let imagePreview = $state<ImagePreviewState>();
   let imagePreviewRequest = 0;
-  let markdownModule: MarkdownModule | undefined;
-  let markdownModulePromise: Promise<MarkdownModule> | undefined;
-  let markdownModuleRevision = $state(0);
-  // Undefined until first needed, and null once workers prove unavailable.
-  let renderWorker: MarkdownRenderWorker | null | undefined;
-  let workerPreview = $state.raw<WorkerPreview>();
-  let pendingWorkerPreview: (Omit<WorkerPreview, "blocks"> & { done: Promise<void> }) | undefined;
   let markdownOutputModulePromise: Promise<MarkdownOutputModule> | undefined;
   let dialogStylesPromise: Promise<void> | undefined;
   let serviceWorkerTimer: number | undefined;
@@ -388,12 +367,13 @@ export function createPageController() {
   );
   const wordCount = $derived(countWords(markdown));
   const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
-  const renderedBlocks = $derived.by(() => {
-    const preview = workerPreview;
-    if (preview && workerPreviewMatches(preview, previewMarkdown)) return preview.blocks;
-    void markdownModuleRevision;
-    return renderMarkdownBlocksForPage(previewMarkdown, resolveAttachmentUrl);
+  const preview = createPreviewRenderer({
+    source: () => previewMarkdown,
+    attachments: () => localAttachmentUrls,
+    noteSourcePath: () => activeNoteSourcePath,
+    resolveAttachmentUrl,
   });
+  const renderedBlocks = $derived(preview.blocks);
   const liveRenderedBlocks = $derived(
     renderLiteMarkdownBlocks(livePreviewMarkdown, resolveAttachmentUrl),
   );
@@ -1012,17 +992,9 @@ export function createPageController() {
     },
   ]);
 
-  function loadMarkdownModule(): Promise<MarkdownModule> {
-    return (markdownModulePromise ??= import("#lib/markdown.ts").then((module) => {
-      markdownModule = module;
-      markdownModuleRevision += 1;
-      return module;
-    }));
-  }
-
   function loadMarkdownOutputModule(): Promise<MarkdownOutputModule> {
     return (markdownOutputModulePromise ??= import("#lib/markdown-output.ts").then((module) => {
-      void loadMarkdownModule().catch(() => undefined);
+      void preview.loadMarkdownModule().catch(() => undefined);
       return module;
     }));
   }
@@ -1032,97 +1004,6 @@ export function createPageController() {
       module.loadDialogStyles(),
     ));
   }
-
-  // While the worker renders, the lite renderer stands in; the full renderer only runs on
-  // the main thread when workers are unavailable.
-  function renderMarkdownBlocksForPage(
-    source: string,
-    resolveLocalUrl: (destination: string) => string | undefined,
-  ) {
-    return (
-      (renderWorker === null
-        ? markdownModule?.renderMarkdownBlocks(source, resolveLocalUrl)
-        : undefined) ?? renderLiteMarkdownBlocks(source, resolveLocalUrl)
-    );
-  }
-
-  function markdownRenderWorker(): MarkdownRenderWorker | undefined {
-    if (renderWorker === undefined) renderWorker = createMarkdownRenderWorker() ?? null;
-    if (renderWorker?.failed) renderWorker = null;
-    return renderWorker ?? undefined;
-  }
-
-  function workerPreviewMatches(
-    preview: Omit<WorkerPreview, "blocks">,
-    source: string,
-    attachments = localAttachmentUrls,
-    noteSourcePath = activeNoteSourcePath,
-  ): boolean {
-    return (
-      preview.source === source &&
-      preview.attachments === attachments &&
-      preview.noteSourcePath === noteSourcePath
-    );
-  }
-
-  /**
-   * Renders a note in the worker so the main thread stays free while it parses. Resolves once
-   * the result is ready to show, or once the main-thread renderer has loaded in its place.
-   */
-  async function renderFullPreview(
-    source: string,
-    attachments = localAttachmentUrls,
-    noteSourcePath = activeNoteSourcePath,
-  ): Promise<void> {
-    if (workerPreview && workerPreviewMatches(workerPreview, source, attachments, noteSourcePath)) {
-      return;
-    }
-    const pending = pendingWorkerPreview;
-    if (pending && workerPreviewMatches(pending, source, attachments, noteSourcePath)) {
-      return pending.done;
-    }
-    const done = renderInWorker(source, attachments, noteSourcePath);
-    const request = { source, attachments, noteSourcePath, done };
-    pendingWorkerPreview = request;
-    try {
-      await done;
-    } finally {
-      if (pendingWorkerPreview === request) pendingWorkerPreview = undefined;
-    }
-  }
-
-  async function renderInWorker(
-    source: string,
-    attachments: LocalAttachmentUrl[],
-    noteSourcePath: string | undefined,
-  ): Promise<void> {
-    const worker = markdownRenderWorker();
-    if (worker) {
-      try {
-        const blocks = await worker.render({ source, noteSourcePath, attachments });
-        if (blocks) workerPreview = { source, attachments, noteSourcePath, blocks };
-        return;
-      } catch {
-        renderWorker = null;
-        workerPreview = undefined;
-      }
-    }
-    await loadMarkdownModule().catch(() => undefined);
-  }
-
-  // The lite renderer handles first paint and active input; the settled preview upgrades once
-  // the full render is ready.
-  function ensureFullMarkdownParserLoaded(): void {
-    if (markdownRenderWorker()) return;
-    if (!markdownModule) void loadMarkdownModule().catch(() => undefined);
-  }
-
-  $effect(() => {
-    const source = previewMarkdown;
-    const attachments = localAttachmentUrls;
-    const noteSourcePath = activeNoteSourcePath;
-    untrack(() => void renderFullPreview(source, attachments, noteSourcePath));
-  });
 
   function applyStoredFontChoices(): void {
     const storedFonts = readFontChoices();
@@ -1273,8 +1154,7 @@ export function createPageController() {
       if (serviceWorkerTimer) window.clearTimeout(serviceWorkerTimer);
       if (githubRestoreTimer) window.clearTimeout(githubRestoreTimer);
       unsubscribeVault?.();
-      renderWorker?.dispose();
-      renderWorker = null;
+      preview.dispose();
       releaseLocalAttachmentUrls();
       closeImagePreview();
       vault?.close();
@@ -1815,7 +1695,7 @@ export function createPageController() {
     );
     // Rendering before the switch shows the note fully formatted instead of upgrading it.
     if (sequence === noteLoadSequence) {
-      await renderFullPreview(note.markdown, nextUrls, note.sourcePath);
+      await preview.render(note.markdown, nextUrls, note.sourcePath);
     }
     if (sequence !== noteLoadSequence) {
       for (const attachment of nextUrls) URL.revokeObjectURL(attachment.url);
@@ -1972,7 +1852,7 @@ export function createPageController() {
     if (!id) return;
     if (id === activeNoteId) {
       if (parsed.fragment) {
-        await renderFullPreview(previewMarkdown);
+        await preview.render(previewMarkdown);
         await scrollToNoteFragment(parsed.fragment);
       }
       return;
@@ -2454,7 +2334,7 @@ export function createPageController() {
             if (candidate.sourcePath === attachment.sourcePath) URL.revokeObjectURL(candidate.url);
           }
           localAttachmentUrls = retained;
-          markdownModuleRevision += 1;
+          preview.invalidate();
         }
       }
       await refreshFileTree();
@@ -2593,7 +2473,7 @@ export function createPageController() {
   async function savePdf(): Promise<void> {
     await import("./styles/print.css");
     updatePreviewImmediately(markdown);
-    await renderFullPreview(markdown);
+    await preview.render(markdown);
     printing = true;
     try {
       await tick();
@@ -2666,7 +2546,7 @@ export function createPageController() {
 
   // Exports keep the note's own attachment paths, because in-app blob URLs die with the tab.
   async function exportedHtml(source: string): Promise<string> {
-    const markdownModule = await loadMarkdownModule();
+    const markdownModule = await preview.loadMarkdownModule();
     return markdownModule.renderMarkdown(source, undefined, { remoteImages: "allow" });
   }
 
@@ -2864,7 +2744,7 @@ export function createPageController() {
     if (options.recordHistory === false) editorHistory.clearPending();
     else editorHistory.record({ markdown, selection: getEditorSelection() });
     markdown = value;
-    ensureFullMarkdownParserLoaded();
+    preview.ensureFullParser();
     queuePreview(value);
     queueSave();
   }
