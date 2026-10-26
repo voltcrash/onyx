@@ -104,7 +104,7 @@ import { createFindReplace } from "./find-replace.svelte.ts";
 import { createPreviewRenderer } from "./preview-renderer.svelte.ts";
 import { paletteCommands, type PaletteActions, type PaletteCommand } from "./palette-commands.ts";
 import type { FolderIcon } from "#lib/folder-icons.ts";
-import { outputFileName } from "#lib/output-utils.ts";
+import { createNoteOutput, downloadBlob, type NoteSource } from "#lib/note-output.ts";
 import {
   basename,
   fileStem,
@@ -139,7 +139,6 @@ const NARROW_VIEWPORT = "(max-width: 900px)";
 
 type GithubModule = typeof import("#lib/github.ts");
 type LazyStylesModule = typeof import("#lib/lazy-styles.ts");
-type MarkdownOutputModule = typeof import("#lib/markdown-output.ts");
 
 let githubModulePromise: Promise<GithubModule> | undefined;
 let lazyStylesModulePromise: Promise<LazyStylesModule> | undefined;
@@ -257,7 +256,6 @@ export function createPageController() {
   let localAttachmentUrls = $state.raw<LocalAttachmentUrl[]>([]);
   let imagePreview = $state<ImagePreviewState>();
   let imagePreviewRequest = 0;
-  let markdownOutputModulePromise: Promise<MarkdownOutputModule> | undefined;
   let dialogStylesPromise: Promise<void> | undefined;
   let serviceWorkerTimer: number | undefined;
   let githubRestoreTimer: number | undefined;
@@ -471,12 +469,7 @@ export function createPageController() {
     ),
   ]);
 
-  function loadMarkdownOutputModule(): Promise<MarkdownOutputModule> {
-    return (markdownOutputModulePromise ??= import("#lib/markdown-output.ts").then((module) => {
-      void preview.loadMarkdownModule().catch(() => undefined);
-      return module;
-    }));
-  }
+  const noteOutput = createNoteOutput(() => preview.loadMarkdownModule());
 
   function loadDialogStyles(): Promise<void> {
     return (dialogStylesPromise ??= loadLazyStylesModule().then((module) =>
@@ -1939,15 +1932,6 @@ export function createPageController() {
     }
   }
 
-  function downloadBlob(blob: Blob, name: string): void {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = name;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
-  }
-
   // Browsers save PDFs through their own print dialog, which the print stylesheet feeds.
   async function savePdf(): Promise<void> {
     await import("./styles/print.css");
@@ -1962,71 +1946,10 @@ export function createPageController() {
     }
   }
 
-  type NoteSource = { markdown: string; title: string };
-
-  function activeNoteSource(): NoteSource {
-    return { markdown, title: noteTitle };
-  }
-
   async function noteSource(id: string): Promise<NoteSource | undefined> {
-    if (id === activeNoteId) return activeNoteSource();
+    if (id === activeNoteId) return { markdown, title: noteTitle };
     const note = await vault?.getNote(id);
     return note && { markdown: note.markdown, title: titleFromMarkdown(note.markdown) };
-  }
-
-  async function copyMarkdown(source = activeNoteSource()): Promise<void> {
-    await navigator.clipboard.writeText(source.markdown);
-  }
-
-  function downloadMarkdown(source = activeNoteSource()): void {
-    downloadBlob(
-      new Blob([source.markdown.endsWith("\n") ? source.markdown : `${source.markdown}\n`], {
-        type: "text/markdown",
-      }),
-      outputFileName(source.title, "md"),
-    );
-  }
-
-  async function copyText(source = activeNoteSource()): Promise<void> {
-    const output = await loadMarkdownOutputModule();
-    await navigator.clipboard.writeText(output.markdownToPlainText(source.markdown));
-  }
-
-  async function downloadText(source = activeNoteSource()): Promise<void> {
-    const output = await loadMarkdownOutputModule();
-    downloadBlob(
-      new Blob([`${output.markdownToPlainText(source.markdown)}\n`], { type: "text/plain" }),
-      outputFileName(source.title, "txt"),
-    );
-  }
-
-  async function copyRichText(source = activeNoteSource()): Promise<void> {
-    const [html, output] = await Promise.all([
-      exportedHtml(source.markdown),
-      loadMarkdownOutputModule(),
-    ]);
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        "text/html": new Blob([html], { type: "text/html" }),
-        "text/plain": new Blob([output.markdownToPlainText(source.markdown)], {
-          type: "text/plain",
-        }),
-      }),
-    ]);
-  }
-
-  async function downloadRtf(source = activeNoteSource()): Promise<void> {
-    const output = await loadMarkdownOutputModule();
-    downloadBlob(
-      new Blob([output.markdownToRtf(source.markdown)], { type: "application/rtf" }),
-      outputFileName(source.title, "rtf"),
-    );
-  }
-
-  // Exports keep the note's own attachment paths, because in-app blob URLs die with the tab.
-  async function exportedHtml(source: string): Promise<string> {
-    const markdownModule = await preview.loadMarkdownModule();
-    return markdownModule.renderMarkdown(source, undefined, { remoteImages: "allow" });
   }
 
   async function copyToClipboard(write: () => Promise<void>): Promise<void> {
@@ -2039,46 +1962,10 @@ export function createPageController() {
     }
   }
 
-  async function copyHtml(source = activeNoteSource()): Promise<void> {
-    const [html, output] = await Promise.all([
-      exportedHtml(source.markdown),
-      loadMarkdownOutputModule(),
-    ]);
-    await navigator.clipboard.writeText(output.formatHtmlSource(html));
-  }
-
-  async function downloadHtml(source = activeNoteSource()): Promise<void> {
-    const [body, output] = await Promise.all([
-      exportedHtml(source.markdown),
-      loadMarkdownOutputModule(),
-    ]);
-    const html = output.createHtmlDocument({
-      title: source.title,
-      body: output.formatHtmlSource(body),
-    });
-    downloadBlob(new Blob([html], { type: "text/html" }), outputFileName(source.title, "html"));
-  }
-
-  const noteCopiers: Record<Exclude<NoteFormat, "pdf">, (source: NoteSource) => Promise<void>> = {
-    markdown: copyMarkdown,
-    text: copyText,
-    "rich-text": copyRichText,
-    html: copyHtml,
-  };
-  const noteExporters: Record<
-    Exclude<NoteFormat, "pdf">,
-    (source: NoteSource) => void | Promise<void>
-  > = {
-    markdown: downloadMarkdown,
-    text: downloadText,
-    "rich-text": downloadRtf,
-    html: downloadHtml,
-  };
-
   async function copyNoteAs(id: string, format: Exclude<NoteFormat, "pdf">): Promise<void> {
     await copyToClipboard(async () => {
       const source = await noteSource(id);
-      if (source) await noteCopiers[format](source);
+      if (source) await noteOutput.copy(source, format);
     });
   }
 
@@ -2090,7 +1977,7 @@ export function createPageController() {
       return;
     }
     const source = await noteSource(id);
-    if (source) await noteExporters[format](source);
+    if (source) await noteOutput.download(source, format);
   }
 
   async function exportZip(): Promise<void> {
