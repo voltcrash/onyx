@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { extractTags, normalizeTag } from "./tags.js";
+import { extractTags, normalizeTag, parseSearchQuery } from "./tags.js";
 
 describe("extractTags", () => {
   it("reads inline tags anywhere in the text", () => {
@@ -36,6 +36,17 @@ describe("extractTags", () => {
 
   it("does not treat front matter as inline text", () => {
     expect(extractTags("---\ncolor: '#fff'\n---\n")).toEqual([]);
+  });
+});
+
+describe("parseSearchQuery", () => {
+  it("separates tag filters from free text", () => {
+    expect(parseSearchQuery("  roadmap #Work notes #q3/plan ")).toEqual({
+      text: "roadmap notes",
+      tags: ["work", "q3/plan"],
+    });
+    expect(parseSearchQuery("#")).toEqual({ text: "#", tags: [] });
+    expect(parseSearchQuery("c# tips")).toEqual({ text: "c# tips", tags: [] });
   });
 });
 

@@ -7,7 +7,7 @@ import {
 import { detectBrowserStorageSupport } from "../browser-storage.js";
 import { normalizeAttachmentFolder, titleFromMarkdown } from "../markdown-utils.js";
 import { isPathWithin, movePath } from "../paths.js";
-import { extractTags, normalizeTag } from "../tags.js";
+import { extractTags, normalizeTag, parseSearchQuery } from "../tags.js";
 import { VaultCoordination } from "./coordination.js";
 import { MirroredVaultFilesystem, VaultFilesystem } from "./filesystem.js";
 import type {
@@ -872,8 +872,9 @@ export class Vault {
 
   async search(query: string, tags: string[] = []): Promise<VaultSearchResult[]> {
     return this.#withLock(async () => {
-      const terms = tokenize(normalizeSearchText(query));
-      const requiredTags = normalizeTags(tags);
+      const parsed = parseSearchQuery(query);
+      const terms = tokenize(normalizeSearchText(parsed.text));
+      const requiredTags = normalizeTags([...tags, ...parsed.tags]);
       if (terms.length === 0) {
         const [documents, notes] = await Promise.all([
           this.#database.getSearchDocuments(),

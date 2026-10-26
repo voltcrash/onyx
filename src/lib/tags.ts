@@ -62,3 +62,19 @@ export function extractTags(markdown: string): string[] {
   }
   return [...tags].sort();
 }
+
+/** Splits a search query into its free text and the `#tags` every result must carry. */
+export function parseSearchQuery(query: string): { text: string; tags: string[] } {
+  const tags: string[] = [];
+  const text = query
+    .split(/\s+/)
+    .filter((word) => {
+      if (!/^#[\p{L}\p{N}_/-]+$/u.test(word)) return true;
+      const tag = normalizeTag(word);
+      if (tag) tags.push(tag);
+      return !tag;
+    })
+    .join(" ")
+    .trim();
+  return { text, tags };
+}
