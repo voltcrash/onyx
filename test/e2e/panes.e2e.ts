@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expectMarkdown } from "./helpers.ts";
 
 test("renders read-only Markdown in the rendered pane", async ({ page }) => {
   await page.goto("/");
@@ -57,7 +58,7 @@ test("keeps source and rendered panes synchronized and lets each pane be tucked 
   await expect(handle).toBeVisible();
 
   await markdown.fill("# Written on the left");
-  await expect(markdown).toHaveValue("# Written on the left");
+  await expectMarkdown(markdown, "# Written on the left");
 
   await expect(page.locator(".rendered-pane h1")).toHaveText("Written on the left");
   await page.getByRole("button", { name: "Hide the rendered pane" }).click();
@@ -109,23 +110,33 @@ test("coalesces rapid input without postponing the rendered text", async ({ page
       return callbacks.length;
     };
 
-    const editor = document.querySelector<HTMLTextAreaElement>(
-      'textarea[aria-label="Markdown editor"]',
-    )!;
+    const { view } = document.querySelector<
+      HTMLElement & {
+        markdownEditor: {
+          view: {
+            state: { doc: { length: number } };
+            dispatch(spec: { changes: { from: number; insert: string }; userEvent: string }): void;
+          };
+        };
+      }
+    >('[aria-label="Markdown editor"]')!.markdownEditor;
+    let firstInputFrames = 0;
     for (const character of " preview") {
-      editor.value += character;
-      editor.dispatchEvent(
-        new InputEvent("input", { bubbles: true, data: character, inputType: "insertText" }),
-      );
+      view.dispatch({
+        changes: { from: view.state.doc.length, insert: character },
+        userEvent: "input.type",
+      });
+      firstInputFrames ||= callbacks.length;
     }
 
     const count = callbacks.length;
-    callbacks[0]?.(performance.now());
+    for (let index = 0; index < count; index += 1) callbacks[index]!(performance.now());
     window.requestAnimationFrame = requestFrame;
-    return count;
+    return { first: firstInputFrames, burst: count };
   });
 
-  expect(scheduledFrames).toBe(1);
+  expect(scheduledFrames.first).toBeGreaterThan(0);
+  expect(scheduledFrames.burst).toBe(scheduledFrames.first);
   await expect(page.locator(".rendered-pane h1")).toHaveText("Rapid preview");
 });
 
@@ -137,14 +148,27 @@ async function markerOffsets(page: Page, from: ScrollSide | null, marker: string
   return page.evaluate(
     ({ from, marker }: { from: ScrollSide | null; marker: string }) => {
       const scrollers = {
-        source: document.querySelector<HTMLElement>(".source-body > :first-child")!,
+        source: document.querySelector<HTMLElement>(".source-editor .cm-scroller")!,
         rendered: document.querySelector<HTMLElement>(".rendered-pane")!,
       };
+      const { markdownEditor } = document.querySelector<
+        HTMLElement & {
+          markdownEditor: {
+            value: string;
+            view: { documentTop: number; lineBlockAt(position: number): { top: number } };
+          };
+        }
+      >('[aria-label="Markdown editor"]')!;
       const markerTop = (scroller: HTMLElement): number => {
-        if (scroller instanceof HTMLTextAreaElement) {
-          const style = getComputedStyle(scroller);
-          const line = scroller.value.split("\n").findIndex((text) => text.includes(marker));
-          return parseFloat(style.paddingTop) + line * parseFloat(style.lineHeight);
+        if (scroller === scrollers.source) {
+          // The editor only renders lines near the viewport, so its layout is asked directly.
+          const { view, value } = markdownEditor;
+          return (
+            view.lineBlockAt(value.indexOf(marker)).top +
+            view.documentTop -
+            scroller.getBoundingClientRect().top +
+            scroller.scrollTop
+          );
         }
         const walker = document.createTreeWalker(scroller, NodeFilter.SHOW_TEXT);
         while (walker.nextNode()) {
@@ -169,6 +193,7 @@ async function markerOffsets(page: Page, from: ScrollSide | null, marker: string
       };
       if (from) {
         const scroller = scrollers[from];
+        scroller.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
         const range = scroller.scrollHeight - scroller.clientHeight;
         scroller.scrollTop = (markerTop(scroller) * range) / scroller.scrollHeight;
         scroller.dispatchEvent(new Event("scroll", { bubbles: true }));
@@ -230,9 +255,8 @@ test("keeps a native scrollbar only on the right pane during synced scrolling", 
 
   const scrollbarWidths = () =>
     page.evaluate(() => ({
-      source: getComputedStyle(
-        document.querySelector<HTMLTextAreaElement>(".source-body > textarea")!,
-      ).scrollbarWidth,
+      source: getComputedStyle(document.querySelector<HTMLElement>(".source-editor .cm-scroller")!)
+        .scrollbarWidth,
       rendered: getComputedStyle(document.querySelector<HTMLElement>(".rendered-pane")!)
         .scrollbarWidth,
     }));
