@@ -57,3 +57,37 @@ test("supports match case and whole-word find options", async ({ page }) => {
   await page.getByRole("button", { name: /Whole word/ }).click();
   await expect(page.locator(".find-count")).toHaveText("1 of 2");
 });
+
+test("keeps replacement input focused when match navigation finishes", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill("Needle once. Needle twice.");
+  await editor.press("ControlOrMeta+f");
+  const findInput = page.getByRole("searchbox", { name: "Find in note" });
+  const replacement = page.getByRole("textbox", { name: "Replace with" });
+  await findInput.fill("needle");
+  await expect(page.locator(".find-count")).toHaveText("1 of 2");
+
+  await page.getByRole("button", { name: "Next match" }).evaluate(async (button) => {
+    const frame = window.requestAnimationFrame;
+    const callbacks: Array<() => void> = [];
+    window.requestAnimationFrame = (callback) =>
+      frame((time) => callbacks.push(() => callback(time)));
+    try {
+      (button as HTMLButtonElement).click();
+      await new Promise<void>((resolve) => frame(() => frame(() => resolve())));
+      document.querySelector<HTMLInputElement>('input[aria-label="Replace with"]')!.focus();
+    } finally {
+      window.requestAnimationFrame = frame;
+      for (const callback of callbacks) callback();
+    }
+  });
+
+  await expect(replacement).toBeFocused();
+  await page.keyboard.type("Signal");
+  await expect(replacement).toHaveValue("Signal");
+  await expect(findInput).toHaveValue("needle");
+  await page.getByRole("button", { name: "Replace", exact: true }).click();
+  await expectMarkdown(editor, "Needle once. Signal twice.");
+});
