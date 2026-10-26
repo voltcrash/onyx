@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { findTextMatches, highlightFindMatches } from "./find-replace.js";
+import { findTextMatches } from "./find-replace.js";
 
 describe("findTextMatches", () => {
   it("finds case-insensitive, non-overlapping matches", () => {
@@ -25,13 +25,5 @@ describe("findTextMatches", () => {
     expect(
       findTextMatches("𝐀note note𝐀 😀note", "note", { matchCase: true, wholeWord: true }),
     ).toEqual([{ start: 16, end: 20 }]);
-  });
-});
-
-describe("highlightFindMatches", () => {
-  it("escapes source text while marking the active match", () => {
-    expect(highlightFindMatches("<note> note", [{ start: 7, end: 11 }], 0)).toBe(
-      '&lt;note&gt; <mark class="find-match find-match-current">note</mark>',
-    );
   });
 });

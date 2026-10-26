@@ -181,14 +181,16 @@
 		onResizeEnd={page.saveSplitRatio}
 		onPlacePane={page.placePane}
 		onReload={() => location.reload()}
-		onMarkdownChange={page.updateMarkdown}
-		onEditorBeforeInput={page.handleEditorBeforeInput}
-		onEditorCopy={page.handleEditorCopy}
-		onEditorCut={page.handleEditorCut}
+		onMarkdownChange={page.handleEditorChange}
+		onEditorHistory={page.handleEditorHistory}
 		onEditorPaste={page.handleEditorPaste}
 		onEditorDragOver={page.handleEditorDragOver}
 		onEditorDrop={page.handleEditorDrop}
 		onNoteLink={(href) => void page.openNoteLink(href)}
+		onWikiLink={(target) => void page.openWikiLink(target)}
+		onTag={page.openTag}
+		backlinks={page.backlinks}
+		onOpenBacklink={(id) => void page.openBacklink(id)}
 	/>
 	{#if page.sidebarDropSide}<div class="sidebar-drop-target" data-side={page.sidebarDropSide} aria-hidden="true"></div>{/if}
 </div>
@@ -258,6 +260,7 @@
 			onCreateRepository={(name) => void page.createBackupRepository(name)}
 			onSelectRepository={(state) => void page.selectBackupRepository(state)}
 			onForgetRepository={() => void page.forgetBackupRepository()}
+			onAutoBackupChange={(enabled) => void page.setAutoBackup(enabled)}
 			onBackup={() => void page.beginBackup()}
 			onRestore={() => { page.settingsOpen = false; void page.openRestore(); }}
 			onImportFolder={() => page.folderInput?.click()}
@@ -292,5 +295,22 @@
 			onRestore={() => void page.restoreSelectedCommit()}
 			formatCommitDate={page.formatCommitDate}
 		/>
+	{/await}
+{/if}
+
+<!-- Last, so it stacks above any dialog that asked for it. -->
+{#if page.confirmation}
+	{#await import('#lib/components/confirm-dialog.svelte') then { default: ConfirmDialog }}
+		{#key page.confirmation.id}
+			<ConfirmDialog
+				eyebrow={page.confirmation.eyebrow}
+				title={page.confirmation.title}
+				message={page.confirmation.message}
+				confirmLabel={page.confirmation.confirmLabel}
+				danger={page.confirmation.danger}
+				onConfirm={page.confirmAction}
+				onCancel={page.cancelAction}
+			/>
+		{/key}
 	{/await}
 {/if}

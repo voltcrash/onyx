@@ -6,7 +6,9 @@ import {
 } from "./database.js";
 import { detectBrowserStorageSupport } from "../browser-storage.js";
 import { normalizeAttachmentFolder, titleFromMarkdown } from "../markdown-utils.js";
-import { isPathWithin, movePath } from "../paths.js";
+import { isPathWithin, movePath, noteFilePath } from "../paths.js";
+import { linksToNote } from "../wikilinks.js";
+import { extractTags, normalizeTag, parseSearchQuery } from "../tags.js";
 import { VaultCoordination } from "./coordination.js";
 import { MirroredVaultFilesystem, VaultFilesystem } from "./filesystem.js";
 import type {
@@ -36,6 +38,8 @@ import { VaultConflictError } from "./types.js";
 
 const DEFAULT_DATABASE_NAME = "onyx-vault";
 const DEFAULT_DIRECTORY_NAME = "onyx";
+
+const DERIVED_TAGS_VERSION = 1;
 
 /** Trashed notes are permanently deleted after 30 days. */
 export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
@@ -99,6 +103,8 @@ export class Vault {
         ),
       );
       await vault.#restoreNativeDirectory();
+      // Tags only make search and filtering better, so a failed backfill must not block opening.
+      await vault.#deriveMissingTags().catch(() => undefined);
       return vault;
     } catch (cause) {
       database.close();
@@ -170,6 +176,29 @@ export class Vault {
     } catch {
       return undefined;
     }
+  }
+
+  // Notes saved before tags were derived from their text get them once per vault.
+  async #deriveMissingTags(): Promise<void> {
+    if ((await this.#database.getDerivedTagsVersion()) >= DERIVED_TAGS_VERSION) return;
+    await this.#withLock(async () => {
+      const entries = [];
+      for (const note of await this.#database.getNotes()) {
+        const markdown =
+          (await this.#database.getNoteMarkdown(note.id)) ??
+          (await this.#filesystem.readText(note.path).catch(() => ""));
+        const tags = extractTags(markdown);
+        if (tags.join("\n") === note.tags.join("\n")) continue;
+        const updated = { ...note, tags };
+        const searchDocument = toSearchDocument(updated, markdown);
+        entries.push({
+          note: updated,
+          searchDocument,
+          searchPostings: createSearchPostings(searchDocument),
+        });
+      }
+      await this.#database.updateDerivedTags(entries, DERIVED_TAGS_VERSION);
+    });
   }
 
   async requestPersistentStorage(): Promise<boolean> {
@@ -245,7 +274,7 @@ export class Vault {
         id,
         title: input.title.trim() || "Untitled",
         path,
-        tags: normalizeTags(input.tags ?? existing?.tags ?? []),
+        tags: extractTags(markdown),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
         revision: actualRevision + 1,
@@ -313,6 +342,26 @@ export class Vault {
 
   async listNotes(): Promise<NoteMetadata[]> {
     return this.#withLock(async () => activeNotes(await this.#database.getNotes()));
+  }
+
+  /** Notes outside the trash that link to `noteId`, by title. */
+  async listBacklinks(noteId: string): Promise<NoteMetadata[]> {
+    return this.#withLock(async () => {
+      const [notes, contents] = await Promise.all([
+        this.#database.getNotes().then(activeNotes),
+        this.#database.getNoteContents(),
+      ]);
+      const target = notes.find((note) => note.id === noteId);
+      if (!target) return [];
+      const markdownById = new Map(contents.map((content) => [content.noteId, content.markdown]));
+      return notes
+        .filter(
+          (note) =>
+            note.id !== noteId &&
+            linksToNote(markdownById.get(note.id) ?? "", noteFilePath(note), target, notes),
+        )
+        .sort((left, right) => left.title.localeCompare(right.title));
+    });
   }
 
   async listTrashedNotes(): Promise<NoteMetadata[]> {
@@ -568,7 +617,7 @@ export class Vault {
           id: noteId,
           title: input.title.trim() || "Untitled",
           path: notePath,
-          tags: [],
+          tags: extractTags(input.markdown),
           createdAt: importedAt,
           updatedAt: importedAt,
           revision: 1,
@@ -844,8 +893,9 @@ export class Vault {
 
   async search(query: string, tags: string[] = []): Promise<VaultSearchResult[]> {
     return this.#withLock(async () => {
-      const terms = tokenize(normalizeSearchText(query));
-      const requiredTags = normalizeTags(tags);
+      const parsed = parseSearchQuery(query);
+      const terms = tokenize(normalizeSearchText(parsed.text));
+      const requiredTags = normalizeTags([...tags, ...parsed.tags]);
       if (terms.length === 0) {
         const [documents, notes] = await Promise.all([
           this.#database.getSearchDocuments(),
@@ -1051,6 +1101,7 @@ export class Vault {
             .map(async (file) => [file.path, await file.contents.text()] as const),
         ),
       );
+      for (const note of notes) note.tags = extractTags(markdownByPath.get(note.path) ?? "");
       const documents = notes.map((note) =>
         toSearchDocument(note, markdownByPath.get(note.path) ?? ""),
       );
@@ -1361,7 +1412,7 @@ function isQuotaExceededError(error: unknown): boolean {
 }
 
 function normalizeTags(tags: string[]): string[] {
-  return [...new Set(tags.map((tag) => tag.trim().toLocaleLowerCase()).filter(Boolean))].sort();
+  return [...new Set(tags.map(normalizeTag).filter(Boolean))].sort();
 }
 
 function normalizeSearchText(value: string): string {

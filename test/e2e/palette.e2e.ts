@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectMarkdown } from "./helpers.ts";
 
 test("opens the command palette in the sidebar and returns focus to the opener", async ({
   page,
@@ -104,7 +105,7 @@ test("offers formatting actions from the command palette", async ({ page }) => {
   }
 
   await page.getByRole("option", { name: /^Bold/ }).click();
-  await expect(editor).toHaveValue("**hello**");
+  await expectMarkdown(editor, "**hello**");
 
   await expect(page.getByRole("tab", { name: "Tools" })).toHaveCount(0);
   await expect(page.locator(".sidebar-switcher")).toHaveCount(0);
@@ -204,7 +205,7 @@ test("searches note titles and Markdown content from the command palette", async
   );
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
   await editor.fill("# Project Aurora\n\nThe neutrino research summary is ready.");
-  await expect(editor).toHaveValue(/Project Aurora/);
+  await expectMarkdown(editor, /Project Aurora/);
   await expect(page.getByText("Unsaved", { exact: true })).toBeHidden();
   await expect(page.getByText("Saving…", { exact: true })).toBeHidden();
   await page.keyboard.press("ControlOrMeta+S");

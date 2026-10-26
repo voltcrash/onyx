@@ -52,7 +52,10 @@ hard breaks (two-space and backslash; single newlines do not break).
 
 ## 3. Onyx-only extensions — intentionally different
 
-- `[[wiki links]]` (with `|label` and `!embed` forms).
+- `[[wiki links]]` (with `#heading`, `|label`, and `!embed` forms). Links get a relative
+  `.md` href; embeds do not.
+- Inline `#tags`, rendered as links outside code and other links. A tag needs a non-digit, so
+  `#42` stays text.
 - `==highlight==` marks.
 - Non-GitHub callout kinds (e.g. `[!TODO]`); rendered with an extra
   `onyx-callout` class to stay distinguishable from GitHub alerts.

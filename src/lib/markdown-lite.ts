@@ -1,3 +1,6 @@
+import { INLINE_TAG, normalizeTag } from "./tags.js";
+import { wikiLinkHref } from "./wikilinks.js";
+
 // Temporary first-paint and active-typing fallback. This is not a GitHub
 // Markdown implementation; the full renderer replaces it once input settles.
 // Keep it fast and approximate rather than growing it into a second parser.
@@ -236,12 +239,22 @@ function renderInline(value: string, resolveLocalUrl?: LocalUrlResolver): string
     return href ? token(`<a href="${href}">${label}</a>`) : label;
   });
   result = result.replace(
-    /\[\[([^\]|]+?)(?:\|([^\]]+))?\]\]/g,
-    (_, target: string, label?: string) =>
+    /(!?)\[\[([^\]|]+?)(?:\|([^\]]+))?\]\]/g,
+    (_, embed: string, target: string, label?: string) =>
       token(
-        `<a class="wikilink" data-wikilink="${escapeHtml(target.trim())}">${label?.trim() || target.trim()}</a>`,
+        embed
+          ? `<a class="wikilink wikilink-embed" data-wikilink="${escapeHtml(target.trim())}">${label?.trim() || target.trim()}</a>`
+          : `<a class="wikilink" data-wikilink="${escapeHtml(target.trim())}" href="${escapeHtml(wikiLinkHref(target))}">${label?.trim() || target.trim()}</a>`,
       ),
   );
+  result = result.replace(INLINE_TAG, (match: string, name: string) => {
+    const tag = normalizeTag(name);
+    return tag
+      ? token(
+          `<a class="tag" data-tag="${escapeHtml(tag)}" href="?tag=${encodeURIComponent(tag)}">${match}</a>`,
+        )
+      : match;
+  });
   result = renderEmphasis(result);
   function renderEmphasis(text: string): string {
     text = text.replace(

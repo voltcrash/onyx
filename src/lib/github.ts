@@ -112,6 +112,21 @@ export interface GithubRestoreResult {
   state: GithubBackupState;
 }
 
+/** The backup branch holds an Onyx backup this device has not restored or made. */
+export class GithubBackupConflictError extends Error {
+  constructor(readonly remoteCommitSha: string) {
+    super(
+      "GitHub has a newer backup from another device. Restore it first, or back up anyway to replace it with this device's notes.",
+    );
+    this.name = "GithubBackupConflictError";
+  }
+}
+
+export interface GithubBackupOptions {
+  /** Back up even when the branch moved past this device's last backup or restore. */
+  replaceNewerBackup?: boolean;
+}
+
 export class GithubRequestError extends Error {
   constructor(
     readonly status: number,
@@ -214,6 +229,7 @@ export async function listGithubRepositories(): Promise<GithubRepository[]> {
 export function backupVaultToGithub(
   vault: Vault,
   backupState: GithubBackupState,
+  options: GithubBackupOptions = {},
 ): Promise<GithubBackupResult> {
   const runExclusive = (
     vault as unknown as {
@@ -223,16 +239,17 @@ export function backupVaultToGithub(
     }
   ).runExclusive;
   if (typeof runExclusive !== "function") {
-    return backupVaultToGithubUnlocked(vault, backupState);
+    return backupVaultToGithubUnlocked(vault, backupState, options);
   }
   return runExclusive.call(vault, (context) =>
-    backupVaultToGithubUnlocked(vault, backupState, context),
+    backupVaultToGithubUnlocked(vault, backupState, options, context),
   );
 }
 
 async function backupVaultToGithubUnlocked(
   vault: Vault,
   backupState: GithubBackupState,
+  options: GithubBackupOptions,
   context?: VaultOperationContext,
 ): Promise<GithubBackupResult> {
   await validateGithubBackupRepository(backupState);
@@ -269,6 +286,16 @@ async function backupVaultToGithubUnlocked(
 
   const prefix = backupState.directory.replace(/^\/+|\/+$/g, "");
   const manifestPath = prefix ? `${prefix}/.onyx.json` : ".onyx.json";
+  // Each backup rewrites the manifest from this device's notes, so building on a backup this device
+  // has not seen would drop the other device's notes from the next restore.
+  if (
+    parentSha &&
+    parentSha !== backupState.lastCommitSha &&
+    remoteBlobs.has(manifestPath) &&
+    !options.replaceNewerBackup
+  ) {
+    throw new GithubBackupConflictError(parentSha);
+  }
   const pendingTree = (
     await mapWithConcurrency(snapshot.changes, GITHUB_FILE_CONCURRENCY, async (change) => {
       const path = prefix ? `${prefix}/${change.path}` : change.path;

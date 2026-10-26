@@ -385,80 +385,89 @@
   flex-direction: column;
   background: var(--surface);
 }
-/* Show raw markdown as typed; Fira Code ligatures would redraw runs like `***`. */
-.source-body > textarea {
+.source-editor {
   flex: 1;
-  width: 100%;
   min-height: 0;
-  resize: none;
+  display: flex;
+  flex-direction: column;
+}
+.source-editor .cm-editor {
+  flex: 1;
+  min-height: 0;
+  background: transparent;
+  color: var(--ink-body);
+}
+.source-editor .cm-editor.cm-focused {
+  outline: 0;
+}
+/* Show raw markdown as typed; Fira Code ligatures would redraw runs like `***`. */
+.source-editor .cm-scroller {
+  overflow: auto;
+  font-family: var(--font-code);
+  font-size: 15px;
+  font-variant-ligatures: none;
+  line-height: 1.78;
+  tab-size: 2;
+}
+.source-editor .cm-content {
   padding: 52px
     max(clamp(28px, 5vw, 72px), calc((100% - var(--content-width)) / 2 + clamp(28px, 5vw, 72px)))
     60px;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--ink-body);
-  font-family: var(--font-code);
-  font-size: 15px;
-  font-variant-ligatures: none;
-  line-height: 1.78;
-  tab-size: 2;
+  caret-color: var(--ink);
 }
-.hide-leading-scrollbar:not(.panes-swapped) .source-body > textarea,
+.source-editor .cm-line {
+  padding: 0;
+}
+.source-editor .cm-content[aria-disabled="true"] {
+  opacity: 0.7;
+}
+.hide-leading-scrollbar:not(.panes-swapped) .source-editor .cm-scroller,
 .hide-leading-scrollbar.panes-swapped .rendered-pane {
   scrollbar-width: none;
 }
-.hide-leading-scrollbar:not(.panes-swapped) .source-body > textarea::-webkit-scrollbar,
+.hide-leading-scrollbar:not(.panes-swapped) .source-editor .cm-scroller::-webkit-scrollbar,
 .hide-leading-scrollbar.panes-swapped .rendered-pane::-webkit-scrollbar {
   display: none;
 }
-.source-body > textarea::placeholder {
+.source-editor .cm-placeholder {
   color: var(--faint);
 }
-.source-body > textarea::selection {
+.source-editor .cm-content ::selection {
   background: var(--selection);
 }
-.source-find-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  width: min(100%, var(--content-width));
-  margin: 0 auto;
-  overflow: hidden;
-  pointer-events: none;
-}
-.source-find-layer > div {
-  min-height: 100%;
-  padding: 52px clamp(28px, 5vw, 72px) 60px;
-  color: var(--ink-body);
-  font-family: var(--font-code);
-  font-size: 15px;
-  font-variant-ligatures: none;
-  line-height: 1.78;
-  tab-size: 2;
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-}
-.source-find-layer .find-match {
+.source-editor .find-match {
   border-radius: 3px;
   background: color-mix(in srgb, var(--accent) 22%, transparent);
-  color: inherit;
 }
-.source-find-layer .find-match-current {
+.source-editor .find-match-current {
   background: color-mix(in srgb, var(--accent) 48%, transparent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 48%, transparent);
 }
-.source-body > textarea.find-highlights-active {
-  position: relative;
-  z-index: 1;
-  background: transparent;
-  color: transparent;
-  caret-color: var(--ink);
-  -webkit-text-fill-color: transparent;
+.source-editor .md-heading {
+  color: var(--ink-strong);
+  font-weight: 650;
 }
-.source-body > textarea.find-highlights-active::placeholder {
+.source-editor .md-strong {
+  font-weight: 650;
+}
+.source-editor .md-emphasis {
+  font-style: italic;
+}
+.source-editor .md-strikethrough {
+  text-decoration: line-through;
+}
+.source-editor .md-link {
+  color: var(--accent-link);
+}
+.source-editor .md-code {
+  color: var(--code-syntax-string);
+}
+.source-editor .md-quote {
+  color: var(--muted);
+}
+.source-editor .md-mark,
+.source-editor .md-list {
   color: var(--faint);
-  -webkit-text-fill-color: var(--faint);
 }
 .rendered-pane {
   grid-row: 1;
@@ -814,6 +823,17 @@
   text-underline-offset: 3px;
   cursor: pointer;
 }
+.prose a.tag {
+  padding: 0.05em 0.4em;
+  border-radius: 999px;
+  background: var(--selection);
+  color: var(--accent-link);
+  font-size: 0.88em;
+  text-decoration: none;
+}
+.prose a.tag:hover {
+  text-decoration: underline;
+}
 .prose .callout {
   --callout: var(--line-hover);
   --callout-bg: var(--subtle);
@@ -910,4 +930,39 @@
 .sidebar-right.sidebar-collapsed .workspace > .storage-error {
   padding-right: 54px;
   padding-left: 18px;
+}
+.backlinks {
+  width: min(100%, var(--content-width));
+  margin: -50px auto 0;
+  padding: 0 clamp(30px, 6vw, 78px) 70px;
+}
+.backlinks h2 {
+  margin: 0 0 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.backlinks ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.backlinks button {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent-link);
+  cursor: pointer;
+  font-size: 12px;
+}
+.backlinks button:hover {
+  border-color: var(--line-hover);
 }

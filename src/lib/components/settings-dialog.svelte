@@ -60,6 +60,7 @@
 		onCreateRepository: (name: string) => void;
 		onSelectRepository: (state: Omit<GithubBackupState, 'updatedAt'>) => void;
 		onForgetRepository: () => void;
+		onAutoBackupChange: (enabled: boolean) => void;
 		onBackup: () => void;
 		onRestore: () => void;
 		onImportFolder: () => void;
@@ -73,7 +74,7 @@
 	let {
 		vault, vaultName, suggestedRepositoryName, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
 		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, fonts, fontCategories, attachmentFolder, attachmentsHidden, onAttachmentsHiddenChange, onRenameAttachmentFolder, scrollSync, onToggleScrollSync, shortcuts, primaryModifier,
-		section = $bindable('editor'), onThemeChange, onColorThemeChange, onFontChange, onFontCategoryChange, onResetFonts, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository,
+		section = $bindable('editor'), onThemeChange, onColorThemeChange, onFontChange, onFontCategoryChange, onResetFonts, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository, onAutoBackupChange,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onPrepareVaultDeletion, onDeleteVault
 	}: Props = $props();
 
@@ -455,6 +456,10 @@
 								<div><dt>Last commit</dt><dd>{githubBackup.lastCommitSha ? githubBackup.lastCommitSha.slice(0, 7) : 'None yet'}</dd></div>
 								<div><dt>Pending changes</dt><dd>{pendingBackupCount === 0 ? 'Up to date' : `${pendingBackupCount} ${pendingBackupCount === 1 ? 'change' : 'changes'}`}</dd></div>
 							</dl>
+							<label class="settings-toggle">
+								<input type="checkbox" checked={githubBackup.autoBackup === true} disabled={!vault} onchange={(event) => onAutoBackupChange(event.currentTarget.checked)} />
+								<span><strong>Back up automatically</strong><small>Commits pending changes two minutes after editing stops, whenever this device is online.</small></span>
+							</label>
 						{/if}
 						<div class="settings-actions">
 							<button class="settings-primary" disabled={!isOnline || !vault || backupState === 'backing-up'} onclick={onBackup}>

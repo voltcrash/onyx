@@ -14,13 +14,11 @@ import type { SettingsSection } from "#lib/components/settings-types.ts";
 import { renderMarkdownBlocks as renderLiteMarkdownBlocks } from "#lib/markdown-lite.ts";
 import {
   attachmentMarkdown,
-  continueListOnEnter,
   countLines,
   countWords,
   DEFAULT_ATTACHMENT_FOLDER,
   findNoteIdForPath,
   indentEditorLines,
-  wrapSelectionWith,
   normalizeAttachmentFolder,
   parseRelativeNoteLink,
   pasteUrlOverSelection,
@@ -102,6 +100,8 @@ import {
 import type { FindMatch } from "#lib/find-replace.ts";
 import { createFindReplace } from "./find-replace.svelte.ts";
 import { createPreviewRenderer } from "./preview-renderer.svelte.ts";
+import { createConfirmation } from "./confirmation.svelte.ts";
+import { resolveWikiLink, splitWikiTarget } from "#lib/wikilinks.ts";
 import { paletteCommands, type PaletteActions, type PaletteCommand } from "./palette-commands.ts";
 import type { FolderIcon } from "#lib/folder-icons.ts";
 import { createNoteOutput, downloadBlob, type NoteSource } from "#lib/note-output.ts";
@@ -129,6 +129,7 @@ import {
   DEFAULT_SIDEBAR_WIDTH,
 } from "#lib/layout.ts";
 import { EditorHistory, type EditorSelection } from "#lib/editor-history.ts";
+import type { MarkdownEditor } from "#lib/markdown-editor.ts";
 import { onMount, tick, untrack } from "svelte";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
@@ -136,6 +137,7 @@ import { page } from "$app/state";
 const NOTE_PAGE_SIZE = 100;
 const PREVIEW_SETTLE_MS = 160;
 const DEFERRED_STARTUP_DELAY_MS = 8_000;
+const AUTO_BACKUP_DELAY_MS = 2 * 60_000;
 // Matches the single-column breakpoint in the responsive stylesheet.
 const NARROW_VIEWPORT = "(max-width: 900px)";
 
@@ -199,7 +201,7 @@ export function createPageController() {
   let printing = $state(false);
   let searchSequence = 0;
   let settledSearchSequence = 0;
-  let editor: HTMLTextAreaElement | undefined = $state();
+  let editor: MarkdownEditor | undefined = $state();
   let searchInput: HTMLInputElement | undefined = $state();
   let sidebarOpen = $state(false);
   let storageError = $state("");
@@ -215,6 +217,9 @@ export function createPageController() {
   let settingsOpen = $state(false);
   let settingsSection = $state<SettingsSection>("editor");
   let pendingBackupCount = $state(0);
+  let autoBackupTimer: number | undefined;
+  // Set when an automatic backup fails, so it does not retry until the user backs up by hand.
+  let autoBackupPaused = $state(false);
   let restoreModalOpen = $state(false);
   let restoreState = $state<RestoreState>("idle");
   let restoreMessage = $state("");
@@ -233,6 +238,8 @@ export function createPageController() {
   let attachmentsHidden = $state(false);
   let vaultAttachments = $state<AttachmentMetadata[]>([]);
   let trashedNotes = $state<NoteMetadata[]>([]);
+  let backlinks = $state.raw<NoteMetadata[]>([]);
+  let backlinksSequence = 0;
   let trashOpen = $state(false);
   let theme = $state<ThemePreference>("system");
   let resolvedTheme = $state<ResolvedTheme>("light");
@@ -469,6 +476,7 @@ export function createPageController() {
   ]);
 
   const noteOutput = createNoteOutput(() => preview.loadMarkdownModule());
+  const confirmation = createConfirmation(() => loadDialogStyles());
 
   function loadDialogStyles(): Promise<void> {
     return (dialogStylesPromise ??= loadLazyStylesModule().then((module) =>
@@ -624,6 +632,7 @@ export function createPageController() {
       if (previewSettleTimer !== undefined) window.clearTimeout(previewSettleTimer);
       if (serviceWorkerTimer) window.clearTimeout(serviceWorkerTimer);
       if (githubRestoreTimer) window.clearTimeout(githubRestoreTimer);
+      window.clearTimeout(autoBackupTimer);
       unsubscribeVault?.();
       preview.dispose();
       releaseLocalAttachmentUrls();
@@ -863,23 +872,106 @@ export function createPageController() {
     }
   }
 
-  async function runBackup(configuration: GithubBackupState): Promise<void> {
+  async function runBackup(
+    configuration: GithubBackupState,
+    options: { replaceNewerBackup?: boolean; automatic?: boolean } = {},
+  ): Promise<void> {
     if (!isOnline || !vault) return;
+    const { automatic = false, ...backupOptions } = options;
     backupState = "backing-up";
-    backupMessage = "Preparing one GitHub commit…";
-    backupCommitUrl = "";
+    if (!automatic) {
+      autoBackupPaused = false;
+      backupMessage = "Preparing one GitHub commit…";
+      backupCommitUrl = "";
+    }
+    const github = await loadGithubModule();
     try {
-      const result = await (await loadGithubModule()).backupVaultToGithub(vault, configuration);
+      const result = await github.backupVaultToGithub(vault, configuration, backupOptions);
       githubBackup = result.state;
       pendingBackupCount = await vault.countPendingBackupOperations();
+      if (automatic) {
+        backupState = "idle";
+        return;
+      }
       backupState = "success";
       backupCommitUrl = result.commitUrl ?? "";
       backupMessage = result.commitUrl
         ? `Backed up ${result.fileCount} ${result.fileCount === 1 ? "file" : "files"} in one commit.`
         : "Your GitHub backup is already up to date.";
     } catch (error) {
+      if (automatic) {
+        autoBackupPaused = true;
+        backupState = "error";
+        backupCommitUrl = "";
+        backupMessage =
+          error instanceof github.GithubBackupConflictError
+            ? "Automatic backup paused because GitHub has a newer backup. Restore it from Settings → Backup & sync, or back up now to replace it."
+            : `Automatic backup paused: ${error instanceof Error ? error.message : "the GitHub backup failed."} Back up now to try again.`;
+        return;
+      }
+      if (error instanceof github.GithubBackupConflictError) {
+        await resolveBackupConflict(configuration);
+        return;
+      }
       showBackupError(error);
     }
+  }
+
+  $effect(() => {
+    const due =
+      githubBackup?.autoBackup === true &&
+      pendingBackupCount > 0 &&
+      isOnline &&
+      githubState === "connected" &&
+      !autoBackupPaused;
+    // Each new pending change restarts the wait, so backups run once editing settles.
+    void pendingBackupCount;
+    untrack(() => scheduleAutoBackup(due));
+  });
+
+  function scheduleAutoBackup(due: boolean): void {
+    window.clearTimeout(autoBackupTimer);
+    autoBackupTimer = due
+      ? window.setTimeout(() => void runAutoBackup(), AUTO_BACKUP_DELAY_MS)
+      : undefined;
+  }
+
+  async function runAutoBackup(): Promise<void> {
+    autoBackupTimer = undefined;
+    const configuration = githubBackup;
+    if (!configuration?.autoBackup || !vault || backupState === "backing-up") return;
+    if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
+    await runBackup(configuration, { automatic: true });
+  }
+
+  async function setAutoBackup(enabled: boolean): Promise<void> {
+    if (!vault || !githubBackup) return;
+    try {
+      await vault.saveGithubBackupState({ ...githubBackup, autoBackup: enabled });
+      githubBackup = await vault.getGithubBackupState();
+      if (enabled) autoBackupPaused = false;
+    } catch (error) {
+      showBackupError(error);
+    }
+  }
+
+  async function resolveBackupConflict(configuration: GithubBackupState): Promise<void> {
+    backupState = "idle";
+    backupMessage = "";
+    const replace = await confirmation.ask({
+      eyebrow: "Backup & sync",
+      title: "GitHub has a newer backup",
+      message: `Another device backed up to ${configuration.owner}/${configuration.repository} after this device last backed up or restored. Restore that backup to bring its notes here, which replaces the notes on this device. Or back up anyway to make this device's notes the latest backup; the other backup stays in the repository history.`,
+      confirmLabel: "Back up anyway",
+      danger: true,
+    });
+    if (replace) {
+      await runBackup(configuration, { replaceNewerBackup: true });
+      return;
+    }
+    backupState = "error";
+    backupMessage =
+      "Backup paused because GitHub has a newer backup. Restore it from Settings → Backup & sync, or back up again to replace it.";
   }
 
   function showBackupError(error: unknown): void {
@@ -1310,18 +1402,74 @@ export function createPageController() {
   async function openNoteLink(href: string): Promise<void> {
     const parsed = parseRelativeNoteLink(href, activeNoteSourcePath);
     if (!parsed) return;
-    let notes: NoteMetadata[];
-    try {
-      notes = vault ? await vault.listNotes() : paletteNotes;
-    } catch {
-      notes = paletteNotes;
-    }
+    const notes = await listNotesForLinks();
     const id = findNoteIdForPath(notes, parsed.path);
-    if (!id) return;
+    if (id) await navigateToNote(id, parsed.fragment);
+  }
+
+  async function listNotesForLinks(): Promise<NoteMetadata[]> {
+    try {
+      return vault ? await vault.listNotes() : paletteNotes;
+    } catch {
+      return paletteNotes;
+    }
+  }
+
+  /** Follows a [[wiki link]], offering to create the note when none has that name. */
+  async function openWikiLink(target: string): Promise<void> {
+    const { name, fragment } = splitWikiTarget(target);
+    if (!name) {
+      await navigateToNote(activeNoteId, fragment);
+      return;
+    }
+    const note = resolveWikiLink(await listNotesForLinks(), name, activeNoteSourcePath);
+    if (note) {
+      await navigateToNote(note.id, fragment);
+      return;
+    }
+    const fileName = basename(name);
+    const confirmed = await confirmation.ask({
+      eyebrow: "Wiki link",
+      title: `Create “${fileStem(fileName)}”?`,
+      message: `No note is named “${name}” yet. Onyx can create it${parentPath(name) ? ` in ${parentPath(name)}` : ""} and open it.`,
+      confirmLabel: "Create note",
+    });
+    if (confirmed) await createNote(parentPath(name), fileName);
+  }
+
+  // Backlinks only supplement the note, so a failed lookup shows none rather than an error.
+  async function refreshBacklinks(): Promise<void> {
+    const currentVault = vault;
+    const noteId = activeNoteId;
+    const sequence = ++backlinksSequence;
+    let next: NoteMetadata[] = [];
+    if (currentVault && noteId) {
+      try {
+        next = await currentVault.listBacklinks(noteId);
+      } catch {
+        next = [];
+      }
+    }
+    if (sequence === backlinksSequence) backlinks = next;
+  }
+
+  $effect(() => {
+    void activeNoteId;
+    void paletteNotes;
+    untrack(() => void refreshBacklinks());
+  });
+
+  function openTag(tag: string): void {
+    openPalette();
+    queueSearch(`#${tag}`);
+  }
+
+  // Records the jump in browser history so Back returns to the note the link was in.
+  async function navigateToNote(id: string, fragment = ""): Promise<void> {
     if (id === activeNoteId) {
-      if (parsed.fragment) {
+      if (fragment) {
         await preview.render(previewMarkdown);
-        await scrollToNoteFragment(parsed.fragment);
+        await scrollToNoteFragment(fragment);
       }
       return;
     }
@@ -1343,9 +1491,7 @@ export function createPageController() {
     } catch {
       // Ignore history failures after a successful navigation.
     }
-    if (parsed.fragment) {
-      await scrollToNoteFragment(parsed.fragment);
-    }
+    if (fragment) await scrollToNoteFragment(fragment);
   }
 
   async function refreshFileTree(): Promise<NoteMetadata[]> {
@@ -1834,12 +1980,14 @@ export function createPageController() {
     if (!vault || transferState === "working") return;
     const note = await vault.getNote(noteId);
     if (!note) return;
-    if (
-      !window.confirm(
-        `Permanently delete “${fileStem(noteFilePath(note))}”? This cannot be undone.`,
-      )
-    )
-      return;
+    const confirmed = await confirmation.ask({
+      eyebrow: "Trash",
+      title: "Delete forever?",
+      message: `“${fileStem(noteFilePath(note))}” and its attachments will be permanently deleted. This cannot be undone.`,
+      confirmLabel: "Delete forever",
+      danger: true,
+    });
+    if (!confirmed) return;
     if (!(await settleDraft())) return;
     try {
       await vault.purgeNote(noteId);
@@ -1859,12 +2007,15 @@ export function createPageController() {
 
   async function emptyTrash(): Promise<void> {
     if (!vault || transferState === "working" || trashedNotes.length === 0) return;
-    if (
-      !window.confirm(
-        `Permanently delete ${trashedNotes.length} ${trashedNotes.length === 1 ? "note" : "notes"} in Trash? This cannot be undone.`,
-      )
-    )
-      return;
+    const count = trashedNotes.length;
+    const confirmed = await confirmation.ask({
+      eyebrow: "Trash",
+      title: "Empty trash?",
+      message: `${count} ${count === 1 ? "note" : "notes"} in Trash will be permanently deleted. This cannot be undone.`,
+      confirmLabel: "Empty trash",
+      danger: true,
+    });
+    if (!confirmed) return;
     if (!(await settleDraft())) return;
     try {
       await vault.emptyTrash();
@@ -2245,42 +2396,21 @@ export function createPageController() {
     if (selection) editorHistory.capture({ markdown, selection });
   }
 
-  function handleEditorBeforeInput(event: InputEvent): void {
-    captureEditorState();
-    if (event.isComposing) return;
-    const target = event.currentTarget;
-    if (!(target instanceof HTMLTextAreaElement)) return;
-    if (event.inputType === "insertText" && typeof event.data === "string") {
-      if (target.selectionStart === target.selectionEnd) return;
-      const wrapped = wrapSelectionWith(
-        target.value,
-        target.selectionStart,
-        target.selectionEnd,
-        event.data,
-      );
-      if (!wrapped) return;
-      event.preventDefault();
-      // Placed synchronously so no deferred caret restore can race later input.
-      target.value = wrapped.value;
-      target.setSelectionRange(wrapped.start, wrapped.end);
-      updateMarkdown(wrapped.value);
-      return;
-    }
-    if (event.inputType !== "insertLineBreak" && event.inputType !== "insertParagraph") return;
-    if (target.selectionStart !== target.selectionEnd) return;
-    const continued = continueListOnEnter(target.value, target.selectionStart);
-    if (!continued) return;
-    event.preventDefault();
-    // Placed synchronously so no deferred caret restore can race later input.
-    target.value = continued.value;
-    target.setSelectionRange(continued.caret, continued.caret);
-    updateMarkdown(continued.value);
+  /** An edit typed into the editor, with the selection it started from. */
+  function handleEditorChange(value: string, before: EditorSelection): void {
+    editorHistory.remember({ markdown, selection: before });
+    updateMarkdown(value);
+  }
+
+  function handleEditorHistory(direction: "undo" | "redo"): void {
+    if (direction === "undo") undo();
+    else redo();
   }
 
   function isEditorTarget(target: EventTarget | null): boolean {
     if (!editor) return false;
-    if (target === null) return editor === document.activeElement;
-    return target === editor || (target instanceof Node && editor.contains(target));
+    if (target === null) return editor.hasFocus;
+    return target instanceof Node && editor.contains(target);
   }
 
   function getEditorSelection(
@@ -2332,17 +2462,17 @@ export function createPageController() {
   }
 
   function runEditorIndent(target: EventTarget | null, outdent: boolean): boolean {
-    if (!(target instanceof HTMLTextAreaElement)) return false;
+    if (!editor || !isEditorTarget(target)) return false;
     const edit = indentEditorLines(
-      target.value,
-      target.selectionStart,
-      target.selectionEnd,
+      editor.value,
+      editor.selectionStart,
+      editor.selectionEnd,
       outdent ? -1 : 1,
     );
     captureEditorState();
     // Placed synchronously so no deferred caret restore can race later input.
-    target.value = edit.value;
-    target.setSelectionRange(edit.start, edit.end);
+    editor.value = edit.value;
+    editor.setSelectionRange(edit.start, edit.end);
     updateMarkdown(edit.value);
     return true;
   }
@@ -2386,31 +2516,6 @@ export function createPageController() {
     editor.focus();
     editor.select();
     return true;
-  }
-
-  function handleEditorCopy(event: ClipboardEvent): void {
-    const selection = getEditorSelection(event.currentTarget);
-    if (!selection || selection.start === selection.end) return;
-    const text = markdown.slice(selection.start, selection.end);
-    if (event.clipboardData) {
-      event.preventDefault();
-      event.clipboardData.setData("text/plain", text);
-    } else {
-      writeEditorClipboard(text);
-    }
-  }
-
-  function handleEditorCut(event: ClipboardEvent): void {
-    const selection = getEditorSelection(event.currentTarget);
-    if (!selection || selection.start === selection.end) return;
-    const text = markdown.slice(selection.start, selection.end);
-    if (event.clipboardData) {
-      event.preventDefault();
-      event.clipboardData.setData("text/plain", text);
-    } else if (!writeEditorClipboard(text)) {
-      return;
-    }
-    replaceEditorSelection(selection, "");
   }
 
   function handleEditorPaste(event: ClipboardEvent): void {
@@ -2460,9 +2565,8 @@ export function createPageController() {
   }
 
   function dropSelection(event: DragEvent): EditorSelection | undefined {
-    if (!(event.currentTarget instanceof HTMLTextAreaElement) || !editor) return;
-    // Textareas expose no caret-from-point API, so drops land at the current selection.
-    return { start: editor.selectionStart, end: editor.selectionEnd };
+    const position = editor?.positionAt(event.clientX, event.clientY);
+    return position === undefined ? undefined : { start: position, end: position };
   }
 
   async function attachFiles(files: File[], selection?: EditorSelection): Promise<void> {
@@ -2806,6 +2910,7 @@ export function createPageController() {
 
   function handleShortcut(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;
+    if (editor?.disabled && isEditorTarget(event.target)) return;
     if (
       find.isOpen &&
       !event.altKey &&
@@ -3306,7 +3411,7 @@ export function createPageController() {
     get editor() {
       return editor;
     },
-    set editor(value: HTMLTextAreaElement | undefined) {
+    set editor(value: MarkdownEditor | undefined) {
       editor = value;
     },
     get searchInput() {
@@ -3396,6 +3501,12 @@ export function createPageController() {
     moveNoteFocus,
     selectNote,
     openNoteLink,
+    openWikiLink,
+    openTag,
+    get backlinks() {
+      return backlinks;
+    },
+    openBacklink: (id: string) => navigateToNote(id),
     createFile: createNote,
     createFolder,
     renameFile,
@@ -3440,9 +3551,8 @@ export function createPageController() {
     copyNoteAs,
     exportNoteAs,
     toggleScrollSync,
-    handleEditorBeforeInput,
-    handleEditorCopy,
-    handleEditorCut,
+    handleEditorChange,
+    handleEditorHistory,
     handleEditorPaste,
     handleEditorDragOver,
     handleEditorDrop,
@@ -3463,6 +3573,7 @@ export function createPageController() {
     createBackupRepository,
     selectBackupRepository,
     forgetBackupRepository,
+    setAutoBackup,
     beginBackup,
     openRestore,
     importFolder,
@@ -3477,6 +3588,11 @@ export function createPageController() {
     dismissBackupMessage() {
       backupMessage = "";
     },
+    get confirmation() {
+      return confirmation.request;
+    },
+    confirmAction: confirmation.confirm,
+    cancelAction: confirmation.cancel,
     get transferMessage() {
       return transferMessage;
     },

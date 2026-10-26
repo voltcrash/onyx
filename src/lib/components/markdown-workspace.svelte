@@ -1,11 +1,13 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, PanelLeft, PencilLine, X } from '@lucide/svelte';
-	import { highlightFindMatches, type FindMatch } from '#lib/find-replace.ts';
+	import type { FindMatch } from '#lib/find-replace.ts';
+	import type { EditorSelection } from '#lib/editor-history.ts';
+	import { MarkdownEditor } from '#lib/markdown-editor.ts';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '#lib/keyboard-shortcuts.ts';
 	import type { ColorTheme, ResolvedTheme } from '#lib/theme.ts';
 	import type { SourceLines } from '#lib/markdown-lite.ts';
-	import { elementAnchors, scrollAnchors, syncedScrollTop, textareaAnchors, type ScrollAnchor } from '#lib/scroll-sync.ts';
+	import { elementAnchors, scrollAnchors, syncedScrollTop, type ScrollAnchor } from '#lib/scroll-sync.ts';
 	import type { PaneEdge, PaneLayout, PaneOrder, SaveState, TransferState } from './app-types';
 
 	interface Props {
@@ -30,7 +32,7 @@
 		hasContent: boolean;
 		shortcuts: KeyboardShortcuts;
 		primaryModifier: PrimaryModifier;
-		editor?: HTMLTextAreaElement;
+		editor?: MarkdownEditor;
 		onRetryStorage: () => void;
 		onDismissStorageNotice: () => void;
 		onToggleSidebar: () => void;
@@ -45,51 +47,56 @@
 		onResizeEnd: () => void;
 		onPlacePane: (pane: 'source' | 'rendered', edge: PaneEdge) => void;
 		onReload: () => void;
-		onMarkdownChange: (value: string) => void;
-		onEditorBeforeInput: (event: InputEvent) => void;
-		onEditorCopy: (event: ClipboardEvent) => void;
-		onEditorCut: (event: ClipboardEvent) => void;
+		onMarkdownChange: (value: string, before: EditorSelection) => void;
+		onEditorHistory: (direction: 'undo' | 'redo') => void;
 		onEditorPaste: (event: ClipboardEvent) => void;
 		onEditorDragOver: (event: DragEvent) => void;
 		onEditorDrop: (event: DragEvent) => void;
 		onNoteLink?: (href: string) => void;
+		onWikiLink?: (target: string) => void;
+		backlinks?: Array<{ id: string; title: string }>;
+		onOpenBacklink?: (id: string) => void;
+		onTag?: (tag: string) => void;
 	}
 
 	let {
 		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedBlocks, displayedRenderedBlocks, scrollSync, markdown, markdownLineCount, findOpen, findQuery, findMatches, activeFindMatch,
 		saveState, transferState, hasContent, shortcuts, primaryModifier,
 		editor = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
-		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onNoteLink
+		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorHistory, onEditorPaste, onEditorDragOver, onEditorDrop, onNoteLink, onWikiLink, onTag, backlinks = [], onOpenBacklink
 	}: Props = $props();
 
-	function renderedNoteHref(event: MouseEvent): string | undefined {
-		if (!onNoteLink || event.defaultPrevented) return;
+	type RenderedLink = { open: () => void };
+
+	// Links Onyx follows itself: tags, wiki links and relative Markdown note links.
+	function renderedLink(event: MouseEvent): RenderedLink | undefined {
+		if (event.defaultPrevented || event.button !== 0) return;
+		if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 		const anchor = (event.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
 		if (!anchor || !renderedPaneElement?.contains(anchor)) return;
 		if (anchor.target.toLowerCase() === '_blank') return;
+		const { tag, wikilink } = anchor.dataset;
+		if (tag && onTag) return { open: () => onTag(tag) };
+		if (wikilink && onWikiLink && !anchor.classList.contains('wikilink-embed')) {
+			return { open: () => onWikiLink(wikilink) };
+		}
 		const href = anchor.getAttribute('href');
-		if (!href || href.startsWith('#')) return;
+		if (!onNoteLink || !href || href.startsWith('#')) return;
 		if (/^[a-z][a-z\d+.-]*:/i.test(href)) return;
 		if (href.startsWith('/') || href.startsWith('\\')) return;
 		if (!/\.(?:md|markdown)(?:[?#]|$)/i.test(href)) return;
-		return href;
-	}
-
-	function renderedNoteLink(event: MouseEvent): string | undefined {
-		if (event.button !== 0) return;
-		if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-		return renderedNoteHref(event);
+		return { open: () => onNoteLink(href) };
 	}
 
 	function handleRenderedMouseDown(event: MouseEvent): void {
-		if (renderedNoteLink(event)) event.preventDefault();
+		if (renderedLink(event)) event.preventDefault();
 	}
 
 	function handleRenderedClick(event: MouseEvent): void {
-		const href = renderedNoteLink(event);
-		if (!href) return;
+		const link = renderedLink(event);
+		if (!link) return;
 		event.preventDefault();
-		onNoteLink?.(href);
+		link.open();
 	}
 
 	let shell = $state<HTMLElement>();
@@ -106,12 +113,7 @@
 	let toggleSecondPane = $derived(swapped ? onToggleSourcePane : onToggleRenderedPane);
 	let towardsStart = $derived(stacked ? ChevronUp : ChevronLeft);
 	let towardsEnd = $derived(stacked ? ChevronDown : ChevronRight);
-	let sourceScrollTop = $state(0);
-	let sourceScrollLeft = $state(0);
 	let sourceFindActive = $derived(findOpen && Boolean(findQuery));
-	let sourceFindMarkup = $derived(
-		sourceFindActive ? highlightFindMatches(markdown, findMatches, activeFindMatch) : '',
-	);
 	// Keyed by their markup, so adding or removing a block moves the others instead of re-rendering them.
 	let keyedRenderedBlocks = $derived.by(() => {
 		const seen = new Map<string, number>();
@@ -123,12 +125,43 @@
 	});
 	const CENTER_SNAP_DISTANCE = 12;
 
-	function syncSourceFindLayer(event?: Event): void {
-		const target = event?.currentTarget instanceof HTMLTextAreaElement ? event.currentTarget : editor;
-		if (!target) return;
-		sourceScrollTop = target.scrollTop;
-		sourceScrollLeft = target.scrollLeft;
+	const EDITOR_PLACEHOLDER = '# Start with a title\n\nThen write. Onyx saves to this device as you go.';
+
+	function mountEditor(node: HTMLElement): () => void {
+		const instance = new MarkdownEditor(node, {
+			doc: untrack(() => markdown),
+			label: 'Markdown editor',
+			placeholder: EDITOR_PLACEHOLDER,
+			onChange: (value, before) => {
+				scrollDriver = 'source';
+				onMarkdownChange(value, before);
+			},
+			onHistory: (direction) => onEditorHistory(direction),
+			onSelectionChange: () => handlePaneInteraction('source'),
+			onLayout: () => queueScrollSync(scrollDriver),
+			onPaste: (event) => onEditorPaste(event),
+			onDragOver: (event) => onEditorDragOver(event),
+			onDrop: (event) => onEditorDrop(event),
+		});
+		editor = instance;
+		return () => {
+			instance.destroy();
+			if (editor === instance) editor = undefined;
+		};
 	}
+
+	$effect(() => {
+		const value = markdown;
+		if (editor && editor.value !== value) editor.value = value;
+	});
+
+	$effect(() => {
+		if (editor) editor.disabled = saveState === 'loading' || transferState === 'working';
+	});
+
+	$effect(() => {
+		editor?.highlightMatches(sourceFindActive ? findMatches : [], activeFindMatch);
+	});
 
 	function resizeTo(event: PointerEvent): void {
 		const bounds = shell?.getBoundingClientRect();
@@ -272,14 +305,12 @@
 	}
 
 	// Scrolling either pane scrolls the other to the same part of the note.
-	let sourceBody = $state<HTMLElement>();
 	let scrollDriver: Pane = 'rendered';
 	let syncFrame = 0;
-	const syncedTops = new WeakMap<Element, number>();
 
 	function scrollerOf(pane: Pane): HTMLElement | undefined {
 		if (pane === 'rendered') return renderedPaneElement;
-		return (sourceBody?.firstElementChild as HTMLElement | null) ?? undefined;
+		return editor?.scrollDOM;
 	}
 
 	function proseAnchors(scroller: HTMLElement): ScrollAnchor[] {
@@ -291,8 +322,8 @@
 		let points: ScrollAnchor[];
 		if (pane === 'rendered') {
 			points = proseAnchors(scroller);
-		} else if (scroller instanceof HTMLTextAreaElement) {
-			points = textareaAnchors(scroller);
+		} else if (editor && scroller === editor.scrollDOM) {
+			points = editor.lineAnchors();
 		} else {
 			points = proseAnchors(scroller);
 		}
@@ -312,8 +343,6 @@
 
 	function setSyncedTop(target: HTMLElement, top: number): void {
 		target.scrollTo({ top, behavior: 'instant' });
-		// Browsers round the offset, so the echo is recognised by the value they settled on.
-		syncedTops.set(target, target.scrollTop);
 	}
 
 	function stepGlide(): void {
@@ -368,31 +397,22 @@
 		});
 	}
 
-	// The pane being edited keeps its place, and the other one catches up with it.
-	function leadingPane(): Pane {
-		if (sourcePaneElement?.contains(document.activeElement)) return 'source';
-		if (renderedPaneElement?.contains(document.activeElement)) return 'rendered';
-		return scrollDriver;
-	}
-
 	function handlePaneScroll(event: Event, pane: Pane): void {
 		const scroller = scrollerOf(pane);
-		if (event.target !== scroller) return;
-		const synced = syncedTops.get(scroller);
-		syncedTops.delete(scroller);
-		if (synced !== undefined && Math.abs(scroller.scrollTop - synced) <= 1) return;
+		// Following-pane events include layout corrections from CodeMirror's virtual viewport.
+		if (event.target !== scroller || pane !== scrollDriver) return;
 		if (glide?.target === scroller) stopGlide();
 		queueScrollSync(pane, true);
 	}
 
-	function handleMarkdownInput(event: Event & { currentTarget: HTMLTextAreaElement }): void {
-		scrollDriver = 'source';
-		onMarkdownChange(event.currentTarget.value);
+	function handlePaneInteraction(pane: Pane): void {
+		if (glide?.target === scrollerOf(pane)) stopGlide();
+		scrollDriver = pane;
 	}
 
 	$effect(() => {
 		if (!scrollSync) stopGlide();
-		else tick().then(() => queueScrollSync(leadingPane()));
+		else tick().then(() => queueScrollSync(scrollDriver));
 	});
 
 	$effect(() => {
@@ -401,13 +421,8 @@
 	});
 
 	$effect(() => {
-		void [sourceFindActive, sourceFindMarkup, editor];
-		void tick().then(() => syncSourceFindLayer());
-	});
-
-	$effect(() => {
 		if (!shell) return;
-		const observer = new ResizeObserver(() => queueScrollSync(leadingPane()));
+		const observer = new ResizeObserver(() => queueScrollSync(scrollDriver));
 		observer.observe(shell);
 		return () => {
 			observer.disconnect();
@@ -421,7 +436,7 @@
 		const fontSet = document.fonts;
 		if (!fontSet) return;
 		const refreshAfterFontLoad = () => {
-			queueScrollSync(leadingPane());
+			queueScrollSync(scrollDriver);
 		};
 		fontSet.addEventListener('loadingdone', refreshAfterFontLoad);
 		return () => fontSet.removeEventListener('loadingdone', refreshAfterFontLoad);
@@ -446,11 +461,8 @@
 
 	<section bind:this={shell} class="editor-shell" class:source-hidden={!sourcePaneVisible} class:rendered-hidden={!renderedPaneVisible} class:panes-stacked={stacked} class:panes-swapped={swapped} class:first-hidden={!firstPaneVisible} class:second-hidden={!secondPaneVisible} class:resizing class:pane-moving={drag?.moving} class:hide-leading-scrollbar={scrollSync && bothPanesVisible && !stacked} style={`--split: ${splitRatio}%; --content-width: ${contentWidth}px`}>
 		<div bind:this={sourcePaneElement} class="source-pane" class:dragged={drag?.moving && drag.pane === 'source'} data-source-theme={resolvedTheme} data-color-theme={colorTheme} style={drag?.moving && drag.pane === 'source' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined}>
-			<div class="source-body" bind:this={sourceBody} onscrollcapture={(event) => handlePaneScroll(event, 'source')} onloadcapture={() => queueScrollSync(leadingPane())}>
-					<textarea bind:this={editor} class:find-highlights-active={sourceFindActive} value={markdown} onbeforeinput={onEditorBeforeInput} oncopy={onEditorCopy} oncut={onEditorCut} onpaste={onEditorPaste} ondragover={onEditorDragOver} ondrop={onEditorDrop} oninput={handleMarkdownInput} onscroll={syncSourceFindLayer} aria-label="Markdown editor" placeholder={'# Start with a title\n\nThen write. Onyx saves to this device as you go.'} spellcheck="true" disabled={saveState === 'loading' || transferState === 'working'}></textarea>
-					{#if sourceFindActive}
-						<div class="source-find-layer" aria-hidden="true"><div style={`transform: translate(${-sourceScrollLeft}px, ${-sourceScrollTop}px)`}>{@html sourceFindMarkup}</div></div>
-					{/if}
+			<div class="source-body" onscrollcapture={(event) => handlePaneScroll(event, 'source')} onwheelcapture={() => handlePaneInteraction('source')} onpointerdowncapture={() => handlePaneInteraction('source')} ontouchstartcapture={() => handlePaneInteraction('source')} onkeydowncapture={() => handlePaneInteraction('source')} onloadcapture={() => queueScrollSync(scrollDriver)}>
+					<div class="source-editor" {@attach mountEditor}></div>
 			</div>
 		</div>
 		<div class="pane-divider">
@@ -473,13 +485,25 @@
 			{/if}
 		</div>
 		<!-- Note links open inside Onyx; SvelteKit preloading them as routes throws on malformed hrefs. -->
-		<div bind:this={renderedPaneElement} class="rendered-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} data-sveltekit-preload-data="false" data-sveltekit-preload-code="false" onmousedown={handleRenderedMouseDown} onclick={handleRenderedClick} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onloadcapture={() => queueScrollSync(leadingPane())}>
+		<!-- Clicks are delegated from the links inside, which stay keyboard operable on their own. -->
+		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+		<div bind:this={renderedPaneElement} class="rendered-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} data-sveltekit-preload-data="false" data-sveltekit-preload-code="false" onmousedown={handleRenderedMouseDown} onclick={handleRenderedClick} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onwheelcapture={() => handlePaneInteraction('rendered')} onpointerdowncapture={() => handlePaneInteraction('rendered')} ontouchstartcapture={() => handlePaneInteraction('rendered')} onkeydowncapture={() => handlePaneInteraction('rendered')} onloadcapture={() => queueScrollSync(scrollDriver)}>
 			{#if hasContent}
 				<article class="prose">
 					{#each keyedRenderedBlocks as block (block.key)}
 						{@html block.html}
 					{/each}
 				</article>
+				{#if backlinks.length > 0}
+					<nav class="backlinks" aria-labelledby="backlinks-title">
+						<h2 id="backlinks-title">Linked from</h2>
+						<ul>
+							{#each backlinks as backlink (backlink.id)}
+								<li><button type="button" onclick={() => onOpenBacklink?.(backlink.id)}>{backlink.title || 'Untitled'}</button></li>
+							{/each}
+						</ul>
+					</nav>
+				{/if}
 			{:else}
 				<div class="preview-empty"><PencilLine size={26} /><strong>Nothing here yet</strong><span>Start writing in the source pane.</span></div>
 			{/if}

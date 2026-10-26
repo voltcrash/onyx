@@ -27,6 +27,21 @@ describe("titleFromMarkdown", () => {
 });
 
 describe("renderMarkdown", () => {
+  it("renders inline tags as links outside code and other links", () => {
+    const html = renderMarkdown("Plan #Work/Q3 and `#code` and [#linked](a.md), not #42.");
+
+    expect(html).toContain('<a class="tag" data-tag="work/q3" href="?tag=work%2Fq3">#Work/Q3</a>');
+    expect(html).toContain("<code>#code</code>");
+    expect(html).toContain('<a href="a.md">#linked</a>');
+    expect(html).toContain("not #42.");
+  });
+
+  it("keeps embeds without an href", () => {
+    expect(renderMarkdown("![[photo.png]]")).toContain(
+      '<a class="wikilink wikilink-embed" data-wikilink="photo.png">photo.png</a>',
+    );
+  });
+
   it("renders CommonMark structure and GFM extensions", () => {
     const html = renderMarkdown(`# Heading
 
@@ -165,7 +180,9 @@ A footnote[^1] and math $a^2$.
     expect(html).toContain("H<del>2</del>O");
     expect(html).toContain("x^2^");
     expect(html).toContain("\u{1F389}");
-    expect(html).toContain('<a class="wikilink" data-wikilink="Other Note">wiki link</a>');
+    expect(html).toContain(
+      '<a class="wikilink" data-wikilink="Other Note" href="Other%20Note.md">wiki link</a>',
+    );
     expect(html).toContain('<blockquote class="callout callout-warning">');
     expect(html).toContain('<p class="callout-title">Warning</p>');
     expect(html).toContain("Careful");

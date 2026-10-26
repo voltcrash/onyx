@@ -1,4 +1,23 @@
-import type { Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
+
+interface EditorElement extends HTMLElement {
+  markdownEditor?: { value: string };
+}
+
+/** The full text of the Markdown editor, which only renders the lines in view. */
+export function markdownOf(editor: Locator): Promise<string> {
+  return editor.evaluate((element) => (element as EditorElement).markdownEditor?.value ?? "");
+}
+
+export async function expectMarkdown(
+  editor: Locator,
+  expected: string | RegExp,
+  options: { timeout?: number } = {},
+): Promise<void> {
+  const value = expect.poll(() => markdownOf(editor), options);
+  if (typeof expected === "string") await value.toBe(expected);
+  else await value.toMatch(expected);
+}
 
 export async function blockNextVaultWrite(page: Page): Promise<void> {
   await page.evaluate(() => {

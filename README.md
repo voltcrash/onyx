@@ -7,8 +7,16 @@ adds private backup and cross-device restore.
 ## What is implemented
 
 - Create and autosave Markdown notes locally.
-- Search note titles and contents from an on-device index.
-- Write in the source pane and see the rendered pane update alongside it.
+- Search note titles and contents from an on-device index. Add `#tag` to a search to keep only
+  notes with that tag.
+- Link notes with `[[Note name]]`, `[[Note name#Heading]]`, or `[[Note name|label]]`. A wiki link
+  finds the note with that file name in any folder, preferring the linking note's folder, and a
+  link to a missing note offers to create it. Each rendered note lists the notes that link to it.
+- Tag notes with inline `#tags` or a front matter `tags:` list. Clicking a tag in the rendered note
+  searches for it.
+- Write in the CodeMirror source pane with Markdown syntax highlighting, then see the rendered
+  pane update alongside it. Find matches appear directly in the source, and long notes render
+  only the source lines near the viewport.
 - Syntax-highlight fenced code blocks and show a short language label when the opening fence names
   a language; the same markup is preserved in rich-text, PDF, and HTML output.
 - Point just beside the divider to reveal a pane's grip, drag it to any side of the workspace to place the panes side by side or stacked, and drag the divider to resize them.
@@ -24,7 +32,8 @@ adds private backup and cross-device restore.
 - Export the complete vault to a folder when the browser supports the File System Access API, or
   download it as a ZIP in other browsers.
 - Optionally sign in with GitHub, select or create a private repository, back up pending changes in
-  one commit, and restore the vault on this or another device.
+  one commit, and restore the vault on this or another device. Backups can run automatically once
+  editing settles.
 - Continue editing offline after the app has been loaded; GitHub actions pause until connectivity
   returns.
 - Inspect browser storage usage, request persistent storage, connect a local folder, or clear the
@@ -100,6 +109,15 @@ downloads the files from a chosen commit, replaces the local notes and attachmen
 IndexedDB metadata and search index. Current backups contain an Onyx manifest; older backups can be
 reconstructed from their `notes/` and `attachments/` paths.
 
+Each device remembers the commit it last backed up or restored. If another device has backed up to
+the branch since then, Onyx does not build on that backup, because each backup's manifest lists
+only the backing-up device's notes. It asks instead: restore the newer backup, which replaces this
+device's notes, or back up anyway, which keeps the other backup in the repository history.
+
+With **Back up automatically** on, Onyx backs up pending changes two minutes after editing stops
+while the device is online. A failed or conflicting automatic backup pauses automatic backups until
+the next manual one.
+
 Create a GitHub OAuth App, configure its callback URL as
 `https://your-onyx-domain.example/api/auth/callback/github`, and set the variables listed in
 [`.env.example`](.env.example). `BETTER_AUTH_SECRET` must contain at least 32 random characters.
@@ -107,8 +125,10 @@ Onyx requests the `repo` scope so it can create private repositories and write b
 
 ## Architecture
 
-- `src/routes/+page.svelte` owns application state and coordinates persistence, transfer, and
-  GitHub workflows.
+- `src/routes/page-controller.svelte.ts` owns application state and coordinates persistence,
+  transfer, and GitHub workflows; `src/routes/+page.svelte` composes the interface.
+- `src/lib/markdown-editor.ts` adapts CodeMirror to the controller's editing, selection, find,
+  clipboard, and scroll-sync workflows. Undo and redo keep using Onyx's per-note history.
 - `src/lib/components/` contains focused workspace, navigation, dialog, and status components.
 - `src/routes/styles/` separates base tokens, application shell, editor, dialog, command-palette,
   responsive, and print styles.
@@ -136,9 +156,13 @@ Use the latest Node.js LTS release and Vite+ for project commands:
 vp install
 vp dev
 vp check
+vp run check
 vp test
-vp build
+vp run build
 ```
+
+`vp test` runs the unit tests. The end-to-end tests drive Chromium through Playwright; install it
+once with `vp run test:e2e:install`, then run `vp run test:e2e`. `vp run test` runs both suites.
 
 The variables in `.env.example` enable optional GitHub backup and sync. Onyx runs locally without
 them.

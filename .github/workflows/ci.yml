@@ -33,8 +33,14 @@ jobs:
       - name: Check
         run: vp check
 
+      - name: Check Svelte components, themes and service worker
+        run: vp run check
+
       - name: Unit tests
         run: vp test
+
+      - name: Install Playwright browser
+        run: vp exec playwright install --with-deps chromium
 
       - name: E2E tests
         run: vp run test:e2e
