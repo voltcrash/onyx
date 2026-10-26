@@ -7,7 +7,13 @@ adds private backup and cross-device restore.
 ## What is implemented
 
 - Create and autosave Markdown notes locally.
-- Search note titles and contents from an on-device index.
+- Search note titles and contents from an on-device index. Add `#tag` to a search to keep only
+  notes with that tag.
+- Link notes with `[[Note name]]`, `[[Note name#Heading]]`, or `[[Note name|label]]`. A wiki link
+  finds the note with that file name in any folder, preferring the linking note's folder, and a
+  link to a missing note offers to create it. Each rendered note lists the notes that link to it.
+- Tag notes with inline `#tags` or a front matter `tags:` list. Clicking a tag in the rendered note
+  searches for it.
 - Write in the source pane and see the rendered pane update alongside it.
 - Syntax-highlight fenced code blocks and show a short language label when the opening fence names
   a language; the same markup is preserved in rich-text, PDF, and HTML output.
@@ -24,7 +30,8 @@ adds private backup and cross-device restore.
 - Export the complete vault to a folder when the browser supports the File System Access API, or
   download it as a ZIP in other browsers.
 - Optionally sign in with GitHub, select or create a private repository, back up pending changes in
-  one commit, and restore the vault on this or another device.
+  one commit, and restore the vault on this or another device. Backups can run automatically once
+  editing settles.
 - Continue editing offline after the app has been loaded; GitHub actions pause until connectivity
   returns.
 - Inspect browser storage usage, request persistent storage, connect a local folder, or clear the
@@ -99,6 +106,15 @@ coalesces pending changes by path and advances the configured branch without for
 downloads the files from a chosen commit, replaces the local notes and attachments, and rebuilds the
 IndexedDB metadata and search index. Current backups contain an Onyx manifest; older backups can be
 reconstructed from their `notes/` and `attachments/` paths.
+
+Each device remembers the commit it last backed up or restored. If another device has backed up to
+the branch since then, Onyx does not build on that backup, because each backup's manifest lists
+only the backing-up device's notes. It asks instead: restore the newer backup, which replaces this
+device's notes, or back up anyway, which keeps the other backup in the repository history.
+
+With **Back up automatically** on, Onyx backs up pending changes two minutes after editing stops
+while the device is online. A failed or conflicting automatic backup pauses automatic backups until
+the next manual one.
 
 Create a GitHub OAuth App, configure its callback URL as
 `https://your-onyx-domain.example/api/auth/callback/github`, and set the variables listed in
