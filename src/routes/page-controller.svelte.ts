@@ -1195,7 +1195,9 @@ export function createPageController() {
       .finally(() => {
         if (remoteSyncRun === run) remoteSyncRun = undefined;
       })
-      .catch(() => undefined);
+      .catch(() => {
+        storageError = "Changes made in another tab could not be loaded. Reload Onyx to see them.";
+      });
   }
 
   async function syncRemoteVault(): Promise<void> {
