@@ -30,13 +30,13 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith("/auth/github/")) return;
+  if (url.pathname.startsWith("/api/auth/")) return;
 
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
         .then(async (response) => {
-          if (response.ok) {
+          if (response.ok && url.pathname === APP_SHELL) {
             const cache = await caches.open(CACHE);
             await cache.put(APP_SHELL, response.clone());
           }
