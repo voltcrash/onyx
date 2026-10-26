@@ -315,3 +315,75 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
   );
   await expect(page.getByText("Restored 1 note and 1 attachment from GitHub.")).toBeVisible();
 });
+
+test("asks before replacing a newer backup made on another device", async ({ page }) => {
+  const remoteSha = "a".repeat(40);
+  const writes: string[] = [];
+
+  await mockGithubSession(page);
+  await page.route("https://api.github.com/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const method = request.method();
+    if (method !== "GET") writes.push(`${method} ${url.pathname}`);
+    const json = (body: unknown) =>
+      route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+    const repository = {
+      default_branch: "main",
+      name: "onyx-vault",
+      owner: { login: "octocat" },
+      permissions: { push: true },
+      private: true,
+    };
+    if (url.pathname === "/user") {
+      await json({ avatar_url: "https://example.com/a.png", id: 1, login: "octocat", name: null });
+    } else if (url.pathname === "/user/repos") {
+      await json([repository]);
+    } else if (url.pathname === "/repos/octocat/onyx-vault") {
+      await json(repository);
+    } else if (url.pathname.endsWith("/git/ref/heads/main")) {
+      await json({ object: { sha: remoteSha } });
+    } else if (url.pathname.endsWith(`/git/commits/${remoteSha}`)) {
+      await json({
+        html_url: "https://github.com/c/remote",
+        sha: remoteSha,
+        tree: { sha: "base" },
+      });
+    } else if (url.pathname.endsWith("/git/trees/base")) {
+      await json({ sha: "base", tree: [{ path: "vault/.onyx.json", type: "blob", sha: "m" }] });
+    } else if (url.pathname.endsWith("/git/blobs")) {
+      await json({ sha: crypto.randomUUID() });
+    } else if (url.pathname.endsWith("/git/trees")) {
+      await json({ sha: "tree", tree: [] });
+    } else if (url.pathname.endsWith("/git/commits")) {
+      await json({ html_url: "https://github.com/c/new", sha: "c".repeat(40), tree: { sha: "t" } });
+    } else if (url.pathname.endsWith("/git/refs/heads/main")) {
+      await json({ object: { sha: "c".repeat(40) } });
+    } else {
+      await route.abort();
+    }
+  });
+
+  await page.goto("/");
+  await expect(page.getByText("@octocat").first()).toBeVisible({ timeout: 12_000 });
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Backup & sync", exact: true }).click();
+  await page.getByLabel("Repository", { exact: true }).selectOption("octocat/onyx-vault");
+  await page.getByRole("button", { name: "Use this repository" }).click();
+  await expect(page.getByRole("heading", { name: "Sync status" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Back up now" }).click();
+  const dialog = page.getByRole("alertdialog", { name: "GitHub has a newer backup" });
+  await expect(dialog).toBeVisible();
+  expect(writes).toEqual([]);
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(
+    page.getByText(/Backup paused because GitHub has a newer backup/).first(),
+  ).toBeVisible();
+  expect(writes).toEqual([]);
+
+  await page.getByRole("button", { name: "Back up now" }).click();
+  await dialog.getByRole("button", { name: "Back up anyway" }).click();
+  await expect(page.getByText(/Backed up \d+ files? in one commit/).first()).toBeVisible();
+  expect(writes).toContain("PATCH /repos/octocat/onyx-vault/git/refs/heads/main");
+});

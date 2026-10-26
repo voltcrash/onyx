@@ -868,13 +868,17 @@ export function createPageController() {
     }
   }
 
-  async function runBackup(configuration: GithubBackupState): Promise<void> {
+  async function runBackup(
+    configuration: GithubBackupState,
+    options: { replaceNewerBackup?: boolean } = {},
+  ): Promise<void> {
     if (!isOnline || !vault) return;
     backupState = "backing-up";
     backupMessage = "Preparing one GitHub commit…";
     backupCommitUrl = "";
+    const github = await loadGithubModule();
     try {
-      const result = await (await loadGithubModule()).backupVaultToGithub(vault, configuration);
+      const result = await github.backupVaultToGithub(vault, configuration, options);
       githubBackup = result.state;
       pendingBackupCount = await vault.countPendingBackupOperations();
       backupState = "success";
@@ -883,8 +887,31 @@ export function createPageController() {
         ? `Backed up ${result.fileCount} ${result.fileCount === 1 ? "file" : "files"} in one commit.`
         : "Your GitHub backup is already up to date.";
     } catch (error) {
+      if (error instanceof github.GithubBackupConflictError) {
+        await resolveBackupConflict(configuration);
+        return;
+      }
       showBackupError(error);
     }
+  }
+
+  async function resolveBackupConflict(configuration: GithubBackupState): Promise<void> {
+    backupState = "idle";
+    backupMessage = "";
+    const replace = await confirmation.ask({
+      eyebrow: "Backup & sync",
+      title: "GitHub has a newer backup",
+      message: `Another device backed up to ${configuration.owner}/${configuration.repository} after this device last backed up or restored. Restore that backup to bring its notes here, which replaces the notes on this device. Or back up anyway to make this device's notes the latest backup; the other backup stays in the repository history.`,
+      confirmLabel: "Back up anyway",
+      danger: true,
+    });
+    if (replace) {
+      await runBackup(configuration, { replaceNewerBackup: true });
+      return;
+    }
+    backupState = "error";
+    backupMessage =
+      "Backup paused because GitHub has a newer backup. Restore it from Settings → Backup & sync, or back up again to replace it.";
   }
 
   function showBackupError(error: unknown): void {
