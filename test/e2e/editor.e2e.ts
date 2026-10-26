@@ -90,7 +90,13 @@ test("navigates relative notes with browser history and rendered fragments", asy
   await expect(editor).toHaveValue(/# Note A/);
   expect(page.url()).toBe(startingUrl);
   expect(await page.evaluate(() => history.length)).toBe(missingLinkHistoryLength);
-  await page.getByRole("link", { name: "Malformed", exact: true }).click();
+  const malformedLink = page.getByRole("link", { name: "Malformed", exact: true });
+  // Resting on a link gives SvelteKit's hover preloading time to read its href.
+  await malformedLink.hover();
+  await page.mouse.move(1, 1, { steps: 2 });
+  await malformedLink.hover();
+  await page.waitForTimeout(100);
+  await malformedLink.click();
   await expect(editor).toHaveValue(/# Note A/);
   expect(await page.evaluate(() => history.length)).toBe(missingLinkHistoryLength);
   expect(pageErrors.filter((message) => message.includes("URI malformed"))).toEqual([]);
