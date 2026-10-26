@@ -14,7 +14,9 @@ adds private backup and cross-device restore.
   link to a missing note offers to create it. Each rendered note lists the notes that link to it.
 - Tag notes with inline `#tags` or a front matter `tags:` list. Clicking a tag in the rendered note
   searches for it.
-- Write in the source pane and see the rendered pane update alongside it.
+- Write in the CodeMirror source pane with Markdown syntax highlighting, then see the rendered
+  pane update alongside it. Find matches appear directly in the source, and long notes render
+  only the source lines near the viewport.
 - Syntax-highlight fenced code blocks and show a short language label when the opening fence names
   a language; the same markup is preserved in rich-text, PDF, and HTML output.
 - Point just beside the divider to reveal a pane's grip, drag it to any side of the workspace to place the panes side by side or stacked, and drag the divider to resize them.
@@ -123,8 +125,10 @@ Onyx requests the `repo` scope so it can create private repositories and write b
 
 ## Architecture
 
-- `src/routes/+page.svelte` owns application state and coordinates persistence, transfer, and
-  GitHub workflows.
+- `src/routes/page-controller.svelte.ts` owns application state and coordinates persistence,
+  transfer, and GitHub workflows; `src/routes/+page.svelte` composes the interface.
+- `src/lib/markdown-editor.ts` adapts CodeMirror to the controller's editing, selection, find,
+  clipboard, and scroll-sync workflows. Undo and redo keep using Onyx's per-note history.
 - `src/lib/components/` contains focused workspace, navigation, dialog, and status components.
 - `src/routes/styles/` separates base tokens, application shell, editor, dialog, command-palette,
   responsive, and print styles.
@@ -154,7 +158,7 @@ vp dev
 vp check
 vp run check
 vp test
-vp build
+vp run build
 ```
 
 `vp test` runs the unit tests. The end-to-end tests drive Chromium through Playwright; install it
