@@ -409,13 +409,14 @@
   line-height: 1.78;
   tab-size: 2;
 }
-.source-editor .cm-content {
+/* Outrank CodeMirror's adopted base styles, which win equally specific rules. */
+.source-editor .cm-editor .cm-content {
   padding: 52px
     max(clamp(28px, 5vw, 72px), calc((100% - var(--content-width)) / 2 + clamp(28px, 5vw, 72px)))
     60px;
   caret-color: var(--ink);
 }
-.source-editor .cm-line {
+.source-editor .cm-editor .cm-line {
   padding: 0;
 }
 .source-editor .cm-content[aria-disabled="true"] {
