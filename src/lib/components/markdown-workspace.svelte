@@ -53,43 +53,48 @@
 		onEditorDragOver: (event: DragEvent) => void;
 		onEditorDrop: (event: DragEvent) => void;
 		onNoteLink?: (href: string) => void;
+		onWikiLink?: (target: string) => void;
+		onTag?: (tag: string) => void;
 	}
 
 	let {
 		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedBlocks, displayedRenderedBlocks, scrollSync, markdown, markdownLineCount, findOpen, findQuery, findMatches, activeFindMatch,
 		saveState, transferState, hasContent, shortcuts, primaryModifier,
 		editor = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
-		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onNoteLink
+		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorBeforeInput, onEditorCopy, onEditorCut, onEditorPaste, onEditorDragOver, onEditorDrop, onNoteLink, onWikiLink, onTag
 	}: Props = $props();
 
-	function renderedNoteHref(event: MouseEvent): string | undefined {
-		if (!onNoteLink || event.defaultPrevented) return;
+	type RenderedLink = { open: () => void };
+
+	// Links Onyx follows itself: tags, wiki links and relative Markdown note links.
+	function renderedLink(event: MouseEvent): RenderedLink | undefined {
+		if (event.defaultPrevented || event.button !== 0) return;
+		if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 		const anchor = (event.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
 		if (!anchor || !renderedPaneElement?.contains(anchor)) return;
 		if (anchor.target.toLowerCase() === '_blank') return;
+		const { tag, wikilink } = anchor.dataset;
+		if (tag && onTag) return { open: () => onTag(tag) };
+		if (wikilink && onWikiLink && !anchor.classList.contains('wikilink-embed')) {
+			return { open: () => onWikiLink(wikilink) };
+		}
 		const href = anchor.getAttribute('href');
-		if (!href || href.startsWith('#')) return;
+		if (!onNoteLink || !href || href.startsWith('#')) return;
 		if (/^[a-z][a-z\d+.-]*:/i.test(href)) return;
 		if (href.startsWith('/') || href.startsWith('\\')) return;
 		if (!/\.(?:md|markdown)(?:[?#]|$)/i.test(href)) return;
-		return href;
-	}
-
-	function renderedNoteLink(event: MouseEvent): string | undefined {
-		if (event.button !== 0) return;
-		if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-		return renderedNoteHref(event);
+		return { open: () => onNoteLink(href) };
 	}
 
 	function handleRenderedMouseDown(event: MouseEvent): void {
-		if (renderedNoteLink(event)) event.preventDefault();
+		if (renderedLink(event)) event.preventDefault();
 	}
 
 	function handleRenderedClick(event: MouseEvent): void {
-		const href = renderedNoteLink(event);
-		if (!href) return;
+		const link = renderedLink(event);
+		if (!link) return;
 		event.preventDefault();
-		onNoteLink?.(href);
+		link.open();
 	}
 
 	let shell = $state<HTMLElement>();

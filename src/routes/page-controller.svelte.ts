@@ -103,6 +103,7 @@ import type { FindMatch } from "#lib/find-replace.ts";
 import { createFindReplace } from "./find-replace.svelte.ts";
 import { createPreviewRenderer } from "./preview-renderer.svelte.ts";
 import { createConfirmation } from "./confirmation.svelte.ts";
+import { resolveWikiLink, splitWikiTarget } from "#lib/wikilinks.ts";
 import { paletteCommands, type PaletteActions, type PaletteCommand } from "./palette-commands.ts";
 import type { FolderIcon } from "#lib/folder-icons.ts";
 import { createNoteOutput, downloadBlob, type NoteSource } from "#lib/note-output.ts";
@@ -1312,18 +1313,52 @@ export function createPageController() {
   async function openNoteLink(href: string): Promise<void> {
     const parsed = parseRelativeNoteLink(href, activeNoteSourcePath);
     if (!parsed) return;
-    let notes: NoteMetadata[];
-    try {
-      notes = vault ? await vault.listNotes() : paletteNotes;
-    } catch {
-      notes = paletteNotes;
-    }
+    const notes = await listNotesForLinks();
     const id = findNoteIdForPath(notes, parsed.path);
-    if (!id) return;
+    if (id) await navigateToNote(id, parsed.fragment);
+  }
+
+  async function listNotesForLinks(): Promise<NoteMetadata[]> {
+    try {
+      return vault ? await vault.listNotes() : paletteNotes;
+    } catch {
+      return paletteNotes;
+    }
+  }
+
+  /** Follows a [[wiki link]], offering to create the note when none has that name. */
+  async function openWikiLink(target: string): Promise<void> {
+    const { name, fragment } = splitWikiTarget(target);
+    if (!name) {
+      await navigateToNote(activeNoteId, fragment);
+      return;
+    }
+    const note = resolveWikiLink(await listNotesForLinks(), name, activeNoteSourcePath);
+    if (note) {
+      await navigateToNote(note.id, fragment);
+      return;
+    }
+    const fileName = basename(name);
+    const confirmed = await confirmation.ask({
+      eyebrow: "Wiki link",
+      title: `Create “${fileStem(fileName)}”?`,
+      message: `No note is named “${name}” yet. Onyx can create it${parentPath(name) ? ` in ${parentPath(name)}` : ""} and open it.`,
+      confirmLabel: "Create note",
+    });
+    if (confirmed) await createNote(parentPath(name), fileName);
+  }
+
+  function openTag(tag: string): void {
+    openPalette();
+    queueSearch(`#${tag}`);
+  }
+
+  // Records the jump in browser history so Back returns to the note the link was in.
+  async function navigateToNote(id: string, fragment = ""): Promise<void> {
     if (id === activeNoteId) {
-      if (parsed.fragment) {
+      if (fragment) {
         await preview.render(previewMarkdown);
-        await scrollToNoteFragment(parsed.fragment);
+        await scrollToNoteFragment(fragment);
       }
       return;
     }
@@ -1345,9 +1380,7 @@ export function createPageController() {
     } catch {
       // Ignore history failures after a successful navigation.
     }
-    if (parsed.fragment) {
-      await scrollToNoteFragment(parsed.fragment);
-    }
+    if (fragment) await scrollToNoteFragment(fragment);
   }
 
   async function refreshFileTree(): Promise<NoteMetadata[]> {
@@ -3403,6 +3436,8 @@ export function createPageController() {
     moveNoteFocus,
     selectNote,
     openNoteLink,
+    openWikiLink,
+    openTag,
     createFile: createNote,
     createFolder,
     renameFile,

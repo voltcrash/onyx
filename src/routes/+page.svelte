@@ -189,6 +189,8 @@
 		onEditorDragOver={page.handleEditorDragOver}
 		onEditorDrop={page.handleEditorDrop}
 		onNoteLink={(href) => void page.openNoteLink(href)}
+		onWikiLink={(target) => void page.openWikiLink(target)}
+		onTag={page.openTag}
 	/>
 	{#if page.sidebarDropSide}<div class="sidebar-drop-target" data-side={page.sidebarDropSide} aria-hidden="true"></div>{/if}
 </div>
