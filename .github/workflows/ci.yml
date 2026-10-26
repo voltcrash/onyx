@@ -33,6 +33,9 @@ jobs:
       - name: Check
         run: vp check
 
+      - name: Check Svelte components, themes and service worker
+        run: vp run check
+
       - name: Unit tests
         run: vp test
 
