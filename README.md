@@ -136,9 +136,13 @@ Use the latest Node.js LTS release and Vite+ for project commands:
 vp install
 vp dev
 vp check
+vp run check
 vp test
 vp build
 ```
+
+`vp test` runs the unit tests. The end-to-end tests drive Chromium through Playwright; install it
+once with `vp run test:e2e:install`, then run `vp run test:e2e`. `vp run test` runs both suites.
 
 The variables in `.env.example` enable optional GitHub backup and sync. Onyx runs locally without
 them.

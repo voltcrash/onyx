@@ -16,8 +16,10 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "themes:generate": "node scripts/generate-themes.mjs",
     "themes:check": "node scripts/generate-themes.mjs --check",
-    "test:e2e": "playwright install && playwright test",
-    "test": "vp run test:e2e"
+    "test:unit": "vp test",
+    "test:e2e:install": "playwright install chromium",
+    "test:e2e": "playwright test",
+    "test": "vp run test:unit && vp run test:e2e"
   },
   "dependencies": {
     "@zip.js/zip.js": "^2.24.0",
