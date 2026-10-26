@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectMarkdown } from "./helpers.ts";
 
 test("toggles sidebar find and replace with the platform shortcut", async ({ page }) => {
   await page.goto("/");
@@ -18,16 +19,17 @@ test("toggles sidebar find and replace with the platform shortcut", async ({ pag
 
   await findInput.fill("needle");
   await expect(page.locator(".find-count")).toHaveText("1 of 3");
-  await expect(page.locator(".source-find-layer .find-match")).toHaveCount(3);
+  await expect(page.locator(".source-editor .find-match")).toHaveCount(3);
   await page.getByRole("button", { name: "Next match" }).click();
   await expect(page.locator(".find-count")).toHaveText("2 of 3");
 
   await page.getByRole("textbox", { name: "Replace with" }).fill("Signal");
   await page.getByRole("button", { name: "Replace", exact: true }).click();
-  await expect(editor).toHaveValue(/Needle once\.[\s\S]*Signal twice\./);
+  await expectMarkdown(editor, /Needle once\.[\s\S]*Signal twice\./);
 
   await page.getByRole("button", { name: "Replace all" }).click();
-  await expect(editor).toHaveValue(
+  await expectMarkdown(
+    editor,
     /Find target[\s\S]*Signal once\.[\s\S]*Signal twice\.[\s\S]*Signal three times\./,
   );
   await expect(page.locator(".find-count")).toHaveText("No matches");

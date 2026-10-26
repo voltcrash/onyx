@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expectMarkdown } from "./helpers.ts";
 
 async function createNote(page: Page, name: string, contents: string): Promise<void> {
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
@@ -26,9 +27,9 @@ test("follows wiki links by note name and offers to create missing notes", async
   );
 
   await article.getByRole("link", { name: "the tomatoes" }).click();
-  await expect(editor).toHaveValue(/# Garden/);
+  await expectMarkdown(editor, /# Garden/);
   await page.goBack();
-  await expect(editor).toHaveValue(/# Journal/);
+  await expectMarkdown(editor, /# Journal/);
 
   await article.getByRole("link", { name: "Seed list" }).click();
   const dialog = page.getByRole("alertdialog", { name: "Create “Seed list”?" });
@@ -71,13 +72,13 @@ test("lists the notes that link to the open note", async ({ page }) => {
   await createNote(page, "Recipes.md", "# Recipes\n\nNothing about plants.");
 
   await page.locator(".note-list").getByRole("button", { name: "Garden", exact: true }).click();
-  await expect(editor).toHaveValue(/# Garden/);
+  await expectMarkdown(editor, /# Garden/);
   const backlinks = page.getByRole("navigation", { name: "Linked from" });
   await expect(backlinks.getByRole("button")).toHaveText(["Journal", "Plan"]);
 
   await backlinks.getByRole("button", { name: "Journal" }).click();
-  await expect(editor).toHaveValue(/# Journal/);
+  await expectMarkdown(editor, /# Journal/);
   await expect(page.getByRole("navigation", { name: "Linked from" })).toHaveCount(0);
   await page.goBack();
-  await expect(editor).toHaveValue(/# Garden/);
+  await expectMarkdown(editor, /# Garden/);
 });

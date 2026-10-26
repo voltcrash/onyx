@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 import themeCatalog from "../../src/lib/theme-catalog.json" with { type: "json" };
-import { blockNextVaultWrite, waitForBlockedVaultWrite, releaseVaultWrite } from "./helpers.ts";
+import {
+  blockNextVaultWrite,
+  expectMarkdown,
+  releaseVaultWrite,
+  waitForBlockedVaultWrite,
+} from "./helpers.ts";
 
 test("persists edits made while an earlier save is still in flight", async ({ page }) => {
   await page.goto("/");
@@ -35,7 +40,7 @@ test("persists edits made while an earlier save is still in flight", async ({ pa
     )
     .toBe(true);
   await page.reload();
-  await expect(editor).toHaveValue("# Latest concurrent edit");
+  await expectMarkdown(editor, "# Latest concurrent edit");
 });
 
 test("waits for an in-flight save before deleting the vault", async ({ page }) => {
@@ -59,9 +64,9 @@ test("waits for an in-flight save before deleting the vault", async ({ page }) =
   await page.getByRole("button", { name: "Click to confirm" }).click();
   await page.getByRole("button", { name: "Close settings" }).click();
 
-  await expect(editor).toHaveValue("");
+  await expectMarkdown(editor, "");
   await page.reload();
-  await expect(editor).toHaveValue(/# Welcome to Onyx/);
+  await expectMarkdown(editor, /# Welcome to Onyx/);
 });
 
 test("keeps startup usable when localStorage and persistent storage are unavailable", async ({
@@ -102,7 +107,7 @@ test("deletes all notes without restoring stale editor content", async ({ page }
   await page.getByRole("button", { name: "Delete all notes", exact: true }).click();
   await page.getByRole("button", { name: "Click to confirm", exact: true }).click();
 
-  await expect(editor).toHaveValue("");
+  await expectMarkdown(editor, "");
   await expect(page.getByText("0 notes", { exact: true })).toBeVisible();
   await expect(page.getByText("No notes yet", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /This note must stay deleted/ })).toHaveCount(0);

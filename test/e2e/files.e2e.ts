@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expectMarkdown } from "./helpers.ts";
 
 test("creates, moves, and manages folders and files", async ({ page }) => {
   await page.goto("/");
@@ -205,7 +206,7 @@ test("moves deleted notes to trash, restores them, and deletes them forever", as
   await expect(page.getByRole("button", { name: "Close trash" })).toBeHidden();
   const restored = page.locator(".note-list").getByRole("button", { name: "Trashme", exact: true });
   await expect(restored).toHaveAttribute("aria-current", "true");
-  await expect(editor).toHaveValue(/# Trashme/);
+  await expectMarkdown(editor, /# Trashme/);
 
   // Deleting forever removes the note from the trash.
   await restored.click({ button: "right" });
@@ -316,15 +317,14 @@ test("stores pasted images in the attachments folder with GitHub-style links", a
     const file = new File([bytes], "image.png", { type: "image/png" });
     const transfer = new DataTransfer();
     transfer.items.add(file);
-    const target = document.querySelector(
-      'textarea[aria-label="Markdown editor"]',
-    ) as HTMLTextAreaElement;
+    const target = document.querySelector<HTMLElement>('[aria-label="Markdown editor"]')!;
     target.dispatchEvent(
       new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }),
     );
   });
 
-  await expect(editor).toHaveValue(
+  await expectMarkdown(
+    editor,
     /!\[image-\d{8}-\d{6}\.png\]\(attachments\/image-\d{8}-\d{6}\.png\)$/,
   );
   await expect(page.locator(".rendered-pane img[src^='blob:']")).toHaveCount(1);
@@ -362,7 +362,8 @@ test("stores pasted images in the attachments folder with GitHub-style links", a
 
   await page.reload();
   await expect(editor).toBeEnabled();
-  await expect(editor).toHaveValue(
+  await expectMarkdown(
+    editor,
     /!\[image-\d{8}-\d{6}\.png\]\(attachments\/image-\d{8}-\d{6}\.png\)$/,
   );
   await expect(page.locator(".attachment-folder-row")).toHaveText("attachments");
@@ -374,7 +375,7 @@ test("stores pasted images in the attachments folder with GitHub-style links", a
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByLabel("Folder", { exact: true }).fill("media");
   await page.getByRole("button", { name: "Rename" }).click();
-  await expect(editor).toHaveValue(/\]\(media\/image-\d{8}-\d{6}\.png\)$/);
+  await expectMarkdown(editor, /\]\(media\/image-\d{8}-\d{6}\.png\)$/);
   await page.getByLabel("Hide the attachments folder in the sidebar").check();
   await page.keyboard.press("Escape");
   await expect(page.locator(".attachment-folder-row")).toHaveCount(0);
