@@ -119,6 +119,7 @@ import {
 } from "#lib/paths.ts";
 import type { MarkdownTransferFile } from "#lib/markdown-transfer.ts";
 import { createInitialMarkdown } from "./welcome-note.ts";
+import { startSidebarDrag, type SidebarSide } from "#lib/sidebar-drag.ts";
 import {
   clampContentWidth,
   clampSidebarWidth,
@@ -152,10 +153,6 @@ function loadLazyStylesModule(): Promise<LazyStylesModule> {
 }
 
 type SidebarState = { collapsed: boolean; open: boolean };
-type SidebarSide = "left" | "right";
-
-const SIDEBAR_DRAG_HOLD_MS = 300;
-const SIDEBAR_DRAG_SLOP_PX = 6;
 
 interface ImagePreviewState {
   id: string;
@@ -2941,64 +2938,6 @@ export function createPageController() {
     writeLocalStorage("onyx:sidebar-width", String(sidebarWidth));
   }
 
-  /** Holding a sidebar toggle picks it up; releasing it over either half of the window docks the sidebar there. */
-  function startSidebarDrag(event: PointerEvent): void {
-    if (event.button !== 0 || !event.isPrimary) return;
-    const startX = event.clientX;
-    const startY = event.clientY;
-    let dragging = false;
-    const holdTimer = window.setTimeout(() => {
-      dragging = true;
-      sidebarDropSide = sidebarSide;
-    }, SIDEBAR_DRAG_HOLD_MS);
-    const onMove = (moveEvent: PointerEvent) => {
-      if (moveEvent.pointerId !== event.pointerId) return;
-      if (dragging) {
-        moveEvent.preventDefault();
-        sidebarDropSide = moveEvent.clientX > window.innerWidth / 2 ? "right" : "left";
-      } else if (
-        Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) > SIDEBAR_DRAG_SLOP_PX
-      ) {
-        finish();
-      }
-    };
-    const onUp = (upEvent: PointerEvent) => {
-      if (upEvent.pointerId !== event.pointerId) return;
-      if (dragging && sidebarDropSide) {
-        setSidebarSide(sidebarDropSide);
-        // The release would otherwise land as a click and toggle the sidebar.
-        window.addEventListener("click", swallowClick, { capture: true, once: true });
-        window.setTimeout(
-          () => window.removeEventListener("click", swallowClick, { capture: true }),
-          0,
-        );
-      }
-      finish();
-    };
-    const onCancel = (cancelEvent: PointerEvent) => {
-      if (cancelEvent.pointerId === event.pointerId) finish();
-    };
-    const onContextMenu = (menuEvent: Event) => {
-      if (dragging) menuEvent.preventDefault();
-    };
-    function swallowClick(clickEvent: Event): void {
-      clickEvent.preventDefault();
-      clickEvent.stopPropagation();
-    }
-    function finish(): void {
-      window.clearTimeout(holdTimer);
-      sidebarDropSide = undefined;
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onCancel);
-      window.removeEventListener("contextmenu", onContextMenu);
-    }
-    window.addEventListener("pointermove", onMove, { passive: false });
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onCancel);
-    window.addEventListener("contextmenu", onContextMenu);
-  }
-
   function setTheme(preference: ThemePreference): void {
     theme = preference;
     resolvedTheme = applyTheme(preference);
@@ -3470,7 +3409,12 @@ export function createPageController() {
     setSidebarSide,
     setSidebarWidth,
     saveSidebarWidth,
-    startSidebarDrag,
+    startSidebarDrag: (event: PointerEvent) =>
+      startSidebarDrag(event, {
+        side: () => sidebarSide,
+        setDropSide: (side) => (sidebarDropSide = side),
+        dock: setSidebarSide,
+      }),
     insertSyntax,
     prefixLine,
     setSplitRatio,
