@@ -160,6 +160,18 @@ import {
 import { findTextMatches, type FindMatch } from "#lib/find-replace.ts";
 import type { FolderIcon } from "#lib/folder-icons.ts";
 import { outputFileName } from "#lib/output-utils.ts";
+import {
+  basename,
+  fileStem,
+  isPathWithin,
+  joinPath,
+  movePath,
+  normalizeFileName,
+  normalizeFolderName,
+  noteFilePath,
+  noteFolderPath,
+  parentPath,
+} from "#lib/paths.ts";
 import type { MarkdownTransferFile } from "#lib/markdown-transfer.ts";
 import { onMount, tick, untrack } from "svelte";
 import { goto } from "$app/navigation";
@@ -172,7 +184,6 @@ const DEFERRED_STARTUP_DELAY_MS = 8_000;
 // Matches the single-column breakpoint in the responsive stylesheet.
 const NARROW_VIEWPORT = "(max-width: 900px)";
 const EDITOR_HISTORY_LIMIT = 200;
-const MARKDOWN_EXTENSION = ".md";
 
 const noteFormatPaletteNames: Record<NoteFormat, string> = {
   markdown: "Markdown",
@@ -260,75 +271,6 @@ interface ImagePreviewState {
   id: string;
   name: string;
   url: string;
-}
-
-function pathParts(path: string): string[] {
-  return path.split("/").filter(Boolean);
-}
-
-function parentPath(path: string): string {
-  return pathParts(path).slice(0, -1).join("/");
-}
-
-function joinPath(parent: string, name: string): string {
-  return [...pathParts(parent), name].join("/");
-}
-
-function isPathWithin(path: string, parent: string): boolean {
-  return !parent || path === parent || path.startsWith(`${parent}/`);
-}
-
-function movePath(path: string, from: string, to: string): string {
-  const suffix = path.slice(from.length).replace(/^\/+/, "");
-  return suffix ? joinPath(to, suffix) : to;
-}
-
-function basename(path: string): string {
-  return pathParts(path).at(-1) ?? "";
-}
-
-function noteFilePath(note: Pick<NoteMetadata, "sourcePath" | "title">): string {
-  const sourcePath = note.sourcePath?.trim();
-  if (sourcePath) return sourcePath;
-  const fallback = (note.title || "Untitled").replace(/[\\/]+/g, "-").trim() || "Untitled";
-  return `${fallback}${MARKDOWN_EXTENSION}`;
-}
-
-function noteFolderPath(note: Pick<NoteMetadata, "sourcePath" | "title">): string {
-  return parentPath(noteFilePath(note));
-}
-
-function fileStem(path: string): string {
-  return basename(path).replace(/\.(?:md|markdown)$/i, "") || "Untitled";
-}
-
-function hasControlCharacters(value: string): boolean {
-  for (const character of value) {
-    if (character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127) return true;
-  }
-  return false;
-}
-
-function normalizeFileName(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed || trimmed === "." || trimmed === ".." || /[\\/]/.test(trimmed)) {
-    throw new Error("File names cannot be empty or contain slashes.");
-  }
-  if (hasControlCharacters(trimmed)) {
-    throw new Error("File names cannot contain control characters.");
-  }
-  return /\.(?:md|markdown)$/i.test(trimmed) ? trimmed : `${trimmed}${MARKDOWN_EXTENSION}`;
-}
-
-function normalizeFolderName(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed || trimmed === "." || trimmed === ".." || /[\\/]/.test(trimmed)) {
-    throw new Error("Folder names cannot be empty or contain slashes.");
-  }
-  if (hasControlCharacters(trimmed)) {
-    throw new Error("Folder names cannot contain control characters.");
-  }
-  return trimmed;
 }
 
 export function createPageController() {
