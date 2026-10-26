@@ -157,7 +157,8 @@ import {
   type ResolvedTheme,
   type ThemePreference,
 } from "#lib/theme.ts";
-import { findTextMatches, type FindMatch } from "#lib/find-replace.ts";
+import type { FindMatch } from "#lib/find-replace.ts";
+import { createFindReplace } from "./find-replace.svelte.ts";
 import type { FolderIcon } from "#lib/folder-icons.ts";
 import { outputFileName } from "#lib/output-utils.ts";
 import {
@@ -307,17 +308,6 @@ export function createPageController() {
   let settledSearchSequence = 0;
   let editor: HTMLTextAreaElement | undefined = $state();
   let searchInput: HTMLInputElement | undefined = $state();
-  let findOpen = $state(false);
-  let findQuery = $state("");
-  let findReplacement = $state("");
-  let findMatchCase = $state(false);
-  let findWholeWord = $state(false);
-  let findMatchIndex = $state(-1);
-  let findInput: HTMLInputElement | undefined = $state();
-  let findReplaceInput: HTMLInputElement | undefined = $state();
-  let findOpener: HTMLElement | undefined = $state();
-  let findSidebarState: SidebarState | undefined;
-  let findNavigationSequence = 0;
   let sidebarOpen = $state(false);
   let storageError = $state("");
   let storageNotice = $state("");
@@ -424,16 +414,28 @@ export function createPageController() {
   );
   const noteTitle = $derived(titleFromMarkdown(markdown));
   const markdownLineCount = $derived(countLines(markdown));
-  const findMatches = $derived.by(() =>
-    findTextMatches(markdown, findQuery, {
-      matchCase: findMatchCase,
-      wholeWord: findWholeWord,
-    }),
-  );
-  const activeFindMatch = $derived(
-    findMatches.length > 0 ? Math.min(Math.max(findMatchIndex, 0), findMatches.length - 1) : -1,
-  );
   const findCanEdit = $derived(saveState !== "loading" && transferState !== "working");
+  const find = createFindReplace({
+    markdown: () => markdown,
+    canEdit: () => findCanEdit,
+    editor: () => editor,
+    editorSelection: () => getEditorSelection(),
+    rememberEditorState,
+    updateMarkdown: (value) => updateMarkdown(value),
+    revealSource: () => {
+      if (singlePaneMode && !sourcePaneVisible) showOnlyPane("source");
+    },
+    openSidebar: () => {
+      const previous = { collapsed: sidebarCollapsed, open: sidebarOpen };
+      sidebarCollapsed = false;
+      if (window.innerWidth <= 900) sidebarOpen = true;
+      return () => {
+        sidebarCollapsed = previous.collapsed;
+        sidebarOpen = previous.open;
+      };
+    },
+    restoreFocus: restoreModalFocus,
+  });
   const notePageCount = $derived(Math.max(1, Math.ceil(results.length / NOTE_PAGE_SIZE)));
   const orderedResults = $derived(
     results.toSorted(
@@ -638,7 +640,7 @@ export function createPageController() {
       shortcut: shortcutLabel("findInNote"),
       icon: Search,
       keywords: "find replace current note text",
-      run: () => openFind(),
+      run: () => find.open(),
     },
     {
       id: "bold",
@@ -1406,7 +1408,7 @@ export function createPageController() {
   function restoreModalFocus(opener: HTMLElement | undefined): void {
     if (!opener) return;
     requestAnimationFrame(() => {
-      if (paletteOpen || findOpen || settingsOpen) return;
+      if (paletteOpen || find.isOpen || settingsOpen) return;
       if (opener.isConnected) opener.focus();
     });
   }
@@ -3547,179 +3549,18 @@ export function createPageController() {
     });
   }
 
-  function keepFindInputFocused(): void {
-    requestAnimationFrame(() => {
-      if (findOpen && findInput && document.activeElement !== findInput) findInput.focus();
-    });
-  }
-
-  function focusFindMatch(index: number, sequence = findNavigationSequence): void {
-    if (!findOpen || sequence !== findNavigationSequence) return;
-    const match = findMatches[index];
-    if (!match) return;
-
-    if (singlePaneMode && !sourcePaneVisible) showOnlyPane("source");
-    if (!editor) {
-      void tick().then(() => focusFindMatch(index, sequence));
-      return;
-    }
-
-    const target = editor;
-    target.focus({ preventScroll: true });
-    target.setSelectionRange(match.start, match.end);
-    const line = markdown.slice(0, match.start).split("\n").length - 1;
-    const lineHeight = Number.parseFloat(getComputedStyle(target).lineHeight) || 24;
-    const paddingTop = Number.parseFloat(getComputedStyle(target).paddingTop) || 0;
-    const targetTop = paddingTop + line * lineHeight;
-    if (target.scrollHeight > target.clientHeight) {
-      target.scrollTop = Math.max(
-        0,
-        Math.min(target.scrollHeight - target.clientHeight, targetTop - target.clientHeight / 2),
-      );
-    } else {
-      // On touch layouts the textarea grows with its text and the page scrolls instead.
-      const top = target.getBoundingClientRect().top + window.scrollY + targetTop;
-      window.scrollTo({ top: Math.max(0, top - window.innerHeight / 2) });
-    }
-    keepFindInputFocused();
-  }
-
-  function queueFindNavigation(): void {
-    const sequence = ++findNavigationSequence;
-    void tick().then(() => {
-      if (sequence !== findNavigationSequence || !findOpen || activeFindMatch < 0) return;
-      focusFindMatch(activeFindMatch, sequence);
-    });
-  }
-
-  function setFindQuery(value: string): void {
-    findQuery = value;
-    findMatchIndex = value ? 0 : -1;
-    queueFindNavigation();
-  }
-
-  function setFindReplacement(value: string): void {
-    findReplacement = value;
-  }
-
-  function setFindMatchCase(value: boolean): void {
-    findMatchCase = value;
-    findMatchIndex = findQuery ? 0 : -1;
-    queueFindNavigation();
-  }
-
-  function setFindWholeWord(value: boolean): void {
-    findWholeWord = value;
-    findMatchIndex = findQuery ? 0 : -1;
-    queueFindNavigation();
-  }
-
-  function moveFindMatch(direction: 1 | -1): void {
-    if (findMatches.length === 0) return;
-    const current = activeFindMatch < 0 ? (direction > 0 ? -1 : 0) : activeFindMatch;
-    findMatchIndex = (current + direction + findMatches.length) % findMatches.length;
-    queueFindNavigation();
-  }
-
-  function toggleFind(): void {
-    if (findOpen) {
-      closeFind();
-      return;
-    }
-    openFind();
-  }
-
-  function openFind(): void {
-    if (findOpen) {
-      requestAnimationFrame(() => {
-        findInput?.focus();
-        findInput?.select();
-      });
-      return;
-    }
-    findOpener = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
-    const selection = getEditorSelection();
-    if (selection && selection.start !== selection.end) {
-      findQuery = markdown.slice(selection.start, selection.end);
-    }
-    findMatchIndex = findQuery ? 0 : -1;
-    findSidebarState = { collapsed: sidebarCollapsed, open: sidebarOpen };
-    sidebarCollapsed = false;
-    if (window.innerWidth <= 900) sidebarOpen = true;
-    findOpen = true;
-    const sequence = ++findNavigationSequence;
-    void tick().then(() => {
-      if (sequence !== findNavigationSequence || !findOpen) return;
-      findInput?.focus();
-      findInput?.select();
-      if (activeFindMatch >= 0) focusFindMatch(activeFindMatch, sequence);
-    });
-  }
-
-  function closeFind(): void {
-    if (!findOpen) return;
-    const previousSidebarState = findSidebarState;
-    findSidebarState = undefined;
-    findOpen = false;
-    findNavigationSequence += 1;
-    if (previousSidebarState) {
-      sidebarCollapsed = previousSidebarState.collapsed;
-      sidebarOpen = previousSidebarState.open;
-    }
-    const opener = findOpener;
-    findOpener = undefined;
-    restoreModalFocus(opener);
-  }
-
-  function replaceFind(): void {
-    const match = findMatches[activeFindMatch];
-    if (!match || !findCanEdit) return;
-    rememberEditorState({ start: match.start, end: match.end });
-    const nextValue = markdown.slice(0, match.start) + findReplacement + markdown.slice(match.end);
-    const nextMatches = findTextMatches(nextValue, findQuery, {
-      matchCase: findMatchCase,
-      wholeWord: findWholeWord,
-    });
-    const nextIndex = nextMatches.findIndex(
-      (candidate) => candidate.start >= match.start + findReplacement.length,
-    );
-    updateMarkdown(nextValue);
-    findMatchIndex = nextMatches.length === 0 ? -1 : nextIndex >= 0 ? nextIndex : 0;
-    queueFindNavigation();
-  }
-
-  function replaceAllFind(): void {
-    if (findMatches.length === 0 || !findCanEdit) return;
-    const matches = findMatches;
-    rememberEditorState({
-      start: matches[0]!.start,
-      end: matches.at(-1)!.end,
-    });
-    let nextValue = markdown;
-    for (let index = matches.length - 1; index >= 0; index -= 1) {
-      const match = matches[index]!;
-      nextValue = `${nextValue.slice(0, match.start)}${findReplacement}${nextValue.slice(match.end)}`;
-    }
-    const nextMatches = findTextMatches(nextValue, findQuery, {
-      matchCase: findMatchCase,
-      wholeWord: findWholeWord,
-    });
-    updateMarkdown(nextValue);
-    findMatchIndex = nextMatches.length > 0 ? 0 : -1;
-    queueFindNavigation();
-  }
-
   function handleShortcut(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;
     if (
-      findOpen &&
+      find.isOpen &&
       !event.altKey &&
       (event.key === "F3" ||
         (event.key.toLowerCase() === "g" &&
           (primaryModifier === "meta" ? event.metaKey : event.ctrlKey)))
     ) {
       event.preventDefault();
-      moveFindMatch(event.shiftKey ? -1 : 1);
+      if (event.shiftKey) find.previous();
+      else find.next();
       return;
     }
     // Tab indents code and lists instead of leaving the editor.
@@ -3771,7 +3612,7 @@ export function createPageController() {
     event.preventDefault();
 
     if (action === "commandPalette") togglePalette();
-    else if (action === "findInNote") toggleFind();
+    else if (action === "findInNote") find.toggle();
     else if (action === "saveNote" && transferState !== "working") void saveDraft();
     else if (action === "newNote" && transferState !== "working") void createNote();
     else if (action === "searchNotes" || action === "focusSearch") focusSearch();
@@ -3787,7 +3628,7 @@ export function createPageController() {
       else if (restoreModalOpen && restoreState !== "restoring") restoreModalOpen = false;
       else if (settingsOpen) closeSettings();
       else if (paletteOpen) closePalette();
-      else if (findOpen) closeFind();
+      else if (find.isOpen) find.close();
       else if (sidebarOpen) sidebarOpen = false;
       else if (searchQuery) resetPaletteSearch();
     }
@@ -4023,31 +3864,28 @@ export function createPageController() {
       return searchPending;
     },
     get findOpen() {
-      return findOpen;
-    },
-    set findOpen(value: boolean) {
-      findOpen = value;
+      return find.isOpen;
     },
     get findQuery() {
-      return findQuery;
+      return find.query;
     },
     get findReplacement() {
-      return findReplacement;
+      return find.replacement;
     },
     get findMatchCase() {
-      return findMatchCase;
+      return find.matchCase;
     },
     get findWholeWord() {
-      return findWholeWord;
+      return find.wholeWord;
     },
     get findMatchCount() {
-      return findMatches.length;
+      return find.matches.length;
     },
     get activeFindMatch() {
-      return activeFindMatch;
+      return find.activeMatch;
     },
     get findMatches(): FindMatch[] {
-      return findMatches;
+      return find.matches;
     },
     get findCanEdit() {
       return findCanEdit;
@@ -4281,16 +4119,16 @@ export function createPageController() {
       searchInput = value;
     },
     get findInput() {
-      return findInput;
+      return find.input;
     },
     set findInput(value: HTMLInputElement | undefined) {
-      findInput = value;
+      find.input = value;
     },
     get findReplaceInput() {
-      return findReplaceInput;
+      return find.replaceInput;
     },
     set findReplaceInput(value: HTMLInputElement | undefined) {
-      findReplaceInput = value;
+      find.replaceInput = value;
     },
     get noteList() {
       return noteList;
@@ -4342,16 +4180,16 @@ export function createPageController() {
     renameVault,
     createNote,
     queueSearch,
-    openFind,
-    closeFind,
-    setFindQuery,
-    setFindReplacement,
-    setFindMatchCase,
-    setFindWholeWord,
-    previousFindMatch: () => moveFindMatch(-1),
-    nextFindMatch: () => moveFindMatch(1),
-    replaceFind,
-    replaceAllFind,
+    openFind: find.open,
+    closeFind: find.close,
+    setFindQuery: find.setQuery,
+    setFindReplacement: find.setReplacement,
+    setFindMatchCase: find.setMatchCase,
+    setFindWholeWord: find.setWholeWord,
+    previousFindMatch: find.previous,
+    nextFindMatch: find.next,
+    replaceFind: find.replace,
+    replaceAllFind: find.replaceAll,
     openPalette,
     closePalette,
     openSettings,
