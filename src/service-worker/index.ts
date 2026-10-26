@@ -30,7 +30,7 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith("/auth/github/")) return;
+  if (url.pathname.startsWith("/api/auth/")) return;
 
   if (request.mode === "navigate") {
     event.respondWith(
