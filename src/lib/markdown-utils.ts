@@ -1,3 +1,5 @@
+import { basename, encodePath, parentPath, relativePath, resolveRelativePath } from "./paths.js";
+
 export interface LocalAttachmentUrl {
   name: string;
   sourcePath?: string;
@@ -110,7 +112,7 @@ export function parseRelativeNoteLink(
   } catch {
     decodedPath = pathPart;
   }
-  const resolved = resolveRelativePath(dirname(noteSourcePath ?? ""), decodedPath);
+  const resolved = resolveRelativePath(parentPath(noteSourcePath ?? ""), decodedPath);
   if (!resolved) return;
   return { path: resolved, fragment };
 }
@@ -155,7 +157,7 @@ export function resolveLocalAttachmentUrl(
   } catch {
     decodedPath = path;
   }
-  const resolvedPath = resolveRelativePath(dirname(noteSourcePath ?? ""), decodedPath);
+  const resolvedPath = resolveRelativePath(parentPath(noteSourcePath ?? ""), decodedPath);
   if (!resolvedPath) return;
   const attachment =
     attachments.find(
@@ -168,31 +170,8 @@ export function resolveLocalAttachmentUrl(
   return attachment ? `${attachment.url}${suffix}` : undefined;
 }
 
-function resolveRelativePath(directory: string, destination: string): string | undefined {
-  if (!destination || destination.includes("\\")) return;
-  const parts: string[] = [];
-  for (const part of `${directory}/${destination}`.split("/")) {
-    if (!part || part === ".") continue;
-    if (part === "..") {
-      if (parts.length === 0) return;
-      parts.pop();
-    } else {
-      parts.push(part);
-    }
-  }
-  return parts.join("/") || undefined;
-}
-
 function normalizePath(path: string): string | undefined {
   return resolveRelativePath("", path);
-}
-
-function dirname(path: string): string {
-  return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
-}
-
-function basename(path: string): string {
-  return path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
 }
 
 export const DEFAULT_ATTACHMENT_FOLDER = "attachments";
@@ -224,7 +203,7 @@ export function attachmentMarkdown(
   noteSourcePath: string | undefined,
   type: string,
 ): string {
-  const destination = encodeLinkPath(relativePath(dirname(noteSourcePath ?? ""), attachmentPath));
+  const destination = encodePath(relativePath(parentPath(noteSourcePath ?? ""), attachmentPath));
   const label = name.replace(/[[\]\\]/g, "\\$&");
   return type.startsWith("image/") ? `![${label}](${destination})` : `[${label}](${destination})`;
 }
@@ -239,8 +218,8 @@ export function rewriteLocalLinks(
   nextNotePath: string | undefined,
   mapPath: (path: string) => string | undefined,
 ): string {
-  const previousDirectory = dirname(previousNotePath ?? "");
-  const nextDirectory = dirname(nextNotePath ?? "");
+  const previousDirectory = parentPath(previousNotePath ?? "");
+  const nextDirectory = parentPath(nextNotePath ?? "");
   let fence: string | undefined;
   return markdown
     .split("\n")
@@ -272,28 +251,11 @@ export function rewriteLocalLinks(
           const relative = relativePath(nextDirectory, target);
           return bracketed
             ? `${opening}<${relative}${suffix}>`
-            : `${opening}${encodeLinkPath(relative)}${suffix}`;
+            : `${opening}${encodePath(relative)}${suffix}`;
         },
       );
     })
     .join("\n");
-}
-
-function relativePath(fromDirectory: string, to: string): string {
-  const from = fromDirectory.split("/").filter(Boolean);
-  const target = to.split("/").filter(Boolean);
-  let shared = 0;
-  while (shared < from.length && shared < target.length - 1 && from[shared] === target[shared]) {
-    shared += 1;
-  }
-  return [...from.slice(shared).map(() => ".."), ...target.slice(shared)].join("/");
-}
-
-function encodeLinkPath(path: string): string {
-  return path
-    .split("/")
-    .map((part) => encodeURIComponent(part))
-    .join("/");
 }
 
 export interface ListEnterResult {
