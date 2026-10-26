@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   backupVaultToGithub,
   createPrivateGithubRepository,
+  GithubBackupConflictError,
   GithubRequestError,
   githubRequest,
   listGithubBackupCommits,
@@ -437,5 +438,115 @@ describe("githubRequest", () => {
 
     await expect(backupVaultToGithub(vault, state)).rejects.toMatchObject({ status: 409 });
     expect(acknowledgeBackupOperations).not.toHaveBeenCalled();
+  });
+});
+
+describe("backupVaultToGithub conflicts", () => {
+  const remoteSha = "a".repeat(40);
+  const state = {
+    branch: "main",
+    directory: "vault",
+    githubAccountId: 1,
+    githubAccountLogin: "onyx",
+    owner: "onyx",
+    repository: "vault",
+    updatedAt: "2026-10-01T00:00:00.000Z",
+  };
+
+  async function backUp(lastCommitSha: string | undefined, replaceNewerBackup = false) {
+    auth.accessToken = "token";
+    class TestFileReader {
+      onerror: (() => void) | null = null;
+      onload: (() => void) | null = null;
+      result: string | null = null;
+
+      readAsDataURL(blob: Blob): void {
+        void blob.text().then((text) => {
+          this.result = `data:;base64,${btoa(text)}`;
+          this.onload?.();
+        });
+      }
+    }
+    vi.stubGlobal("FileReader", TestFileReader);
+    const writes: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (input, init) => {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const path = new URL(url, "https://onyx.test").pathname;
+        const method = init?.method ?? "GET";
+        if (method !== "GET") writes.push(`${method} ${path}`);
+        if (path === "/user") {
+          return Response.json({ avatar_url: "avatar", id: 1, login: "onyx", name: null });
+        }
+        if (path === "/repos/onyx/vault") {
+          return Response.json({
+            default_branch: "main",
+            name: "vault",
+            owner: { login: "onyx" },
+            permissions: { push: true },
+            private: true,
+          });
+        }
+        if (path.endsWith("/git/ref/heads/main"))
+          return Response.json({ object: { sha: remoteSha } });
+        if (path.endsWith(`/git/commits/${remoteSha}`)) {
+          return Response.json({ html_url: "remote", sha: remoteSha, tree: { sha: "base" } });
+        }
+        if (path.endsWith("/git/trees/base")) {
+          return Response.json({
+            sha: "base",
+            tree: [{ path: "vault/.onyx.json", sha: "manifest", type: "blob" }],
+          });
+        }
+        if (path.endsWith("/git/blobs")) return Response.json({ sha: crypto.randomUUID() });
+        if (path.endsWith("/git/trees")) return Response.json({ sha: "tree", tree: [] });
+        if (path.endsWith("/git/commits")) {
+          return Response.json({ html_url: "commit", sha: "c".repeat(40), tree: { sha: "tree" } });
+        }
+        if (path.endsWith("/git/refs/heads/main")) return Response.json({ object: {} });
+        return Response.json({ message: `Unexpected ${method} ${path}` }, { status: 500 });
+      }),
+    );
+    await restoreGithubSession();
+    const acknowledgeBackupOperations = vi.fn();
+    const vault = {
+      acknowledgeBackupOperations,
+      createBackupManifest: vi.fn().mockResolvedValue({ version: 1, notes: [], attachments: [] }),
+      createBackupSnapshot: vi.fn().mockResolvedValue({
+        changes: [{ contents: new Blob(["# Edit"]), path: "notes/note.md" }],
+        operationIds: ["operation"],
+      }),
+      saveGithubBackupState: vi.fn(),
+    } as unknown as Vault;
+    const result = backupVaultToGithub(vault, { ...state, lastCommitSha }, { replaceNewerBackup });
+    return { result, writes, acknowledgeBackupOperations };
+  }
+
+  it("refuses to build on an Onyx backup this device has not seen", async () => {
+    const { result, writes, acknowledgeBackupOperations } = await backUp("b".repeat(40));
+
+    await expect(result).rejects.toBeInstanceOf(GithubBackupConflictError);
+    await expect(result).rejects.toMatchObject({ remoteCommitSha: remoteSha });
+    expect(writes).toEqual([]);
+    expect(acknowledgeBackupOperations).not.toHaveBeenCalled();
+  });
+
+  it("refuses when this device has never backed up to a branch that has a backup", async () => {
+    const { result } = await backUp(undefined);
+    await expect(result).rejects.toBeInstanceOf(GithubBackupConflictError);
+  });
+
+  it("builds on the backup this device made or restored last", async () => {
+    const { result, acknowledgeBackupOperations } = await backUp(remoteSha);
+    await expect(result).resolves.toMatchObject({ state: { lastCommitSha: "c".repeat(40) } });
+    expect(acknowledgeBackupOperations).toHaveBeenCalledWith(["operation"]);
+  });
+
+  it("replaces the newer backup when asked to", async () => {
+    const { result, writes } = await backUp("b".repeat(40), true);
+    await expect(result).resolves.toMatchObject({ fileCount: 2 });
+    expect(writes).toContain("PATCH /repos/onyx/vault/git/refs/heads/main");
   });
 });
