@@ -1,5 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import { blockNextVaultWrite, waitForBlockedVaultWrite, releaseVaultWrite } from "./helpers.ts";
+import {
+  blockNextVaultWrite,
+  expectMarkdown,
+  releaseVaultWrite,
+  waitForBlockedVaultWrite,
+} from "./helpers.ts";
 
 async function mockGithubSession(page: Page): Promise<void> {
   await page.route("**/api/auth/**", async (route) => {
@@ -308,7 +313,7 @@ test("restores a selected GitHub commit into the local vault", async ({ page }) 
   await page.getByRole("button", { name: "Restore selected" }).click();
   await page.getByRole("button", { name: "Confirm restore" }).click();
 
-  await expect(editor).toHaveValue(markdown);
+  await expectMarkdown(editor, markdown);
   await expect(page.locator('.rendered-pane img[alt="restored image"]')).toHaveAttribute(
     "src",
     /^blob:/,
@@ -436,11 +441,22 @@ test("backs up automatically once editing settles", async ({ page }) => {
   await page.getByLabel("Repository", { exact: true }).selectOption("octocat/onyx-vault");
   await page.getByRole("button", { name: "Use this repository" }).click();
   await page.getByRole("checkbox", { name: /Back up automatically/ }).check();
+  const pendingChanges = page
+    .locator(".settings-facts > div")
+    .filter({
+      has: page.getByText("Pending changes", { exact: true }),
+    })
+    .locator("dd");
+  const beforeEdit = await pendingChanges.innerText();
   await page.getByRole("button", { name: "Close settings" }).click();
 
   await editor.fill("# Automatic\n\nSaved without pressing back up.");
   await page.keyboard.press("ControlOrMeta+S");
-  await expect(page.getByText("Saving…", { exact: true })).toBeHidden();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Backup & sync", exact: true }).click();
+  await expect(pendingChanges).not.toHaveText(beforeEdit);
+  await expect(page.getByRole("checkbox", { name: /Back up automatically/ })).toBeChecked();
+  await page.getByRole("button", { name: "Close settings" }).click();
   await page.clock.fastForward("01:00");
   expect(writes).toEqual([]);
 
