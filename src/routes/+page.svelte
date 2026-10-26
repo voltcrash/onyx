@@ -262,6 +262,7 @@
 			onCreateRepository={(name) => void page.createBackupRepository(name)}
 			onSelectRepository={(state) => void page.selectBackupRepository(state)}
 			onForgetRepository={() => void page.forgetBackupRepository()}
+			onAutoBackupChange={(enabled) => void page.setAutoBackup(enabled)}
 			onBackup={() => void page.beginBackup()}
 			onRestore={() => { page.settingsOpen = false; void page.openRestore(); }}
 			onImportFolder={() => page.folderInput?.click()}

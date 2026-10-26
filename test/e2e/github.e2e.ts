@@ -387,3 +387,66 @@ test("asks before replacing a newer backup made on another device", async ({ pag
   await expect(page.getByText(/Backed up \d+ files? in one commit/).first()).toBeVisible();
   expect(writes).toContain("PATCH /repos/octocat/onyx-vault/git/refs/heads/main");
 });
+
+test("backs up automatically once editing settles", async ({ page }) => {
+  const writes: string[] = [];
+
+  await page.clock.install();
+  await mockGithubSession(page);
+  await page.route("https://api.github.com/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const method = request.method();
+    if (method !== "GET") writes.push(`${method} ${url.pathname}`);
+    const json = (body: unknown, status = 200) =>
+      route.fulfill({ contentType: "application/json", status, body: JSON.stringify(body) });
+    const repository = {
+      default_branch: "main",
+      name: "onyx-vault",
+      owner: { login: "octocat" },
+      permissions: { push: true },
+      private: true,
+    };
+    if (url.pathname === "/user") {
+      await json({ avatar_url: "https://example.com/a.png", id: 1, login: "octocat", name: null });
+    } else if (url.pathname === "/user/repos") {
+      await json([repository]);
+    } else if (url.pathname === "/repos/octocat/onyx-vault") {
+      await json(repository);
+    } else if (url.pathname.endsWith("/git/ref/heads/main")) {
+      await json({ message: "Not Found" }, 404);
+    } else if (url.pathname.endsWith("/git/blobs")) {
+      await json({ sha: crypto.randomUUID() });
+    } else if (url.pathname.endsWith("/git/trees")) {
+      await json({ sha: "tree", tree: [] });
+    } else if (url.pathname.endsWith("/git/commits")) {
+      await json({ html_url: "https://github.com/c/new", sha: "c".repeat(40), tree: { sha: "t" } });
+    } else if (url.pathname.endsWith("/git/refs")) {
+      await json({ object: { sha: "c".repeat(40) } });
+    } else {
+      await route.abort();
+    }
+  });
+
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(page.getByText("@octocat").first()).toBeVisible({ timeout: 12_000 });
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Backup & sync", exact: true }).click();
+  await page.getByLabel("Repository", { exact: true }).selectOption("octocat/onyx-vault");
+  await page.getByRole("button", { name: "Use this repository" }).click();
+  await page.getByRole("checkbox", { name: /Back up automatically/ }).check();
+  await page.getByRole("button", { name: "Close settings" }).click();
+
+  await editor.fill("# Automatic\n\nSaved without pressing back up.");
+  await page.keyboard.press("ControlOrMeta+S");
+  await expect(page.getByText("Saving…", { exact: true })).toBeHidden();
+  await page.clock.fastForward("01:00");
+  expect(writes).toEqual([]);
+
+  await page.clock.fastForward("01:30");
+  await expect.poll(() => writes).toContain("POST /repos/octocat/onyx-vault/git/refs");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Backup & sync", exact: true }).click();
+  await expect(page.getByText("Up to date")).toBeVisible();
+});
