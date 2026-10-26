@@ -162,6 +162,16 @@ export class Vault {
     return this.#withLock(task);
   }
 
+  // A copy to restore if a deletion fails. The deletion still goes ahead when the stored file is
+  // already missing.
+  async #readForRollback(path: string): Promise<File | undefined> {
+    try {
+      return await this.#filesystem.read(path);
+    } catch {
+      return undefined;
+    }
+  }
+
   async requestPersistentStorage(): Promise<boolean> {
     try {
       const storage = navigator.storage;
@@ -428,13 +438,10 @@ export class Vault {
         (await this.#database.getNoteMarkdown(noteId)) ??
         (await this.#filesystem.readText(note.path).catch(() => ""));
       const attachmentFiles = await Promise.all(
-        attachments.map(async (attachment) => {
-          try {
-            return { attachment, file: await this.#filesystem.read(attachment.path) };
-          } catch {
-            return { attachment, file: undefined };
-          }
-        }),
+        attachments.map(async (attachment) => ({
+          attachment,
+          file: await this.#readForRollback(attachment.path),
+        })),
       );
       const now = new Date().toISOString();
       const operations: BackupOperation[] = [
@@ -740,12 +747,7 @@ export class Vault {
     return this.#withLock(async () => {
       const attachment = await this.#database.getAttachment(id);
       if (!attachment) return undefined;
-      let file: File | undefined;
-      try {
-        file = await this.#filesystem.read(attachment.path);
-      } catch {
-        // The metadata can still be removed when the stored file is already missing.
-      }
+      const file = await this.#readForRollback(attachment.path);
       const now = new Date().toISOString();
       const operation: BackupOperation = {
         id: crypto.randomUUID(),
@@ -781,13 +783,10 @@ export class Vault {
       if (targeted.length === 0) return [];
       const now = new Date().toISOString();
       const removed = await Promise.all(
-        targeted.map(async (attachment) => {
-          try {
-            return { attachment, file: await this.#filesystem.read(attachment.path) };
-          } catch {
-            return { attachment, file: undefined };
-          }
-        }),
+        targeted.map(async (attachment) => ({
+          attachment,
+          file: await this.#readForRollback(attachment.path),
+        })),
       );
       const operations: BackupOperation[] = targeted.map((attachment): BackupOperation => ({
         id: crypto.randomUUID(),
