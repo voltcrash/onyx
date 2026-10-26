@@ -6,7 +6,8 @@ import {
 } from "./database.js";
 import { detectBrowserStorageSupport } from "../browser-storage.js";
 import { normalizeAttachmentFolder, titleFromMarkdown } from "../markdown-utils.js";
-import { isPathWithin, movePath } from "../paths.js";
+import { isPathWithin, movePath, noteFilePath } from "../paths.js";
+import { linksToNote } from "../wikilinks.js";
 import { extractTags, normalizeTag, parseSearchQuery } from "../tags.js";
 import { VaultCoordination } from "./coordination.js";
 import { MirroredVaultFilesystem, VaultFilesystem } from "./filesystem.js";
@@ -341,6 +342,26 @@ export class Vault {
 
   async listNotes(): Promise<NoteMetadata[]> {
     return this.#withLock(async () => activeNotes(await this.#database.getNotes()));
+  }
+
+  /** Notes outside the trash that link to `noteId`, by title. */
+  async listBacklinks(noteId: string): Promise<NoteMetadata[]> {
+    return this.#withLock(async () => {
+      const [notes, contents] = await Promise.all([
+        this.#database.getNotes().then(activeNotes),
+        this.#database.getNoteContents(),
+      ]);
+      const target = notes.find((note) => note.id === noteId);
+      if (!target) return [];
+      const markdownById = new Map(contents.map((content) => [content.noteId, content.markdown]));
+      return notes
+        .filter(
+          (note) =>
+            note.id !== noteId &&
+            linksToNote(markdownById.get(note.id) ?? "", noteFilePath(note), target, notes),
+        )
+        .sort((left, right) => left.title.localeCompare(right.title));
+    });
   }
 
   async listTrashedNotes(): Promise<NoteMetadata[]> {

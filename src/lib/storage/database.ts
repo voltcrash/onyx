@@ -256,6 +256,10 @@ export class VaultDatabase {
     return this.#getAll<SearchDocument>("searchDocuments");
   }
 
+  getNoteContents(): Promise<Array<{ noteId: string; markdown: string }>> {
+    return this.#getAll<{ noteId: string; markdown: string }>("noteContents");
+  }
+
   async getNoteMarkdown(noteId: string): Promise<string | undefined> {
     const record = await this.#get<{ markdown: string }>("noteContents", noteId);
     return record?.markdown;

@@ -42,3 +42,44 @@ describe("utf8ByteLength", () => {
     }
   });
 });
+
+describe("Vault backlinks", () => {
+  const note = (id: string, sourcePath: string, deletedAt?: string) => ({
+    id,
+    title: sourcePath.replace(/^.*\//, "").replace(/\.md$/, ""),
+    path: `notes/${id}.md`,
+    tags: [],
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-01T00:00:00.000Z",
+    revision: 1,
+    size: 0,
+    sourcePath,
+    ...(deletedAt ? { deletedAt } : {}),
+  });
+
+  it("lists notes that link to a note by wiki link or relative link, excluding trash", async () => {
+    const database = {
+      getNotes: vi
+        .fn()
+        .mockResolvedValue([
+          note("target", "garden/Tomatoes.md"),
+          note("wiki", "Journal.md"),
+          note("relative", "garden/Plan.md"),
+          note("unrelated", "Other.md"),
+          note("trashed", "Old.md", "2026-10-02T00:00:00.000Z"),
+        ]),
+      getNoteContents: vi.fn().mockResolvedValue([
+        { noteId: "wiki", markdown: "Today [[Tomatoes]]." },
+        { noteId: "relative", markdown: "[plants](Tomatoes.md)" },
+        { noteId: "unrelated", markdown: "`[[Tomatoes]]`" },
+        { noteId: "trashed", markdown: "[[Tomatoes]]" },
+        { noteId: "target", markdown: "[[Tomatoes]]" },
+      ]),
+    };
+    const coordination = { runExclusive: <T>(task: () => Promise<T>) => task() };
+    const vault = Reflect.construct(Vault, [database, {}, coordination]) as Vault;
+
+    const backlinks = await vault.listBacklinks("target");
+    expect(backlinks.map(({ id }) => id)).toEqual(["wiki", "relative"]);
+  });
+});
