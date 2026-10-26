@@ -44,7 +44,7 @@ test("navigates relative notes with browser history and rendered fragments", asy
   await createNote("note-b.md", "# Note B\n\n[B to C](note-c.md)");
   await createNote("note-c.md", destination);
 
-  await page.getByRole("button", { name: "Note A", exact: true }).click();
+  await page.locator(".note-list").getByRole("button", { name: "Note A", exact: true }).click();
   await expect(editor).toHaveValue(/# Note A/);
   const relativeLink = page.getByRole("link", { name: "A to B", exact: true });
   for (const modifiers of [["Control"], ["Shift"], ["Alt"]] as const) {
