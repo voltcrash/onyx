@@ -1,3 +1,5 @@
+import { VERCEL_ENV } from "$app/env/private";
+import { publicPaths, discoveryPaths } from "#lib/site.ts";
 import { building } from "$app/env";
 import { getAuth, isGithubAuthConfigured } from "#lib/server/auth.ts";
 import { svelteKitHandler } from "better-auth/svelte-kit";
@@ -11,7 +13,6 @@ const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
   "X-Permitted-Cross-Domain-Policies": "none",
-  "X-Robots-Tag": "noindex, nofollow, noarchive, nosnippet",
 } as const;
 
 export const handle: Handle = async ({ event, resolve }) => {
@@ -24,6 +25,14 @@ export const handle: Handle = async ({ event, resolve }) => {
         })
     : await resolve(event);
   const headers = new Headers(response.headers);
+  const indexable =
+    response.status === 200 &&
+    [...publicPaths, ...discoveryPaths].includes(event.url.pathname) &&
+    (!VERCEL_ENV || VERCEL_ENV === "production");
+  headers.set(
+    "X-Robots-Tag",
+    indexable ? "index, follow, max-image-preview:large" : "noindex, nofollow",
+  );
 
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) headers.set(name, value);
   if (event.url.protocol === "https:") {

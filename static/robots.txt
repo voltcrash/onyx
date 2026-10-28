@@ -1,2 +1,6 @@
+# Public product pages are available to search engines and AI search crawlers.
 User-agent: *
-Disallow: /
+Allow: /
+Disallow: /api/
+
+Sitemap: https://onyx.voltcrash.com/sitemap.xml

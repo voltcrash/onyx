@@ -1,4 +1,6 @@
 <script lang="ts">
+	import './layout.css';
+	import Seo from '#lib/components/seo.svelte';
 	import MarkdownWorkspace from '#lib/components/markdown-workspace.svelte';
 	import NotesSidebar from '#lib/components/notes-sidebar.svelte';
 	import StatusNotices from '#lib/components/status-notices.svelte';
@@ -44,10 +46,7 @@
 	}
 </script>
 
-<svelte:head>
-	<title>onyx - a quiet place to think in markdown</title>
-	<meta name="description" content="A fast, local-first Markdown editor with full-text search that works offline." />
-</svelte:head>
+<Seo />
 
 <div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:sidebar-resizing={sidebarResizing} class:palette-open={page.paletteOpen} style={`--sidebar-width: ${page.sidebarWidth}px`} inert={page.settingsOpen || page.restoreModalOpen || page.imagePreview !== undefined}>
 	<NotesSidebar
@@ -135,6 +134,7 @@
 		onCloseFind={page.closeFind}
 		onOpenPalette={page.openPalette}
 		onClosePalette={page.closePalette}
+		onOpenAbout={(event) => void page.openAbout(event)}
 		onOpenSettings={() => page.openSettings('editor')}
 		onOpenStorageSettings={() => page.openSettings('storage')}
 		onMoveNoteFocus={page.moveNoteFocus}
