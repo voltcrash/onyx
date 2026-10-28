@@ -166,3 +166,9 @@ once with `vp run test:e2e:install`, then run `vp run test:e2e`. `vp run test` r
 
 The variables in `.env.example` enable optional GitHub backup and sync. Onyx runs locally without
 them.
+
+## Search discoverability
+
+Public product information lives at `/about`, with workflow guides for offline editing,
+local-first storage and GitHub backup. See [search discoverability](docs/search-discoverability.md)
+for indexing behavior, validation and production search-console setup.
