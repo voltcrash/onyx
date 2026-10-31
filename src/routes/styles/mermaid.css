@@ -24,10 +24,5 @@
   color: var(--danger);
   font-size: 0.85em;
   overflow-wrap: anywhere;
-}
-
-@media print {
-  .diagram-mermaid .pele-zoom {
-    display: none !important;
-  }
+  white-space: pre-wrap;
 }
