@@ -4,6 +4,7 @@
 	import type { FindMatch } from '#lib/find-replace.ts';
 	import type { EditorSelection } from '#lib/editor-history.ts';
 	import { MarkdownEditor } from '#lib/markdown-editor.ts';
+	import { enhanceMermaidPreview } from '#lib/mermaid-preview.ts';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '#lib/keyboard-shortcuts.ts';
 	import type { ColorTheme, ResolvedTheme } from '#lib/theme.ts';
 	import type { SourceLines } from '#lib/markdown-lite.ts';
@@ -74,7 +75,7 @@
 		if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 		const anchor = (event.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
 		if (!anchor || !renderedPaneElement?.contains(anchor)) return;
-		if (anchor.target.toLowerCase() === '_blank') return;
+		if (anchor.getAttribute('target')?.toLowerCase() === '_blank') return;
 		const { tag, wikilink } = anchor.dataset;
 		if (tag && onTag) return { open: () => onTag(tag) };
 		if (wikilink && onWikiLink && !anchor.classList.contains('wikilink-embed')) {
@@ -147,6 +148,16 @@
 		return () => {
 			instance.destroy();
 			if (editor === instance) editor = undefined;
+		};
+	}
+
+	function mountPreview(node: HTMLElement): () => void {
+		const cleanup = enhanceMermaidPreview(node);
+		const observer = new ResizeObserver(() => queueScrollSync(scrollDriver));
+		observer.observe(node);
+		return () => {
+			observer.disconnect();
+			cleanup();
 		};
 	}
 
@@ -489,7 +500,7 @@
 		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 		<div bind:this={renderedPaneElement} class="rendered-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} data-sveltekit-preload-data="false" data-sveltekit-preload-code="false" onmousedown={handleRenderedMouseDown} onclick={handleRenderedClick} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onwheelcapture={() => handlePaneInteraction('rendered')} onpointerdowncapture={() => handlePaneInteraction('rendered')} ontouchstartcapture={() => handlePaneInteraction('rendered')} onkeydowncapture={() => handlePaneInteraction('rendered')} onloadcapture={() => queueScrollSync(scrollDriver)}>
 			{#if hasContent}
-				<article class="prose">
+				<article class="prose" {@attach mountPreview}>
 					{#each keyedRenderedBlocks as block (block.key)}
 						{@html block.html}
 					{/each}

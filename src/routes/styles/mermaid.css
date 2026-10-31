@@ -1,0 +1,31 @@
+.diagram-mermaid {
+  --pele-bg: var(--paper);
+  --pele-fg: var(--ink-body);
+  --pele-muted: var(--muted);
+  --pele-line: var(--ink-soft);
+  --pele-surface: var(--surface-soft);
+  --pele-surface-alt: var(--subtle);
+  --pele-border: var(--line-hover);
+  --pele-accent: var(--accent);
+  --pele-critical: var(--danger);
+  --pele-error: var(--danger);
+  position: relative;
+  min-width: 0;
+  margin: 24px 0;
+  break-inside: avoid;
+}
+
+.diagram-mermaid > svg.pele {
+  display: block;
+  margin-inline: auto;
+}
+
+.prose .diagram-error > p {
+  color: var(--danger);
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+.diagram-error-line {
+  white-space: pre-wrap;
+}

@@ -41,6 +41,17 @@ Onyx renders Markdown much like GitHub does:
 
 Not sure of the syntax? Open the command palette and choose a formatting command such as *Heading*, *Task list*, *Callout* or *Math*.
 
+### Draw a diagram
+
+Put Mermaid syntax inside a fenced block to draw flowcharts, sequences, timelines and more:
+
+\`\`\`mermaid
+flowchart LR
+  Write --> Review --> Publish
+\`\`\`
+
+Diagrams follow your colors and fonts, fit the pane, and appear in HTML exports and printed PDFs. If a diagram is too wide to read, use its zoom buttons or focus it and press \`+\`, \`-\` and \`0\` to zoom and reset. Invalid syntax shows the error and keeps your source readable.
+
 ## Connect and organize your notes
 
 - **Wiki links:** type \`[[Note name]]\` to link to another note. Use \`[[Note name#Heading]]\` to jump to a section and \`[[Note name|label]]\` to change the link text. Each note lists the notes that link back to it at the bottom of the preview.

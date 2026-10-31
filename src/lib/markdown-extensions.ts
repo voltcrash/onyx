@@ -32,6 +32,7 @@ export interface MarkdownExtensionOptions {
 
 const OPAQUE_PARENTS = new Set([
   "code",
+  "diagram",
   "inlineCode",
   "html",
   "math",
@@ -149,6 +150,7 @@ function fencedDiagramNode(language: string, source: string): MdastNode {
     data: {
       hName: "pre",
       hProperties: { className: [`diagram`, `diagram-${language}`] },
+      hChildren: [{ type: "text", value: source }],
     },
     children: [{ type: "text", value: source }],
   };
@@ -165,8 +167,7 @@ function remarkFencedLanguage(language: string): Plugin<[]> {
   };
 }
 
-// GitHub renders ```mermaid fences as diagrams. Onyx emits a placeholder the
-// viewer lazy-loads Mermaid for; without it the source stays readable text.
+// Keep the source as text through sanitizing; the HTML pipeline renders it with Pele.
 export const remarkMermaid = remarkFencedLanguage("mermaid");
 
 // GitHub renders ```geojson fences as maps. Onyx has no map viewer, so valid

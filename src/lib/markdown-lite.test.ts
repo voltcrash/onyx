@@ -3,6 +3,15 @@ import { describe, expect, it } from "vite-plus/test";
 import { renderMarkdownBlocks } from "./markdown-lite.js";
 
 describe("renderMarkdownBlocks", () => {
+  it("keeps Mermaid fences mountable while typing without changing their source", () => {
+    const source = 'mindmap\n  root((Notes))\n    "<script> #tag [[label]]"';
+    const [block] = renderMarkdownBlocks(`\`\`\`MERMAID\n${source}\n\`\`\``);
+    expect(block?.html).toContain('class="diagram diagram-mermaid"');
+    expect(block?.html).toContain(`data-mermaid-source="${encodeURIComponent(source)}"`);
+    expect(block?.html).not.toContain("<script>");
+    expect(block?.lines).toEqual({ start: 0, end: 5 });
+  });
+
   it("renders wiki links with hrefs and inline tags", () => {
     const html = renderMarkdownBlocks("See [[My Plan#Next|plan]] for #work, ![[pic.png]].")
       .map((block) => block.html)
