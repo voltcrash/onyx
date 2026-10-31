@@ -54,7 +54,7 @@ const VOID_TAGS = new Set([
 ]);
 
 // Blocks whose text is significant, so their contents are copied through untouched.
-const PRESERVED_TAGS = new Set(["pre", "code", "textarea", "script", "style"]);
+const PRESERVED_TAGS = new Set(["pre", "code", "textarea", "script", "style", "svg"]);
 
 /**
  * Indents the rendered fragment for reading. Inline elements and preserved blocks keep their
@@ -167,6 +167,8 @@ export function createHtmlDocument({ title, body }: HtmlDocumentOptions): string
       li > p { margin: 0; }
       li > p + p { margin-top: 0.6em; }
       img { max-width: 100%; height: auto; }
+      .diagram-mermaid { margin: 1.5em 0; break-inside: avoid; }
+      .diagram-mermaid > svg { display: block; max-width: 100%; height: auto; margin-inline: auto; }
       table { width: 100%; border-collapse: collapse; }
       th, td { padding: 0.45em 0.7em; border: 1px solid rgb(128 128 128 / 0.35); }
       hr { border: 0; border-top: 1px solid rgb(128 128 128 / 0.35); }
