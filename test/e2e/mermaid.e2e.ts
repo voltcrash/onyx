@@ -4,11 +4,14 @@ import themeCatalog from "../../src/lib/theme-catalog.json" with { type: "json" 
 
 const preview = ".rendered-pane article";
 const diagramSvg = `${preview} .diagram-mermaid > svg`;
+let diagramNumber = 0;
 
 async function writeDiagram(page: Page, source: string) {
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(editor).toBeEnabled();
-  await editor.fill(mermaidFence(source));
+  const number = ++diagramNumber;
+  await editor.fill(`# Diagram ${number}\n\n${mermaidFence(source)}`);
+  await expect(page.locator(`${preview} #user-content-diagram-${number}`)).toBeVisible();
   await expect(page.locator(diagramSvg).first()).toBeVisible();
 }
 
@@ -21,6 +24,7 @@ test("renders all 33 built-in diagram types in the real Markdown worker", async 
   await editor.fill(
     mermaidExamples.map(([type, source]) => `## ${type}\n\n${mermaidFence(source)}`).join("\n\n"),
   );
+  await expect(page.locator(`${preview} h2#user-content-info`)).toHaveText("info");
   await expect(page.locator(diagramSvg)).toHaveCount(mermaidExamples.length);
   await expect(page.locator(`${preview} .diagram-error`)).toHaveCount(0);
   for (const [type] of mermaidExamples) {
@@ -76,8 +80,9 @@ test("keeps diagrams visible throughout typing and the settled worker render", a
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(editor).toBeEnabled();
   await editor.fill(
-    `${mermaidFence("flowchart TD\n A[Draft] --> B[Review] --> C[Published]")}\n\nParagraph below the diagram. `,
+    `# Typing regression\n\n${mermaidFence("flowchart TD\n A[Draft] --> B[Review] --> C[Published]")}\n\nParagraph below the diagram. `,
   );
+  await expect(page.locator(`${preview} #user-content-typing-regression`)).toBeVisible();
   await expect(page.locator(`${diagramSvg} text`).first()).toHaveText("Draft");
   await expect(page.locator(diagramSvg)).toHaveCSS("font-family", /Geist/);
   await editor.press("ControlOrMeta+End");
@@ -105,6 +110,7 @@ test("keeps diagrams visible throughout typing and the settled worker render", a
   expect(missing).toBe(0);
   expect(maxHeight - minHeight).toBeLessThan(1);
   await expect(page.locator(`${preview} p`).last()).toContainText("while writing.");
+  await expect(page.locator(`${preview} #user-content-typing-regression`)).toBeVisible();
 });
 
 test("adapts to mobile and pane widths and supports keyboard zoom", async ({ page }, testInfo) => {
@@ -213,9 +219,16 @@ test("keeps hostile diagrams inert, preserves image privacy, and handles SVG not
 test("renders without workers and continues editing offline", async ({ page, context }) => {
   await page.addInitScript(() => Object.defineProperty(window, "Worker", { value: undefined }));
   await page.goto("/");
-  await writeDiagram(page, "flowchart LR\n A[Offline] --> B[Ready]");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill(`# Online render\n\n${mermaidFence("flowchart LR\n A[Offline] --> B[Ready]")}`);
+  await expect(page.locator(`${preview} #user-content-online-render`)).toBeVisible();
+  await expect(page.locator(`${diagramSvg}.pele-flowchart`)).toBeVisible();
   await context.setOffline(true);
-  await writeDiagram(page, "sequenceDiagram\n Writer->>Onyx: Works offline");
+  await editor.fill(
+    `# Offline render\n\n${mermaidFence("sequenceDiagram\n Writer->>Onyx: Works offline")}`,
+  );
+  await expect(page.locator(`${preview} #user-content-offline-render`)).toBeVisible();
   await expect(page.locator(`${diagramSvg}.pele-sequence`)).toBeVisible();
 });
 
