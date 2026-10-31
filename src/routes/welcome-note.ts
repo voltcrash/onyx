@@ -34,7 +34,7 @@ Onyx renders Markdown much like GitHub does:
 - **Text:** headings, **bold**, *italic*, ~~strikethrough~~, ==highlights==, \`inline code\` and footnotes
 - **Structure:** bulleted, numbered and task lists, quotes, tables and dividers
 - **Code:** fenced code blocks with syntax highlighting
-- **Math:** \`$inline$\` and \`$$display$$\` equations
+- **Math:** \`$inline$\` equations, and display equations between lines of \`$$\`
 - **Callouts:** GitHub alerts such as \`> [!NOTE]\`, \`> [!TIP]\` and \`> [!WARNING]\`
 - **Diagrams:** \`mermaid\` code blocks
 - **Images and files:** paste or drop them into the editor and Onyx stores them with your notes
@@ -57,7 +57,7 @@ The command palette, ${key("commandPalette")}, is the fastest way to do anything
 
 ## Work offline
 
-Once Onyx has loaded online, it keeps working without a connection in the same browser. Your notes and search stay available offline. Only the first visit and GitHub backup need the internet.
+Once Onyx has loaded online, it keeps working without a connection in the same browser. Your notes and search stay available offline. Only the first visit and GitHub backup and restore need the internet.
 
 ## Where your notes live
 
@@ -84,7 +84,7 @@ GitHub backup is optional. It keeps an off-device copy of your vault in a privat
 3. Back up whenever you like, or turn on automatic backup to save two minutes after you stop editing.
 4. On another device, open Onyx, connect GitHub, and restore the vault from any backup.
 
-Your browser sends notes directly to GitHub; they do not pass through an Onyx server. Restoring replaces the notes on that device. If another device backed up newer changes, Onyx asks whether to restore them first or back up anyway. Earlier backups remain in the repository's history.
+Your browser sends notes directly to GitHub; they do not pass through an Onyx server. Restoring replaces the notes on that device. If another device backed up newer changes, a manual backup asks whether to restore them first or back up anyway. An automatic backup that fails or finds newer changes pauses until you back up manually. Earlier backups remain in the repository's history.
 
 ## Make it yours
 
