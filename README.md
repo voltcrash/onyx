@@ -150,7 +150,7 @@ Vercel deployment.
 
 ## Development
 
-Use the latest Node.js LTS release and Vite+ for project commands:
+Use Node.js 26 LTS (currently 26.13.0) and Vite+ for project commands:
 
 ```sh
 vp install
@@ -160,6 +160,10 @@ vp run check
 vp test
 vp run build
 ```
+
+TypeScript 7 provides the `tsc` command through the `@typescript/native` alias. SvelteKit and
+`svelte-check` still need the JavaScript compiler API, so the `typescript` alias uses Microsoft’s
+[`@typescript/typescript6` compatibility package](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6.0).
 
 `vp test` runs the unit tests. The end-to-end tests drive Chromium through Playwright; install it
 once with `vp run test:e2e:install`, then run `vp run test:e2e`. `vp run test` runs both suites.
