@@ -56,11 +56,6 @@
 </script>
 
 <section class="sidebar-panel find-panel" role="search" aria-label="Find and replace">
-	<div class="find-heading">
-		<div class="find-title"><Search size={16} /><div><strong>Find in note</strong><span>Search the open note</span></div></div>
-		<button class="icon-button find-close" type="button" aria-label="Close find and replace" title="Close find and replace (Esc)" onclick={onClose}><X size={17} /></button>
-	</div>
-
 	<div class="find-fields">
 		<label class="find-field">
 			<span class="visually-hidden">Find in note</span>

@@ -352,45 +352,11 @@
   padding: 1px 0 18px;
   scrollbar-width: thin;
 }
-.find-heading,
-.find-title,
 .find-navigation,
 .find-options,
 .find-replace-actions {
   display: flex;
   align-items: center;
-}
-.find-heading {
-  justify-content: space-between;
-  gap: 8px;
-  margin: 0 3px 18px;
-}
-.find-title {
-  min-width: 0;
-  gap: 8px;
-  color: var(--accent-quiet);
-}
-.find-title > div {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-.find-title strong {
-  overflow: hidden;
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.find-title span {
-  color: var(--faint);
-  font-size: 10px;
-}
-.find-close {
-  width: 29px;
-  height: 29px;
-  flex: 0 0 auto;
 }
 .find-fields {
   display: grid;
