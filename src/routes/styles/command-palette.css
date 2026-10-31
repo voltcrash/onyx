@@ -15,43 +15,6 @@
   flex-direction: column;
   overflow: hidden;
 }
-.palette-heading,
-.palette-title {
-  display: flex;
-  align-items: center;
-}
-.palette-heading {
-  justify-content: space-between;
-  gap: 8px;
-  margin: 0 3px 18px;
-}
-.palette-title {
-  min-width: 0;
-  gap: 8px;
-  color: var(--accent-quiet);
-}
-.palette-title > div {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-.palette-title strong {
-  overflow: hidden;
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.palette-title span {
-  color: var(--faint);
-  font-size: 10px;
-}
-.palette-close {
-  width: 29px;
-  height: 29px;
-  flex: 0 0 auto;
-}
 .palette-search-box {
   margin: 0 0 2px;
 }
