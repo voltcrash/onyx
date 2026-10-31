@@ -79,8 +79,12 @@ export function renderMarkdownBlocks(
       if (index < lines.length) index += 1;
       const label = codeLanguageLabel(language);
       const languageAttribute = label ? ` data-code-language="${escapeHtml(label)}"` : "";
+      const source = content.join("\n");
       blocks.push({
-        html: `<pre${languageAttribute}><code>${escapeHtml(content.join("\n"))}</code></pre>`,
+        html:
+          language.toLowerCase() === "mermaid"
+            ? `<div class="diagram diagram-mermaid" data-mermaid-source="${encodeURIComponent(source)}"><pre>${escapeHtml(source)}</pre></div>`
+            : `<pre${languageAttribute}><code>${escapeHtml(source)}</code></pre>`,
         element: true,
         lines: { start, end: index },
       });

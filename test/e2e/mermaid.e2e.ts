@@ -71,6 +71,42 @@ test("recovers after invalid input, rapid edits, and switching notes", async ({ 
   await expect(page.locator(`${diagramSvg}.pele-flowchart`)).toHaveCount(0);
 });
 
+test("keeps diagrams visible throughout typing and the settled worker render", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill(
+    `${mermaidFence("flowchart TD\n A[Draft] --> B[Review] --> C[Published]")}\n\nParagraph below the diagram. `,
+  );
+  await expect(page.locator(`${diagramSvg} text`).first()).toHaveText("Draft");
+  await expect(page.locator(diagramSvg)).toHaveCSS("font-family", /Geist/);
+  await editor.press("ControlOrMeta+End");
+  const frames = page.evaluate(
+    () =>
+      new Promise<{ missing: number; minHeight: number; maxHeight: number }>((resolve) => {
+        let remaining = 150;
+        let missing = 0;
+        let minHeight = Infinity;
+        let maxHeight = 0;
+        function measure() {
+          const svg = document.querySelector(".rendered-pane .diagram-mermaid > svg");
+          if (!svg) missing += 1;
+          const height = svg?.getBoundingClientRect().height ?? 0;
+          minHeight = Math.min(minHeight, height);
+          maxHeight = Math.max(maxHeight, height);
+          if (--remaining) requestAnimationFrame(measure);
+          else resolve({ missing, minHeight, maxHeight });
+        }
+        requestAnimationFrame(measure);
+      }),
+  );
+  await page.keyboard.type("Keep this diagram visible while writing.", { delay: 25 });
+  const { missing, minHeight, maxHeight } = await frames;
+  expect(missing).toBe(0);
+  expect(maxHeight - minHeight).toBeLessThan(1);
+  await expect(page.locator(`${preview} p`).last()).toContainText("while writing.");
+});
+
 test("adapts to mobile and pane widths and supports keyboard zoom", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
