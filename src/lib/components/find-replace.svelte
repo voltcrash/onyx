@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ChevronDown, ChevronUp, Search, X } from '@lucide/svelte';
+	import { ChevronDown, ChevronUp, Replace, Search, X } from '@lucide/svelte';
 	import { formatShortcut, type PrimaryModifier } from '#lib/keyboard-shortcuts.ts';
 
 	interface Props {
@@ -70,7 +70,7 @@
 		</div>
 
 		<label class="find-field replace-field">
-			<span class="find-replace-glyph" aria-hidden="true">↔</span>
+			<Replace size={15} aria-hidden="true" />
 			<span class="visually-hidden">Replace with</span>
 			<input bind:this={replaceInput} type="text" value={replacement} placeholder="Replace with" aria-label="Replace with" autocomplete="off" spellcheck="false" oninput={(event) => onReplacementChange(event.currentTarget.value)} onkeydown={handleReplaceKeydown} />
 		</label>

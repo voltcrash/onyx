@@ -379,6 +379,9 @@
   border-color: var(--focus-border);
   box-shadow: 0 0 0 2px var(--focus-ring);
 }
+.find-field > svg {
+  flex: 0 0 auto;
+}
 .find-field input {
   min-width: 0;
   flex: 1;
@@ -443,7 +446,6 @@
 .find-fields .replace-field {
   grid-column: 1 / -1;
 }
-.find-replace-glyph,
 .find-option-glyph {
   display: inline-grid;
   place-items: center;
@@ -451,10 +453,6 @@
   color: var(--muted);
   font-size: 12px;
   font-weight: 650;
-}
-.find-replace-glyph {
-  width: 15px;
-  font-size: 16px;
 }
 .find-options {
   gap: 6px;
