@@ -2193,15 +2193,6 @@ export function createPageController() {
     transferMessage = error instanceof Error && error.message ? error.message : fallback;
   }
 
-  async function openAbout(event: MouseEvent): Promise<void> {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-      return;
-    event.preventDefault();
-    if (!(await settleDraft()) || transferState === "working" || markdown !== lastSavedMarkdown)
-      return;
-    await goto("/about");
-  }
-
   async function settleDraft(): Promise<boolean> {
     if (markdown !== lastSavedMarkdown) return saveDraft();
     if (saveTimer) window.clearTimeout(saveTimer);
@@ -3535,7 +3526,6 @@ export function createPageController() {
     copyFilePath,
     changeNotePage,
     saveDraft,
-    openAbout,
     openVault,
     dismissStorageNotice,
     toggleSidebar,
