@@ -74,7 +74,7 @@
 		if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 		const anchor = (event.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
 		if (!anchor || !renderedPaneElement?.contains(anchor)) return;
-		if (anchor.target.toLowerCase() === '_blank') return;
+		if (anchor.getAttribute('target')?.toLowerCase() === '_blank') return;
 		const { tag, wikilink } = anchor.dataset;
 		if (tag && onTag) return { open: () => onTag(tag) };
 		if (wikilink && onWikiLink && !anchor.classList.contains('wikilink-embed')) {
