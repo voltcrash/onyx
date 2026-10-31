@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectMarkdown } from "./helpers.ts";
 
 for (const { device, width } of [
   { device: "desktop", width: 1440 },
@@ -27,6 +28,14 @@ for (const { device, width } of [
         )
         .toBeLessThanOrEqual(1);
     };
+    await expectLineSizedFragments();
+
+    await editor.press("a");
+    await expectMarkdown(editor, "a");
+    await expect(placeholder).toHaveCount(0);
+    await editor.press("Backspace");
+    await expectMarkdown(editor, "");
+    await expect(placeholder).toBeVisible();
     await expectLineSizedFragments();
   });
 }
