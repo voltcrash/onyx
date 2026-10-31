@@ -348,7 +348,8 @@
 }
 .find-panel {
   overflow-y: auto;
-  padding: 1px 4px 18px;
+  margin-inline: -5px;
+  padding: 1px 0 18px;
   scrollbar-width: thin;
 }
 .find-heading,
