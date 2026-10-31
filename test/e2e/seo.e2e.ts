@@ -37,20 +37,13 @@ test("sitemap and AI discovery list only public product pages", async ({ request
 });
 
 test("errors and authentication responses remain excluded", async ({ request }) => {
-  for (const path of ["/guides/missing", "/missing", "/api/auth/get-session"]) {
+  for (const path of ["/missing", "/api/auth/get-session"]) {
     const response = await request.get(`http://localhost:4173${path}`);
     expect(response.headers()["x-robots-tag"]).toContain("noindex");
   }
-});
-
-test("product pages work with JavaScript disabled", async ({ browser }) => {
-  const context = await browser.newContext({ javaScriptEnabled: false });
-  const page = await context.newPage();
-  await page.goto("http://localhost:4173/about");
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await expect(page.locator("#startup-shell")).toBeHidden();
-  await page.getByRole("link", { name: guides[0].title }).first().click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(guides[0].title);
-  await expect(page.getByRole("link", { name: "Open Onyx and start writing" })).toBeVisible();
-  await context.close();
+  for (const path of ["/about", "/guides/offline-markdown-editor"]) {
+    const response = await request.get(`http://localhost:4173${path}`);
+    expect(response.status()).toBe(404);
+    expect(response.headers()["x-robots-tag"]).toContain("noindex");
+  }
 });

@@ -120,7 +120,7 @@ export const structuredData = {
   ],
 };
 
-export const publicPaths = ["/", "/about", ...guides.map(({ slug }) => `/guides/${slug}`)];
+export const publicPaths = ["/"];
 export const discoveryPaths = ["/robots.txt", "/sitemap.xml", "/llms.txt"];
 export const canonicalUrl = (path: string) => new URL(path, SITE_URL).href;
 export const serializeJsonLd = (value: unknown) => JSON.stringify(value).replaceAll("<", "\\u003c");
