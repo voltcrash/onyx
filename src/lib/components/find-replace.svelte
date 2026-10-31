@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ChevronDown, ChevronUp, Search, X } from '@lucide/svelte';
+	import { ChevronDown, ChevronUp, Replace, Search, X } from '@lucide/svelte';
 	import { formatShortcut, type PrimaryModifier } from '#lib/keyboard-shortcuts.ts';
 
 	interface Props {
@@ -56,11 +56,6 @@
 </script>
 
 <section class="sidebar-panel find-panel" role="search" aria-label="Find and replace">
-	<div class="find-heading">
-		<div class="find-title"><Search size={16} /><div><strong>Find in note</strong><span>Search the open note</span></div></div>
-		<button class="icon-button find-close" type="button" aria-label="Close find and replace" title="Close find and replace (Esc)" onclick={onClose}><X size={17} /></button>
-	</div>
-
 	<div class="find-fields">
 		<label class="find-field">
 			<span class="visually-hidden">Find in note</span>
@@ -75,7 +70,7 @@
 		</div>
 
 		<label class="find-field replace-field">
-			<span class="find-replace-glyph" aria-hidden="true">↔</span>
+			<Replace size={15} aria-hidden="true" />
 			<span class="visually-hidden">Replace with</span>
 			<input bind:this={replaceInput} type="text" value={replacement} placeholder="Replace with" aria-label="Replace with" autocomplete="off" spellcheck="false" oninput={(event) => onReplacementChange(event.currentTarget.value)} onkeydown={handleReplaceKeydown} />
 		</label>

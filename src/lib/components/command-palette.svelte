@@ -33,7 +33,7 @@
 </script>
 
 <script lang="ts">
-	import { LoaderCircle, Search, X } from '@lucide/svelte';
+	import { LoaderCircle, Search } from '@lucide/svelte';
 
 	interface Props {
 		items: PaletteItem[];
@@ -185,11 +185,6 @@
 
 	<section id="command-palette" class="palette-panel" role="search" aria-label="Command palette" aria-busy={loading}>
 	<div class="palette">
-		<div class="palette-heading">
-			<div class="palette-title"><Search size={16} /><div><strong id="command-palette-title">Command palette</strong><span id="command-palette-description">Search notes or run a command</span></div></div>
-			<button class="icon-button palette-close" type="button" aria-label="Close command palette" title="Close command palette (Esc)" onclick={onClose}><X size={17} /></button>
-		</div>
-
 		<label class="search-box palette-search-box">
 			<span class="visually-hidden">Search notes and commands</span>
 			<Search size={15} aria-hidden="true" />
@@ -200,8 +195,7 @@
 				role="combobox"
 				aria-expanded="true"
 				aria-controls="palette-list"
-				aria-labelledby="command-palette-title"
-				aria-describedby="command-palette-description palette-result-count"
+				aria-describedby="palette-result-count"
 				aria-activedescendant={matches[activeIndex] ? `palette-${matches[activeIndex].id}` : undefined}
 				aria-label="Search notes and commands"
 				placeholder="Search notes or commands…"
