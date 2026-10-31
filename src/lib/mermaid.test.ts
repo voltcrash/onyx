@@ -123,6 +123,16 @@ describe("Mermaid diagrams", () => {
     }
   });
 
+  it("preserves error lines without exposing HTML formatting indentation", () => {
+    const html = renderMarkdown(mermaidFence("flowchart TD\n A --> ["));
+    const error = html.match(/<p role="status">([\s\S]*?)<\/p>/)?.[1] ?? "";
+    expect(error).toContain("<br>");
+    expect(error).toContain('class="diagram-error-line"');
+    expect(error).not.toContain("\n");
+    const document = createHtmlDocument({ title: "Invalid diagram", body: formatHtmlSource(html) });
+    expect(document).toContain(error);
+  });
+
   it("keeps hostile labels, URLs, callbacks, errors, and authored SVG inert", () => {
     const markdown = `${mermaidFence('flowchart LR\n A["<script>alert(1)</script>"] --> B\n click A "javascript:alert(1)"\n click B callback')}\n\n${mermaidFence("<img src=x onerror=alert(1)>")}\n\n<svg onload="alert(1)"><script>alert(1)</script></svg>`;
     const html = renderMarkdown(markdown);

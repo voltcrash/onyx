@@ -24,5 +24,8 @@
   color: var(--danger);
   font-size: 0.85em;
   overflow-wrap: anywhere;
+}
+
+.diagram-error-line {
   white-space: pre-wrap;
 }

@@ -183,7 +183,7 @@ export function createHtmlDocument({ title, body }: HtmlDocumentOptions): string
       img { max-width: 100%; height: auto; }
       .diagram-mermaid { --pele-bg: Canvas; --pele-fg: CanvasText; --pele-line: CanvasText; --pele-muted: GrayText; --pele-surface: color-mix(in srgb, CanvasText 6%, Canvas); --pele-surface-alt: color-mix(in srgb, CanvasText 12%, Canvas); --pele-border: GrayText; margin: 1.5em 0; break-inside: avoid; }
       .diagram-mermaid > svg { display: block; max-width: 100%; height: auto; margin-inline: auto; }
-      .diagram-error > p { white-space: pre-wrap; }
+      .diagram-error-line { white-space: pre-wrap; }
       table { width: 100%; border-collapse: collapse; }
       th, td { padding: 0.45em 0.7em; border: 1px solid rgb(128 128 128 / 0.35); }
       hr { border: 0; border-top: 1px solid rgb(128 128 128 / 0.35); }

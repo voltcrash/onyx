@@ -337,6 +337,7 @@ const renderMermaidDiagrams: Plugin<[]> = () => (tree) => {
       // Only Pele's escaped, URL-filtered SVG bypasses the authored-HTML sanitizer.
       node.children = [{ type: "raw", value: svg }];
     } catch (error) {
+      const message = `Unable to render Mermaid diagram: ${error instanceof Error ? error.message : "Unknown error"}`;
       node.tagName = "div";
       node.properties = { className: ["diagram", "diagram-mermaid", "diagram-error"] };
       node.children = [
@@ -344,12 +345,15 @@ const renderMermaidDiagrams: Plugin<[]> = () => (tree) => {
           type: "element",
           tagName: "p",
           properties: { role: "status" },
-          children: [
+          children: message.split("\n").flatMap((line, index): MarkdownTreeNode[] => [
+            ...(index ? [{ type: "element", tagName: "br" }] : []),
             {
-              type: "text",
-              value: `Unable to render Mermaid diagram: ${error instanceof Error ? error.message : "Unknown error"}`,
+              type: "element",
+              tagName: "span",
+              properties: { className: ["diagram-error-line"] },
+              children: [{ type: "text", value: line }],
             },
-          ],
+          ]),
         },
         { type: "element", tagName: "pre", children: [{ type: "text", value: source }] },
       ];
