@@ -110,6 +110,19 @@ describe("Mermaid diagrams", () => {
     expect(JSON.stringify(renderMarkdownTree(markdown))).not.toContain("<svg");
   });
 
+  it("preserves the complete SVG byte for byte when exporting diagrams with nested icons", () => {
+    for (const source of [
+      '---\nconfig:\n  treeView:\n    showIcons: true\n---\ntreeView-beta\n  "project"\n    "package.json"\n    "src"\n      "app.ts"',
+      "architecture-beta\n  service app(server)[Onyx]\n  service db(database)[Notes]\n  app:R --> L:db",
+    ]) {
+      const html = renderMarkdown(mermaidFence(source));
+      const svg = html.slice(html.indexOf("<svg"), html.lastIndexOf("</svg>") + 6);
+      expect(svg.match(/<svg\b/g)?.length).toBeGreaterThan(1);
+      expect(formatHtmlSource(html)).toContain(svg);
+      expect(formatHtmlSource(`${html}<p>After</p>`).endsWith("<p>\n  After\n</p>")).toBe(true);
+    }
+  });
+
   it("keeps hostile labels, URLs, callbacks, errors, and authored SVG inert", () => {
     const markdown = `${mermaidFence('flowchart LR\n A["<script>alert(1)</script>"] --> B\n click A "javascript:alert(1)"\n click B callback')}\n\n${mermaidFence("<img src=x onerror=alert(1)>")}\n\n<svg onload="alert(1)"><script>alert(1)</script></svg>`;
     const html = renderMarkdown(markdown);

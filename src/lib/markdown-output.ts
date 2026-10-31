@@ -94,7 +94,21 @@ export function formatHtmlSource(html: string): string {
     }
     if (PRESERVED_TAGS.has(name) && !closing) {
       const closeIndex = html.toLowerCase().indexOf(`</${name}`, end + 1);
-      const closeEnd = closeIndex === -1 ? -1 : html.indexOf(">", closeIndex);
+      let closeEnd = closeIndex === -1 ? -1 : html.indexOf(">", closeIndex);
+      if (name === "svg") {
+        closeEnd = -1;
+        const tags = /<\/?svg\b[^>]*>/gi;
+        tags.lastIndex = start;
+        let nesting = 0;
+        for (let match; (match = tags.exec(html));) {
+          if (match[0].startsWith("</")) nesting -= 1;
+          else if (!match[0].endsWith("/>")) nesting += 1;
+          if (nesting === 0) {
+            closeEnd = tags.lastIndex - 1;
+            break;
+          }
+        }
+      }
       const block = html.slice(start, closeEnd === -1 ? html.length : closeEnd + 1);
       flushText();
       lines.push(`${"  ".repeat(depth)}${block}`);
