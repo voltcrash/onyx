@@ -19,6 +19,8 @@ adds private backup and cross-device restore.
   only the source lines near the viewport.
 - Syntax-highlight fenced code blocks and show a short language label when the opening fence names
   a language; the same markup is preserved in rich-text, PDF, and HTML output.
+- Render Mermaid fences as diagrams with [Pele](https://pele.run/), including responsive layouts,
+  theme colors, and keyboard zoom. Diagrams also appear in HTML exports and printed PDFs.
 - Point just beside the divider to reveal a pane's grip, drag it to any side of the workspace to place the panes side by side or stacked, and drag the divider to resize them.
 - Copy or export notes as plain text, rich text, generated HTML, or a printed-page PDF. Plain text
   copies to the clipboard or downloads as a text file, rich
