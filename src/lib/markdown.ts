@@ -10,6 +10,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
+import { render as renderMermaid } from "pele";
 import { unified, type Plugin } from "unified";
 
 import {
@@ -269,7 +270,8 @@ function createHtmlProcessor(dialect: MarkdownDialect) {
       .use(rehypeKatex, { output: "mathml" })
       .use(prefixInternalLinks)
       .use(resolveMarkdownUrls)
-      .use(rehypeStringify)
+      .use(renderMermaidDiagrams)
+      .use(rehypeStringify, { allowDangerousHtml: true })
   );
 }
 
@@ -310,6 +312,50 @@ function markdownProcessor(dialect: MarkdownDialect = "onyx") {
 function noHandler(): undefined {
   return undefined;
 }
+
+const renderMermaidDiagrams: Plugin<[]> = () => (tree) => {
+  let index = 0;
+  visit(tree as MarkdownTreeNode, (node) => {
+    if (
+      node.tagName !== "pre" ||
+      !Array.isArray(node.properties?.className) ||
+      !node.properties.className.includes("diagram-mermaid")
+    )
+      return;
+    const source = node.children?.map((child) => child.value ?? "").join("") ?? "";
+    try {
+      const { svg } = renderMermaid(source, {
+        idPrefix: `onyx-mermaid-${index++}`,
+        images: activeUrls.remoteImages === "allow",
+        linkRel: "noopener noreferrer",
+      });
+      node.tagName = "div";
+      node.properties = {
+        className: ["diagram", "diagram-mermaid"],
+        "data-mermaid-source": encodeURIComponent(source),
+      };
+      // Only Pele's escaped, URL-filtered SVG bypasses the authored-HTML sanitizer.
+      node.children = [{ type: "raw", value: svg }];
+    } catch (error) {
+      node.tagName = "div";
+      node.properties = { className: ["diagram", "diagram-mermaid", "diagram-error"] };
+      node.children = [
+        {
+          type: "element",
+          tagName: "p",
+          properties: { role: "status" },
+          children: [
+            {
+              type: "text",
+              value: `Unable to render Mermaid diagram: ${error instanceof Error ? error.message : "Unknown error"}`,
+            },
+          ],
+        },
+        { type: "element", tagName: "pre", children: [{ type: "text", value: source }] },
+      ];
+    }
+  });
+};
 
 const addCodeLanguage: Plugin<[]> = () => (tree) => {
   visit(tree as MarkdownTreeNode, (node) => {

@@ -398,7 +398,7 @@ describe("github markdown compatibility", () => {
   it("recognizes Mermaid fences as diagrams instead of code", () => {
     const html = renderMarkdown("```mermaid\ngraph TD;\n  A-->B;\n```");
     expect(html).toContain("diagram-mermaid");
-    expect(html).toContain("graph TD;");
+    expect(html).toContain("<svg");
     expect(html).not.toContain("language-mermaid");
   });
 
