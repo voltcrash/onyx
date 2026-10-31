@@ -430,7 +430,9 @@
 .hide-leading-scrollbar.panes-swapped .rendered-pane::-webkit-scrollbar {
   display: none;
 }
-.source-editor .cm-placeholder {
+.source-editor .cm-editor .cm-placeholder {
+  /* Keep the native caret on the first line of a multiline placeholder. */
+  display: inline;
   color: var(--faint);
 }
 .source-editor .cm-content ::selection {
