@@ -18,13 +18,11 @@ for (const path of publicPaths) {
     expect(html).toContain('property="og:title"');
     expect(html).toContain('name="twitter:card"');
     expect(html).toContain('name="description"');
-    if (path !== "/") {
-      expect(html).toContain("<h1");
-      const scripts = [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)];
-      expect(scripts.length).toBeGreaterThan(0);
-      for (const script of scripts)
-        expect(JSON.parse(script[1])["@context"]).toBe("https://schema.org");
-    }
+    expect(html).toContain("<h1");
+    const scripts = [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)];
+    expect(scripts.length).toBeGreaterThan(0);
+    for (const script of scripts)
+      expect(JSON.parse(script[1])["@context"]).toBe("https://schema.org");
   });
 }
 

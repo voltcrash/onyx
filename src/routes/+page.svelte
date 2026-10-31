@@ -1,6 +1,7 @@
 <script lang="ts">
 	import './layout.css';
 	import Seo from '#lib/components/seo.svelte';
+	import { structuredData } from '#lib/site.ts';
 	import MarkdownWorkspace from '#lib/components/markdown-workspace.svelte';
 	import NotesSidebar from '#lib/components/notes-sidebar.svelte';
 	import StatusNotices from '#lib/components/status-notices.svelte';
@@ -46,7 +47,7 @@
 	}
 </script>
 
-<Seo />
+<Seo {structuredData} />
 
 <div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:sidebar-resizing={sidebarResizing} class:palette-open={page.paletteOpen} style={`--sidebar-width: ${page.sidebarWidth}px`} inert={page.settingsOpen || page.restoreModalOpen || page.imagePreview !== undefined}>
 	<NotesSidebar
