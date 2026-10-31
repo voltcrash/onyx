@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { canonicalUrl, publicPaths, guides } from "../../src/lib/site.ts";
+import { canonicalUrl, publicPaths } from "../../src/lib/site.ts";
 
 for (const path of publicPaths) {
   test(`public HTML is indexable without JavaScript: ${path}`, async ({ request }) => {
@@ -32,8 +32,9 @@ test("sitemap and AI discovery list only public product pages", async ({ request
   expect(rules).toContain(`Sitemap: ${canonicalUrl("/sitemap.xml")}`);
   const llms = await request.get("http://localhost:4173/llms.txt");
   expect(llms.headers()["content-type"]).toContain("text/plain");
-  for (const guide of guides)
-    expect(await llms.text()).toContain(canonicalUrl(`/guides/${guide.slug}`));
+  const reference = await llms.text();
+  expect(reference).toContain(`(${canonicalUrl("/")})`);
+  expect(reference).not.toMatch(/\/about|\/guides/);
 });
 
 test("errors and authentication responses remain excluded", async ({ request }) => {

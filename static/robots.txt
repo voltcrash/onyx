@@ -1,4 +1,4 @@
-# Public product pages are available to search engines and AI search crawlers.
+# Onyx is available to search engines and AI search crawlers.
 User-agent: *
 Allow: /
 Disallow: /api/
