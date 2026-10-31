@@ -173,6 +173,7 @@ them.
 
 ## Search discoverability
 
-Public product information lives at `/about`, with workflow guides for offline editing,
-local-first storage and GitHub backup. See [search discoverability](docs/search-discoverability.md)
-for indexing behavior, validation and production search-console setup.
+Onyx explains itself in the welcome note that opens on first visit, in
+`src/routes/welcome-note.ts`. It is server-rendered at `/`, so search engines read it too. See
+[search discoverability](docs/search-discoverability.md) for indexing behavior, validation and
+production search-console setup.
