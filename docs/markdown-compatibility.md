@@ -73,6 +73,8 @@ script, CDN, or network connection. Markdown, plain text, and RTF downloads reta
 the source. Clipboard rich text includes SVG; display depends on the receiving app.
 Preview images are disabled to preserve Onyx's image privacy policy; HTML exports
 allow Pele's safe image URLs. URL links work, including relative Markdown note links.
+Diagram links to heading fragments and local attachments keep their original paths;
+Onyx does not normalize those destinations inside SVG.
 
 [Pele's compatibility differences](https://pele.run/compatibility) still apply:
 layout differs from Mermaid.js, arbitrary HTML labels and JavaScript callbacks
