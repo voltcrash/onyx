@@ -98,7 +98,6 @@
 		onCloseFind: () => void;
 		onOpenPalette: () => void;
 		onClosePalette: () => void;
-		onOpenAbout: (event: MouseEvent) => void;
 		onOpenSettings: () => void;
 		onOpenStorageSettings: () => void;
 		onMoveNoteFocus: (event: KeyboardEvent) => void;
@@ -113,7 +112,7 @@
 		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSidebarDragStart, sidebarSide, onSidebarSideChange, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onSetFolderIcon, onSetFolderPinned, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, trashedNotes, trashOpen, onToggleTrash, onRestoreFile, onPurgeFile, onEmptyTrash, onCopyFilePath, onCopyFileAs, onExportFileAs, onSearch,
 		onSetNotePinned,
 		onFindQueryChange, onFindReplacementChange, onFindMatchCaseChange, onFindWholeWordChange, onFindPrevious, onFindNext, onFindReplace, onFindReplaceAll, onCloseFind,
-		onOpenPalette, onClosePalette, onOpenAbout, onOpenSettings, onOpenStorageSettings, onMoveNoteFocus, onSelectNote, onChangePage,
+		onOpenPalette, onClosePalette, onOpenSettings, onOpenStorageSettings, onMoveNoteFocus, onSelectNote, onChangePage,
 		onContentWidthChange
 	}: Props = $props();
 
@@ -1052,7 +1051,6 @@
 			aria-label={`${wordCount} words, ${readingMinutes} minute reading time, ${docStatusLabel}. Open local storage settings.`}
 			onclick={onOpenStorageSettings}
 		><span class="doc-status-text">{wordCount} {wordCount === 1 ? 'word' : 'words'} · {readingMinutes} min · {docStatusLabel}</span><i class="doc-status-dot" aria-hidden="true"></i></button>
-		<a class="icon-button" href="/about" onclick={onOpenAbout} aria-label="About Onyx and Markdown guides" title="About Onyx">?</a>
 		<button class="icon-button" aria-label="Settings" aria-haspopup="dialog" aria-expanded={settingsOpen} aria-controls="settings-dialog" title="Settings" onclick={onOpenSettings}><Settings size={18} /></button>
 	</div>
 </aside>

@@ -135,7 +135,6 @@
 		onCloseFind={page.closeFind}
 		onOpenPalette={page.openPalette}
 		onClosePalette={page.closePalette}
-		onOpenAbout={(event) => void page.openAbout(event)}
 		onOpenSettings={() => page.openSettings('editor')}
 		onOpenStorageSettings={() => page.openSettings('storage')}
 		onMoveNoteFocus={page.moveNoteFocus}
