@@ -129,6 +129,17 @@ test("adapts to mobile and pane widths and supports keyboard zoom", async ({ pag
   const svg = page.locator(diagramSvg);
   await expect(page.locator(`${preview} .pele-zoom-in`)).toBeVisible();
   await expect(svg).toHaveAttribute("tabindex", "0");
+  // Pele resets zoom in an animation frame after its resize observer runs.
+  await svg.evaluate(
+    (element) =>
+      new Promise<void>((resolve) => {
+        const observer = new ResizeObserver(() => {
+          observer.disconnect();
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        });
+        observer.observe(element);
+      }),
+  );
   const fitted = await svg.getAttribute("viewBox");
   await svg.focus();
   await svg.press("+");
