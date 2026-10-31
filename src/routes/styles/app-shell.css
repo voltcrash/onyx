@@ -177,7 +177,7 @@
   content: "";
   position: absolute;
   inset: 0 auto 0 4px;
-  width: 2px;
+  width: 1px;
   background: var(--accent-quiet);
   opacity: 0;
   transition: opacity 0.15s ease;
