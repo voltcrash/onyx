@@ -183,8 +183,11 @@
   transition: opacity 0.15s ease;
 }
 .sidebar-resize:hover::after,
-.sidebar-resize:focus-visible::after,
 .sidebar-resizing .sidebar-resize::after {
+  opacity: 0.65;
+}
+.sidebar-resize:focus-visible::after {
+  background: var(--accent-quiet);
   opacity: 1;
 }
 .sidebar-collapsed .sidebar-resize {
