@@ -178,7 +178,7 @@
   position: absolute;
   inset: 0 auto 0 4px;
   width: 1px;
-  background: var(--accent-quiet);
+  background: var(--line-hover);
   opacity: 0;
   transition: opacity 0.15s ease;
 }
