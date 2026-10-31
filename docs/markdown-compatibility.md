@@ -14,7 +14,7 @@ Markdown source
 → remark-rehype with raw HTML → rehype-raw
 → heading slugs and generated markup
 → rehype-sanitize (narrow allowlist)
-→ syntax highlighting, math typesetting, link resolution
+→ syntax highlighting, math typesetting, link resolution, Pele SVG diagrams
 → renderer → preview styles
 ```
 
@@ -42,13 +42,51 @@ hard breaks (two-space and backslash; single newlines do not break).
   style attributes are stripped.
 - Math: `$…$`, `$$…$$`, ````math`fences, and the alternate`$`…`$` inline
   syntax (KaTeX output; GitHub uses a different engine).
-- Diagrams: ``mermaid`, ``geojson`, ````topojson`, ````stl` fences are
-  recognized. Mermaid renders client-side when loaded; geographic/model
-  fences show a structural summary plus source instead of GitHub's
+- Diagrams: `mermaid` fences render as SVG with Pele; `geojson`, `topojson`,
+  and `stl` fences show a structural summary plus source instead of GitHub's
   interactive viewers.
 - Heading anchors use `github-slugger` (via `rehype-slug`) with a
   `user-content-` prefix; `#section` links are re-pointed after sanitizing.
 - Emoji shortcodes (`:tada:`) via `remark-gemoji`.
+
+### Mermaid diagrams
+
+Use a fenced block with the `mermaid` language:
+
+````markdown
+```mermaid
+flowchart LR
+  Draft --> Review --> Published
+```
+````
+
+[Pele](https://pele.run/) renders all 33 built-in Mermaid diagram families.
+Onyx renders static SVG in its Markdown worker, then enhances the preview with
+container-aware layout, measured fonts, and zoom. Changing color themes updates
+diagram colors immediately. Changing fonts or resizing a pane updates the layout.
+For diagrams too wide to read at their fitted size, use the zoom buttons, pinch,
+Ctrl/Command + wheel, or focus the diagram and press `+`, `-`, and `0` to zoom/reset.
+Arrow keys pan a zoomed diagram; ordinary wheel scrolling still scrolls the note.
+
+HTML exports and the PDF print view include static diagrams without requiring a
+script, CDN, or network connection. Markdown, plain text, and RTF downloads retain
+the source. Clipboard rich text includes SVG; display depends on the receiving app.
+Preview images are disabled to preserve Onyx's image privacy policy; HTML exports
+allow Pele's safe image URLs. URL links work, including relative Markdown note links.
+
+[Pele's compatibility differences](https://pele.run/compatibility) still apply:
+layout differs from Mermaid.js, arbitrary HTML labels and JavaScript callbacks
+are not supported, external plugins such as ZenUML are unavailable, and Onyx does
+not supply custom icon or math resolvers (math labels retain their TeX source).
+Pele's default limits remain in place: 50,000 source characters, 4,000,000 SVG
+characters, and 5,000 edges in flowcharts/agentflow. Invalid, unsupported, or
+oversized diagrams show an escaped error and the original source while the rest
+of the note continues rendering.
+
+`src/lib/mermaid.test.ts` covers every built-in family, aliases, source preservation,
+accessibility, error isolation, safe URLs, and exports. `test/e2e/mermaid.e2e.ts`
+checks the actual worker and browser behavior, mobile zoom, fonts, every color
+theme in light/dark modes, CSP, note links, offline editing, and print/HTML output.
 
 ## 3. Onyx-only extensions — intentionally different
 
