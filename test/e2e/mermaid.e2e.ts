@@ -270,4 +270,11 @@ test("exports diagrams as standalone SVG and prints the complete unzoomed diagra
   await expect(page.locator(".diagram-mermaid > svg")).toBeVisible();
   await expect(page.locator(".diagram-mermaid svg text").first()).toHaveText("Draft");
   await expect(page.locator("script")).toHaveCount(0);
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    const ink = await page.locator("body").evaluate((element) => getComputedStyle(element).color);
+    await expect(page.locator(".diagram-mermaid svg text").first()).toHaveCSS("fill", ink);
+    await expect(page.locator(".diagram-mermaid .pele-edge path").first()).toHaveCSS("stroke", ink);
+    await page.screenshot({ path: testInfo.outputPath(`mermaid-export-${colorScheme}.png`) });
+  }
 });
