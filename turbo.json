@@ -1,0 +1,24 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "globalPassThroughEnv": ["NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "NPM_CONFIG_CAFILE"],
+  "tasks": {
+    "ci:lint": {
+      "tags": ["ci"]
+    },
+    "ci:check": {
+      "tags": ["ci"]
+    },
+    "ci:unit": {
+      "tags": ["ci"]
+    },
+    "ci:build": {
+      "outputs": [".svelte-kit/**", ".vercel/output/**"],
+      "tags": ["ci"]
+    },
+    "ci:e2e": {
+      "cache": false,
+      "env": ["CI"],
+      "tags": ["ci", "ci:os:ubuntu"]
+    }
+  }
+}
