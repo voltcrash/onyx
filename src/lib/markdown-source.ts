@@ -68,11 +68,14 @@ export function parseMarkdownSource(source: string): SourceNode {
   return tree;
 }
 
-export function visitProse(node: SourceNode, visit: (node: SourceNode) => void): void {
-  if (opaque.has(node.type)) return;
-  visit(node);
-  if (node.type === "link" || node.type === "linkReference") return;
-  for (const child of node.children ?? []) visitProse(child, visit);
+export function visitProse(node: SourceNode, visit: (node: SourceNode) => void | boolean): boolean {
+  if (opaque.has(node.type)) return true;
+  if (visit(node) === false) return false;
+  if (node.type === "link" || node.type === "linkReference") return true;
+  for (const child of node.children ?? []) {
+    if (!visitProse(child, visit)) return false;
+  }
+  return true;
 }
 
 export function plainText(node: SourceNode): string {

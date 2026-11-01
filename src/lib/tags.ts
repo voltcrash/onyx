@@ -48,7 +48,9 @@ export function extractTags(markdown: string): string[] {
     }
   }
 
-  visitProse(parseMarkdownSource(lines.slice(index).join("\n")), (parent) => {
+  const prose = lines.slice(index).join("\n");
+  if (!/#\S/u.test(prose)) return [...tags].sort();
+  visitProse(parseMarkdownSource(prose), (parent) => {
     if (parent.type === "link" || parent.type === "linkReference") return;
     for (const child of parent.children ?? []) {
       if (child.type !== "text") continue;

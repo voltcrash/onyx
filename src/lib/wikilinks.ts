@@ -92,7 +92,7 @@ export function linksToNote<T extends LinkableNote>(
   target: T,
   notes: T[],
 ): boolean {
-  if (!markdown.includes("[")) return false;
+  if (!markdown.includes("[[") && !/\]\s*[:(]/.test(markdown)) return false;
   const tree = parseMarkdownSource(markdown);
   const definitions = new Map<string, string>();
   visitProse(tree, (node) => {
@@ -108,6 +108,7 @@ export function linksToNote<T extends LinkableNote>(
   const targetPath = noteFilePath(target).toLocaleLowerCase();
   let found = false;
   visitProse(tree, (node: SourceNode) => {
+    if (found) return false;
     if (node.type === "text") {
       for (const match of (node.value ?? "").matchAll(WIKI_LINK)) {
         if (
