@@ -564,13 +564,32 @@ export function toggleInlineSyntax(
   placeholder = "text",
 ): WrapSelectionEdit {
   const selection = value.slice(start, end) || placeholder;
+  let left = start;
+  let right = end;
+  while (
+    value.slice(left - before.length, left) !== before ||
+    value.slice(right, right + after.length) !== after
+  ) {
+    const inner = ["**", "_"].find(
+      (marker) =>
+        left >= marker.length &&
+        value.slice(left - marker.length, left) === marker &&
+        value.slice(right, right + marker.length) === marker,
+    );
+    if (!inner) break;
+    left -= inner.length;
+    right += inner.length;
+  }
   if (
-    start >= before.length &&
-    value.slice(start - before.length, start) === before &&
-    value.slice(end, end + after.length) === after
+    left >= before.length &&
+    value.slice(left - before.length, left) === before &&
+    value.slice(right, right + after.length) === after
   ) {
     return {
-      value: value.slice(0, start - before.length) + selection + value.slice(end + after.length),
+      value:
+        value.slice(0, left - before.length) +
+        value.slice(left, right) +
+        value.slice(right + after.length),
       start: start - before.length,
       end: start - before.length + selection.length,
     };

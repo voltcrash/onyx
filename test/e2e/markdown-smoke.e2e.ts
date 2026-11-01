@@ -40,7 +40,7 @@ test("toggles formatting shortcuts and pastes literal link labels", async ({ pag
   await expect(editor).toBeEnabled();
   await editor.fill("three");
   await editor.press("ControlOrMeta+A");
-  for (const key of ["b", "i", "i", "b"]) {
+  for (const key of ["b", "i", "b", "i"]) {
     await editor.press(`ControlOrMeta+${key}`);
     await page.evaluate(
       () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
