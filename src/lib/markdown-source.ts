@@ -9,6 +9,7 @@ export interface SourceNode {
   url?: string;
   alt?: string;
   identifier?: string;
+  literal?: number[];
   children?: SourceNode[];
   position?: { start: { offset?: number }; end: { offset?: number } };
 }
@@ -28,9 +29,8 @@ export function preserveLiteralSyntax(node: SourceNode, source: string): void {
     const end = child.position?.end.offset;
     if (start === undefined || end === undefined) return [child];
     const raw = source.slice(start, end);
-    const parts: SourceNode[] = [];
+    const literal: number[] = [];
     const value = child.value ?? "";
-    let cursor = 0;
     let decodedOffset = 0;
     let rawOffset = 0;
     for (const match of raw.matchAll(
@@ -41,19 +41,15 @@ export function preserveLiteralSyntax(node: SourceNode, source: string): void {
         if (raw[rawOffset] === value[decodedOffset]) decodedOffset += 1;
         rawOffset += 1;
       }
-      const literal = match[0].startsWith("\\")
+      const decoded = match[0].startsWith("\\")
         ? match[0].slice(1)
         : plainText(parser.parse(match[0]) as SourceNode);
-      if (decodedOffset > cursor)
-        parts.push({ type: "text", value: value.slice(cursor, decodedOffset) });
-      parts.push({ type: "literal", value: literal });
-      decodedOffset += literal.length;
-      cursor = decodedOffset;
+      for (let index = 0; index < decoded.length; index++) literal.push(decodedOffset + index);
+      decodedOffset += decoded.length;
       rawOffset = match.index + match[0].length;
     }
-    if (!parts.length) return [child];
-    if (cursor < value.length) parts.push({ type: "text", value: value.slice(cursor) });
-    return parts;
+    if (literal.length) child.literal = literal;
+    return [child];
   });
 }
 
@@ -77,4 +73,22 @@ export function visitProse(node: SourceNode, visit: (node: SourceNode) => void):
 export function plainText(node: SourceNode): string {
   if (node.type === "image" || node.type === "imageReference") return node.alt ?? "";
   return node.value ?? node.children?.map(plainText).join("") ?? "";
+}
+
+export function literalAt(node: SourceNode, start: number, length = 1): boolean {
+  return node.literal?.some((offset) => offset >= start && offset < start + length) ?? false;
+}
+
+export function sliceText(
+  node: SourceNode,
+  start: number,
+  end = node.value?.length ?? 0,
+): Pick<SourceNode, "type" | "value" | "literal"> {
+  return {
+    type: "text",
+    value: node.value?.slice(start, end) ?? "",
+    literal: node.literal
+      ?.filter((offset) => offset >= start && offset < end)
+      .map((offset) => offset - start),
+  };
 }

@@ -1,4 +1,4 @@
-import { parseMarkdownSource, visitProse } from "./markdown-source.js";
+import { literalAt, parseMarkdownSource, visitProse } from "./markdown-source.js";
 
 // A tag starts after whitespace or at a line start, so URL fragments, entities and heading markers
 // are not tags. It needs one non-digit, which keeps issue references like #42 as plain text.
@@ -50,12 +50,17 @@ export function extractTags(markdown: string): string[] {
 
   visitProse(parseMarkdownSource(lines.slice(index).join("\n")), (parent) => {
     if (parent.type === "link" || parent.type === "linkReference") return;
-    for (const [childIndex, child] of (parent.children ?? []).entries()) {
+    for (const child of parent.children ?? []) {
       if (child.type !== "text") continue;
-      const previous = parent.children?.[childIndex - 1];
-      const value = (child.value ?? "").replace(/!?\[\[[^\]\n]+\]\]/g, " ");
+      const value = child.value ?? "";
+      const wikiRanges = [...value.matchAll(/!?\[\[[^\]\n]+\]\]/g)];
       for (const match of value.matchAll(INLINE_TAG)) {
-        if (match.index === 0 && previous?.type === "literal" && !/\s$/.test(previous.value ?? ""))
+        if (
+          literalAt(child, match.index) ||
+          wikiRanges.some(
+            (wiki) => match.index >= wiki.index && match.index < wiki.index + wiki[0].length,
+          )
+        )
           continue;
         add(match[1]!);
       }

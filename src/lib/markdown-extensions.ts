@@ -1,3 +1,4 @@
+import { literalAt, sliceText } from "./markdown-source.js";
 import type { Plugin } from "unified";
 import { INLINE_TAG, normalizeTag } from "./tags.js";
 import { wikiLinkHref } from "./wikilinks.js";
@@ -17,6 +18,7 @@ export interface MdastNode {
     hChildren?: MdastNode[];
   };
   lang?: string;
+  literal?: number[];
   position?: { start: { line: number; offset?: number }; end: { line: number; offset?: number } };
   type: string;
   value?: string;
@@ -135,14 +137,16 @@ export const remarkGithubInlineMath: Plugin<[]> = () => (tree, file) => {
         first.type === "text" &&
         (first.value ?? "").endsWith("$") &&
         !(first.value ?? "").endsWith("$$") &&
+        !literalAt(first, (first.value ?? "").length - 1) &&
         code?.type === "inlineCode" &&
         (code.value ?? "") !== "" &&
         last?.type === "text" &&
         (last.value ?? "").startsWith("$") &&
-        !(last.value ?? "").startsWith("$$")
+        !(last.value ?? "").startsWith("$$") &&
+        !literalAt(last, 0)
       ) {
         const head = first.value!.slice(0, -1);
-        if (head) result.push({ type: "text", value: head });
+        if (head) result.push(sliceText(first, 0, first.value!.length - 1));
         const value = code.value ?? "";
         result.push({
           type: "inlineMath",
@@ -154,7 +158,7 @@ export const remarkGithubInlineMath: Plugin<[]> = () => (tree, file) => {
           },
         });
         const tail = last.value!.slice(1);
-        if (tail) result.push({ type: "text", value: tail });
+        if (tail) result.push(sliceText(last, 1));
         index += 3;
       } else {
         result.push(first);
@@ -331,7 +335,7 @@ export const remarkWikiLinks: Plugin<[MarkdownExtensionOptions?]> = (options) =>
       const children = parent.children ?? [];
       if (!children.some((child) => child.type === "text" && child.value?.includes("[["))) return;
       parent.children = children.flatMap((child) =>
-        child.type === "text" ? splitWikiLinks(child.value ?? "") : [child],
+        child.type === "text" ? splitWikiLinks(child) : [child],
       );
     },
     true,
@@ -347,15 +351,8 @@ export const remarkTags: Plugin<[MarkdownExtensionOptions?]> = (options) => (tre
       if (parent.type === "link" || parent.type === "wikiLink" || parent.type === "tag") return;
       const children = parent.children ?? [];
       if (!children.some((child) => child.type === "text" && child.value?.includes("#"))) return;
-      parent.children = children.flatMap((child, index) =>
-        child.type === "text"
-          ? splitTags(
-              child.value ?? "",
-              index > 0 &&
-                children[index - 1]?.type === "literal" &&
-                !/\s$/.test(children[index - 1]?.value ?? ""),
-            )
-          : [child],
+      parent.children = children.flatMap((child) =>
+        child.type === "text" ? splitTags(child) : [child],
       );
     },
     true,
@@ -376,7 +373,7 @@ export const remarkCallouts: Plugin<[MarkdownExtensionOptions?]> = (options) => 
       if (first?.type !== "text") continue;
       const [line, ...rest] = (first.value ?? "").split("\n");
       const marker = line?.match(CALLOUT_MARKER);
-      if (!marker) continue;
+      if (!marker || literalAt(first, 0, marker[0].indexOf("]") + 1)) continue;
       const kind = marker[1]!.toLowerCase();
       const githubAlert = (GITHUB_ALERT_TYPES as readonly string[]).includes(kind);
       if (githubAlert && nested) continue;
@@ -440,13 +437,16 @@ function capitalize(value: string): string {
   return value.slice(0, 1).toUpperCase() + value.slice(1);
 }
 
-function splitWikiLinks(value: string): MdastNode[] {
+function splitWikiLinks(child: MdastNode): MdastNode[] {
+  const value = child.value ?? "";
   const nodes: MdastNode[] = [];
   let cursor = 0;
   for (const match of value.matchAll(WIKI_LINK)) {
     const [raw, embed, target, label] = match;
     const start = match.index;
-    if (start > cursor) nodes.push({ type: "text", value: value.slice(cursor, start) });
+    if (literalAt(child, start + (embed ? 1 : 0), 2) || literalAt(child, start + raw.length - 2, 2))
+      continue;
+    if (start > cursor) nodes.push(sliceText(child, cursor, start));
     cursor = start + raw.length;
     nodes.push({
       type: "wikiLink",
@@ -461,19 +461,20 @@ function splitWikiLinks(value: string): MdastNode[] {
       children: [{ type: "text", value: (label ?? target)!.trim() }],
     });
   }
-  if (cursor === 0) return [{ type: "text", value }];
-  if (cursor < value.length) nodes.push({ type: "text", value: value.slice(cursor) });
+  if (cursor === 0) return [child];
+  if (cursor < value.length) nodes.push(sliceText(child, cursor));
   return nodes;
 }
 
-function splitTags(value: string, blockedStart = false): MdastNode[] {
+function splitTags(child: MdastNode): MdastNode[] {
+  const value = child.value ?? "";
   const nodes: MdastNode[] = [];
   let cursor = 0;
   for (const match of value.matchAll(INLINE_TAG)) {
-    if (blockedStart && match.index === 0) continue;
+    if (literalAt(child, match.index)) continue;
     const tag = normalizeTag(match[1]!);
     if (!tag) continue;
-    if (match.index > cursor) nodes.push({ type: "text", value: value.slice(cursor, match.index) });
+    if (match.index > cursor) nodes.push(sliceText(child, cursor, match.index));
     cursor = match.index + match[0].length;
     nodes.push({
       type: "tag",
@@ -484,8 +485,8 @@ function splitTags(value: string, blockedStart = false): MdastNode[] {
       children: [{ type: "text", value: match[0] }],
     });
   }
-  if (cursor === 0) return [{ type: "text", value }];
-  if (cursor < value.length) nodes.push({ type: "text", value: value.slice(cursor) });
+  if (cursor === 0) return [child];
+  if (cursor < value.length) nodes.push(sliceText(child, cursor));
   return nodes;
 }
 
@@ -516,7 +517,12 @@ function wrapDelimited(children: MdastNode[], delimiter: string, tagName: string
       index !== -1;
       index = value.indexOf(delimiter, cursor)
     ) {
-      if (index > cursor) tokens.push({ kind: "text", value: value.slice(cursor, index) });
+      if (index > cursor) tokens.push({ kind: "node", node: sliceText(child, cursor, index) });
+      if (literalAt(child, index, delimiter.length)) {
+        tokens.push({ kind: "node", node: sliceText(child, index, index + delimiter.length) });
+        cursor = index + delimiter.length;
+        continue;
+      }
       cursor = index + delimiter.length;
       const before = index === 0 ? "" : value[index - 1]!;
       const after = value[cursor] ?? "";
@@ -526,7 +532,7 @@ function wrapDelimited(children: MdastNode[], delimiter: string, tagName: string
         canClose: before === "" || !/\s/.test(before),
       });
     }
-    if (cursor < value.length) tokens.push({ kind: "text", value: value.slice(cursor) });
+    if (cursor < value.length) tokens.push({ kind: "node", node: sliceText(child, cursor) });
   }
 
   const result: Token[] = [];
@@ -566,6 +572,11 @@ function mergeText(nodes: MdastNode[]): MdastNode[] {
   for (const node of nodes) {
     const previous = merged.at(-1);
     if (node.type === "text" && previous?.type === "text") {
+      const length = previous.value?.length ?? 0;
+      previous.literal = [
+        ...(previous.literal ?? []),
+        ...(node.literal ?? []).map((offset) => offset + length),
+      ];
       previous.value = `${previous.value ?? ""}${node.value ?? ""}`;
     } else {
       merged.push(node);

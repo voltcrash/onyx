@@ -286,3 +286,12 @@ it("preserves multiline quote text around escaped extension markers", () => {
   expect(html).toContain("first\nsecond #literal\nthird");
   expect(html).not.toContain("&gt; second");
 });
+
+it("keeps decoded wiki names intact while checking only delimiter provenance", () => {
+  expect(renderMarkdown("[[A &amp; B]]")).toContain('href="A%20%26%20B.md"');
+  expect(renderMarkdown(String.raw`[[Note\_name]]`)).toContain('href="Note_name.md"');
+  expect(renderMarkdown(String.raw`\*#literal`)).not.toContain('class="tag"');
+  expect(renderMarkdown(String.raw`==before \*literal\* after==`)).toContain(
+    "<mark>before *literal* after</mark>",
+  );
+});

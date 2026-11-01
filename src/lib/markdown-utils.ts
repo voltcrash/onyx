@@ -1,4 +1,4 @@
-import { parseMarkdownSource, plainText, type SourceNode } from "./markdown-source.js";
+import { literalAt, parseMarkdownSource, plainText, type SourceNode } from "./markdown-source.js";
 import {
   basename,
   decodePath,
@@ -22,7 +22,10 @@ export function titleFromMarkdown(value: string, fallback = "Untitled"): string 
     if (node.type === "text")
       return (node.value ?? "").replace(
         /!?\[\[([^\]|\n]+)(?:\|([^\]\n]+))?\]\]/g,
-        (_raw, target: string, alias?: string) => (alias ?? target).trim(),
+        (raw, target: string, alias: string | undefined, offset: number) =>
+          literalAt(node, offset, 2) || literalAt(node, offset + raw.length - 2, 2)
+            ? raw
+            : (alias ?? target).trim(),
       );
     return node.children?.map(label).join("") ?? plainText(node);
   }

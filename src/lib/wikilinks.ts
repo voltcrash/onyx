@@ -1,4 +1,4 @@
-import { parseMarkdownSource, visitProse, type SourceNode } from "./markdown-source.js";
+import { literalAt, parseMarkdownSource, visitProse, type SourceNode } from "./markdown-source.js";
 import {
   decodePath,
   encodePath,
@@ -110,7 +110,12 @@ export function linksToNote<T extends LinkableNote>(
   visitProse(tree, (node: SourceNode) => {
     if (node.type === "text") {
       for (const match of (node.value ?? "").matchAll(WIKI_LINK)) {
-        if (match[1]) continue;
+        if (
+          match[1] ||
+          literalAt(node, match.index, 2) ||
+          literalAt(node, match.index + match[0].length - 2, 2)
+        )
+          continue;
         const { name } = splitWikiTarget(match[2]!);
         if (name && resolveWikiLink(notes, name, sourcePath)?.id === target.id) found = true;
       }
