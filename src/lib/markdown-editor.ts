@@ -130,7 +130,7 @@ export class MarkdownEditor {
         doc: options.doc,
         extensions: [
           this.#editable.of([EditorView.editable.of(true), EditorState.readOnly.of(false)]),
-          markdownLanguage({ base: gfmLanguage, addKeymap: false }),
+          markdownLanguage({ base: gfmLanguage, addKeymap: false, pasteURLAsLink: false }),
           syntaxHighlighting(markdownHighlighting),
           EditorView.lineWrapping,
           placeholder(options.placeholder),
