@@ -70,3 +70,10 @@ it("indexes only active prose tags", () => {
 it("does not index inline tags inside math", () => {
   expect(extractTags("$x #math$ and #prose")).toEqual(["prose"]);
 });
+
+it("indexes tags inside literal wiki brackets", () => {
+  for (const markdown of [String.raw`\[\[foo #bar]]`, "&#91;&#91;foo #bar]]"]) {
+    expect(extractTags(markdown)).toEqual(["bar"]);
+  }
+  expect(extractTags("[[foo #bar]]")).toEqual([]);
+});

@@ -53,7 +53,11 @@ export function extractTags(markdown: string): string[] {
     for (const child of parent.children ?? []) {
       if (child.type !== "text") continue;
       const value = child.value ?? "";
-      const wikiRanges = [...value.matchAll(/!?\[\[[^\]\n]+\]\]/g)];
+      const wikiRanges = [...value.matchAll(/!?\[\[[^\]\n]+\]\]/g)].filter(
+        (wiki) =>
+          !literalAt(child, wiki.index + (wiki[0].startsWith("!") ? 1 : 0), 2) &&
+          !literalAt(child, wiki.index + wiki[0].length - 2, 2),
+      );
       for (const match of value.matchAll(INLINE_TAG)) {
         if (
           literalAt(child, match.index) ||
