@@ -56,3 +56,26 @@ describe("normalizeTag", () => {
     expect(normalizeTag("'Quoted'")).toBe("quoted");
   });
 });
+
+it("indexes only active prose tags", () => {
+  expect(
+    extractTags(String.raw`\#escaped &#35;entity \\#boundary #real [**#label**](x) [#reference][r]
+
+[r]: x
+
+    #code`),
+  ).toEqual(["real"]);
+});
+
+it("does not index inline tags inside math", () => {
+  expect(extractTags("$x #math$ and #prose")).toEqual(["prose"]);
+  expect(extractTags("$5 #price $10")).toEqual(["price"]);
+  expect(extractTags("> $5 and\n> more #q $10")).toEqual(["q"]);
+});
+
+it("indexes tags inside literal wiki brackets", () => {
+  for (const markdown of [String.raw`\[\[foo #bar]]`, "&#91;&#91;foo #bar]]"]) {
+    expect(extractTags(markdown)).toEqual(["bar"]);
+  }
+  expect(extractTags("[[foo #bar]]")).toEqual([]);
+});

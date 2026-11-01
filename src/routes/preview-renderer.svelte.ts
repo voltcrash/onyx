@@ -30,9 +30,8 @@ export interface PreviewRendererHost {
 }
 
 /**
- * Renders the settled preview. The lite renderer handles first paint and active input, and the
- * preview upgrades once the worker, or the main-thread renderer where workers are unavailable,
- * finishes the full render.
+ * Keeps the last full preview during edits while the worker prepares its replacement.
+ * The lite renderer handles first paint; unavailable workers use the main-thread parser.
  */
 export function createPreviewRenderer(host: PreviewRendererHost) {
   let markdownModule: MarkdownModule | undefined;
@@ -42,11 +41,19 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
   let renderWorker: MarkdownRenderWorker | null | undefined;
   let workerPreview = $state.raw<WorkerPreview>();
   let pendingWorkerPreview: (PreviewKey & { done: Promise<void> }) | undefined;
+  let renderSequence = 0;
+  let displayedSequence = 0;
 
   const blocks = $derived.by(() => {
     const source = host.source();
     const preview = workerPreview;
-    if (preview && matches(preview, source)) return preview.blocks;
+    if (
+      preview &&
+      renderWorker !== null &&
+      preview.noteSourcePath === host.noteSourcePath() &&
+      preview.attachments === host.attachments()
+    )
+      return preview.blocks;
     void revision;
     return renderOnPage(source);
   });
@@ -55,7 +62,7 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
     const source = host.source();
     const attachments = host.attachments();
     const noteSourcePath = host.noteSourcePath();
-    untrack(() => void render(source, attachments, noteSourcePath));
+    untrack(() => void render(source, { attachments, noteSourcePath }));
   });
 
   function loadMarkdownModule(): Promise<MarkdownModule> {
@@ -66,8 +73,7 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
     }));
   }
 
-  // While the worker renders, the lite renderer stands in; the full renderer only runs on
-  // the main thread when workers are unavailable.
+  // Only first paint uses lite output; edits retain full blocks until the worker answers.
   function renderOnPage(source: string): RenderedBlock[] {
     return (
       (renderWorker === null
@@ -101,13 +107,13 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
    */
   async function render(
     source: string,
-    attachments = host.attachments(),
-    noteSourcePath = host.noteSourcePath(),
+    context = { attachments: host.attachments(), noteSourcePath: host.noteSourcePath() },
   ): Promise<void> {
+    const { attachments, noteSourcePath } = context;
     if (workerPreview && matches(workerPreview, source, attachments, noteSourcePath)) return;
     const pending = pendingWorkerPreview;
     if (pending && matches(pending, source, attachments, noteSourcePath)) return pending.done;
-    const done = renderInWorker(source, attachments, noteSourcePath);
+    const done = renderInWorker(source, attachments, noteSourcePath, ++renderSequence);
     const request = { source, attachments, noteSourcePath, done };
     pendingWorkerPreview = request;
     try {
@@ -121,12 +127,16 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
     source: string,
     attachments: LocalAttachmentUrl[],
     noteSourcePath: string | undefined,
+    sequence: number,
   ): Promise<void> {
     const current = worker();
     if (current) {
       try {
         const rendered = await current.render({ source, noteSourcePath, attachments });
-        if (rendered) workerPreview = { source, attachments, noteSourcePath, blocks: rendered };
+        if (rendered && sequence > displayedSequence) {
+          displayedSequence = sequence;
+          workerPreview = { source, attachments, noteSourcePath, blocks: rendered };
+        }
         return;
       } catch {
         renderWorker = null;

@@ -1,3 +1,4 @@
+import { literalAt, parseMarkdownSource, visitProse, type SourceNode } from "./markdown-source.js";
 import {
   decodePath,
   encodePath,
@@ -15,7 +16,6 @@ interface LinkableNote {
 }
 
 const WIKI_LINK = /(!?)\[\[([^\]|\n]+?)(?:\|[^\]\n]+?)?\]\]/g;
-const MARKDOWN_LINK = /(!?)\[[^\]\n]*\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g;
 const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
 const INLINE_CODE = /(`+)[\s\S]*?\1/g;
 
@@ -92,21 +92,49 @@ export function linksToNote<T extends LinkableNote>(
   target: T,
   notes: T[],
 ): boolean {
-  if (!markdown.includes("[[") && !markdown.includes("](")) return false;
-  const prose = stripCode(markdown);
-  for (const match of prose.matchAll(WIKI_LINK)) {
-    if (match[1]) continue;
-    const { name } = splitWikiTarget(match[2]!);
-    if (name && resolveWikiLink(notes, name, sourcePath)?.id === target.id) return true;
-  }
-  const targetPath = noteFilePath(target);
-  for (const match of prose.matchAll(MARKDOWN_LINK)) {
-    if (match[1]) continue;
-    const destination = match[2]!.replace(/[?#].*$/, "");
-    if (!isMarkdownPath(destination) || /^[a-z][a-z\d+.-]*:/i.test(destination)) continue;
-    if (resolveRelativePath(parentPath(sourcePath), decodePath(destination)) === targetPath) {
-      return true;
+  if (!markdown.includes("[[") && !/\]\s*[:(]/.test(markdown)) return false;
+  const tree = parseMarkdownSource(markdown);
+  const definitions = new Map<string, string>();
+  visitProse(tree, (node) => {
+    if (
+      node.type === "definition" &&
+      node.identifier &&
+      node.url &&
+      !definitions.has(node.identifier)
+    ) {
+      definitions.set(node.identifier, node.url);
     }
-  }
-  return false;
+  });
+  const targetPath = noteFilePath(target).toLocaleLowerCase();
+  let found = false;
+  visitProse(tree, (node: SourceNode) => {
+    if (found) return false;
+    if (node.type === "text") {
+      for (const match of (node.value ?? "").matchAll(WIKI_LINK)) {
+        if (
+          match[1] ||
+          literalAt(node, match.index, 2) ||
+          literalAt(node, match.index + match[0].length - 2, 2)
+        )
+          continue;
+        const { name } = splitWikiTarget(match[2]!);
+        if (name && resolveWikiLink(notes, name, sourcePath)?.id === target.id) found = true;
+      }
+    }
+    const destination =
+      node.type === "link"
+        ? node.url
+        : node.type === "linkReference"
+          ? definitions.get(node.identifier ?? "")
+          : undefined;
+    if (!destination) return;
+    const path = destination.replace(/[?#].*$/, "");
+    if (!isMarkdownPath(path) || /^(?:[a-z][a-z\d+.-]*:|[\\/])/i.test(path)) return;
+    if (
+      resolveRelativePath(parentPath(sourcePath), decodePath(path))?.toLocaleLowerCase() ===
+      targetPath
+    )
+      found = true;
+  });
+  return found;
 }

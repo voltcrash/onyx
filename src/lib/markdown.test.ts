@@ -9,6 +9,23 @@ import {
   titleFromMarkdown,
 } from "./markdown.js";
 
+it("keeps prose formatting, escapes, and tags between currency dollars", () => {
+  const html = renderMarkdown(String.raw`$5 **and** \& &#38; #price $10`);
+  expect(html).toContain("<strong>and</strong>");
+  expect(html).not.toContain("\\");
+  expect(html).not.toContain("<math");
+  expect(html).toContain('data-tag="price"');
+});
+
+it("retains multiline currency prose inside quotes and callouts", () => {
+  for (const prefix of ["", "[!NOTE]\n> "]) {
+    const html = renderMarkdown(`> ${prefix}$5 and\n> more #q $10`);
+    expect(html).toContain("$5 and\nmore");
+    expect(html).toContain('data-tag="q"');
+    expect(html).toContain("$10");
+  }
+});
+
 describe("titleFromMarkdown", () => {
   it("ignores YAML and TOML front matter", () => {
     expect(titleFromMarkdown("---\ntitle: Hidden\n---\n\n# Heading")).toBe("Heading");
@@ -254,4 +271,56 @@ A note[^1].
       undefined,
     ]);
   });
+});
+
+describe("literal extension delimiters", () => {
+  it("respects escapes, entities and escaped callout markers", () => {
+    const html =
+      renderMarkdown(String.raw`\#literal \[[Literal note]] \==literal mark== &#35;tag &#91;[Entity]] ==no\==
+
+> \[!NOTE]
+> literal`);
+    expect(html).not.toMatch(/class="(?:tag|wikilink|callout)|<mark>/);
+    expect(html).toContain("#literal [[Literal note]] ==literal mark== #tag [[Entity]]");
+  });
+  it("keeps even backslashes distinct from escaped openers", () => {
+    expect(renderMarkdown(String.raw`\\[[Note]]`)).toContain('class="wikilink"');
+    expect(renderMarkdown(String.raw`\\\[[Note]]`)).not.toContain('class="wikilink"');
+  });
+  it("does not create anchors inside formatted inline or reference link labels", () => {
+    const html = renderMarkdown(
+      "[**#work** and *[[Other]]* and ==#mark==](https://example.com)\n\n[**#tag** [[Note]]][ref]\n\n[ref]: https://example.org",
+    );
+    expect(html.match(/<a /g)).toHaveLength(2);
+    expect(html).not.toMatch(/class="(?:tag|wikilink)"/);
+    expect(html).toContain("<strong>#work</strong>");
+    expect(html).toContain("[[Other]]");
+  });
+});
+
+it("preserves multiline quote text around escaped extension markers", () => {
+  const html = renderMarkdown("> first\n> second \\#literal\n> third");
+  expect(html).toContain("first\nsecond #literal\nthird");
+  expect(html).not.toContain("&gt; second");
+});
+
+it("keeps decoded wiki names intact while checking only delimiter provenance", () => {
+  expect(renderMarkdown("[[A &amp; B]]")).toContain('href="A%20%26%20B.md"');
+  expect(renderMarkdown(String.raw`[[Note\_name]]`)).toContain('href="Note_name.md"');
+  expect(renderMarkdown(String.raw`\*#literal`)).not.toContain('class="tag"');
+  expect(renderMarkdown(String.raw`==before \*literal\* after==`)).toContain(
+    "<mark>before *literal* after</mark>",
+  );
+});
+
+it("retains escape provenance after removing a callout marker", () => {
+  const html = renderMarkdown("> [!NOTE]\n> \\#literal \\[[Literal]] \\==literal==");
+  expect(html).toContain('class="callout callout-note"');
+  expect(html).not.toMatch(/class="(?:tag|wikilink)"|<mark>/);
+});
+
+it("keeps escaped extensions literal after emoji shortcodes", () => {
+  const html = renderMarkdown(":smile: \\#literal \\[[Literal]] \\==literal==");
+  expect(html).toContain("😄 #literal [[Literal]] ==literal==");
+  expect(html).not.toMatch(/class="(?:tag|wikilink)"|<mark>/);
 });

@@ -26,6 +26,8 @@ import {
   type MarkdownDialect,
 } from "./markdown-extensions.js";
 
+import { remarkLiteralSyntax } from "./markdown-source.js";
+
 export type { MarkdownDialect };
 
 export { resolveLocalAttachmentUrl, titleFromMarkdown } from "./markdown-utils.js";
@@ -211,7 +213,7 @@ export function renderMarkdownBlocks(
   const previousUrls = activeUrls;
   activeUrls = { resolve: resolveLocalUrl, remoteImages: options.remoteImages ?? "block" };
   try {
-    const tree = processor.runSync(processor.parse(source)) as MarkdownTreeNode;
+    const tree = processor.runSync(processor.parse(source), { value: source }) as MarkdownTreeNode;
     return (tree.children ?? []).map((node) => ({
       html: String(processor.stringify(node as Parameters<typeof processor.stringify>[0])),
       element: node.type === "element",
@@ -236,7 +238,7 @@ export function renderMarkdownTree(
   options: Pick<MarkdownRenderOptions, "dialect"> = {},
 ): MarkdownTreeNode {
   const processor = treeProcessor(options.dialect ?? "onyx");
-  return processor.runSync(processor.parse(source)) as MarkdownTreeNode;
+  return processor.runSync(processor.parse(source), { value: source }) as MarkdownTreeNode;
 }
 
 // Building a pipeline registers every highlight grammar, so each one is built once and reused.
@@ -285,23 +287,27 @@ function markdownProcessor(dialect: MarkdownDialect = "onyx") {
       // GitHub writing extensions: math, alerts, diagrams, and emoji.
       // remark-math covers `$…$`, `$$…$$`, and GitHub's ```math fences.
       .use(remarkMath)
+      .use(remarkLiteralSyntax)
       .use(remarkGithubInlineMath)
       .use(remarkMermaid)
       .use(remarkGeoJSON)
       .use(remarkTopoJSON)
       .use(remarkSTL)
-      .use(remarkGemoji)
       .use(remarkCallouts, { dialect })
       // Onyx note-taking extensions: wiki links and `==highlight==` marks.
       // GitHub-incompatible by design; keep them out of the layers above.
       .use(remarkWikiLinks, { dialect })
       .use(remarkTags, { dialect })
       .use(remarkInlineMarks, { dialect })
+      .use(remarkGemoji)
       // Front matter is metadata, not prose, so it is dropped rather than printed.
       .use(remarkRehype, {
         allowDangerousHtml: true,
         clobberPrefix: "",
-        handlers: { toml: noHandler, yaml: noHandler },
+        handlers: {
+          toml: noHandler,
+          yaml: noHandler,
+        },
       })
       .use(rehypeRaw)
       .use(rehypeSlug)

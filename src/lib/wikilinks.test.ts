@@ -72,3 +72,38 @@ describe("linksToNote", () => {
     expect(stripCode("a `b` c\n```\nx\n```\nd")).toBe("a   c\n\n\n\nd");
   });
 });
+
+it("ignores literal wiki delimiters and links nested in labels", () => {
+  for (const source of [
+    String.raw`\[[Ideas]]`,
+    "&#91;[Ideas]]",
+    "[**[[Ideas]]**](https://example.com)",
+    "    [[Ideas]]",
+  ]) {
+    expect(linksToNote(source, "Plan.md", notes[2]!, notes)).toBe(false);
+  }
+  expect(linksToNote(String.raw`\\[[Ideas]]`, "Plan.md", notes[2]!, notes)).toBe(true);
+});
+
+it("resolves used full, collapsed and shortcut references with parsed definitions", () => {
+  for (const source of [
+    "[label][REF]\n\n[ref]: Ideas.md#top",
+    "[ref][]\n\n[ref]: Ideas.md",
+    "[ref]: Ideas.md\n\n[ref]",
+    "[**label**](<Ideas.md#top>)",
+  ]) {
+    expect(linksToNote(source, "Plan.md", notes[2]!, notes)).toBe(true);
+  }
+  for (const source of [
+    "[unused]: Ideas.md",
+    "`[ref]`\n\n[ref]: Ideas.md",
+    "```\n[ref]\n```\n\n[ref]: Ideas.md",
+    "![ref]\n\n[ref]: Ideas.md",
+  ]) {
+    expect(linksToNote(source, "Plan.md", notes[2]!, notes)).toBe(false);
+  }
+});
+
+it("does not index wiki links inside math", () => {
+  expect(linksToNote("$x [[Ideas]]$", "Plan.md", notes[2]!, notes)).toBe(false);
+});

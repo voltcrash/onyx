@@ -477,3 +477,22 @@ describe("countWords and countLines", () => {
     }
   });
 });
+
+it("leaves list-looking code alone in fenced, indented and nested code blocks", () => {
+  for (const value of [
+    "```md\n- literal\n```",
+    "~~~\n1. literal\n~~~",
+    "    - literal",
+    "- parent\n\n      - literal",
+    "> ```\n> - literal\n> ```",
+  ]) {
+    expect(continueListOnEnter(value, value.indexOf("literal") + 7)).toBeUndefined();
+  }
+});
+
+it("renumbers past mixed nested lists and continuation paragraphs", () => {
+  const value = "1. one\n   - nested\n     - [x] task\n\n   continuation\n2. two";
+  expect(continueListOnEnter(value, 6)?.value).toBe(
+    value.replace("one\n", "one\n2. \n").replace("2. two", "3. two"),
+  );
+});

@@ -1,3 +1,4 @@
+import { literalAt, sliceText } from "./markdown-source.js";
 import type { Plugin } from "unified";
 import { INLINE_TAG, normalizeTag } from "./tags.js";
 import { wikiLinkHref } from "./wikilinks.js";
@@ -17,7 +18,8 @@ export interface MdastNode {
     hChildren?: MdastNode[];
   };
   lang?: string;
-  position?: { start: { line: number }; end: { line: number } };
+  literal?: number[];
+  position?: { start: { line: number; offset?: number }; end: { line: number; offset?: number } };
   type: string;
   value?: string;
 }
@@ -97,7 +99,22 @@ export const remarkInlineMarks: Plugin<[MarkdownExtensionOptions?]> = (options) 
 // GitHub's alternate inline math `$`…`$` for equations containing Markdown
 // syntax. The parser leaves it as text/code/text, so adjacent `$`-wrapped code
 // spans are folded into inline math matching remark-math's node shape.
-export const remarkGithubInlineMath: Plugin<[]> = () => (tree) => {
+export const remarkGithubInlineMath: Plugin<[]> = () => (tree, file) => {
+  const source = String(file);
+  visitParents(tree as MdastNode, (parent) => {
+    parent.children = (parent.children ?? []).map((child) => {
+      if (child.type !== "inlineMath") return child;
+      const start = child.position?.start.offset;
+      const end = child.position?.end.offset;
+      const raw = start === undefined || end === undefined ? "" : source.slice(start, end);
+      const alternate = raw.startsWith("$`") && raw.endsWith("`$");
+      if (alternate) {
+        const value = raw.slice(2, -2);
+        return { ...child, value, data: { ...child.data, hChildren: [{ type: "text", value }] } };
+      }
+      return child;
+    });
+  });
   visitParents(tree as MdastNode, (parent) => {
     const children = parent.children ?? [];
     if (children.length < 3 || !children.some((child) => child.type === "inlineCode")) return;
@@ -111,14 +128,16 @@ export const remarkGithubInlineMath: Plugin<[]> = () => (tree) => {
         first.type === "text" &&
         (first.value ?? "").endsWith("$") &&
         !(first.value ?? "").endsWith("$$") &&
+        !literalAt(first, (first.value ?? "").length - 1) &&
         code?.type === "inlineCode" &&
         (code.value ?? "") !== "" &&
         last?.type === "text" &&
         (last.value ?? "").startsWith("$") &&
-        !(last.value ?? "").startsWith("$$")
+        !(last.value ?? "").startsWith("$$") &&
+        !literalAt(last, 0)
       ) {
         const head = first.value!.slice(0, -1);
-        if (head) result.push({ type: "text", value: head });
+        if (head) result.push(sliceText(first, 0, first.value!.length - 1));
         const value = code.value ?? "";
         result.push({
           type: "inlineMath",
@@ -130,7 +149,7 @@ export const remarkGithubInlineMath: Plugin<[]> = () => (tree) => {
           },
         });
         const tail = last.value!.slice(1);
-        if (tail) result.push({ type: "text", value: tail });
+        if (tail) result.push(sliceText(last, 1));
         index += 3;
       } else {
         result.push(first);
@@ -301,26 +320,34 @@ export const remarkGeoJSON: Plugin<[]> = () => (tree) => {
 export const remarkWikiLinks: Plugin<[MarkdownExtensionOptions?]> = (options) => (tree) => {
   // Wiki links are Onyx-only; the GitHub dialect leaves them as text.
   if (options?.dialect === "github") return;
-  visitParents(tree as MdastNode, (parent) => {
-    const children = parent.children ?? [];
-    if (!children.some((child) => child.type === "text" && child.value?.includes("[["))) return;
-    parent.children = children.flatMap((child) =>
-      child.type === "text" ? splitWikiLinks(child.value ?? "") : [child],
-    );
-  });
+  visitParents(
+    tree as MdastNode,
+    (parent) => {
+      const children = parent.children ?? [];
+      if (!children.some((child) => child.type === "text" && child.value?.includes("[["))) return;
+      parent.children = children.flatMap((child) =>
+        child.type === "text" ? splitWikiLinks(child) : [child],
+      );
+    },
+    true,
+  );
 };
 
 export const remarkTags: Plugin<[MarkdownExtensionOptions?]> = (options) => (tree) => {
   // Tags are Onyx-only; the GitHub dialect leaves them as text.
   if (options?.dialect === "github") return;
-  visitParents(tree as MdastNode, (parent) => {
-    if (parent.type === "link" || parent.type === "wikiLink" || parent.type === "tag") return;
-    const children = parent.children ?? [];
-    if (!children.some((child) => child.type === "text" && child.value?.includes("#"))) return;
-    parent.children = children.flatMap((child) =>
-      child.type === "text" ? splitTags(child.value ?? "") : [child],
-    );
-  });
+  visitParents(
+    tree as MdastNode,
+    (parent) => {
+      if (parent.type === "link" || parent.type === "wikiLink" || parent.type === "tag") return;
+      const children = parent.children ?? [];
+      if (!children.some((child) => child.type === "text" && child.value?.includes("#"))) return;
+      parent.children = children.flatMap((child) =>
+        child.type === "text" ? splitTags(child) : [child],
+      );
+    },
+    true,
+  );
 };
 
 export const remarkCallouts: Plugin<[MarkdownExtensionOptions?]> = (options) => (tree) => {
@@ -335,9 +362,9 @@ export const remarkCallouts: Plugin<[MarkdownExtensionOptions?]> = (options) => 
       const paragraph = node.children?.[0];
       const first = paragraph?.type === "paragraph" ? paragraph.children?.[0] : undefined;
       if (first?.type !== "text") continue;
-      const [line, ...rest] = (first.value ?? "").split("\n");
+      const [line] = (first.value ?? "").split("\n");
       const marker = line?.match(CALLOUT_MARKER);
-      if (!marker) continue;
+      if (!marker || literalAt(first, 0, marker[0].indexOf("]") + 1)) continue;
       const kind = marker[1]!.toLowerCase();
       const githubAlert = (GITHUB_ALERT_TYPES as readonly string[]).includes(kind);
       if (githubAlert && nested) continue;
@@ -348,7 +375,11 @@ export const remarkCallouts: Plugin<[MarkdownExtensionOptions?]> = (options) => 
       const title = githubAlert
         ? GITHUB_ALERT_TITLES[kind as GitHubAlertType]
         : trailing || (CALLOUT_TITLES[kind] ?? capitalize(kind));
-      first.value = githubAlert && trailing ? [trailing, ...rest].join("\n") : rest.join("\n");
+      const bodyStart =
+        githubAlert && trailing
+          ? line!.indexOf(trailing, line!.indexOf("]") + 1)
+          : Math.min((line?.length ?? 0) + 1, first.value?.length ?? 0);
+      Object.assign(first, sliceText(first, bodyStart));
       if (!first.value && paragraph!.children!.length === 1) paragraph!.children = [];
       node.data = {
         // Onyx-only callouts keep an extra marker class so GitHub-compatible
@@ -386,23 +417,31 @@ function replaceFencedCode(
   }
 }
 
-function visitParents(node: MdastNode, callback: (node: MdastNode) => void): void {
+function visitParents(
+  node: MdastNode,
+  callback: (node: MdastNode) => void,
+  skipLinks = false,
+): void {
+  if (skipLinks && ["link", "linkReference", "wikiLink", "tag"].includes(node.type)) return;
   if (OPAQUE_PARENTS.has(node.type) || !node.children) return;
   callback(node);
-  for (const child of node.children) visitParents(child, callback);
+  for (const child of node.children) visitParents(child, callback, skipLinks);
 }
 
 function capitalize(value: string): string {
   return value.slice(0, 1).toUpperCase() + value.slice(1);
 }
 
-function splitWikiLinks(value: string): MdastNode[] {
+function splitWikiLinks(child: MdastNode): MdastNode[] {
+  const value = child.value ?? "";
   const nodes: MdastNode[] = [];
   let cursor = 0;
   for (const match of value.matchAll(WIKI_LINK)) {
     const [raw, embed, target, label] = match;
     const start = match.index;
-    if (start > cursor) nodes.push({ type: "text", value: value.slice(cursor, start) });
+    if (literalAt(child, start + (embed ? 1 : 0), 2) || literalAt(child, start + raw.length - 2, 2))
+      continue;
+    if (start > cursor) nodes.push(sliceText(child, cursor, start));
     cursor = start + raw.length;
     nodes.push({
       type: "wikiLink",
@@ -417,18 +456,20 @@ function splitWikiLinks(value: string): MdastNode[] {
       children: [{ type: "text", value: (label ?? target)!.trim() }],
     });
   }
-  if (cursor === 0) return [{ type: "text", value }];
-  if (cursor < value.length) nodes.push({ type: "text", value: value.slice(cursor) });
+  if (cursor === 0) return [child];
+  if (cursor < value.length) nodes.push(sliceText(child, cursor));
   return nodes;
 }
 
-function splitTags(value: string): MdastNode[] {
+function splitTags(child: MdastNode): MdastNode[] {
+  const value = child.value ?? "";
   const nodes: MdastNode[] = [];
   let cursor = 0;
   for (const match of value.matchAll(INLINE_TAG)) {
+    if (literalAt(child, match.index)) continue;
     const tag = normalizeTag(match[1]!);
     if (!tag) continue;
-    if (match.index > cursor) nodes.push({ type: "text", value: value.slice(cursor, match.index) });
+    if (match.index > cursor) nodes.push(sliceText(child, cursor, match.index));
     cursor = match.index + match[0].length;
     nodes.push({
       type: "tag",
@@ -439,8 +480,8 @@ function splitTags(value: string): MdastNode[] {
       children: [{ type: "text", value: match[0] }],
     });
   }
-  if (cursor === 0) return [{ type: "text", value }];
-  if (cursor < value.length) nodes.push({ type: "text", value: value.slice(cursor) });
+  if (cursor === 0) return [child];
+  if (cursor < value.length) nodes.push(sliceText(child, cursor));
   return nodes;
 }
 
@@ -471,7 +512,12 @@ function wrapDelimited(children: MdastNode[], delimiter: string, tagName: string
       index !== -1;
       index = value.indexOf(delimiter, cursor)
     ) {
-      if (index > cursor) tokens.push({ kind: "text", value: value.slice(cursor, index) });
+      if (index > cursor) tokens.push({ kind: "node", node: sliceText(child, cursor, index) });
+      if (literalAt(child, index, delimiter.length)) {
+        tokens.push({ kind: "node", node: sliceText(child, index, index + delimiter.length) });
+        cursor = index + delimiter.length;
+        continue;
+      }
       cursor = index + delimiter.length;
       const before = index === 0 ? "" : value[index - 1]!;
       const after = value[cursor] ?? "";
@@ -481,7 +527,7 @@ function wrapDelimited(children: MdastNode[], delimiter: string, tagName: string
         canClose: before === "" || !/\s/.test(before),
       });
     }
-    if (cursor < value.length) tokens.push({ kind: "text", value: value.slice(cursor) });
+    if (cursor < value.length) tokens.push({ kind: "node", node: sliceText(child, cursor) });
   }
 
   const result: Token[] = [];
@@ -521,6 +567,11 @@ function mergeText(nodes: MdastNode[]): MdastNode[] {
   for (const node of nodes) {
     const previous = merged.at(-1);
     if (node.type === "text" && previous?.type === "text") {
+      const length = previous.value?.length ?? 0;
+      previous.literal = [
+        ...(previous.literal ?? []),
+        ...(node.literal ?? []).map((offset) => offset + length),
+      ];
       previous.value = `${previous.value ?? ""}${node.value ?? ""}`;
     } else {
       merged.push(node);

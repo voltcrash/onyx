@@ -30,8 +30,9 @@ function workerExportConditions() {
       if (!entry) return null;
       const resolved = await this.resolve(source, importer, { skipSelf: true });
       const id = resolved?.id.replaceAll("\\", "/");
-      if (!id?.endsWith(entry.browser)) return resolved;
-      return `${id.slice(0, -entry.browser.length)}${entry.worker}`;
+      const path = id?.split("?")[0];
+      if (!path?.endsWith(entry.browser)) return resolved;
+      return `${path.slice(0, -entry.browser.length)}${entry.worker}${id?.slice(path.length) ?? ""}`;
     },
   };
 }
@@ -50,7 +51,10 @@ export default defineConfig({
     format: "es",
     plugins: () => [workerExportConditions()],
   },
+  // Dev workers share the client optimizer, whose browser-only exports cannot run in workers.
+  optimizeDeps: { exclude: Object.keys(WORKER_ENTRIES) },
   plugins: [
+    { ...workerExportConditions(), apply: "serve" },
     lazyPlugins(() => [
       tailwindcss(),
       sveltekit({

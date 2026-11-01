@@ -54,6 +54,10 @@
   .workspace {
     grid-column: 1;
   }
+  .source-editor .cm-editor .cm-content,
+  .prose {
+    padding-inline: 52px;
+  }
   /* One pane at a time, so nothing is resizable and the grab strip would only eat edge swipes. */
   .pane-resize,
   .pane-grip {
@@ -133,13 +137,13 @@
     padding: 0;
   }
   .source-editor .cm-editor .cm-content {
-    padding: 28px 22px 70px;
+    padding: 28px 52px 70px;
   }
   .source-editor .cm-scroller {
     font-size: 14px;
   }
   .prose {
-    padding: 36px 25px 80px;
+    padding: 36px 52px 80px;
   }
   .status-notices {
     right: 12px;

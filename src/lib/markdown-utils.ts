@@ -1,3 +1,4 @@
+import { literalAt, parseMarkdownSource, plainText, type SourceNode } from "./markdown-source.js";
 import {
   basename,
   decodePath,
@@ -14,11 +15,25 @@ export interface LocalAttachmentUrl {
 }
 
 export function titleFromMarkdown(value: string, fallback = "Untitled"): string {
-  const title = firstContentLine(value)
-    .replace(/^#{1,6}\s*/, "")
-    .replace(/[*_`~[\]]/g, "")
-    .trim();
-  return title.slice(0, 80) || fallback;
+  const line = firstContentLine(value);
+  const tree = parseMarkdownSource(line);
+  function label(node: SourceNode): string {
+    if (node.type === "html") return (node.value ?? "").replace(/<[^>]*>/g, "");
+    if (node.type === "text")
+      return (node.value ?? "").replace(
+        /!?\[\[([^\]|\n]+)(?:\|([^\]\n]+))?\]\]/g,
+        (raw, target: string, alias: string | undefined, offset: number) =>
+          literalAt(node, offset, 2) || literalAt(node, offset + raw.length - 2, 2)
+            ? raw
+            : (alias ?? target).trim(),
+      );
+    return node.children?.map(label).join("") ?? plainText(node);
+  }
+  const content = label(tree).trim();
+  const title = /^>\s*\[![\w-]+\]/.test(line)
+    ? content.replace(/^\[![\w-]+\][-+]?[ \t]*/, "")
+    : content;
+  return (title || (/^(---|\+\+\+)$/.test(line) ? line : "")).slice(0, 80) || fallback;
 }
 
 /** The first non-blank line after any front matter, read without splitting the whole note. */
@@ -267,6 +282,22 @@ export function continueListOnEnter(value: string, caret: number): ListEnterResu
   const line = value.slice(lineStart, lineEnd);
   const match = line.match(/^(\s*)([-+*]|\d+[.)])(\s+)(.*)$/);
   if (!match) return;
+  let inCode = false;
+  function checkCode(node: SourceNode): void {
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (
+      node.type === "code" &&
+      start !== undefined &&
+      end !== undefined &&
+      cursor >= start &&
+      cursor <= end
+    )
+      inCode = true;
+    for (const child of node.children ?? []) checkCode(child);
+  }
+  checkCode(parseMarkdownSource(value.slice(0, lineEnd)));
+  if (inCode) return;
   const [, indent, marker, gap, rest] = match as [string, string, string, string, string];
   const task = rest.match(/^\[([ xX])\](\s+|$)([\s\S]*)$/);
   const ordered = marker.match(/^(\d+)([.)])$/);
@@ -322,7 +353,8 @@ function renumberFollowingItems(
     }
     const match = line.match(/^(\s*)(\d+)([.)])(\s[\s\S]*)?$/);
     if (!match) {
-      active = false;
+      const leading = line.match(/^\s*/)?.[0] ?? "";
+      if (!(leading.startsWith(indent) && leading.length > indent.length)) active = false;
     } else if (match[1] !== indent) {
       // A deeper item belongs to a nested list; anything else ends this one.
       if (!(match[1]!.startsWith(indent) && match[1]!.length > indent.length)) active = false;
@@ -474,7 +506,12 @@ export function pasteUrlOverSelection(selected: string, clipboard: string): stri
   if (!selected) return;
   const destination = clipboard.trim();
   if (!/^https?:\/\/\S+$/i.test(destination)) return;
-  return `[${selected}](${destination})`;
+  const label = selected.replace(/[\\[\]`*_~!<>]/g, "\\$&");
+  const url = destination.replace(
+    /[\\()<>]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `[${label}](${url})`;
 }
 
 export interface ToggleCheckboxesEdit {
@@ -515,5 +552,51 @@ export function toggleCheckboxes(
     value: touched.head + edits.map((edit) => edit.text).join("\n") + touched.tail,
     start: remapPosition(touched, deltas, touched.first),
     end: remapPosition(touched, deltas, touched.last),
+  };
+}
+
+export function toggleInlineSyntax(
+  value: string,
+  start: number,
+  end: number,
+  before: string,
+  after = before,
+  placeholder = "text",
+): WrapSelectionEdit {
+  const selection = value.slice(start, end) || placeholder;
+  let left = start;
+  let right = end;
+  while (
+    value.slice(left - before.length, left) !== before ||
+    value.slice(right, right + after.length) !== after
+  ) {
+    const inner = ["**", "_"].find(
+      (marker) =>
+        left >= marker.length &&
+        value.slice(left - marker.length, left) === marker &&
+        value.slice(right, right + marker.length) === marker,
+    );
+    if (!inner) break;
+    left -= inner.length;
+    right += inner.length;
+  }
+  if (
+    left >= before.length &&
+    value.slice(left - before.length, left) === before &&
+    value.slice(right, right + after.length) === after
+  ) {
+    return {
+      value:
+        value.slice(0, left - before.length) +
+        value.slice(left, right) +
+        value.slice(right + after.length),
+      start: start - before.length,
+      end: start - before.length + selection.length,
+    };
+  }
+  return {
+    value: value.slice(0, start) + before + selection + after + value.slice(end),
+    start: start + before.length,
+    end: start + before.length + selection.length,
   };
 }

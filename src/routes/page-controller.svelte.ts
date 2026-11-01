@@ -11,7 +11,6 @@ import type {
 } from "#lib/components/app-types.ts";
 import type { NoteFormat } from "#lib/components/note-formats.ts";
 import type { SettingsSection } from "#lib/components/settings-types.ts";
-import { renderMarkdownBlocks as renderLiteMarkdownBlocks } from "#lib/markdown-lite.ts";
 import {
   attachmentMarkdown,
   countLines,
@@ -26,6 +25,7 @@ import {
   rewriteLocalLinks,
   titleFromMarkdown,
   toggleCheckboxes,
+  toggleInlineSyntax,
   type LocalAttachmentUrl,
 } from "#lib/markdown-utils.ts";
 import {
@@ -173,7 +173,6 @@ export function createPageController() {
   let noteRevision = $state(0);
   let markdown = $state(initialMarkdown);
   let previewMarkdown = $state(initialMarkdown);
-  let livePreviewMarkdown = $state(initialMarkdown);
   let lastSavedMarkdown = $state(initialMarkdown);
   let results = $state<VaultSearchResult[]>([]);
   let folders = $state<FolderMetadata[]>([]);
@@ -197,7 +196,6 @@ export function createPageController() {
   let previewFrame: number | undefined = $state();
   let previewSettleTimer: number | undefined = $state();
   let pendingPreviewMarkdown = initialMarkdown;
-  let previewIsLive = $state(false);
   let printing = $state(false);
   let searchSequence = 0;
   let settledSearchSequence = 0;
@@ -288,23 +286,13 @@ export function createPageController() {
     resolveAttachmentUrl,
   });
   const renderedBlocks = $derived(preview.blocks);
-  const liveRenderedBlocks = $derived(
-    renderLiteMarkdownBlocks(livePreviewMarkdown, resolveAttachmentUrl),
-  );
   const renderedBlockHtml = $derived(
     renderedBlocks.filter((block) => block.element).map((block) => block.html),
   );
-  const liveRenderedBlockHtml = $derived(
-    liveRenderedBlocks.filter((block) => block.element).map((block) => block.html),
-  );
-  const displayedRenderedBlocks = $derived(
-    previewIsLive ? liveRenderedBlockHtml : renderedBlockHtml,
-  );
+  const displayedRenderedBlocks = $derived(renderedBlockHtml);
   const renderedMarkdown = $derived(renderedBlocks.map((block) => block.html).join(""));
   const renderedBlockLines = $derived(
-    (previewIsLive ? liveRenderedBlocks : renderedBlocks)
-      .filter((block) => block.element)
-      .map((block) => block.lines),
+    renderedBlocks.filter((block) => block.element).map((block) => block.lines),
   );
   const noteTitle = $derived(titleFromMarkdown(markdown));
   const markdownLineCount = $derived(countLines(markdown));
@@ -1258,7 +1246,10 @@ export function createPageController() {
     );
     // Rendering before the switch shows the note fully formatted instead of upgrading it.
     if (sequence === noteLoadSequence) {
-      await preview.render(note.markdown, nextUrls, note.sourcePath);
+      await preview.render(note.markdown, {
+        attachments: nextUrls,
+        noteSourcePath: note.sourcePath,
+      });
     }
     if (sequence !== noteLoadSequence) {
       for (const attachment of nextUrls) URL.revokeObjectURL(attachment.url);
@@ -2284,13 +2275,11 @@ export function createPageController() {
       if (previewFrame !== undefined) window.cancelAnimationFrame(previewFrame);
       previewFrame = undefined;
       previewMarkdown = pendingPreviewMarkdown;
-      previewIsLive = false;
     }, PREVIEW_SETTLE_MS);
     if (previewFrame !== undefined) return;
     previewFrame = window.requestAnimationFrame(() => {
       previewFrame = undefined;
-      livePreviewMarkdown = pendingPreviewMarkdown;
-      previewIsLive = true;
+      previewMarkdown = pendingPreviewMarkdown;
     });
   }
 
@@ -2300,9 +2289,7 @@ export function createPageController() {
     previewFrame = undefined;
     previewSettleTimer = undefined;
     pendingPreviewMarkdown = value;
-    livePreviewMarkdown = value;
     previewMarkdown = value;
-    previewIsLive = false;
   }
 
   function setSplitRatio(value: number): void {
@@ -2882,16 +2869,18 @@ export function createPageController() {
   function insertSyntax(before: string, after = before, placeholder = "text"): void {
     const target = editor;
     if (!target) return;
-    const relativeStart = target.selectionStart;
-    const selectionEnd = target.selectionEnd;
-    const selection = markdown.slice(relativeStart, selectionEnd) || placeholder;
-    updateMarkdown(
-      `${markdown.slice(0, relativeStart)}${before}${selection}${after}${markdown.slice(selectionEnd)}`,
+    const edit = toggleInlineSyntax(
+      markdown,
+      target.selectionStart,
+      target.selectionEnd,
+      before,
+      after,
+      placeholder,
     );
+    updateMarkdown(edit.value);
     requestAnimationFrame(() => {
       target.focus();
-      const selectionStart = relativeStart + before.length;
-      target.setSelectionRange(selectionStart, selectionStart + selection.length);
+      target.setSelectionRange(edit.start, edit.end);
     });
   }
 
