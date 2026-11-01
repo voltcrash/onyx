@@ -1,4 +1,4 @@
-import { parseMarkdownSource, type SourceNode } from "./markdown-source.js";
+import { parseMarkdownSource, plainText, type SourceNode } from "./markdown-source.js";
 import {
   basename,
   decodePath,
@@ -15,11 +15,21 @@ export interface LocalAttachmentUrl {
 }
 
 export function titleFromMarkdown(value: string, fallback = "Untitled"): string {
-  const title = firstContentLine(value)
-    .replace(/^#{1,6}\s*/, "")
-    .replace(/[*_`~[\]]/g, "")
+  const line = firstContentLine(value);
+  const tree = parseMarkdownSource(line);
+  function label(node: SourceNode): string {
+    if (node.type === "html") return (node.value ?? "").replace(/<[^>]*>/g, "");
+    if (node.type === "text")
+      return (node.value ?? "").replace(
+        /!?\[\[([^\]|\n]+)(?:\|([^\]\n]+))?\]\]/g,
+        (_raw, target: string, alias?: string) => (alias ?? target).trim(),
+      );
+    return node.children?.map(label).join("") ?? plainText(node);
+  }
+  const title = label(tree)
+    .replace(/^\[![\w-]+\][-+]?[ \t]*/, "")
     .trim();
-  return title.slice(0, 80) || fallback;
+  return (title || (/^(---|\+\+\+)$/.test(line) ? line : "")).slice(0, 80) || fallback;
 }
 
 /** The first non-blank line after any front matter, read without splitting the whole note. */
