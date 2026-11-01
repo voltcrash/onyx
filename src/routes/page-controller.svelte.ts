@@ -25,6 +25,7 @@ import {
   rewriteLocalLinks,
   titleFromMarkdown,
   toggleCheckboxes,
+  toggleInlineSyntax,
   type LocalAttachmentUrl,
 } from "#lib/markdown-utils.ts";
 import {
@@ -2865,16 +2866,18 @@ export function createPageController() {
   function insertSyntax(before: string, after = before, placeholder = "text"): void {
     const target = editor;
     if (!target) return;
-    const relativeStart = target.selectionStart;
-    const selectionEnd = target.selectionEnd;
-    const selection = markdown.slice(relativeStart, selectionEnd) || placeholder;
-    updateMarkdown(
-      `${markdown.slice(0, relativeStart)}${before}${selection}${after}${markdown.slice(selectionEnd)}`,
+    const edit = toggleInlineSyntax(
+      markdown,
+      target.selectionStart,
+      target.selectionEnd,
+      before,
+      after,
+      placeholder,
     );
+    updateMarkdown(edit.value);
     requestAnimationFrame(() => {
       target.focus();
-      const selectionStart = relativeStart + before.length;
-      target.setSelectionRange(selectionStart, selectionStart + selection.length);
+      target.setSelectionRange(edit.start, edit.end);
     });
   }
 
