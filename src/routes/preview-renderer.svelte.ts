@@ -30,9 +30,8 @@ export interface PreviewRendererHost {
 }
 
 /**
- * Renders the settled preview. The lite renderer handles first paint and active input, and the
- * preview upgrades once the worker, or the main-thread renderer where workers are unavailable,
- * finishes the full render.
+ * Keeps the last full preview during edits while the worker prepares its replacement.
+ * The lite renderer handles first paint; unavailable workers use the main-thread parser.
  */
 export function createPreviewRenderer(host: PreviewRendererHost) {
   let markdownModule: MarkdownModule | undefined;
@@ -46,7 +45,13 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
   const blocks = $derived.by(() => {
     const source = host.source();
     const preview = workerPreview;
-    if (preview && matches(preview, source)) return preview.blocks;
+    if (
+      preview &&
+      renderWorker !== null &&
+      preview.noteSourcePath === host.noteSourcePath() &&
+      preview.attachments === host.attachments()
+    )
+      return preview.blocks;
     void revision;
     return renderOnPage(source);
   });
@@ -66,8 +71,7 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
     }));
   }
 
-  // While the worker renders, the lite renderer stands in; the full renderer only runs on
-  // the main thread when workers are unavailable.
+  // Only first paint uses lite output; edits retain full blocks until the worker answers.
   function renderOnPage(source: string): RenderedBlock[] {
     return (
       (renderWorker === null
@@ -126,7 +130,8 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
     if (current) {
       try {
         const rendered = await current.render({ source, noteSourcePath, attachments });
-        if (rendered) workerPreview = { source, attachments, noteSourcePath, blocks: rendered };
+        if (rendered && matches({ source, attachments, noteSourcePath }, host.source()))
+          workerPreview = { source, attachments, noteSourcePath, blocks: rendered };
         return;
       } catch {
         renderWorker = null;

@@ -11,7 +11,6 @@ import type {
 } from "#lib/components/app-types.ts";
 import type { NoteFormat } from "#lib/components/note-formats.ts";
 import type { SettingsSection } from "#lib/components/settings-types.ts";
-import { renderMarkdownBlocks as renderLiteMarkdownBlocks } from "#lib/markdown-lite.ts";
 import {
   attachmentMarkdown,
   countLines,
@@ -173,7 +172,6 @@ export function createPageController() {
   let noteRevision = $state(0);
   let markdown = $state(initialMarkdown);
   let previewMarkdown = $state(initialMarkdown);
-  let livePreviewMarkdown = $state(initialMarkdown);
   let lastSavedMarkdown = $state(initialMarkdown);
   let results = $state<VaultSearchResult[]>([]);
   let folders = $state<FolderMetadata[]>([]);
@@ -197,7 +195,6 @@ export function createPageController() {
   let previewFrame: number | undefined = $state();
   let previewSettleTimer: number | undefined = $state();
   let pendingPreviewMarkdown = initialMarkdown;
-  let previewIsLive = $state(false);
   let printing = $state(false);
   let searchSequence = 0;
   let settledSearchSequence = 0;
@@ -288,23 +285,13 @@ export function createPageController() {
     resolveAttachmentUrl,
   });
   const renderedBlocks = $derived(preview.blocks);
-  const liveRenderedBlocks = $derived(
-    renderLiteMarkdownBlocks(livePreviewMarkdown, resolveAttachmentUrl),
-  );
   const renderedBlockHtml = $derived(
     renderedBlocks.filter((block) => block.element).map((block) => block.html),
   );
-  const liveRenderedBlockHtml = $derived(
-    liveRenderedBlocks.filter((block) => block.element).map((block) => block.html),
-  );
-  const displayedRenderedBlocks = $derived(
-    previewIsLive ? liveRenderedBlockHtml : renderedBlockHtml,
-  );
+  const displayedRenderedBlocks = $derived(renderedBlockHtml);
   const renderedMarkdown = $derived(renderedBlocks.map((block) => block.html).join(""));
   const renderedBlockLines = $derived(
-    (previewIsLive ? liveRenderedBlocks : renderedBlocks)
-      .filter((block) => block.element)
-      .map((block) => block.lines),
+    renderedBlocks.filter((block) => block.element).map((block) => block.lines),
   );
   const noteTitle = $derived(titleFromMarkdown(markdown));
   const markdownLineCount = $derived(countLines(markdown));
@@ -2284,13 +2271,11 @@ export function createPageController() {
       if (previewFrame !== undefined) window.cancelAnimationFrame(previewFrame);
       previewFrame = undefined;
       previewMarkdown = pendingPreviewMarkdown;
-      previewIsLive = false;
     }, PREVIEW_SETTLE_MS);
     if (previewFrame !== undefined) return;
     previewFrame = window.requestAnimationFrame(() => {
       previewFrame = undefined;
-      livePreviewMarkdown = pendingPreviewMarkdown;
-      previewIsLive = true;
+      previewMarkdown = pendingPreviewMarkdown;
     });
   }
 
@@ -2300,9 +2285,7 @@ export function createPageController() {
     previewFrame = undefined;
     previewSettleTimer = undefined;
     pendingPreviewMarkdown = value;
-    livePreviewMarkdown = value;
     previewMarkdown = value;
-    previewIsLive = false;
   }
 
   function setSplitRatio(value: number): void {
