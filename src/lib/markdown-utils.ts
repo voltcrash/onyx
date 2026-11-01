@@ -492,7 +492,12 @@ export function pasteUrlOverSelection(selected: string, clipboard: string): stri
   if (!selected) return;
   const destination = clipboard.trim();
   if (!/^https?:\/\/\S+$/i.test(destination)) return;
-  return `[${selected}](${destination})`;
+  const label = selected.replace(/[\\[\]`*_~!<>]/g, "\\$&");
+  const url = destination.replace(
+    /[\\()<>]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `[${label}](${url})`;
 }
 
 export interface ToggleCheckboxesEdit {
