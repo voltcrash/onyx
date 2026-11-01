@@ -296,7 +296,7 @@ export function continueListOnEnter(value: string, caret: number): ListEnterResu
       inCode = true;
     for (const child of node.children ?? []) checkCode(child);
   }
-  checkCode(parseMarkdownSource(value));
+  checkCode(parseMarkdownSource(value.slice(0, lineEnd)));
   if (inCode) return;
   const [, indent, marker, gap, rest] = match as [string, string, string, string, string];
   const task = rest.match(/^\[([ xX])\](\s+|$)([\s\S]*)$/);
