@@ -15,17 +15,32 @@ export interface SourceNode {
   position?: { start: { offset?: number }; end: { offset?: number } };
 }
 
-const parser = unified()
+const proseParser = unified()
   .use(remarkParse)
   .use(remarkGfm)
-  .use(remarkMath)
   .use(remarkFrontmatter, ["yaml", "toml"]);
+const parser = proseParser().use(remarkMath);
 const opaque = new Set(["code", "inlineCode", "html", "math", "inlineMath", "yaml", "toml"]);
 
 /** Escapes and entities are text, never fresh extension delimiters after decoding. */
 export function preserveLiteralSyntax(node: SourceNode, source: string): void {
   if (opaque.has(node.type) || !node.children) return;
   node.children = node.children.flatMap((child) => {
+    if (child.type === "inlineMath") {
+      const start = child.position?.start.offset;
+      const end = child.position?.end.offset;
+      const raw = start === undefined || end === undefined ? "" : source.slice(start, end);
+      if (
+        raw.startsWith("$") &&
+        !raw.startsWith("$$") &&
+        !(raw.startsWith("$`") && raw.endsWith("`$")) &&
+        (/^\s|\s$/.test(raw.slice(1, -1)) || /\d/.test(source[end ?? source.length] ?? ""))
+      ) {
+        const prose = proseParser.parse(raw) as SourceNode;
+        preserveLiteralSyntax(prose, raw);
+        return prose.children?.[0]?.children ?? [child];
+      }
+    }
     if (child.type !== "text") {
       preserveLiteralSyntax(child, source);
       return [child];

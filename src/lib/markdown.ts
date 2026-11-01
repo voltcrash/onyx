@@ -307,10 +307,6 @@ function markdownProcessor(dialect: MarkdownDialect = "onyx") {
         handlers: {
           toml: noHandler,
           yaml: noHandler,
-          literal: (_state: unknown, node: { type: string; value?: unknown }) => ({
-            type: "text" as const,
-            value: "value" in node ? String(node.value) : "",
-          }),
         },
       })
       .use(rehypeRaw)

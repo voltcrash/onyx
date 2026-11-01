@@ -9,6 +9,14 @@ import {
   titleFromMarkdown,
 } from "./markdown.js";
 
+it("keeps prose formatting, escapes, and tags between currency dollars", () => {
+  const html = renderMarkdown(String.raw`$5 **and** \& &#38; #price $10`);
+  expect(html).toContain("<strong>and</strong>");
+  expect(html).not.toContain("\\");
+  expect(html).not.toContain("<math");
+  expect(html).toContain('data-tag="price"');
+});
+
 describe("titleFromMarkdown", () => {
   it("ignores YAML and TOML front matter", () => {
     expect(titleFromMarkdown("---\ntitle: Hidden\n---\n\n# Heading")).toBe("Heading");

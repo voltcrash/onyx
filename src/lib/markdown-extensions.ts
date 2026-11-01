@@ -41,7 +41,6 @@ const OPAQUE_PARENTS = new Set([
   "inlineMath",
   "yaml",
   "toml",
-  "literal",
 ]);
 
 // GitHub has no `~text~`/`^text^` inline marks: tildes follow GFM strikethrough
@@ -109,14 +108,6 @@ export const remarkGithubInlineMath: Plugin<[]> = () => (tree, file) => {
       const end = child.position?.end.offset;
       const raw = start === undefined || end === undefined ? "" : source.slice(start, end);
       const alternate = raw.startsWith("$`") && raw.endsWith("`$");
-      if (
-        !alternate &&
-        raw.startsWith("$") &&
-        !raw.startsWith("$$") &&
-        (/^\s|\s$/.test(raw.slice(1, -1)) || /\d/.test(source[end ?? source.length] ?? ""))
-      ) {
-        return { type: "literal", value: raw, position: child.position };
-      }
       if (alternate) {
         const value = raw.slice(2, -2);
         return { ...child, value, data: { ...child.data, hChildren: [{ type: "text", value }] } };
