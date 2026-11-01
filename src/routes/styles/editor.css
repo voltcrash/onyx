@@ -621,7 +621,12 @@
 }
 .prose li.task-list-item {
   list-style: none;
-  margin-left: -22px;
+}
+.prose ul.contains-task-list {
+  padding-left: 2px;
+}
+.prose li ul.contains-task-list {
+  padding-left: 24px;
 }
 .prose .task-list-item input {
   width: 15px;
@@ -644,6 +649,8 @@
 }
 .prose pre {
   overflow-x: auto;
+  overflow-wrap: normal;
+  color-scheme: dark;
   margin: 16px 0;
   padding: 16px;
   border-radius: 8px;
@@ -653,6 +660,7 @@
 }
 .prose pre[data-code-language] {
   position: relative;
+  padding-bottom: 30px;
 }
 .prose pre[data-code-language]::before {
   content: attr(data-code-language);
@@ -673,7 +681,7 @@
 }
 .prose pre code.hljs {
   display: block;
-  overflow-x: auto;
+  overflow: visible;
   font-size: inherit;
 }
 .prose :is(pre code, .code-content) .hljs-comment,
@@ -763,6 +771,7 @@
   border-top: 1px solid var(--line-hover);
 }
 .prose a {
+  text-decoration-line: underline;
   color: var(--accent-link);
   text-decoration-color: var(--accent-underline);
   text-underline-offset: 3px;
@@ -905,6 +914,8 @@
 .prose .katex:has(math[display="block"]) {
   display: block;
   overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 6px;
   margin: 24px 0;
   text-align: center;
 }
