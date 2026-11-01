@@ -295,3 +295,9 @@ it("keeps decoded wiki names intact while checking only delimiter provenance", (
     "<mark>before *literal* after</mark>",
   );
 });
+
+it("retains escape provenance after removing a callout marker", () => {
+  const html = renderMarkdown("> [!NOTE]\n> \\#literal \\[[Literal]] \\==literal==");
+  expect(html).toContain('class="callout callout-note"');
+  expect(html).not.toMatch(/class="(?:tag|wikilink)"|<mark>/);
+});

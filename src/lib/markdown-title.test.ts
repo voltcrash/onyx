@@ -11,3 +11,8 @@ it.each([
 ])("extracts visible title text from %s", (source, title) => {
   expect(titleFromMarkdown(source)).toBe(title);
 });
+
+it("preserves literal callout-looking title text", () => {
+  expect(titleFromMarkdown("> \\[!NOTE] literal")).toBe("[!NOTE] literal");
+  expect(titleFromMarkdown("[!NOTE] literal")).toBe("[!NOTE] literal");
+});

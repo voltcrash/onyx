@@ -371,7 +371,7 @@ export const remarkCallouts: Plugin<[MarkdownExtensionOptions?]> = (options) => 
       const paragraph = node.children?.[0];
       const first = paragraph?.type === "paragraph" ? paragraph.children?.[0] : undefined;
       if (first?.type !== "text") continue;
-      const [line, ...rest] = (first.value ?? "").split("\n");
+      const [line] = (first.value ?? "").split("\n");
       const marker = line?.match(CALLOUT_MARKER);
       if (!marker || literalAt(first, 0, marker[0].indexOf("]") + 1)) continue;
       const kind = marker[1]!.toLowerCase();
@@ -384,7 +384,11 @@ export const remarkCallouts: Plugin<[MarkdownExtensionOptions?]> = (options) => 
       const title = githubAlert
         ? GITHUB_ALERT_TITLES[kind as GitHubAlertType]
         : trailing || (CALLOUT_TITLES[kind] ?? capitalize(kind));
-      first.value = githubAlert && trailing ? [trailing, ...rest].join("\n") : rest.join("\n");
+      const bodyStart =
+        githubAlert && trailing
+          ? line!.indexOf(trailing, line!.indexOf("]") + 1)
+          : Math.min((line?.length ?? 0) + 1, first.value?.length ?? 0);
+      Object.assign(first, sliceText(first, bodyStart));
       if (!first.value && paragraph!.children!.length === 1) paragraph!.children = [];
       node.data = {
         // Onyx-only callouts keep an extra marker class so GitHub-compatible

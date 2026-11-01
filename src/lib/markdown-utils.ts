@@ -29,9 +29,10 @@ export function titleFromMarkdown(value: string, fallback = "Untitled"): string 
       );
     return node.children?.map(label).join("") ?? plainText(node);
   }
-  const title = label(tree)
-    .replace(/^\[![\w-]+\][-+]?[ \t]*/, "")
-    .trim();
+  const content = label(tree).trim();
+  const title = /^>\s*\[![\w-]+\]/.test(line)
+    ? content.replace(/^\[![\w-]+\][-+]?[ \t]*/, "")
+    : content;
   return (title || (/^(---|\+\+\+)$/.test(line) ? line : "")).slice(0, 80) || fallback;
 }
 
