@@ -1,5 +1,8 @@
 import { insertNewline, standardKeymap } from "@codemirror/commands";
-import { markdown as markdownLanguage } from "@codemirror/lang-markdown";
+import {
+  markdown as markdownLanguage,
+  markdownLanguage as gfmLanguage,
+} from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import {
   Annotation,
@@ -127,7 +130,7 @@ export class MarkdownEditor {
         doc: options.doc,
         extensions: [
           this.#editable.of([EditorView.editable.of(true), EditorState.readOnly.of(false)]),
-          markdownLanguage({ addKeymap: false }),
+          markdownLanguage({ base: gfmLanguage, addKeymap: false }),
           syntaxHighlighting(markdownHighlighting),
           EditorView.lineWrapping,
           placeholder(options.placeholder),

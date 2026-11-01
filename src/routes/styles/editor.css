@@ -463,14 +463,16 @@
   color: var(--accent-link);
 }
 .source-editor .md-code {
-  color: var(--code-syntax-string);
+  color: var(--ink-body);
 }
 .source-editor .md-quote {
   color: var(--muted);
 }
-.source-editor .md-mark,
 .source-editor .md-list {
-  color: var(--faint);
+  color: var(--ink-body);
+}
+.source-editor .md-mark {
+  color: var(--ink-body);
 }
 .rendered-pane {
   grid-row: 1;
