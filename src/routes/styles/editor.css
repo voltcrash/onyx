@@ -519,6 +519,7 @@
   margin: 0 auto;
   padding: 49px clamp(30px, 6vw, 78px) 90px;
   color: var(--ink-body);
+  overflow-wrap: anywhere;
   font-family: var(--font-content);
   font-size: 17px;
   line-height: 1.76;
