@@ -9,6 +9,9 @@ test("wraps long headings and list words on mobile and leaves room for the pane 
   await editor.fill("## " + "VeryLongHeading".repeat(10) + "\n\n1. " + "LongListWord".repeat(20));
   await expect(page.locator(".rendered-pane h2")).toHaveCount(1);
   await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await editor.evaluate((element) => parseFloat(getComputedStyle(element).paddingRight)),
+  ).toBeGreaterThanOrEqual(50);
   await page.getByRole("button", { name: "Show the rendered pane" }).click();
   expect(
     await page
