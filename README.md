@@ -188,7 +188,8 @@ single-package app and uses the existing Vite+ commands:
 
 `vercel.json` bootstraps Vite+ and installs the frozen pnpm lockfile through `vp`. The toolchain
 lives in the ignored `.vercel-ci/` directory because Vercel CI copies the checkout into isolated
-task instances. `scripts/ci.sh` selects that toolchain, including the Node.js version in
+task instances. Bootstrap also copies Node 26's `libatomic` dependency from Amazon Linux into that
+directory. `scripts/ci.sh` selects that toolchain and library, including the Node.js version in
 `package.json`, for each task. Playwright runs on Ubuntu and installs Chromium with its system
 dependencies there. No task needs GitHub OAuth credentials, a deployment, or an external service;
 GitHub API calls in the browser tests are intercepted locally.
