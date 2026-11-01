@@ -1,3 +1,4 @@
+import { parseMarkdownSource, type SourceNode } from "./markdown-source.js";
 import {
   basename,
   decodePath,
@@ -267,6 +268,22 @@ export function continueListOnEnter(value: string, caret: number): ListEnterResu
   const line = value.slice(lineStart, lineEnd);
   const match = line.match(/^(\s*)([-+*]|\d+[.)])(\s+)(.*)$/);
   if (!match) return;
+  let inCode = false;
+  function checkCode(node: SourceNode): void {
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (
+      node.type === "code" &&
+      start !== undefined &&
+      end !== undefined &&
+      cursor >= start &&
+      cursor <= end
+    )
+      inCode = true;
+    for (const child of node.children ?? []) checkCode(child);
+  }
+  checkCode(parseMarkdownSource(value));
+  if (inCode) return;
   const [, indent, marker, gap, rest] = match as [string, string, string, string, string];
   const task = rest.match(/^\[([ xX])\](\s+|$)([\s\S]*)$/);
   const ordered = marker.match(/^(\d+)([.)])$/);
@@ -322,7 +339,8 @@ function renumberFollowingItems(
     }
     const match = line.match(/^(\s*)(\d+)([.)])(\s[\s\S]*)?$/);
     if (!match) {
-      active = false;
+      const leading = line.match(/^\s*/)?.[0] ?? "";
+      if (!(leading.startsWith(indent) && leading.length > indent.length)) active = false;
     } else if (match[1] !== indent) {
       // A deeper item belongs to a nested list; anything else ends this one.
       if (!(match[1]!.startsWith(indent) && match[1]!.length > indent.length)) active = false;
