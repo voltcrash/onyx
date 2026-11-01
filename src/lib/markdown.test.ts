@@ -17,6 +17,15 @@ it("keeps prose formatting, escapes, and tags between currency dollars", () => {
   expect(html).toContain('data-tag="price"');
 });
 
+it("retains multiline currency prose inside quotes and callouts", () => {
+  for (const prefix of ["", "[!NOTE]\n> "]) {
+    const html = renderMarkdown(`> ${prefix}$5 and\n> more #q $10`);
+    expect(html).toContain("$5 and\nmore");
+    expect(html).toContain('data-tag="q"');
+    expect(html).toContain("$10");
+  }
+});
+
 describe("titleFromMarkdown", () => {
   it("ignores YAML and TOML front matter", () => {
     expect(titleFromMarkdown("---\ntitle: Hidden\n---\n\n# Heading")).toBe("Heading");

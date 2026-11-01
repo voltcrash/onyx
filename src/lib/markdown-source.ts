@@ -36,8 +36,15 @@ export function preserveLiteralSyntax(node: SourceNode, source: string): void {
         !(raw.startsWith("$`") && raw.endsWith("`$")) &&
         (/^\s|\s$/.test(raw.slice(1, -1)) || /\d/.test(source[end ?? source.length] ?? ""))
       ) {
-        const prose = proseParser.parse(raw) as SourceNode;
-        preserveLiteralSyntax(prose, raw);
+        const content = raw.slice(1, -1);
+        const value = child.value ?? "";
+        const padded =
+          /^[ \r\n]/.test(content) && /[ \r\n]$/.test(content) && /[^ \r\n]/.test(value);
+        const text = padded
+          ? `$${content.match(/^(?:\r\n|[ \r\n])/)![0]}${value}${content.match(/(?:\r\n|[ \r\n])$/)![0]}$`
+          : `$${value}$`;
+        const prose = proseParser.parse(text) as SourceNode;
+        preserveLiteralSyntax(prose, text);
         return prose.children?.[0]?.children ?? [child];
       }
     }

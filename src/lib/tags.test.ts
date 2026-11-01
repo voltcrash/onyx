@@ -70,6 +70,7 @@ it("indexes only active prose tags", () => {
 it("does not index inline tags inside math", () => {
   expect(extractTags("$x #math$ and #prose")).toEqual(["prose"]);
   expect(extractTags("$5 #price $10")).toEqual(["price"]);
+  expect(extractTags("> $5 and\n> more #q $10")).toEqual(["q"]);
 });
 
 it("indexes tags inside literal wiki brackets", () => {
