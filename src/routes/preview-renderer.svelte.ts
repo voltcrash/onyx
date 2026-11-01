@@ -41,6 +41,8 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
   let renderWorker: MarkdownRenderWorker | null | undefined;
   let workerPreview = $state.raw<WorkerPreview>();
   let pendingWorkerPreview: (PreviewKey & { done: Promise<void> }) | undefined;
+  let renderSequence = 0;
+  let displayedSequence = 0;
 
   const blocks = $derived.by(() => {
     const source = host.source();
@@ -60,7 +62,7 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
     const source = host.source();
     const attachments = host.attachments();
     const noteSourcePath = host.noteSourcePath();
-    untrack(() => void render(source, attachments, noteSourcePath));
+    untrack(() => void render(source, { attachments, noteSourcePath }));
   });
 
   function loadMarkdownModule(): Promise<MarkdownModule> {
@@ -105,13 +107,13 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
    */
   async function render(
     source: string,
-    attachments = host.attachments(),
-    noteSourcePath = host.noteSourcePath(),
+    context = { attachments: host.attachments(), noteSourcePath: host.noteSourcePath() },
   ): Promise<void> {
+    const { attachments, noteSourcePath } = context;
     if (workerPreview && matches(workerPreview, source, attachments, noteSourcePath)) return;
     const pending = pendingWorkerPreview;
     if (pending && matches(pending, source, attachments, noteSourcePath)) return pending.done;
-    const done = renderInWorker(source, attachments, noteSourcePath);
+    const done = renderInWorker(source, attachments, noteSourcePath, ++renderSequence);
     const request = { source, attachments, noteSourcePath, done };
     pendingWorkerPreview = request;
     try {
@@ -125,13 +127,16 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
     source: string,
     attachments: LocalAttachmentUrl[],
     noteSourcePath: string | undefined,
+    sequence: number,
   ): Promise<void> {
     const current = worker();
     if (current) {
       try {
         const rendered = await current.render({ source, noteSourcePath, attachments });
-        if (rendered && matches({ source, attachments, noteSourcePath }, host.source()))
+        if (rendered && sequence > displayedSequence) {
+          displayedSequence = sequence;
           workerPreview = { source, attachments, noteSourcePath, blocks: rendered };
+        }
         return;
       } catch {
         renderWorker = null;

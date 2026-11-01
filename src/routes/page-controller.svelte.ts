@@ -1246,7 +1246,10 @@ export function createPageController() {
     );
     // Rendering before the switch shows the note fully formatted instead of upgrading it.
     if (sequence === noteLoadSequence) {
-      await preview.render(note.markdown, nextUrls, note.sourcePath);
+      await preview.render(note.markdown, {
+        attachments: nextUrls,
+        noteSourcePath: note.sourcePath,
+      });
     }
     if (sequence !== noteLoadSequence) {
       for (const attachment of nextUrls) URL.revokeObjectURL(attachment.url);
