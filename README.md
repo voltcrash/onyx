@@ -173,6 +173,41 @@ once with `vp run test:e2e:install`, then run `vp run test:e2e`. `vp run test` r
 The variables in `.env.example` enable optional GitHub backup and sync. Onyx runs locally without
 them.
 
+## Continuous integration
+
+Vercel CI runs the five tasks tagged `ci` in `turbo.json` on GitHub pushes. Each task covers this
+single-package app and uses the existing Vite+ commands:
+
+| Task       | Validation                                      |
+| ---------- | ----------------------------------------------- |
+| `ci:lint`  | Formatting, linting, and TypeScript checks      |
+| `ci:check` | Svelte, generated themes, and service worker    |
+| `ci:unit`  | Unit tests                                      |
+| `ci:build` | Theme generation and production build           |
+| `ci:e2e`   | Chromium tests against a local production build |
+
+`vercel.json` bootstraps Vite+ and installs the frozen pnpm lockfile through `vp`. The toolchain
+lives in the ignored `.vercel-ci/` directory because Vercel CI copies the checkout into isolated
+task instances. `scripts/ci.sh` selects that toolchain, including the Node.js version in
+`package.json`, for each task. Playwright runs on Ubuntu and installs Chromium with its system
+dependencies there. No task needs GitHub OAuth credentials, a deployment, or an external service;
+GitHub API calls in the browser tests are intercepted locally.
+
+To reproduce the complete task graph on Ubuntu with permission to install browser dependencies:
+
+```sh
+sh scripts/ci-install.sh
+CI=1 vp run ci
+```
+
+The local command runs tasks sequentially because Svelte checks and builds share generated files;
+Vercel CI runs them in separate instances. E2E tests always run rather than using cached results.
+Local failures retain traces in `test-results/`; Vercel CI retains task logs, but does not upload
+these trace files. This replaces the previous GitHub Actions workflow's seven-day trace uploads.
+The other tasks can reuse Vercel Remote Cache.
+Find run status and logs in the Vercel team's CI tab or with `vercel ci list --json` from this
+checkout, using an authenticated Vercel CLI and the team's `--scope`.
+
 ## Search discoverability
 
 Onyx explains itself in the welcome note that opens on first visit, in
