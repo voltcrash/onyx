@@ -96,3 +96,17 @@ describe("code syntax theme tokens", () => {
     }
   });
 });
+
+it("keeps source code, list prose and syntax markers readable on source surfaces", () => {
+  for (const theme of Object.values(themes)) {
+    for (const mode of ["light", "dark"] as const) {
+      const tokens = resolvedTokens(theme, mode);
+      for (const foreground of ["--ink-body"]) {
+        expect(contrastRatio(tokens[foreground]!, tokens["--surface"]!)).toBeGreaterThanOrEqual(
+          4.5,
+        );
+      }
+      expect(contrastRatio(tokens["--code-bg"]!, tokens["--surface"]!)).toBeGreaterThan(1.03);
+    }
+  }
+});
