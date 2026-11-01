@@ -103,3 +103,7 @@ it("resolves used full, collapsed and shortcut references with parsed definition
     expect(linksToNote(source, "Plan.md", notes[2]!, notes)).toBe(false);
   }
 });
+
+it("does not index wiki links inside math", () => {
+  expect(linksToNote("$x [[Ideas]]$", "Plan.md", notes[2]!, notes)).toBe(false);
+});

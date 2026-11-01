@@ -66,3 +66,7 @@ it("indexes only active prose tags", () => {
     #code`),
   ).toEqual(["real"]);
 });
+
+it("does not index inline tags inside math", () => {
+  expect(extractTags("$x #math$ and #prose")).toEqual(["prose"]);
+});

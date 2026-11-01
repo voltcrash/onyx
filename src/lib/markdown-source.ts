@@ -1,6 +1,7 @@
 import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
+import remarkMath from "remark-math";
 import { unified, type Plugin } from "unified";
 
 export interface SourceNode {
@@ -14,7 +15,11 @@ export interface SourceNode {
   position?: { start: { offset?: number }; end: { offset?: number } };
 }
 
-const parser = unified().use(remarkParse).use(remarkGfm).use(remarkFrontmatter, ["yaml", "toml"]);
+const parser = unified()
+  .use(remarkParse)
+  .use(remarkGfm)
+  .use(remarkMath)
+  .use(remarkFrontmatter, ["yaml", "toml"]);
 const opaque = new Set(["code", "inlineCode", "html", "math", "inlineMath", "yaml", "toml"]);
 
 /** Escapes and entities are text, never fresh extension delimiters after decoding. */

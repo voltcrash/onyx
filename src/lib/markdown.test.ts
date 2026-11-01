@@ -301,3 +301,9 @@ it("retains escape provenance after removing a callout marker", () => {
   expect(html).toContain('class="callout callout-note"');
   expect(html).not.toMatch(/class="(?:tag|wikilink)"|<mark>/);
 });
+
+it("keeps escaped extensions literal after emoji shortcodes", () => {
+  const html = renderMarkdown(":smile: \\#literal \\[[Literal]] \\==literal==");
+  expect(html).toContain("😄 #literal [[Literal]] ==literal==");
+  expect(html).not.toMatch(/class="(?:tag|wikilink)"|<mark>/);
+});

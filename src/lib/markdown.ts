@@ -293,13 +293,13 @@ function markdownProcessor(dialect: MarkdownDialect = "onyx") {
       .use(remarkGeoJSON)
       .use(remarkTopoJSON)
       .use(remarkSTL)
-      .use(remarkGemoji)
       .use(remarkCallouts, { dialect })
       // Onyx note-taking extensions: wiki links and `==highlight==` marks.
       // GitHub-incompatible by design; keep them out of the layers above.
       .use(remarkWikiLinks, { dialect })
       .use(remarkTags, { dialect })
       .use(remarkInlineMarks, { dialect })
+      .use(remarkGemoji)
       // Front matter is metadata, not prose, so it is dropped rather than printed.
       .use(remarkRehype, {
         allowDangerousHtml: true,
