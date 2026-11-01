@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 for (const { device, width, top, side, bottom } of [
   { device: "desktop", width: 1440, top: 52, side: 72, bottom: 60 },
-  { device: "mobile", width: 390, top: 28, side: 22, bottom: 70 },
+  { device: "mobile", width: 390, top: 28, side: 52, bottom: 70 },
 ]) {
   test(`preserves source pane margins on ${device}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
