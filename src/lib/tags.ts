@@ -1,4 +1,4 @@
-import { stripCode } from "./wikilinks.js";
+import { parseMarkdownSource, visitProse } from "./markdown-source.js";
 
 // A tag starts after whitespace or at a line start, so URL fragments, entities and heading markers
 // are not tags. It needs one non-digit, which keeps issue references like #42 as plain text.
@@ -48,9 +48,19 @@ export function extractTags(markdown: string): string[] {
     }
   }
 
-  for (const match of stripCode(lines.slice(index).join("\n")).matchAll(INLINE_TAG)) {
-    add(match[1]!);
-  }
+  visitProse(parseMarkdownSource(lines.slice(index).join("\n")), (parent) => {
+    if (parent.type === "link" || parent.type === "linkReference") return;
+    for (const [childIndex, child] of (parent.children ?? []).entries()) {
+      if (child.type !== "text") continue;
+      const previous = parent.children?.[childIndex - 1];
+      const value = (child.value ?? "").replace(/!?\[\[[^\]\n]+\]\]/g, " ");
+      for (const match of value.matchAll(INLINE_TAG)) {
+        if (match.index === 0 && previous?.type === "literal" && !/\s$/.test(previous.value ?? ""))
+          continue;
+        add(match[1]!);
+      }
+    }
+  });
   return [...tags].sort();
 }
 

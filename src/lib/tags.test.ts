@@ -56,3 +56,13 @@ describe("normalizeTag", () => {
     expect(normalizeTag("'Quoted'")).toBe("quoted");
   });
 });
+
+it("indexes only active prose tags", () => {
+  expect(
+    extractTags(String.raw`\#escaped &#35;entity \\#boundary #real [**#label**](x) [#reference][r]
+
+[r]: x
+
+    #code`),
+  ).toEqual(["real"]);
+});

@@ -17,7 +17,7 @@ export interface MdastNode {
     hChildren?: MdastNode[];
   };
   lang?: string;
-  position?: { start: { line: number }; end: { line: number } };
+  position?: { start: { line: number; offset?: number }; end: { line: number; offset?: number } };
   type: string;
   value?: string;
 }
@@ -39,6 +39,7 @@ const OPAQUE_PARENTS = new Set([
   "inlineMath",
   "yaml",
   "toml",
+  "literal",
 ]);
 
 // GitHub has no `~text~`/`^text^` inline marks: tildes follow GFM strikethrough
@@ -301,26 +302,41 @@ export const remarkGeoJSON: Plugin<[]> = () => (tree) => {
 export const remarkWikiLinks: Plugin<[MarkdownExtensionOptions?]> = (options) => (tree) => {
   // Wiki links are Onyx-only; the GitHub dialect leaves them as text.
   if (options?.dialect === "github") return;
-  visitParents(tree as MdastNode, (parent) => {
-    const children = parent.children ?? [];
-    if (!children.some((child) => child.type === "text" && child.value?.includes("[["))) return;
-    parent.children = children.flatMap((child) =>
-      child.type === "text" ? splitWikiLinks(child.value ?? "") : [child],
-    );
-  });
+  visitParents(
+    tree as MdastNode,
+    (parent) => {
+      const children = parent.children ?? [];
+      if (!children.some((child) => child.type === "text" && child.value?.includes("[["))) return;
+      parent.children = children.flatMap((child) =>
+        child.type === "text" ? splitWikiLinks(child.value ?? "") : [child],
+      );
+    },
+    true,
+  );
 };
 
 export const remarkTags: Plugin<[MarkdownExtensionOptions?]> = (options) => (tree) => {
   // Tags are Onyx-only; the GitHub dialect leaves them as text.
   if (options?.dialect === "github") return;
-  visitParents(tree as MdastNode, (parent) => {
-    if (parent.type === "link" || parent.type === "wikiLink" || parent.type === "tag") return;
-    const children = parent.children ?? [];
-    if (!children.some((child) => child.type === "text" && child.value?.includes("#"))) return;
-    parent.children = children.flatMap((child) =>
-      child.type === "text" ? splitTags(child.value ?? "") : [child],
-    );
-  });
+  visitParents(
+    tree as MdastNode,
+    (parent) => {
+      if (parent.type === "link" || parent.type === "wikiLink" || parent.type === "tag") return;
+      const children = parent.children ?? [];
+      if (!children.some((child) => child.type === "text" && child.value?.includes("#"))) return;
+      parent.children = children.flatMap((child, index) =>
+        child.type === "text"
+          ? splitTags(
+              child.value ?? "",
+              index > 0 &&
+                children[index - 1]?.type === "literal" &&
+                !/\s$/.test(children[index - 1]?.value ?? ""),
+            )
+          : [child],
+      );
+    },
+    true,
+  );
 };
 
 export const remarkCallouts: Plugin<[MarkdownExtensionOptions?]> = (options) => (tree) => {
@@ -386,10 +402,15 @@ function replaceFencedCode(
   }
 }
 
-function visitParents(node: MdastNode, callback: (node: MdastNode) => void): void {
+function visitParents(
+  node: MdastNode,
+  callback: (node: MdastNode) => void,
+  skipLinks = false,
+): void {
+  if (skipLinks && ["link", "linkReference", "wikiLink", "tag"].includes(node.type)) return;
   if (OPAQUE_PARENTS.has(node.type) || !node.children) return;
   callback(node);
-  for (const child of node.children) visitParents(child, callback);
+  for (const child of node.children) visitParents(child, callback, skipLinks);
 }
 
 function capitalize(value: string): string {
@@ -422,10 +443,11 @@ function splitWikiLinks(value: string): MdastNode[] {
   return nodes;
 }
 
-function splitTags(value: string): MdastNode[] {
+function splitTags(value: string, blockedStart = false): MdastNode[] {
   const nodes: MdastNode[] = [];
   let cursor = 0;
   for (const match of value.matchAll(INLINE_TAG)) {
+    if (blockedStart && match.index === 0) continue;
     const tag = normalizeTag(match[1]!);
     if (!tag) continue;
     if (match.index > cursor) nodes.push({ type: "text", value: value.slice(cursor, match.index) });

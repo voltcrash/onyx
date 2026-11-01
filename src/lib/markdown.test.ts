@@ -255,3 +255,34 @@ A note[^1].
     ]);
   });
 });
+
+describe("literal extension delimiters", () => {
+  it("respects escapes, entities and escaped callout markers", () => {
+    const html =
+      renderMarkdown(String.raw`\#literal \[[Literal note]] \==literal mark== &#35;tag &#91;[Entity]] ==no\==
+
+> \[!NOTE]
+> literal`);
+    expect(html).not.toMatch(/class="(?:tag|wikilink|callout)|<mark>/);
+    expect(html).toContain("#literal [[Literal note]] ==literal mark== #tag [[Entity]]");
+  });
+  it("keeps even backslashes distinct from escaped openers", () => {
+    expect(renderMarkdown(String.raw`\\[[Note]]`)).toContain('class="wikilink"');
+    expect(renderMarkdown(String.raw`\\\[[Note]]`)).not.toContain('class="wikilink"');
+  });
+  it("does not create anchors inside formatted inline or reference link labels", () => {
+    const html = renderMarkdown(
+      "[**#work** and *[[Other]]* and ==#mark==](https://example.com)\n\n[**#tag** [[Note]]][ref]\n\n[ref]: https://example.org",
+    );
+    expect(html.match(/<a /g)).toHaveLength(2);
+    expect(html).not.toMatch(/class="(?:tag|wikilink)"/);
+    expect(html).toContain("<strong>#work</strong>");
+    expect(html).toContain("[[Other]]");
+  });
+});
+
+it("preserves multiline quote text around escaped extension markers", () => {
+  const html = renderMarkdown("> first\n> second \\#literal\n> third");
+  expect(html).toContain("first\nsecond #literal\nthird");
+  expect(html).not.toContain("&gt; second");
+});
