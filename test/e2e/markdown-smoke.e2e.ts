@@ -33,3 +33,31 @@ test("retains full blocks and DOM while typing, then shows the latest edit", asy
     }),
   ).toEqual([]);
 });
+
+test("toggles formatting shortcuts and pastes literal link labels", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill("three");
+  await editor.press("ControlOrMeta+A");
+  for (const key of ["b", "i", "i", "b"]) {
+    await editor.press(`ControlOrMeta+${key}`);
+    await page.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+    );
+  }
+  await expect
+    .poll(() => editor.evaluate((element) => Reflect.get(element, "markdownEditor").value))
+    .toBe("three");
+  await editor.fill("a]b");
+  await editor.press("ControlOrMeta+A");
+  await editor.evaluate((element) => {
+    const clipboardData = new DataTransfer();
+    clipboardData.setData("text/plain", "https://example.com/a)b");
+    element.dispatchEvent(
+      new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData }),
+    );
+  });
+  const link = page.locator('.rendered-pane a[href="https://example.com/a%29b"]');
+  await expect(link).toHaveText("a]b");
+});
