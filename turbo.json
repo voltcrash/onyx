@@ -3,7 +3,7 @@
   "globalPassThroughEnv": ["NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "NPM_CONFIG_CAFILE"],
   "tasks": {
     "ci:lint": {
-      "tags": ["ci"]
+      "tags": ["ci", "ci:cpus:4"]
     },
     "ci:check": {
       "tags": ["ci"]

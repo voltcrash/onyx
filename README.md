@@ -194,6 +194,9 @@ directory. `scripts/ci.sh` selects that toolchain and library, including the Nod
 dependencies there. No task needs GitHub OAuth credentials, a deployment, or an external service;
 GitHub API calls in the browser tests are intercepted locally.
 
+Lint uses 4 CPUs and 8 GB of memory because Oxlint's JavaScript plugin allocator cannot start on
+Vercel's default 4 GB runner. The other tasks use the default resources.
+
 To reproduce the complete task graph on Ubuntu with permission to install browser dependencies:
 
 ```sh
