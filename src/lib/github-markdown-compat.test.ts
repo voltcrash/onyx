@@ -461,3 +461,16 @@ describe("github markdown compatibility", () => {
     expect(html).toContain("Invalid STL");
   });
 });
+
+it("keeps currency and whitespace-delimited dollars literal", () => {
+  for (const value of ["costs $5 and $10", "$ x$", "$x $", "$ x $", "$2$3"]) {
+    expect(renderMarkdown(value)).not.toContain("<math");
+    expect(renderMarkdown(value)).toContain(value);
+  }
+});
+
+it("normalizes alternate math and honors escaped alternate dollars", () => {
+  const standard = renderMarkdown(String.raw`$\sqrt{3x-1}$`);
+  expect(renderMarkdown(String.raw`$\`\sqrt{3x-1}\`$`.replaceAll("\\`", "`"))).toBe(standard);
+  expect(renderMarkdown("\\$`\\sqrt{3x-1}`\\$")).not.toContain("<math");
+});

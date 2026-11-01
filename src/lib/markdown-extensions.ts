@@ -98,7 +98,30 @@ export const remarkInlineMarks: Plugin<[MarkdownExtensionOptions?]> = (options) 
 // GitHub's alternate inline math `$`…`$` for equations containing Markdown
 // syntax. The parser leaves it as text/code/text, so adjacent `$`-wrapped code
 // spans are folded into inline math matching remark-math's node shape.
-export const remarkGithubInlineMath: Plugin<[]> = () => (tree) => {
+export const remarkGithubInlineMath: Plugin<[]> = () => (tree, file) => {
+  const source = String(file);
+  visitParents(tree as MdastNode, (parent) => {
+    parent.children = (parent.children ?? []).map((child) => {
+      if (child.type !== "inlineMath") return child;
+      const start = child.position?.start.offset;
+      const end = child.position?.end.offset;
+      const raw = start === undefined || end === undefined ? "" : source.slice(start, end);
+      const alternate = raw.startsWith("$`") && raw.endsWith("`$");
+      if (
+        !alternate &&
+        raw.startsWith("$") &&
+        !raw.startsWith("$$") &&
+        (/^\s|\s$/.test(raw.slice(1, -1)) || /\d/.test(source[end ?? source.length] ?? ""))
+      ) {
+        return { type: "literal", value: raw, position: child.position };
+      }
+      if (alternate) {
+        const value = raw.slice(2, -2);
+        return { ...child, value, data: { ...child.data, hChildren: [{ type: "text", value }] } };
+      }
+      return child;
+    });
+  });
   visitParents(tree as MdastNode, (parent) => {
     const children = parent.children ?? [];
     if (children.length < 3 || !children.some((child) => child.type === "inlineCode")) return;
