@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ci": {
+    "bootstrapping": {
+      "installCommand": "sh scripts/ci-install.sh",
+      "installEnv": {}
+    }
+  }
+}
