@@ -15,8 +15,10 @@ export function createConfirmation(prepare: () => Promise<void>) {
   let request = $state<ConfirmationRequest>();
   let settle: ((confirmed: boolean) => void) | undefined;
   let nextId = 0;
+  let disposed = false;
 
   function answer(confirmed: boolean): void {
+    nextId += 1;
     const done = settle;
     settle = undefined;
     request = undefined;
@@ -30,13 +32,19 @@ export function createConfirmation(prepare: () => Promise<void>) {
     /** Resolves true when confirmed, and false when cancelled or replaced by another request. */
     ask: async (options: ConfirmationOptions): Promise<boolean> => {
       answer(false);
+      const id = nextId;
       await prepare();
+      if (disposed || id !== nextId) return false;
       return new Promise<boolean>((resolve) => {
         settle = resolve;
-        request = { ...options, id: ++nextId };
+        request = { ...options, id };
       });
     },
     confirm: () => answer(true),
     cancel: () => answer(false),
+    dispose: () => {
+      disposed = true;
+      answer(false);
+    },
   };
 }
