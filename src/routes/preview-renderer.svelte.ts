@@ -1,3 +1,4 @@
+import { createLazyResource } from "#lib/lazy-resource.ts";
 import {
   renderMarkdownBlocks as renderLiteMarkdownBlocks,
   type RenderedBlock,
@@ -35,7 +36,13 @@ export interface PreviewRendererHost {
  */
 export function createPreviewRenderer(host: PreviewRendererHost) {
   let markdownModule: MarkdownModule | undefined;
-  let markdownModulePromise: Promise<MarkdownModule> | undefined;
+  const markdownResource = createLazyResource(() =>
+    import("#lib/markdown.ts").then((module) => {
+      markdownModule = module;
+      revision += 1;
+      return module;
+    }),
+  );
   let revision = $state(0);
   // Undefined until first needed, and null once workers prove unavailable.
   let renderWorker: MarkdownRenderWorker | null | undefined;
@@ -43,6 +50,7 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
   let pendingWorkerPreview: (PreviewKey & { done: Promise<void> }) | undefined;
   let renderSequence = 0;
   let displayedSequence = 0;
+  let disposed = false;
 
   const blocks = $derived.by(() => {
     const source = host.source();
@@ -66,11 +74,7 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
   });
 
   function loadMarkdownModule(): Promise<MarkdownModule> {
-    return (markdownModulePromise ??= import("#lib/markdown.ts").then((module) => {
-      markdownModule = module;
-      revision += 1;
-      return module;
-    }));
+    return markdownResource.load();
   }
 
   // Only first paint uses lite output; edits retain full blocks until the worker answers.
@@ -109,6 +113,7 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
     source: string,
     context = { attachments: host.attachments(), noteSourcePath: host.noteSourcePath() },
   ): Promise<void> {
+    if (disposed) return;
     const { attachments, noteSourcePath } = context;
     if (workerPreview && matches(workerPreview, source, attachments, noteSourcePath)) return;
     const pending = pendingWorkerPreview;
@@ -133,16 +138,20 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
     if (current) {
       try {
         const rendered = await current.render({ source, noteSourcePath, attachments });
-        if (rendered && sequence > displayedSequence) {
+        if (!disposed && current === renderWorker && rendered && sequence > displayedSequence) {
           displayedSequence = sequence;
           workerPreview = { source, attachments, noteSourcePath, blocks: rendered };
         }
         return;
       } catch {
+        current.dispose();
+        if (disposed) return;
         renderWorker = null;
         workerPreview = undefined;
+        revision += 1;
       }
     }
+    if (disposed) return;
     await loadMarkdownModule().catch(() => undefined);
   }
 
@@ -162,6 +171,8 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
       revision += 1;
     },
     dispose(): void {
+      disposed = true;
+      renderSequence += 1;
       renderWorker?.dispose();
       renderWorker = null;
     },

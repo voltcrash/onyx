@@ -58,7 +58,7 @@
 		onConnectGithub: () => void;
 		onDisconnectGithub: () => void;
 		onCreateRepository: (name: string) => void;
-		onSelectRepository: (state: Omit<GithubBackupState, 'updatedAt'>) => void;
+		onSelectRepository: (state: Omit<GithubBackupState, 'updatedAt'>) => Promise<void>;
 		onForgetRepository: () => void;
 		onAutoBackupChange: (enabled: boolean) => void;
 		onBackup: () => void;
@@ -68,7 +68,7 @@
 		onExportFolder: () => void;
 		onExportZip: () => void;
 		onPrepareVaultDeletion: () => Promise<boolean>;
-		onDeleteVault: () => Promise<void>;
+		onDeleteVault: (expectedVersion: number) => Promise<void>;
 	}
 
 	let {
@@ -108,6 +108,10 @@
 	let repositoryState = $state<'idle' | 'loading' | 'error'>('idle');
 	let repositoryMessage = $state('');
 	let repositoriesLoaded = $state(false);
+	let repositoryGeneration = 0;
+	let usageGeneration = 0;
+	let applyingRepository = $state(false);
+	let clearTarget: {vault:Vault;version:number} | undefined;
 	let selectedRepository = $state('');
 	let branch = $state('main');
 	let directory = $state('vault');
@@ -139,6 +143,15 @@
 	);
 
 	$effect(() => {
+      void githubUser?.id;
+      untrack(() => { repositoryGeneration += 1; repositories = []; repositoriesLoaded = false; repositoryState = 'idle'; repositoryMessage = ''; });
+    });
+    $effect(() => {
+      void vault;
+      untrack(() => { usageGeneration += 1; usage = undefined; usageState = 'idle'; usageMessage = ''; clearTarget = undefined; clearState = 'idle'; });
+    });
+
+	$effect(() => {
 		if (section === 'github' && connected && isOnline && !repositoriesLoaded) void loadRepositories();
 		if (section === 'storage' && !usage && usageState === 'idle') void loadUsage();
 	});
@@ -153,28 +166,38 @@
 
 	async function loadRepositories(): Promise<void> {
 		if (!isOnline) return;
-		repositoryState = 'loading';
+		const account = githubUser?.id;
+        const generation = ++repositoryGeneration;
+        repositoryState = 'loading';
 		repositoryMessage = '';
 		try {
-			repositories = await listGithubRepositories();
+			const loaded = await listGithubRepositories();
+            if (account !== githubUser?.id || generation !== repositoryGeneration) return;
+            repositories = loaded;
 			repositoriesLoaded = true;
 			repositoryState = 'idle';
 			if (repositories.length === 0) repositoryMessage = 'No repositories with write access were found.';
 		} catch (error) {
-			repositoryState = 'error';
+			if (account !== githubUser?.id || generation !== repositoryGeneration) return;
+            repositoryState = 'error';
 			repositoryMessage = error instanceof Error ? error.message : 'Repositories could not be loaded.';
 		}
 	}
 
 	async function loadUsage(): Promise<void> {
 		if (!vault) return;
-		usageState = 'loading';
+		const opened = vault;
+        const generation = ++usageGeneration;
+        usageState = 'loading';
 		usageMessage = '';
 		try {
-			usage = await vault.getStorageUsage();
+			const loaded = await opened.getStorageUsage();
+            if (opened !== vault || generation !== usageGeneration) return;
+            usage = loaded;
 			usageState = 'idle';
 		} catch (error) {
-			usageState = 'error';
+			if (opened !== vault || generation !== usageGeneration) return;
+            usageState = 'error';
 			usageMessage = error instanceof Error ? error.message : 'Storage usage is unavailable.';
 		}
 	}
@@ -221,17 +244,19 @@
 		}
 	}
 
-	function applyRepository(): void {
+	async function applyRepository(): Promise<void> {
+        if (applyingRepository) return;
 		const repository = repositories.find((item) => `${item.owner}/${item.name}` === selectedRepository);
 		if (!repository) return;
-		onSelectRepository({
+		applyingRepository = true;
+        try { await onSelectRepository({
 			githubAccountId: githubUser!.id,
 			githubAccountLogin: githubUser!.login,
 			owner: repository.owner,
 			repository: repository.name,
 			branch: branch.trim() || repository.branch,
 			directory: directory.trim().replace(/^\/+|\/+$/g, '')
-		});
+		}); } finally { applyingRepository = false; }
 	}
 
 	async function clearVault(): Promise<void> {
@@ -239,18 +264,25 @@
 		if (clearState !== 'confirming') {
 			clearState = 'preparing';
 			clearMessage = '';
-			if (!(await onPrepareVaultDeletion())) {
+			const opened = vault;
+            try {
+            if (!(await onPrepareVaultDeletion())) {
 				clearState = 'error';
 				clearMessage = 'Save the current note before deleting the vault.';
 				return;
 			}
-			clearState = 'confirming';
+            const version = await opened.getVersion();
+            if (opened !== vault) return;
+            clearTarget = {vault:opened,version};
+            clearState = 'confirming';
+            } catch(error) { clearState = 'error'; clearMessage = error instanceof Error ? error.message : 'The vault could not be prepared.'; }
 			return;
 		}
-		clearState = 'clearing';
+		if (!clearTarget || clearTarget.vault !== vault) { clearState = 'idle'; return; }
+        clearState = 'clearing';
 		clearMessage = '';
 		try {
-			await onDeleteVault();
+			await onDeleteVault(clearTarget.version);
 			clearState = 'idle';
 			usage = undefined;
 		} catch (error) {
@@ -285,7 +317,8 @@
 	function captureShortcut(event: KeyboardEvent, action: ShortcutAction): void {
 		event.preventDefault();
 		event.stopPropagation();
-		const shortcut = shortcutFromEvent(event, primaryModifier);
+		if (event.key === 'Escape') { recordingShortcut = undefined; shortcutMessage = ''; return; }
+        const shortcut = shortcutFromEvent(event, primaryModifier);
 		if (!shortcut) return;
 		const conflict = shortcutActions.find(({ id }) => id !== action && shortcutsEqual(shortcuts[id], shortcut));
 		if (conflict) {
@@ -308,7 +341,7 @@
 	<div id="settings-dialog" class="shortcut-modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1" use:manageModalFocus>
 		<div class="modal-title">
 			<div><h2 id="settings-title">Settings</h2></div>
-			<button class="icon-button" aria-label="Close settings" onclick={onClose}><X size={18} /></button>
+			<button class="icon-button" aria-label="Close settings" disabled={clearState === 'clearing'} onclick={onClose}><X size={18} /></button>
 		</div>
 
 		<div class="settings-body">
@@ -495,7 +528,7 @@
 						</div>
 						{#if repositoryMessage}<p class="settings-hint error">{repositoryMessage}</p>{/if}
 						<div class="settings-actions">
-							<button class="settings-primary" disabled={!isOnline || !selectedRepository} onclick={applyRepository}>Use this repository</button>
+							<button class="settings-primary" disabled={!isOnline || !selectedRepository || applyingRepository} onclick={applyRepository}>Use this repository</button>
 						</div>
 						<div class="settings-separator"><span>or create a new one</span></div>
 						<div class="settings-field">

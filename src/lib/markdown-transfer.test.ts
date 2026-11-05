@@ -194,3 +194,20 @@ function createMemoryFileHandle(
     }),
   } as unknown as FileSystemFileHandle;
 }
+
+it("exports one captured vault generation without rereading live notes", async () => {
+  const vault = {
+    captureExport: async () => ({
+      notes: [{ id: "n", title: "Snapshot", sourcePath: "Snapshot.md", markdown: "captured text" }],
+      attachments: [],
+    }),
+    listNotes: async () => {
+      throw new Error("must not read live metadata");
+    },
+    getNote: async () => {
+      throw new Error("must not read live text");
+    },
+  } as unknown as Vault;
+  const files = await createMarkdownExport(vault);
+  expect(await files[0].contents.text()).toBe("captured text");
+});

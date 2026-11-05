@@ -49,7 +49,7 @@
 
 <Seo {structuredData} />
 
-<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:sidebar-resizing={sidebarResizing} class:palette-open={page.paletteOpen} style={`--sidebar-width: ${page.sidebarWidth}px`} inert={page.settingsOpen || page.restoreModalOpen || page.imagePreview !== undefined}>
+<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:sidebar-resizing={sidebarResizing} class:palette-open={page.paletteOpen} style={`--sidebar-width: ${page.sidebarWidth}px`} inert={page.settingsOpen || page.restoreModalOpen || page.imagePreview !== undefined || page.confirmation !== undefined}>
 	<NotesSidebar
 		vaults={page.vaults}
 		activeVaultId={page.activeVaultId}
@@ -78,7 +78,7 @@
 		transferState={page.transferState}
 		storageError={page.storageError}
 		paletteOpen={page.paletteOpen}
-		searchPending={page.searchPending}
+		searchPending={page.searchPending} searchError={page.searchError}
 		paletteItems={page.paletteItems}
 		settingsOpen={page.settingsOpen}
 		isOnline={page.isOnline}
@@ -102,11 +102,11 @@
 		onCreateVault={() => void page.createVault()}
 		onRenameVault={page.renameVault}
 		onCreateNote={() => void page.createNote()}
-		onCreateFile={(folder, name) => void page.createFile(folder, name)}
-		onCreateFolder={(folder, name) => void page.createFolder(folder, name)}
+		onCreateFile={page.createFile}
+		onCreateFolder={page.createFolder}
 		onDeleteAttachment={(id) => void page.deleteAttachment(id)}
-		onRenameFile={(id, name) => void page.renameFile(id, name)}
-		onRenameFolder={(path, name) => void page.renameFolder(path, name)}
+		onRenameFile={page.renameFile}
+		onRenameFolder={page.renameFolder}
 		onSetFolderIcon={(path, icon) => void page.setFolderIcon(path, icon)}
 		onSetFolderPinned={(path, pinned) => void page.setFolderPinned(path, pinned)}
 		onSetNotePinned={(id, pinned) => void page.setNotePinned(id, pinned)}
@@ -142,7 +142,7 @@
 		onChangePage={page.changeNotePage}
 		onContentWidthChange={page.setContentWidth}
 	/>
-	<button type="button" class="sidebar-resize" aria-label={`Resize notes sidebar, ${page.sidebarWidth} pixels wide`} title="Drag to resize; snaps to the default width" onpointerdown={startSidebarResize} onpointermove={trackSidebarResize} onpointerup={endSidebarResize} onpointercancel={endSidebarResize} onkeydown={nudgeSidebarResize}></button>
+	<button type="button" class="sidebar-resize" aria-label={`Resize notes sidebar, ${page.sidebarWidth} pixels wide`} title="Drag to resize; snaps to the default width" onpointerdown={startSidebarResize} onpointermove={trackSidebarResize} onpointerup={endSidebarResize} onpointercancel={endSidebarResize} onlostpointercapture={endSidebarResize} onkeydown={nudgeSidebarResize}></button>
 
 	<MarkdownWorkspace
 		storageNotice={page.storageNotice}
@@ -166,7 +166,10 @@
 		hasContent={page.hasContent}
 		shortcuts={page.shortcuts}
 		primaryModifier={page.primaryModifier}
-		bind:editor={page.editor}
+		saveConflict={page.saveConflict}
+      onSaveConflictCopy={() => void page.saveConflictCopy()}
+      editorBlocked={page.editorBlocked}
+        bind:editor={page.editor}
 		onRetryStorage={() => void (page.vault ? page.saveDraft() : page.openVault())}
 		onDismissStorageNotice={page.dismissStorageNotice}
 		onToggleSidebar={page.toggleSidebar}
@@ -205,7 +208,7 @@
 {/if}
 
 {#if page.printing}
-	<div class="print-document paper-surface" aria-hidden="true"><article class="prose">{@html page.renderedMarkdown}</article></div>
+	<div class="print-document paper-surface" aria-hidden="true"><article class="prose">{@html page.printHtml}</article></div>
 {/if}
 
 <StatusNotices
@@ -258,7 +261,7 @@
 			onConnectGithub={() => void page.connectGitHub()}
 			onDisconnectGithub={() => void page.disconnectGitHub()}
 			onCreateRepository={(name) => void page.createBackupRepository(name)}
-			onSelectRepository={(state) => void page.selectBackupRepository(state)}
+			onSelectRepository={(state) => page.selectBackupRepository(state)}
 			onForgetRepository={() => void page.forgetBackupRepository()}
 			onAutoBackupChange={(enabled) => void page.setAutoBackup(enabled)}
 			onBackup={() => void page.beginBackup()}

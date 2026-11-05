@@ -16,3 +16,9 @@ it("preserves literal callout-looking title text", () => {
   expect(titleFromMarkdown("> \\[!NOTE] literal")).toBe("[!NOTE] literal");
   expect(titleFromMarkdown("[!NOTE] literal")).toBe("[!NOTE] literal");
 });
+
+it("uses the same closed front matter boundaries as tag extraction", () => {
+  expect(titleFromMarkdown("---\ntags: secret\n...\n# Visible")).toBe("Visible");
+  expect(titleFromMarkdown("+++\ntitle = 'Hidden'\n+++\n# Visible")).toBe("Visible");
+  expect(titleFromMarkdown("---\nunclosed")).toBe("---");
+});

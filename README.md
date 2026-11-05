@@ -130,7 +130,7 @@ Onyx requests the `repo` scope so it can create private repositories and write b
 - `src/routes/page-controller.svelte.ts` owns application state and coordinates persistence,
   transfer, and GitHub workflows; `src/routes/+page.svelte` composes the interface.
 - `src/lib/markdown-editor.ts` adapts CodeMirror to the controller's editing, selection, find,
-  clipboard, and scroll-sync workflows. Undo and redo keep using Onyx's per-note history.
+  clipboard, and scroll-sync workflows. Undo and redo use Onyx's document history; opening another note starts a fresh history.
 - `src/lib/components/` contains focused workspace, navigation, dialog, and status components.
 - `src/routes/styles/` separates base tokens, application shell, editor, dialog, command-palette,
   responsive, and print styles.

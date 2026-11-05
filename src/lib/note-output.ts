@@ -1,3 +1,4 @@
+import { createLazyResource } from "./lazy-resource.js";
 import type { NoteFormat } from "./components/note-formats.js";
 import { outputFileName } from "./output-utils.js";
 
@@ -25,13 +26,10 @@ export function downloadBlob(blob: Blob, name: string): void {
  * output and Markdown renderers load on first use.
  */
 export function createNoteOutput(loadMarkdownModule: () => Promise<MarkdownModule>) {
-  let outputModulePromise: Promise<MarkdownOutputModule> | undefined;
+  const outputResource = createLazyResource(() => import("./markdown-output.js"));
 
   function loadOutputModule(): Promise<MarkdownOutputModule> {
-    return (outputModulePromise ??= import("./markdown-output.js").then((module) => {
-      void loadMarkdownModule().catch(() => undefined);
-      return module;
-    }));
+    return outputResource.load();
   }
 
   // Exports keep the note's own attachment paths, because in-app blob URLs die with the tab.

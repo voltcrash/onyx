@@ -23,7 +23,10 @@ export function enhanceMermaidPreview(root: HTMLElement): () => void {
           pele = module;
           update();
         })
-        .catch(() => undefined);
+        .catch(() => undefined)
+        .finally(() => {
+          loading = undefined;
+        });
       return;
     }
     for (const element of elements) {

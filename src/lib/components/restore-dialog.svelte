@@ -28,12 +28,13 @@
 		formatCommitDate
 	}: Props = $props();
 
-	let confirmationSha = $state('');
-	const pendingChangesConfirmed = $derived(confirmationSha === selectedRestoreSha);
+	let confirmation = $state('');
+	const identity = $derived(JSON.stringify([restoreOwner,restoreRepository,restoreBranch,restoreDirectory,selectedRestoreSha,pendingBackupCount]));
+	const pendingChangesConfirmed = $derived(confirmation === identity);
 
 	function requestRestore(): void {
 		if (pendingBackupCount > 0 && !pendingChangesConfirmed) {
-			confirmationSha = selectedRestoreSha;
+			confirmation = identity;
 			return;
 		}
 		onRestore();
@@ -44,10 +45,10 @@
 	<div id="restore-dialog" class="shortcut-modal restore-modal" role="dialog" aria-modal="true" aria-labelledby="restore-title" aria-describedby="restore-warning" aria-busy={restoreState === 'loading' || restoreState === 'restoring'} tabindex="-1" use:manageModalFocus>
 		<div class="modal-title"><div><span>GitHub restore</span><h2 id="restore-title">Choose a backup commit</h2></div><button type="button" class="icon-button" aria-label="Close GitHub restore" disabled={restoreState === 'restoring'} onclick={onClose}><X size={18} /></button></div>
 		<form class="restore-source" onsubmit={(event) => { event.preventDefault(); onLoadCommits(); }}>
-			<label>Owner<input bind:value={restoreOwner} required autocomplete="off" /></label>
-			<label>Repository<input bind:value={restoreRepository} required autocomplete="off" /></label>
-			<label>Branch<input bind:value={restoreBranch} required autocomplete="off" /></label>
-			<label>Directory<input bind:value={restoreDirectory} autocomplete="off" /></label>
+			<label>Owner<input disabled={restoreState === 'restoring'} bind:value={restoreOwner} required autocomplete="off" /></label>
+			<label>Repository<input disabled={restoreState === 'restoring'} bind:value={restoreRepository} required autocomplete="off" /></label>
+			<label>Branch<input disabled={restoreState === 'restoring'} bind:value={restoreBranch} required autocomplete="off" /></label>
+			<label>Directory<input disabled={restoreState === 'restoring'} bind:value={restoreDirectory} autocomplete="off" /></label>
 			<button type="submit" disabled={!isOnline || restoreState === 'loading' || restoreState === 'restoring'}>{#if restoreState === 'loading'}<LoaderCircle class="spin" size={14} />{/if} Load commits</button>
 		</form>
 		<div class="restore-list" aria-live="polite">
@@ -56,7 +57,7 @@
 			{:else}
 				{#each restoreCommits as commit (commit.sha)}
 					<label class:selected={selectedRestoreSha === commit.sha}>
-						<input type="radio" name="restore-commit" value={commit.sha} bind:group={selectedRestoreSha} />
+						<input disabled={restoreState === 'restoring'} type="radio" name="restore-commit" value={commit.sha} bind:group={selectedRestoreSha} />
 						<GitCommitHorizontal size={17} />
 						<span><strong>{commit.message}</strong><small>{formatCommitDate(commit.committedAt)} · {commit.author} · {commit.sha.slice(0, 7)}</small></span>
 					</label>

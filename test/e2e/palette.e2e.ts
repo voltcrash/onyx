@@ -228,3 +228,28 @@ test("searches note titles and Markdown content from the command palette", async
     "true",
   );
 });
+
+test("recovers from a search failure without leaving the palette busy", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await page.evaluate(() => {
+    const original = Reflect.get(
+      IDBDatabase.prototype,
+      "transaction",
+    ) as IDBDatabase["transaction"];
+    IDBDatabase.prototype.transaction = function (...args: Parameters<typeof original>) {
+      if (args[0] === "searchPostings") {
+        IDBDatabase.prototype.transaction = original;
+        throw new DOMException("Temporary search failure", "UnknownError");
+      }
+      return original.apply(this, args);
+    };
+  });
+  await page.keyboard.press("ControlOrMeta+K");
+  const search = page.getByRole("combobox");
+  await search.fill("temporary");
+  await expect(page.getByRole("alert")).toContainText("Search failed");
+  await search.fill("Welcome");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByRole("option", { name: /Welcome to Onyx/ }).first()).toBeVisible();
+});

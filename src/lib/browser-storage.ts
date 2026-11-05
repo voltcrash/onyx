@@ -41,13 +41,24 @@ export function readLocalStorage(key: string): string | undefined {
   }
 }
 
+const preferenceFailureListeners = new Set<() => void>();
+
+export function subscribePreferenceWriteFailures(listener: () => void): () => void {
+  preferenceFailureListeners.add(listener);
+  return () => preferenceFailureListeners.delete(listener);
+}
+
 export function writeLocalStorage(key: string, value: string): boolean {
   try {
-    globalThis.localStorage?.setItem(key, value);
-    return typeof globalThis.localStorage !== "undefined";
+    if (globalThis.localStorage) {
+      globalThis.localStorage.setItem(key, value);
+      return true;
+    }
   } catch {
-    return false;
+    // Preferences remain usable for the current tab when persistence fails.
   }
+  for (const listener of preferenceFailureListeners) listener();
+  return false;
 }
 
 function canUseLocalStorage(): boolean {

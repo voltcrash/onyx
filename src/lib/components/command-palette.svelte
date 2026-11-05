@@ -33,6 +33,7 @@
 </script>
 
 <script lang="ts">
+	import { nextEnabledIndex } from '#lib/palette-navigation.ts';
 	import { LoaderCircle, Search } from '@lucide/svelte';
 
 	interface Props {
@@ -40,12 +41,13 @@
 		controls?: PaletteControl[];
 		query: string;
 		loading?: boolean;
+		error?: string;
 		searchInput?: HTMLInputElement;
 		onQueryChange: (value: string) => void;
 		onClose: () => void;
 	}
 
-	let { items, controls = [], query, loading = false, searchInput = $bindable(), onQueryChange, onClose }: Props = $props();
+	let { items, controls = [], query, loading = false, error = '', searchInput = $bindable(), onQueryChange, onClose }: Props = $props();
 
 	let activeIndex = $state(0);
 	let list: HTMLElement | undefined = $state();
@@ -73,7 +75,7 @@
 
 	$effect(() => {
 		const first = matches.findIndex((item) => !item.disabled);
-		activeIndex = first === -1 ? 0 : first;
+		activeIndex = first;
 	});
 
 	$effect(() => {
@@ -122,12 +124,7 @@
 
 	function move(delta: number): void {
 		if (matches.length === 0) return;
-		let next = activeIndex;
-		for (let step = 0; step < matches.length; step += 1) {
-			next = (next + delta + matches.length) % matches.length;
-			if (!matches[next]?.disabled) break;
-		}
-		activeIndex = next;
+		activeIndex = nextEnabledIndex(matches,activeIndex,delta);
 		scrollActiveIntoView();
 	}
 
@@ -217,6 +214,7 @@
 		</div>
 
 		<div class="palette-list" id="palette-list" role="listbox" aria-label="Results" bind:this={list}>
+			{#if error}<div class="palette-empty" role="alert">Search failed: {error}</div>{/if}
 			{#each groups as group (group.name)}
 				<div class="palette-group">{group.name}</div>
 				{#each group.items as item (item.id)}

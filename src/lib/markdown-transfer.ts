@@ -1,5 +1,6 @@
 import { BlobReader, BlobWriter, ZipReader, ZipWriter, type Entry } from "@zip.js/zip.js";
 
+import { mapMarkdownProse } from "./markdown-source.js";
 import { titleFromMarkdown } from "./markdown-utils.js";
 import {
   basename,
@@ -170,12 +171,18 @@ export async function importMarkdownFiles(
 }
 
 export async function createMarkdownExport(vault: Vault): Promise<MarkdownTransferFile[]> {
-  const [notes, attachments] = await Promise.all([vault.listNotes(), vault.listAttachments()]);
+  const snapshot =
+    typeof vault.captureExport === "function" ? await vault.captureExport() : undefined;
+  const [notes, attachments] = snapshot
+    ? [snapshot.notes, snapshot.attachments.map((attachment) => attachment.metadata)]
+    : await Promise.all([vault.listNotes(), vault.listAttachments()]);
   const records: ExportRecord[] = [];
   const paths = new Set<string>();
 
   for (const note of notes.toReversed()) {
-    const value = await vault.getNote(note.id);
+    const value = snapshot
+      ? snapshot.notes.find((candidate) => candidate.id === note.id)
+      : await vault.getNote(note.id);
     if (!value) continue;
     const fallback = `${safeName(note.title)}.md`;
     const sourcePath = normalizeExportPath(note.sourcePath, fallback);
@@ -190,7 +197,9 @@ export async function createMarkdownExport(vault: Vault): Promise<MarkdownTransf
   }
 
   for (const metadata of attachments) {
-    const attachment = await vault.getAttachment(metadata.id);
+    const attachment = snapshot
+      ? snapshot.attachments.find((candidate) => candidate.metadata.id === metadata.id)
+      : await vault.getAttachment(metadata.id);
     if (!attachment) continue;
     const fallback = `attachments/${safeName(metadata.name)}`;
     const sourcePath = normalizeExportPath(metadata.sourcePath, fallback);
@@ -231,8 +240,14 @@ export async function createMarkdownZip(
   validateTransferFiles(files, resolvedLimits);
 
   const writer = new ZipWriter(new BlobWriter("application/zip"));
-  for (const file of files) await writer.add(file.path, new BlobReader(file.contents));
-  const archive = await writer.close();
+  let archive: Blob;
+  try {
+    for (const file of files) await writer.add(file.path, new BlobReader(file.contents));
+    archive = await writer.close();
+  } catch (error) {
+    await writer.close().catch(() => undefined);
+    throw error;
+  }
   assertWithinLimit(archive.size, resolvedLimits.maxArchiveBytes, "ZIP archive");
   return archive;
 }
@@ -593,23 +608,25 @@ async function rewriteMarkdownLinks(
     return `${encodePath(relativePath(exportDirectory, exportPath))}${suffix}`;
   };
 
-  const withInlineLinks = markdown.replace(
-    /(!?\[[^\]]*\]\(\s*)(<[^>\n]+>|[^\s)\n]+)/g,
-    (match, prefix: string, destination: string) => {
-      const angleBrackets = destination.startsWith("<") && destination.endsWith(">");
-      const rawDestination = angleBrackets ? destination.slice(1, -1) : destination;
-      const rewritten = rewrite(rawDestination);
-      if (!rewritten) return match;
-      return `${prefix}${angleBrackets ? `<${rewritten}>` : rewritten}`;
-    },
-  );
-  return withInlineLinks.replace(
-    /(!?\[\[)([^\]|#]+)(?=\||#|\]\])/g,
-    (match, prefix: string, destination: string) => {
-      const rewritten = rewrite(destination);
-      return rewritten ? `${prefix}${rewritten}` : match;
-    },
-  );
+  return mapMarkdownProse(markdown, (prose) => {
+    const withInlineLinks = prose.replace(
+      /(!?\[[^\]]*\]\(\s*)(<[^>\n]+>|[^\s)\n]+)/g,
+      (match, prefix: string, destination: string) => {
+        const angleBrackets = destination.startsWith("<") && destination.endsWith(">");
+        const rawDestination = angleBrackets ? destination.slice(1, -1) : destination;
+        const rewritten = rewrite(rawDestination);
+        if (!rewritten) return match;
+        return `${prefix}${angleBrackets ? `<${rewritten}>` : rewritten}`;
+      },
+    );
+    return withInlineLinks.replace(
+      /(!?\[\[)([^\]|#]+)(?=\||#|\]\])/g,
+      (match, prefix: string, destination: string) => {
+        const rewritten = rewrite(destination);
+        return rewritten ? `${prefix}${rewritten}` : match;
+      },
+    );
+  });
 }
 
 function resolveLinkPath(directory: string, destination: string): string | undefined {

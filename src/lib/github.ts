@@ -3,8 +3,8 @@ import type {
   Vault,
   VaultBackupManifest,
   VaultRestoreFile,
-  VaultOperationContext,
 } from "./storage/index.js";
+import { githubTargetKey } from "./storage/types.js";
 import { authClient } from "./auth-client.js";
 
 const API_ROOT = "https://api.github.com";
@@ -18,6 +18,15 @@ const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 let accessToken: string | undefined;
 let authenticatedUser: GithubUser | undefined;
 let sessionRefreshPromise: Promise<boolean> | undefined;
+let authenticationGeneration = 0;
+const authenticationListeners = new Set<(user: GithubUser | undefined) => void>();
+
+export function subscribeGithubAuthentication(
+  listener: (user: GithubUser | undefined) => void,
+): () => void {
+  authenticationListeners.add(listener);
+  return () => authenticationListeners.delete(listener);
+}
 
 export interface GithubUser {
   avatarUrl: string;
@@ -139,23 +148,27 @@ export class GithubRequestError extends Error {
 }
 
 export async function restoreGithubSession(): Promise<GithubUser | undefined> {
-  const token = await requestGithubSession();
-  if (!token) {
-    clearGithubAuthentication();
-    return undefined;
-  }
-  accessToken = token;
+  const generation = ++authenticationGeneration;
   try {
+    const token = await requestGithubSession();
+    if (generation !== authenticationGeneration) return undefined;
+    if (!token) {
+      clearGithubAuthentication();
+      return undefined;
+    }
+    accessToken = token;
     const user = await githubRequest<GithubUserResponse>("/user");
+    if (generation !== authenticationGeneration) return undefined;
     authenticatedUser = {
       avatarUrl: user.avatar_url,
       id: user.id,
       login: user.login,
       name: user.name,
     };
+    for (const listener of authenticationListeners) listener(authenticatedUser);
     return authenticatedUser;
   } catch (error) {
-    clearGithubAuthentication();
+    if (generation === authenticationGeneration) clearGithubAuthentication();
     throw error;
   }
 }
@@ -231,31 +244,29 @@ export function backupVaultToGithub(
   backupState: GithubBackupState,
   options: GithubBackupOptions = {},
 ): Promise<GithubBackupResult> {
-  const runExclusive = (
-    vault as unknown as {
-      runExclusive?: (
-        task: (context: VaultOperationContext) => Promise<GithubBackupResult>,
-      ) => Promise<GithubBackupResult>;
-    }
-  ).runExclusive;
-  if (typeof runExclusive !== "function") {
-    return backupVaultToGithubUnlocked(vault, backupState, options);
-  }
-  return runExclusive.call(vault, (context) =>
-    backupVaultToGithubUnlocked(vault, backupState, options, context),
-  );
+  return typeof vault.runBackupExclusive === "function"
+    ? vault.runBackupExclusive(() => backupVaultToGithubUnlocked(vault, backupState, options))
+    : backupVaultToGithubUnlocked(vault, backupState, options);
 }
 
 async function backupVaultToGithubUnlocked(
   vault: Vault,
   backupState: GithubBackupState,
   options: GithubBackupOptions,
-  context?: VaultOperationContext,
 ): Promise<GithubBackupResult> {
+  const captured =
+    typeof vault.captureGithubBackup === "function" ? await vault.captureGithubBackup() : undefined;
+  if (captured) {
+    if (
+      !captured.configuration ||
+      githubTargetKey(captured.configuration) !== githubTargetKey(backupState)
+    )
+      throw new Error("The backup target changed. Start a new backup.");
+    backupState = captured.configuration;
+  }
   await validateGithubBackupRepository(backupState);
-  const snapshot = context
-    ? await vault.createBackupSnapshot({ context })
-    : await vault.createBackupSnapshot();
+  const snapshot = captured?.snapshot ?? (await vault.createBackupSnapshot());
+  const backupManifest = captured?.manifest ?? (await vault.createBackupManifest());
   const repositoryPath = repositoryApiPath(backupState);
   const branchPath = backupState.branch.split("/").map(encodeURIComponent).join("/");
   let parentSha: string | undefined;
@@ -291,6 +302,7 @@ async function backupVaultToGithubUnlocked(
   if (
     parentSha &&
     parentSha !== backupState.lastCommitSha &&
+    parentSha !== backupState.pendingCommitSha &&
     remoteBlobs.has(manifestPath) &&
     !options.replaceNewerBackup
   ) {
@@ -304,23 +316,20 @@ async function backupVaultToGithubUnlocked(
           ? { path, mode: "100644" as const, type: "blob" as const, sha: null }
           : undefined;
       }
+      const bytes = await change.contents.arrayBuffer();
+      const header = new TextEncoder().encode(`blob ${bytes.byteLength}\0`);
+      const input = new Uint8Array(header.length + bytes.byteLength);
+      input.set(header);
+      input.set(new Uint8Array(bytes), header.length);
+      const sha = [...new Uint8Array(await crypto.subtle.digest("SHA-1", input))]
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+      if (remoteBlobs.get(path) === sha) return undefined;
       const blob = await createGithubBlob(repositoryPath, change.contents);
-      if (remoteBlobs.get(path) === blob.sha) return undefined;
       return { path, mode: "100644" as const, type: "blob" as const, sha: blob.sha };
     })
   ).filter((entry) => entry !== undefined);
-  const manifest = new Blob(
-    [
-      JSON.stringify(
-        context
-          ? await vault.createBackupManifest({ context })
-          : await vault.createBackupManifest(),
-      ),
-    ],
-    {
-      type: "application/json",
-    },
-  );
+  const manifest = new Blob([JSON.stringify(backupManifest)], { type: "application/json" });
   const manifestBlob = await createGithubBlob(repositoryPath, manifest);
   const tree =
     remoteBlobs.get(manifestPath) === manifestBlob.sha
@@ -336,9 +345,14 @@ async function backupVaultToGithubUnlocked(
         ];
 
   if (tree.length === 0) {
-    if (context) await vault.acknowledgeBackupOperations(snapshot.operationIds, { context });
-    else await vault.acknowledgeBackupOperations(snapshot.operationIds);
-    return { fileCount: 0, state: backupState };
+    const state = { ...backupState, lastCommitSha: parentSha };
+    if (typeof vault.completeGithubBackup === "function")
+      return {
+        fileCount: 0,
+        state: await vault.completeGithubBackup(state, snapshot.operationIds),
+      };
+    await vault.acknowledgeBackupOperations(snapshot.operationIds);
+    return { fileCount: 0, state };
   }
 
   const createdTree = await githubRequest<GithubTreeResponse>(`${repositoryPath}/git/trees`, {
@@ -353,6 +367,8 @@ async function backupVaultToGithubUnlocked(
       parents: parentSha ? [parentSha] : [],
     }),
   });
+  if (typeof vault.recordPendingGithubCommit === "function")
+    await vault.recordPendingGithubCommit(backupState, commit.sha);
   if (parentSha) {
     await githubRequest(`${repositoryPath}/git/refs/heads/${branchPath}`, {
       method: "PATCH",
@@ -371,13 +387,15 @@ async function backupVaultToGithubUnlocked(
     lastBackedUpAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  if (context) {
-    await vault.saveGithubBackupState(state, { context });
-    await vault.acknowledgeBackupOperations(snapshot.operationIds, { context });
-  } else {
-    await vault.saveGithubBackupState(state);
-    await vault.acknowledgeBackupOperations(snapshot.operationIds);
+  if (typeof vault.completeGithubBackup === "function") {
+    return {
+      commitUrl: commit.html_url,
+      fileCount: tree.length,
+      state: await vault.completeGithubBackup(state, snapshot.operationIds),
+    };
   }
+  await vault.saveGithubBackupState(state);
+  await vault.acknowledgeBackupOperations(snapshot.operationIds);
   return { commitUrl: commit.html_url, fileCount: tree.length, state };
 }
 
@@ -407,6 +425,19 @@ export async function restoreVaultFromGithub(
   vault: Vault,
   backupState: GithubBackupState,
   commitSha: string,
+  options: { expectedVersion?: number } = {},
+): Promise<GithubRestoreResult> {
+  const expectedVersion = options.expectedVersion ?? (await vault.getVersion());
+  const restore = () =>
+    restoreVaultFromGithubUnlocked(vault, { ...backupState }, commitSha, expectedVersion);
+  return vault.runBackupExclusive(restore);
+}
+
+async function restoreVaultFromGithubUnlocked(
+  vault: Vault,
+  backupState: GithubBackupState,
+  commitSha: string,
+  expectedVersion: number,
 ): Promise<GithubRestoreResult> {
   if (!/^[0-9a-f]{40}$/i.test(commitSha)) throw new Error("Select a valid GitHub backup commit");
   await validateGithubBackupRepository(backupState);
@@ -438,13 +469,12 @@ export async function restoreVaultFromGithub(
       contents: await downloadGithubBlob(repositoryPath, sha),
     }),
   );
-  if (!files.some((file) => file.path.startsWith("notes/"))) {
-    throw new Error("The selected commit does not contain an Onyx vault in that directory");
-  }
   const manifestSha = selectedBlobs.get(".onyx.json");
   const manifest = manifestSha
     ? await parseBackupManifest(await downloadGithubBlob(repositoryPath, manifestSha))
     : undefined;
+  if (!manifest && !files.some((file) => file.path.startsWith("notes/")))
+    throw new Error("The selected commit does not contain an Onyx vault in that directory");
   const changedPaths = new Set<string>();
   for (const [path, sha] of selectedBlobs) {
     if (isVaultFile(path) && currentBlobs.get(path) !== sha) changedPaths.add(path);
@@ -454,38 +484,20 @@ export async function restoreVaultFromGithub(
   }
   const restoredAt =
     selectedCommit.committer?.date ?? selectedCommit.author?.date ?? new Date().toISOString();
-  const applyRestore = async (context?: VaultOperationContext): Promise<GithubRestoreResult> => {
-    const result = context
-      ? await vault.restoreBackup(files, {
-          manifest,
-          pendingPaths: [...changedPaths],
-          restoredAt,
-          context,
-        })
-      : await vault.restoreBackup(files, {
-          manifest,
-          pendingPaths: [...changedPaths],
-          restoredAt,
-        });
-    const state: GithubBackupState = {
-      ...backupState,
-      lastCommitSha: selectedCommit.sha,
-      updatedAt: new Date().toISOString(),
-    };
-    if (context) await vault.saveGithubBackupState(state, { context });
-    else await vault.saveGithubBackupState(state);
-    return { ...result, state };
+  const state: GithubBackupState = {
+    ...backupState,
+    lastCommitSha: selectedCommit.sha,
+    pendingCommitSha: undefined,
+    updatedAt: new Date().toISOString(),
   };
-  const runExclusive = (
-    vault as unknown as {
-      runExclusive?: (
-        task: (context: VaultOperationContext) => Promise<GithubRestoreResult>,
-      ) => Promise<GithubRestoreResult>;
-    }
-  ).runExclusive;
-  return typeof runExclusive === "function"
-    ? runExclusive.call(vault, applyRestore)
-    : applyRestore();
+  const result = await vault.restoreBackup(files, {
+    manifest,
+    pendingPaths: [...changedPaths],
+    restoredAt,
+    expectedVersion,
+    githubBackup: state,
+  });
+  return { ...result, state };
 }
 
 export async function githubRequest<T>(path: `/${string}`, init: RequestInit = {}): Promise<T> {
@@ -497,6 +509,7 @@ async function requestGithub<T>(
   init: RequestInit = {},
 ): Promise<GithubRequestResult<T>> {
   if (!accessToken) throw new Error("Sign in with GitHub before using backup and sync");
+  const generation = authenticationGeneration;
   const baseHeaders = new Headers(init.headers);
   baseHeaders.set("Accept", "application/vnd.github+json");
   if (init.body) baseHeaders.set("Content-Type", "application/json");
@@ -504,12 +517,16 @@ async function requestGithub<T>(
   let refreshed = false;
   for (let attempt = 0; attempt < MAX_REQUEST_ATTEMPTS; attempt += 1) {
     const tokenForRequest = accessToken;
-    if (!tokenForRequest) throw new Error("Sign in with GitHub before using backup and sync");
+    if (generation !== authenticationGeneration || !tokenForRequest)
+      throw new Error("Sign in with GitHub before using backup and sync");
     const headers = new Headers(baseHeaders);
     headers.set("Authorization", `Bearer ${tokenForRequest}`);
     let response: Response;
+    let body: unknown;
     try {
-      response = await fetchWithTimeout(`${API_ROOT}${path}`, { ...init, headers });
+      const completed = await fetchWithTimeout(`${API_ROOT}${path}`, { ...init, headers });
+      response = completed.response;
+      body = completed.data;
     } catch (error) {
       if (
         attempt === MAX_REQUEST_ATTEMPTS - 1 ||
@@ -518,19 +535,19 @@ async function requestGithub<T>(
       ) {
         throw error;
       }
-      await retryDelay(exponentialDelay(attempt));
+      await retryDelay(exponentialDelay(attempt), init.signal);
       continue;
     }
-    if (response.ok) return { data: (await response.json()) as T, response };
+    if (generation !== authenticationGeneration)
+      throw new Error("GitHub authentication changed during the request");
+    if (response.ok) return { data: body as T, response };
 
     if (response.status === 401 && !refreshed && attempt < MAX_REQUEST_ATTEMPTS - 1) {
       refreshed = true;
       if (await refreshGithubAccessToken(tokenForRequest)) continue;
     }
 
-    const result = (await response.json().catch(() => undefined)) as
-      | { message?: string }
-      | undefined;
+    const result = body as { message?: string } | undefined;
     const retryAt = githubRetryAt(response);
     const rateLimited = isRateLimited(response, result?.message);
     const delay = retryAt ? Math.max(0, retryAt.getTime() - Date.now()) : exponentialDelay(attempt);
@@ -540,7 +557,7 @@ async function requestGithub<T>(
       (rateLimited || RETRYABLE_STATUSES.has(response.status)) &&
       delay <= MAX_RETRY_DELAY_MS
     ) {
-      await retryDelay(delay);
+      await retryDelay(delay, init.signal);
       continue;
     }
     const message = rateLimited
@@ -581,13 +598,15 @@ async function refreshGithubAccessToken(rejectedToken: string): Promise<boolean>
   if (accessToken && accessToken !== rejectedToken) return true;
   if (sessionRefreshPromise) return sessionRefreshPromise;
 
-  sessionRefreshPromise = (async () => {
+  const generation = authenticationGeneration;
+  const refresh = (async () => {
     let token: string | undefined;
     try {
       token = await requestGithubSession(true);
     } catch {
       return false;
     }
+    if (generation !== authenticationGeneration) return false;
     if (!token) {
       clearGithubAuthentication();
       return false;
@@ -595,23 +614,30 @@ async function refreshGithubAccessToken(rejectedToken: string): Promise<boolean>
     accessToken = token;
     return true;
   })().finally(() => {
-    sessionRefreshPromise = undefined;
+    if (sessionRefreshPromise === refresh) sessionRefreshPromise = undefined;
   });
-  return sessionRefreshPromise;
+  sessionRefreshPromise = refresh;
+  return refresh;
 }
 
 function clearGithubAuthentication(): void {
+  authenticationGeneration += 1;
   accessToken = undefined;
   authenticatedUser = undefined;
+  sessionRefreshPromise = undefined;
+  for (const listener of authenticationListeners) listener(undefined);
 }
 
-async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+): Promise<GithubRequestResult<unknown>> {
   const controller = new AbortController();
   const externalSignal = init.signal;
   let timedOut = false;
   let timeout: ReturnType<typeof setTimeout> | undefined;
   let removeExternalListener: (() => void) | undefined;
-  const timeoutRequest = new Promise<Response>((_, reject) => {
+  const timeoutRequest = new Promise<GithubRequestResult<unknown>>((_, reject) => {
     timeout = setTimeout(() => {
       timedOut = true;
       controller.abort();
@@ -620,7 +646,7 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit): Pr
   });
   const requests = [timeoutRequest];
   if (externalSignal) {
-    const externalAbort = new Promise<Response>((_, reject) => {
+    const externalAbort = new Promise<GithubRequestResult<unknown>>((_, reject) => {
       const abort = () => {
         controller.abort(externalSignal.reason);
         reject(externalSignal.reason ?? new DOMException("The request was aborted", "AbortError"));
@@ -633,7 +659,16 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit): Pr
     });
     requests.push(externalAbort);
   }
-  requests.push(Promise.resolve().then(() => fetch(input, { ...init, signal: controller.signal })));
+  requests.push(
+    Promise.resolve().then(async () => {
+      const response = await fetch(input, { ...init, signal: controller.signal });
+      const data = await response.json().catch((error) => {
+        if (response.ok) throw error;
+        return undefined;
+      });
+      return { response, data };
+    }),
+  );
   try {
     return await Promise.race(requests);
   } catch (error) {
@@ -733,8 +768,20 @@ function exponentialDelay(attempt: number): number {
   return base + Math.floor(Math.random() * Math.max(1, base / 4));
 }
 
-function retryDelay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+function retryDelay(milliseconds: number, signal?: AbortSignal | null): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      reject(signal?.reason ?? new DOMException("The request was aborted", "AbortError"));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }, milliseconds);
+    if (signal?.aborted) abort();
+    else signal?.addEventListener("abort", abort, { once: true });
+  });
 }
 
 async function mapWithConcurrency<T, R>(

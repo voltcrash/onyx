@@ -77,6 +77,7 @@ export interface GithubBackupState {
   branch: string;
   directory: string;
   lastCommitSha?: string;
+  pendingCommitSha?: string;
   lastBackedUpAt?: string;
   /** Back up pending changes on their own, shortly after editing stops. */
   autoBackup?: boolean;
@@ -87,9 +88,11 @@ export type BackupOperationKind =
   | "attachment:delete"
   | "attachment:upsert"
   | "note:delete"
-  | "note:upsert";
+  | "note:upsert"
+  | "metadata:upsert";
 
 export interface BackupOperation {
+  sequence?: number;
   id: VaultId;
   kind: BackupOperationKind;
   entityId: VaultId;
@@ -128,6 +131,7 @@ export interface VaultOperationOptions {
 
 export interface VaultBackupManifest {
   version: 1;
+  folders?: FolderMetadata[];
   notes: NoteMetadata[];
   attachments: AttachmentMetadata[];
 }
@@ -155,6 +159,7 @@ export interface VaultStorageUsage {
 }
 
 export interface VaultFileStorageStatus {
+  pendingNoteFiles?: number;
   nativeDirectoryAvailable: boolean;
   nativeDirectoryName?: string;
   nativeDirectoryPermission:
@@ -199,4 +204,14 @@ export class VaultConflictError extends Error {
     );
     this.name = "VaultConflictError";
   }
+}
+
+export function githubTargetKey(state: GithubBackupState): string {
+  return JSON.stringify([
+    state.githubAccountId,
+    state.owner.toLowerCase(),
+    state.repository.toLowerCase(),
+    state.branch,
+    state.directory.replace(/^\/+|\/+$/g, ""),
+  ]);
 }

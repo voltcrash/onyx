@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick, untrack } from 'svelte';
+	import { onDestroy, tick, untrack } from 'svelte';
 	import { Archive, BriefcaseBusiness, CalendarDays, Camera, ChevronDown, ChevronRight, Code2, Copy, Download, ExternalLink, FilePlus2, FileText, Folder, FolderPlus, HardDrive, Heart, House, Image, Lightbulb, LoaderCircle, Lock, LockOpen, LogOut, Music2, Palette, Paperclip, PanelLeft, PanelRight, Pencil, Pin, Plane, Plus, Rocket, Search, Settings, Sparkles, Star, Tag, Trash2, Type, Undo2, X, type LucideIcon } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '#lib/keyboard-shortcuts.ts';
 	import { folderIconOptions, isFolderIcon, type FolderIcon } from '#lib/folder-icons.ts';
@@ -41,6 +41,7 @@
 		notesLoaded: boolean;
 		transferState: TransferState;
 		paletteOpen: boolean;
+		searchError: string;
 		searchPending: boolean;
 		settingsOpen: boolean;
 		isOnline: boolean;
@@ -64,12 +65,12 @@
 		onSidebarSideChange: (side: 'left' | 'right') => void;
 		onSelectVault: (id: string) => void;
 		onCreateVault: () => void;
-		onRenameVault: (id: string, name: string) => void;
+		onRenameVault: (id: string, name: string) => Promise<void>;
 		onCreateNote: () => void;
-		onCreateFile: (folderPath: string, name: string) => void;
-		onCreateFolder: (parentPath: string, name: string) => void;
-		onRenameFile: (id: string, name: string) => void;
-		onRenameFolder: (path: string, name: string) => void;
+		onCreateFile: (folderPath: string, name: string) => Promise<void>;
+		onCreateFolder: (parentPath: string, name: string) => Promise<void>;
+		onRenameFile: (id: string, name: string) => Promise<void>;
+		onRenameFolder: (path: string, name: string) => Promise<void>;
 		onSetFolderIcon: (path: string, icon?: FolderIcon) => void;
 		onSetFolderPinned: (path: string, pinned: boolean) => void;
 		onSetNotePinned: (id: string, pinned: boolean) => void;
@@ -107,7 +108,7 @@
 	}
 
 	let {
-		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, attachments, attachmentFolder, attachmentsHidden, onOpenAttachment, onOpenAttachmentInNewTab, onDeleteAttachment, searchQuery, findOpen, findQuery, findReplacement, findMatchCase, findWholeWord, findMatchCount, activeFindMatch, findCanEdit, notePage, notePageCount, saveState, notesLoaded, paletteOpen, searchPending, paletteItems, settingsOpen,
+		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, attachments, attachmentFolder, attachmentsHidden, onOpenAttachment, onOpenAttachmentInNewTab, onDeleteAttachment, searchQuery, findOpen, findQuery, findReplacement, findMatchCase, findWholeWord, findMatchCount, activeFindMatch, findCanEdit, notePage, notePageCount, saveState, notesLoaded, paletteOpen, searchPending, searchError, paletteItems, settingsOpen,
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, wordCount, readingMinutes, contentWidth,
 		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSidebarDragStart, sidebarSide, onSidebarSideChange, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onSetFolderIcon, onSetFolderPinned, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, trashedNotes, trashOpen, onToggleTrash, onRestoreFile, onPurgeFile, onEmptyTrash, onCopyFilePath, onCopyFileAs, onExportFileAs, onSearch,
 		onSetNotePinned,
@@ -172,6 +173,8 @@
 
 	let contextSubmenu = $state<'export' | 'copy' | 'folder-icon'>();
 	let naming = $state<NamingState>();
+	let namingBusy = $state(false);
+	let namingError = $state('');
 	let draftName = $state('');
 	let namingInput = $state<HTMLInputElement>();
 	let draggedEntry = $state<DraggedEntry>();
@@ -313,6 +316,8 @@
 			? 'Opening…'
 			: saveState === 'error'
 				? 'Save failed'
+                : saveState === 'unsaved' ? 'Unsaved changes'
+                : saveState === 'saving' ? 'Saving…'
 				: githubState === 'connected' && githubUser
 					? `@${githubUser.login}`
 					: githubState === 'connected'
@@ -413,6 +418,7 @@
 		longPressTimer = setTimeout(() => {
 			longPressTimer = undefined;
 			longPressStart = undefined;
+			touchStart = undefined;
 			suppressRowClickUntil = Date.now() + 1000;
 			try {
 				navigator.vibrate?.(10);
@@ -424,6 +430,7 @@
 	}
 
 	function handleRowTouchMove(event: TouchEvent): void {
+		if (event.touches.length !== 1) { clearLongPress(); touchStart = undefined; return; }
 		const start = longPressStart;
 		if (!start || longPressTimer === undefined) return;
 		const touch = event.touches[0] ?? event.changedTouches[0];
@@ -460,7 +467,9 @@
 
 	async function beginNaming(state: NamingState): Promise<void> {
 		closeContextMenu();
+		if (namingBusy) return;
 		naming = state;
+		namingError = '';
 		const target = state.action === 'rename-file'
 			? visibleResults.find((result) => result.note.id === state.id) ?? results.find((result) => result.note.id === state.id)
 			: undefined;
@@ -483,21 +492,33 @@
 
 	function cancelNaming(): void {
 		naming = undefined;
+		namingBusy = false;
+		namingError = '';
 		draftName = '';
 	}
 
-	function commitNaming(): void {
+	async function commitNaming(): Promise<void> {
+		if (namingBusy) return;
 		const state = naming;
 		const name = draftName.trim();
-		if (!state || !name) {
-			cancelNaming();
-			return;
+		if (!state || !name) { cancelNaming(); return; }
+		namingBusy = true;
+		namingError = '';
+		try {
+			if (state.action === 'create-file') await onCreateFile(state.parentPath, name);
+			else if (state.action === 'create-folder') await onCreateFolder(state.parentPath, name);
+			else if (state.action === 'rename-file') await onRenameFile(state.id, name);
+			else await onRenameFolder(state.path, name);
+			if (naming === state) cancelNaming();
+		} catch (error) {
+			if (naming === state) namingError = error instanceof Error ? error.message : 'The name could not be saved.';
+		} finally {
+			if (naming === state) {
+				namingBusy = false;
+				await tick();
+				if (naming === state) namingInput?.focus();
+			}
 		}
-		cancelNaming();
-		if (state.action === 'create-file') onCreateFile(state.parentPath, name);
-		else if (state.action === 'create-folder') onCreateFolder(state.parentPath, name);
-		else if (state.action === 'rename-file') onRenameFile(state.id, name);
-		else onRenameFolder(state.path, name);
 	}
 
 	function handleNamingKeydown(event: KeyboardEvent): void {
@@ -506,7 +527,7 @@
 			commitNaming();
 		} else if (event.key === 'Escape') {
 			event.preventDefault();
-			cancelNaming();
+			if (!namingBusy) cancelNaming();
 		}
 	}
 
@@ -737,6 +758,14 @@
 		const current = activeVaultId;
 		const previous = shownVaultId;
 		if (current === previous) return;
+		untrack(() => {
+			closeContextMenu();
+			cancelNaming();
+			endDrag();
+			clearLongPress();
+			collapsedFolders = new Set();
+			touchStart = undefined;
+		});
 		const from = vaults.findIndex((vault) => vault.id === previous);
 		const to = vaults.findIndex((vault) => vault.id === current);
 		shownVaultId = current;
@@ -831,6 +860,8 @@
 		touchStart = event.touches.length === 1 && !isSwipeExempt(event.target) ? { x: event.touches[0].clientX, y: event.touches[0].clientY } : undefined;
 	}
 
+	onDestroy(clearLongPress);
+
 	function handleSidebarTouchEnd(event: TouchEvent): void {
 		const start = touchStart;
 		touchStart = undefined;
@@ -845,7 +876,7 @@
 	function handleWindowKeydown(event: KeyboardEvent): void {
 		if (event.key === 'Escape') {
 			if (contextMenu) closeContextMenu();
-			else if (naming) cancelNaming();
+			else if (naming && !namingBusy) cancelNaming();
 			else if (trashOpen && !paletteOpen && !findOpen) onToggleTrash();
 		}
 	}
@@ -895,7 +926,7 @@
 <aside class="sidebar" aria-label="Notes" oncontextmenu={openSidebarContextMenu} bind:this={sidebarElement} ontouchstart={handleSidebarTouchStart} ontouchend={handleSidebarTouchEnd} ontouchcancel={() => (touchStart = undefined)}>
 	<div class="notes-heading"><div class="notes-title"><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions"><button class="icon-button search-palette-button" type="button" aria-label="Open the command palette" aria-haspopup="listbox" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Search notes and commands (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><Search size={19} aria-hidden="true" /></button><button class="icon-button sidebar-toggle" onpointerdown={onSidebarDragStart} aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button></div></div>
 	{#if paletteOpen}
-		<CommandPalette items={paletteItems} controls={paletteControls} query={searchQuery} loading={searchPending} bind:searchInput onQueryChange={onSearch} onClose={onClosePalette} />
+		<CommandPalette items={paletteItems} controls={paletteControls} query={searchQuery} loading={searchPending} error={searchError} bind:searchInput onQueryChange={onSearch} onClose={onClosePalette} />
 	{:else if findOpen}
 		<FindReplace
 			query={findQuery}
@@ -954,7 +985,7 @@
 				{#if naming && (naming.action === 'create-file' || naming.action === 'create-folder')}
 					<div class="file-naming-row" style={`--tree-depth: ${naming.parentPath ? 1 : 0}`}>
 						{#if naming.action === 'create-folder'}<Folder size={16} />{:else}<FileText size={16} />{/if}
-						<input bind:this={namingInput} bind:value={draftName} aria-label={naming.action === 'create-folder' ? 'Folder name' : 'File name'} spellcheck="false" onblur={commitNaming} onkeydown={handleNamingKeydown} />
+						<input bind:this={namingInput} bind:value={draftName} aria-label={naming.action === 'create-folder' ? 'Folder name' : 'File name'} spellcheck="false" disabled={namingBusy} aria-invalid={Boolean(namingError)} title={namingError || undefined} onblur={commitNaming} onkeydown={handleNamingKeydown} />
 					</div>
 				{/if}
 				{#if treeRows.length === 0 && !(naming && (naming.action === 'create-file' || naming.action === 'create-folder'))}
@@ -981,7 +1012,7 @@
 							</button>
 						{:else}
 							<button class="file file-tree-row" class:active={row.result.note.id === activeNoteId} class:dragging={draggedEntry?.kind === 'file' && draggedEntry.id === row.result.note.id} data-file-path={row.path} data-file-pinned={row.result.note.pinned ? 'true' : undefined} style={`--tree-depth: ${row.depth}`} aria-current={row.result.note.id === activeNoteId ? 'true' : undefined} title="Drag to move file — right-click or long-press for options" draggable="true" disabled={transferState === 'working'} onkeydown={onMoveNoteFocus} onclick={() => handleFileRowClick(row.result.note.id)} oncontextmenu={(event) => openFileContextMenu(event, row.result)} ontouchstart={(event) => { const result = row.result; handleRowTouchStart(event, (x, y) => showFileContextMenu(result, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd} ondragstart={(event) => startDrag(event, { kind: 'file', id: row.result.note.id, path: row.path })} ondragend={endDrag}>
-								<FileText size={16} /><span>{#if naming?.action === 'rename-file' && naming.id === row.result.note.id}<input class="file-inline-input" bind:this={namingInput} bind:value={draftName} aria-label="File name" spellcheck="false" onblur={commitNaming} onkeydown={handleNamingKeydown} />{:else}<strong>{row.label}</strong>{/if}</span>{#if row.result.note.pinned}<Pin class="file-pin-indicator" size={13} aria-label="Pinned" />{/if}
+								<FileText size={16} /><span>{#if naming?.action === 'rename-file' && naming.id === row.result.note.id}<input class="file-inline-input" bind:this={namingInput} bind:value={draftName} aria-label="File name" spellcheck="false" disabled={namingBusy} aria-invalid={Boolean(namingError)} title={namingError || undefined} onblur={commitNaming} onkeydown={handleNamingKeydown} />{:else}<strong>{row.label}</strong>{/if}</span>{#if row.result.note.pinned}<Pin class="file-pin-indicator" size={13} aria-label="Pinned" />{/if}
 							</button>
 					{/if}
 					{/each}

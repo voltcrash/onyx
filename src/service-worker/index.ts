@@ -1,3 +1,4 @@
+import { fetchNavigation } from "../lib/offline-navigation.js";
 import { version } from "$app/env";
 import { assets, immutable } from "$app/manifest";
 import { asset, resolve } from "$app/paths";
@@ -12,7 +13,6 @@ const PRECACHE = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll([...PRECACHE, APP_SHELL])));
-  void self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
@@ -20,7 +20,11 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))),
+        Promise.all(
+          keys
+            .filter((key) => key.startsWith("onyx-") && key !== CACHE)
+            .map((key) => caches.delete(key)),
+        ),
       )
       .then(() => self.clients.claim()),
   );
@@ -34,15 +38,10 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
-        .then(async (response) => {
-          if (response.ok && url.pathname === APP_SHELL) {
-            const cache = await caches.open(CACHE);
-            await cache.put(APP_SHELL, response.clone());
-          }
-          return response;
-        })
-        .catch(async () => (await caches.match(APP_SHELL)) ?? Response.error()),
+      fetchNavigation(
+        () => fetch(request),
+        async () => (await caches.open(CACHE)).match(APP_SHELL),
+      ),
     );
     return;
   }
@@ -50,7 +49,11 @@ self.addEventListener("fetch", (event) => {
   if (PRECACHE.includes(url.pathname)) {
     // Vite varies CORS headers by Origin, but these static asset contents are identical.
     event.respondWith(
-      caches.match(request, { ignoreVary: true }).then((cached) => cached ?? fetch(request)),
+      caches
+        .open(CACHE)
+        .then(
+          async (cache) => (await cache.match(request, { ignoreVary: true })) ?? fetch(request),
+        ),
     );
   }
 });

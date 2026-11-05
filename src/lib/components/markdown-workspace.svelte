@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, tick, untrack } from 'svelte';
+	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, PanelLeft, PencilLine, X } from '@lucide/svelte';
 	import type { FindMatch } from '#lib/find-replace.ts';
 	import type { EditorSelection } from '#lib/editor-history.ts';
@@ -28,6 +28,9 @@
 		findQuery: string;
 		findMatches: FindMatch[];
 		activeFindMatch: number;
+		saveConflict: boolean;
+		onSaveConflictCopy: () => void;
+		editorBlocked: boolean;
 		saveState: SaveState;
 		transferState: TransferState;
 		hasContent: boolean;
@@ -62,7 +65,7 @@
 
 	let {
 		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedBlocks, displayedRenderedBlocks, scrollSync, markdown, markdownLineCount, findOpen, findQuery, findMatches, activeFindMatch,
-		saveState, transferState, hasContent, shortcuts, primaryModifier,
+		saveConflict, onSaveConflictCopy, editorBlocked, saveState, transferState, hasContent, shortcuts, primaryModifier,
 		editor = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
 		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorHistory, onEditorPaste, onEditorDragOver, onEditorDrop, onNoteLink, onWikiLink, onTag, backlinks = [], onOpenBacklink
 	}: Props = $props();
@@ -101,7 +104,12 @@
 	}
 
 	let shell = $state<HTMLElement>();
-	let resizing = $state(false);
+	let resizePointerId = $state<number>();
+	let resizeHandle: HTMLElement | undefined;
+	let resizing = $derived(resizePointerId !== undefined);
+	let disposed = false;
+	let moveSequence = 0;
+	const paneAnimations = new Set<Animation>();
 	let bothPanesVisible = $derived(sourcePaneVisible && renderedPaneVisible);
 	let stacked = $derived(paneLayout === 'rows');
 	let swapped = $derived(paneOrder === 'rendered-first');
@@ -167,7 +175,7 @@
 	});
 
 	$effect(() => {
-		if (editor) editor.disabled = saveState === 'loading' || transferState === 'working';
+		if (editor) editor.disabled = editorBlocked || transferState === 'working';
 	});
 
 	$effect(() => {
@@ -184,20 +192,22 @@
 	}
 
 	function startResize(event: PointerEvent): void {
-		if (!bothPanesVisible) return;
+		if (!bothPanesVisible || event.button !== 0 || !event.isPrimary || resizing || drag) return;
 		event.preventDefault();
-		resizing = true;
+		resizePointerId = event.pointerId;
+		resizeHandle = event.currentTarget as HTMLElement;
 		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
 	}
 
 	function trackResize(event: PointerEvent): void {
-		if (resizing) resizeTo(event);
+		if (event.pointerId === resizePointerId) resizeTo(event);
 	}
 
 	function endResize(event: PointerEvent): void {
-		if (!resizing) return;
-		resizing = false;
-		(event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+		if (event.pointerId !== resizePointerId) return;
+		resizePointerId = undefined;
+		if (resizeHandle?.hasPointerCapture(event.pointerId)) resizeHandle.releasePointerCapture(event.pointerId);
+		resizeHandle = undefined;
 		onResizeEnd();
 	}
 
@@ -249,7 +259,7 @@
 	}
 
 	function startPaneDrag(event: PointerEvent, pane: Pane): void {
-		if (!bothPanesVisible || event.button !== 0 || drag) return;
+		if (!bothPanesVisible || event.button !== 0 || !event.isPrimary || resizing || drag) return;
 		event.preventDefault();
 		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
 		const bounds = (pane === 'source' ? sourcePaneElement : renderedPaneElement)!.getBoundingClientRect();
@@ -276,9 +286,9 @@
 	}
 
 	function cancelPaneDrag(event: KeyboardEvent): void {
-		if (event.key !== 'Escape' || !drag?.moving) return;
-		event.preventDefault();
-		void movePane(drag.pane, paneEdge(drag.pane));
+		if (event.key !== 'Escape') return;
+		if (drag || resizing) event.preventDefault();
+		cancelInteractions();
 	}
 
 	function nudgePane(event: KeyboardEvent, pane: Pane): void {
@@ -290,13 +300,16 @@
 
 	// Each pane glides from where it was drawn to its new track instead of jumping there.
 	async function movePane(pane: Pane, edge: PaneEdge): Promise<void> {
+		const sequence = ++moveSequence;
+		for (const animation of paneAnimations) animation.cancel();
+		paneAnimations.clear();
 		const panes = [sourcePaneElement, renderedPaneElement].filter((element): element is HTMLElement => Boolean(element));
 		const before = panes.map((element) => element.getBoundingClientRect());
 		const moved = pane === 'source' ? sourcePaneElement : renderedPaneElement;
 		if (edge !== paneEdge(pane)) onPlacePane(pane, edge);
 		drag = undefined;
 		await tick();
-		if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+		if (disposed || sequence !== moveSequence || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 		panes.forEach((element, index) => {
 			const from = before[index];
 			const to = element.getBoundingClientRect();
@@ -304,13 +317,15 @@
 			// Clipping instead of scaling keeps the text laid out at its final size while the pane moves.
 			const clipRight = Math.max(0, to.width - from.width);
 			const clipBottom = Math.max(0, to.height - from.height);
-			element.animate(
+			const animation = element.animate(
 				[
 					{ transform: `translate(${from.left - to.left}px, ${from.top - to.top}px)`, clipPath: `inset(0 ${clipRight}px ${clipBottom}px 0 round 10px)`, zIndex: element === moved ? 8 : 7 },
 					{ transform: 'none', clipPath: 'inset(0 0 0 0 round 0)', zIndex: element === moved ? 8 : 7 }
 				],
 				{ duration: 300, easing: MOVE_EASING }
 			);
+			paneAnimations.add(animation);
+			animation.onfinish = () => paneAnimations.delete(animation);
 		});
 		shell?.querySelector('.pane-divider')?.animate([{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 1 }], { duration: 300 });
 	}
@@ -358,7 +373,7 @@
 
 	function stepGlide(): void {
 		glideFrame = 0;
-		if (!glide) return;
+		if (disposed || !bothPanesVisible || !scrollSync || !glide) { stopGlide(); return; }
 		const { target, top } = glide;
 		const distance = top - target.scrollTop;
 		if (Math.abs(distance) < 1) {
@@ -399,6 +414,7 @@
 	let smoothSync = false;
 
 	function queueScrollSync(from: Pane, smooth = false): void {
+		if (disposed) return;
 		if (from !== scrollDriver) stopGlide();
 		scrollDriver = from;
 		smoothSync = smooth;
@@ -422,7 +438,7 @@
 	}
 
 	$effect(() => {
-		if (!scrollSync) stopGlide();
+		if (!scrollSync || !bothPanesVisible) stopGlide();
 		else tick().then(() => queueScrollSync(scrollDriver));
 	});
 
@@ -443,6 +459,33 @@
 		};
 	});
 
+	function cancelInteractions(): void {
+		const pointerId = resizePointerId;
+		resizePointerId = undefined;
+		if (pointerId !== undefined) {
+			if (resizeHandle?.hasPointerCapture(pointerId)) resizeHandle.releasePointerCapture(pointerId);
+			onResizeEnd();
+		}
+		resizeHandle = undefined;
+		drag = undefined;
+	}
+
+	$effect(() => {
+		void [bothPanesVisible, stacked, swapped];
+		untrack(cancelInteractions);
+	});
+
+	onDestroy(() => {
+		if (typeof window === 'undefined') return;
+		disposed = true;
+		moveSequence += 1;
+		cancelInteractions();
+		cancelAnimationFrame(syncFrame);
+		stopGlide();
+		for (const animation of paneAnimations) animation.cancel();
+		paneAnimations.clear();
+	});
+
 		onMount(() => {
 		const fontSet = document.fonts;
 		if (!fontSet) return;
@@ -454,7 +497,7 @@
 	});
 </script>
 
-<svelte:window onkeydown={cancelPaneDrag} />
+<svelte:window onkeydown={cancelPaneDrag} onblur={cancelInteractions} />
 
 <main class="workspace">
 	<button class="collapsed-sidebar-toggle" onpointerdown={onSidebarDragStart} aria-label="Show notes sidebar" title={`Show sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button>
@@ -465,7 +508,8 @@
 		<div class="storage-error" role="alert">
 			<CloudOff size={16} />
 			<span>{storageError} Your current text stays open, but it may be lost when this tab closes. Copy it somewhere safe if the retry keeps failing.</span>
-			<button onclick={onRetryStorage}>Try again</button>
+			{#if saveConflict}<button onclick={onSaveConflictCopy}>Save a copy</button>{/if}
+            <button onclick={onRetryStorage}>Try again</button>
 			<button onclick={onReload}>Reload</button>
 		</div>
 	{/if}
@@ -477,10 +521,10 @@
 			</div>
 		</div>
 		<div class="pane-divider">
-			<button type="button" class="pane-resize" class:enabled={bothPanesVisible} aria-label={`Resize the panes, the ${firstPane} pane takes ${Math.round(splitRatio)} percent`} title="Drag to resize; snaps to center. Double-click to even out" tabindex={bothPanesVisible ? 0 : -1} onpointerdown={startResize} onpointermove={trackResize} onpointerup={endResize} onpointercancel={endResize} onkeydown={nudgeResize} ondblclick={resetSplit}></button>
+			<button type="button" class="pane-resize" class:enabled={bothPanesVisible} aria-label={`Resize the panes, the ${firstPane} pane takes ${Math.round(splitRatio)} percent`} title="Drag to resize; snaps to center. Double-click to even out" tabindex={bothPanesVisible ? 0 : -1} onpointerdown={startResize} onpointermove={trackResize} onpointerup={endResize} onpointercancel={endResize} onlostpointercapture={endResize} onkeydown={nudgeResize} ondblclick={resetSplit}></button>
 			{#if bothPanesVisible}
-				<button type="button" class="pane-grip" class:grip-start={!swapped} aria-label="Move the source pane" title="Drag to move this pane, or use the arrow keys" onpointerdown={(event) => startPaneDrag(event, 'source')} onpointermove={trackPaneDrag} onpointerup={endPaneDrag} onpointercancel={endPaneDrag} onkeydown={(event) => nudgePane(event, 'source')}></button>
-				<button type="button" class="pane-grip" class:grip-start={swapped} aria-label="Move the rendered pane" title="Drag to move this pane, or use the arrow keys" onpointerdown={(event) => startPaneDrag(event, 'rendered')} onpointermove={trackPaneDrag} onpointerup={endPaneDrag} onpointercancel={endPaneDrag} onkeydown={(event) => nudgePane(event, 'rendered')}></button>
+				<button type="button" class="pane-grip" class:grip-start={!swapped} aria-label="Move the source pane" title="Drag to move this pane, or use the arrow keys" onpointerdown={(event) => startPaneDrag(event, 'source')} onpointermove={trackPaneDrag} onpointerup={endPaneDrag} onpointercancel={endPaneDrag} onlostpointercapture={endPaneDrag} onkeydown={(event) => nudgePane(event, 'source')}></button>
+				<button type="button" class="pane-grip" class:grip-start={swapped} aria-label="Move the rendered pane" title="Drag to move this pane, or use the arrow keys" onpointerdown={(event) => startPaneDrag(event, 'rendered')} onpointermove={trackPaneDrag} onpointerup={endPaneDrag} onpointercancel={endPaneDrag} onlostpointercapture={endPaneDrag} onkeydown={(event) => nudgePane(event, 'rendered')}></button>
 				{@const FirstIcon = towardsStart}
 				{@const SecondIcon = towardsEnd}
 				<div class="pane-handle-pair" role="group" aria-label="Pane visibility">

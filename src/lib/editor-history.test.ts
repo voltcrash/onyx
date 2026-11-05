@@ -69,3 +69,12 @@ describe("EditorHistory", () => {
     expect(history.undo({ markdown: "b" })).toBeUndefined();
   });
 });
+
+it("clears a pending pre-edit snapshot when undo changes the history position", () => {
+  const history = new EditorHistory();
+  history.record({ markdown: "a" });
+  history.remember({ markdown: "a", selection: { start: 0, end: 1 } });
+  history.undo({ markdown: "b" });
+  history.record({ markdown: "a", selection: { start: 1, end: 1 } });
+  expect(history.undo({ markdown: "c" })?.selection).toEqual({ start: 1, end: 1 });
+});

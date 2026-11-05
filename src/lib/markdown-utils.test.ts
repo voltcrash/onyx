@@ -496,3 +496,13 @@ it("renumbers past mixed nested lists and continuation paragraphs", () => {
     value.replace("one\n", "one\n2. \n").replace("2. two", "3. two"),
   );
 });
+
+it("does not rewrite links inside inline code or a fence with a false closer", () => {
+  const source =
+    "`![example](attachments/a.png)`\n\n```md\n```not-a-closer\n![example](attachments/a.png)\n```\n\n![real](attachments/a.png)";
+  expect(
+    rewriteLocalLinks(source, "Note.md", "Note.md", (path) =>
+      path.replace("attachments/", "media/"),
+    ),
+  ).toBe(source.replace("![real](attachments/a.png)", "![real](media/a.png)"));
+});

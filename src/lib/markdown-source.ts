@@ -122,3 +122,51 @@ export function sliceText(
       .map((offset) => offset - start),
   };
 }
+
+export function opaqueSourceRanges(
+  source: string,
+): Array<{ start: number; end: number; type: string }> {
+  const ranges: Array<{ start: number; end: number; type: string }> = [];
+  function visit(node: SourceNode): void {
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (opaque.has(node.type) && start !== undefined && end !== undefined) {
+      ranges.push({ start, end, type: node.type });
+      return;
+    }
+    for (const child of node.children ?? []) visit(child);
+  }
+  visit(parseMarkdownSource(source));
+  return ranges.sort((a, b) => a.start - b.start);
+}
+
+export function mapMarkdownProse(source: string, transform: (prose: string) => string): string {
+  let cursor = 0;
+  const parts: string[] = [];
+  for (const range of opaqueSourceRanges(source)) {
+    parts.push(transform(source.slice(cursor, range.start)), source.slice(range.start, range.end));
+    cursor = range.end;
+  }
+  parts.push(transform(source.slice(cursor)));
+  return parts.join("");
+}
+
+export function frontmatterBounds(
+  source: string,
+): { marker: "---" | "+++"; closingLine: number; bodyStart: number } | undefined {
+  const firstBreak = source.indexOf("\n");
+  if (firstBreak === -1) return;
+  const marker = source.slice(0, firstBreak).replace(/\r$/, "");
+  if (marker !== "---" && marker !== "+++") return;
+  let start = firstBreak + 1;
+  let lineNumber = 1;
+  while (start < source.length) {
+    const newline = source.indexOf("\n", start);
+    const end = newline === -1 ? source.length : newline;
+    const line = source.slice(start, end).replace(/[\t \r]+$/, "");
+    if (line === marker || (marker === "---" && line === "..."))
+      return { marker, closingLine: lineNumber, bodyStart: newline === -1 ? end : end + 1 };
+    start = end + 1;
+    lineNumber += 1;
+  }
+}

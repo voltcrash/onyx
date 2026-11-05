@@ -1,3 +1,4 @@
+import { requestDatabaseLock } from "./database-lock.js";
 import type { VaultChangeEvent, VaultChangeKind } from "./types.js";
 
 interface VaultChangeMessage {
@@ -16,6 +17,7 @@ export class VaultCoordination {
   readonly #channel?: BroadcastChannel;
   readonly #listeners = new Set<ChangeListener>();
   #queue: Promise<void> = Promise.resolve();
+  #state: "open" | "closing" | "closed" = "open";
 
   constructor(databaseName: string, directoryName: string) {
     const scope = `${databaseName}:${directoryName}`;
@@ -36,6 +38,7 @@ export class VaultCoordination {
   }
 
   async runExclusive<T>(task: () => Promise<T>): Promise<T> {
+    if (this.#state !== "open") throw new Error("The vault is closed");
     const previous = this.#queue;
     let release!: () => void;
     this.#queue = new Promise<void>((resolve) => {
@@ -43,7 +46,10 @@ export class VaultCoordination {
     });
     await previous;
     try {
-      return await requestLock(this.#lockName, task);
+      return await requestLock(this.#lockName, async () => {
+        if (this.#state !== "open") throw new Error("The vault is closed");
+        return task();
+      });
     } finally {
       release();
     }
@@ -63,7 +69,10 @@ export class VaultCoordination {
     }
   }
 
-  close(): void {
+  async close(): Promise<void> {
+    this.#state = "closing";
+    await this.#queue;
+    this.#state = "closed";
     if (this.#channel) {
       this.#channel.onmessage = null;
       this.#channel.close();
@@ -85,7 +94,7 @@ export class VaultCoordination {
 
 async function requestLock<T>(name: string, task: () => Promise<T>): Promise<T> {
   const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
-  if (!locks || typeof locks.request !== "function") return task();
+  if (!locks || typeof locks.request !== "function") return requestDatabaseLock(name, task);
   return locks.request(name, { mode: "exclusive" }, task);
 }
 

@@ -24,6 +24,7 @@ declare global {
     // interface PageData {}
     interface PageState {
       onyxNoteId?: string;
+      onyxVaultId?: string;
     }
     // interface Platform {}
   }
