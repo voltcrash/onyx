@@ -55,15 +55,22 @@ export class Vault {
   #nativeDirectoryName?: string;
   #nativeDirectoryPermission: VaultFileStorageStatus["nativeDirectoryPermission"];
   #activeOperation?: VaultOperationContext;
+  readonly #pendingNoteFiles = new Set<string>();
+  readonly #backupCoordination: VaultCoordination;
 
   private constructor(
     database: VaultDatabase,
     filesystem: MirroredVaultFilesystem,
     coordination = new VaultCoordination(DEFAULT_DATABASE_NAME, DEFAULT_DIRECTORY_NAME),
+    backupCoordination = new VaultCoordination(
+      DEFAULT_DATABASE_NAME,
+      `${DEFAULT_DIRECTORY_NAME}:backups`,
+    ),
   ) {
     this.#database = database;
     this.#filesystem = filesystem;
     this.#coordination = coordination;
+    this.#backupCoordination = backupCoordination;
     this.#nativeDirectoryPermission = detectBrowserStorageSupport().directoryPicker
       ? "not-configured"
       : "unsupported";
@@ -103,7 +110,16 @@ export class Vault {
       const filesystem = new MirroredVaultFilesystem(opfs, (reason) => {
         vault.#nativeDirectoryPermission = reason === "permission" ? "prompt" : "error";
       });
-      vault = new Vault(database, filesystem, coordination);
+      vault = new Vault(
+        database,
+        filesystem,
+        coordination,
+        new VaultCoordination(
+          options.databaseName ?? DEFAULT_DATABASE_NAME,
+          `${options.directoryName ?? DEFAULT_DIRECTORY_NAME}:backups`,
+        ),
+      );
+      await vault.#repairNoteFiles();
       await vault.#restoreNativeDirectory();
       // Tags only make search and filtering better, so a failed backfill must not block opening.
       await vault.#deriveMissingTags().catch(() => undefined);
@@ -119,6 +135,7 @@ export class Vault {
 
   getFileStorageStatus(): VaultFileStorageStatus {
     return {
+      pendingNoteFiles: this.#pendingNoteFiles.size,
       nativeDirectoryAvailable: detectBrowserStorageSupport().directoryPicker,
       nativeDirectoryName: this.#nativeDirectoryName,
       nativeDirectoryPermission: this.#nativeDirectoryPermission,
@@ -156,9 +173,35 @@ export class Vault {
     });
   }
 
-  close(): void {
+  async close(): Promise<void> {
+    await this.#backupCoordination.close();
+    await this.#coordination.close();
     this.#database.close();
-    this.#coordination.close();
+  }
+
+  runBackupExclusive<T>(task: () => Promise<T>): Promise<T> {
+    return this.#backupCoordination.runExclusive(task);
+  }
+
+  getVersion(): Promise<number> {
+    return this.#withLock(() => this.#getVaultVersion());
+  }
+
+  async #repairNoteFiles(): Promise<void> {
+    await this.#withLock(async () => {
+      for (const note of await this.#database.getNotes()) {
+        const markdown = await this.#database.getNoteMarkdown(note.id);
+        if (markdown === undefined) continue;
+        if ((await this.#filesystem.readText(note.path).catch(() => undefined)) === markdown)
+          continue;
+        try {
+          await this.#filesystem.writeText(note.path, markdown);
+        } catch (error) {
+          if (!isQuotaExceededError(error)) throw error;
+          this.#pendingNoteFiles.add(note.id);
+        }
+      }
+    });
   }
 
   subscribe(listener: (event: VaultChangeEvent) => void): () => void {
@@ -323,6 +366,8 @@ export class Vault {
         }
         throw error;
       }
+      if (fileSaved) this.#pendingNoteFiles.delete(id);
+      else this.#pendingNoteFiles.add(id);
       this.#publish({ kind: "note", noteId: id });
       return { ...metadata, markdown };
     });

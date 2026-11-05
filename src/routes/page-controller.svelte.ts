@@ -630,7 +630,7 @@ export function createPageController() {
       preview.dispose();
       releaseLocalAttachmentUrls();
       closeImagePreview();
-      vault?.close();
+      void vault?.close();
     };
   });
 
@@ -1187,8 +1187,9 @@ export function createPageController() {
     saveRequested = false;
     remoteChanges.length = 0;
     remoteSyncRequested = false;
-    vault?.close();
+    const previousVault = vault;
     vault = undefined;
+    await previousVault?.close();
     resetEditorAfterVaultClear();
     githubBackup = undefined;
     pendingBackupCount = 0;
@@ -1217,6 +1218,10 @@ export function createPageController() {
 
   function appendNativeDirectoryNotice(): void {
     const status = vault?.getFileStorageStatus();
+    if (status?.pendingNoteFiles)
+      appendStorageNotice(
+        "Some note files need repair because storage is full. The latest text is saved in the browser database; export a ZIP or back up to GitHub.",
+      );
     if (!status?.nativeDirectoryName || status.nativeDirectoryPermission === "granted") return;
     appendStorageNotice(
       status.nativeDirectoryPermission === "error"

@@ -16,6 +16,7 @@ export class VaultCoordination {
   readonly #channel?: BroadcastChannel;
   readonly #listeners = new Set<ChangeListener>();
   #queue: Promise<void> = Promise.resolve();
+  #state: "open" | "closing" | "closed" = "open";
 
   constructor(databaseName: string, directoryName: string) {
     const scope = `${databaseName}:${directoryName}`;
@@ -36,6 +37,7 @@ export class VaultCoordination {
   }
 
   async runExclusive<T>(task: () => Promise<T>): Promise<T> {
+    if (this.#state !== "open") throw new Error("The vault is closed");
     const previous = this.#queue;
     let release!: () => void;
     this.#queue = new Promise<void>((resolve) => {
@@ -43,7 +45,10 @@ export class VaultCoordination {
     });
     await previous;
     try {
-      return await requestLock(this.#lockName, task);
+      return await requestLock(this.#lockName, async () => {
+        if (this.#state !== "open") throw new Error("The vault is closed");
+        return task();
+      });
     } finally {
       release();
     }
@@ -63,7 +68,10 @@ export class VaultCoordination {
     }
   }
 
-  close(): void {
+  async close(): Promise<void> {
+    this.#state = "closing";
+    await this.#queue;
+    this.#state = "closed";
     if (this.#channel) {
       this.#channel.onmessage = null;
       this.#channel.close();

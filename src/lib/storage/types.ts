@@ -158,6 +158,7 @@ export interface VaultStorageUsage {
 }
 
 export interface VaultFileStorageStatus {
+  pendingNoteFiles?: number;
   nativeDirectoryAvailable: boolean;
   nativeDirectoryName?: string;
   nativeDirectoryPermission:
