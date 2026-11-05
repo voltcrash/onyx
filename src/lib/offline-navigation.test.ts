@@ -2,15 +2,20 @@ import { describe, expect, it } from "vite-plus/test";
 import { fetchNavigation } from "./offline-navigation.js";
 
 describe("offline navigation", () => {
-  it("serves a successful network response when cache storage is full", async () => {
-    const response = new Response("current shell");
+  it("serves network responses without replacing the active offline shell", async () => {
+    const response = new Response("newer deployment shell");
+    const activeShell = new Response("active deployment shell");
     const actual = await fetchNavigation(
       () => Promise.resolve(response),
-      () => Promise.resolve(new Response("old shell")),
-      () => Promise.reject(new Error("Quota exceeded")),
+      () => Promise.resolve(activeShell),
     );
     expect(actual).toBe(response);
-    expect(await actual.text()).toBe("current shell");
+    expect(await actual.text()).toBe("newer deployment shell");
+    const offline = await fetchNavigation(
+      () => Promise.reject(new TypeError("Offline")),
+      () => Promise.resolve(activeShell),
+    );
+    expect(await offline.text()).toBe("active deployment shell");
   });
 
   it("uses the current cached shell only when the network fails", async () => {
@@ -19,7 +24,6 @@ describe("offline navigation", () => {
       await fetchNavigation(
         () => Promise.reject(new TypeError("Offline")),
         () => Promise.resolve(response),
-        () => Promise.resolve(),
       ),
     ).toBe(response);
   });

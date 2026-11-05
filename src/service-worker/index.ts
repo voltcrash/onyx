@@ -41,12 +41,6 @@ self.addEventListener("fetch", (event) => {
       fetchNavigation(
         () => fetch(request),
         async () => (await caches.open(CACHE)).match(APP_SHELL),
-        async (response) => {
-          if (url.pathname === APP_SHELL) {
-            const cache = await caches.open(CACHE);
-            await cache.put(APP_SHELL, response);
-          }
-        },
       ),
     );
     return;

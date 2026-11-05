@@ -1,7 +1,6 @@
 export async function fetchNavigation(
   network: () => Promise<Response>,
   cached: () => Promise<Response | undefined>,
-  remember: (response: Response) => Promise<void>,
 ): Promise<Response> {
   let response: Response;
   try {
@@ -9,6 +8,5 @@ export async function fetchNavigation(
   } catch {
     return (await cached().catch(() => undefined)) ?? Response.error();
   }
-  if (response.ok) await remember(response.clone()).catch(() => undefined);
   return response;
 }
