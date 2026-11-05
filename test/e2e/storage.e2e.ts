@@ -355,3 +355,37 @@ test("recovers an interrupted replacement before an already-open tab continues",
   await page.reload();
   await expectMarkdown(editor, "# After recovery");
 });
+
+test("settles a reverted draft while its earlier save is still running", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expectMarkdown(editor, "");
+  await editor.fill("# Destination");
+  await page.keyboard.press("ControlOrMeta+S");
+  const destination = page.locator(".file-tree-row.file").filter({ hasText: "Destination" });
+  await expect(destination).toBeVisible();
+  const source = page.locator(".file-tree-row.file").filter({ hasText: "Welcome to Onyx" });
+  await source.click();
+  await expectMarkdown(editor, /# Welcome to Onyx/);
+  const original = await editor.evaluate(
+    (element) =>
+      (element as HTMLElement & { markdownEditor: { value: string } }).markdownEditor.value,
+  );
+  await blockNextVaultWrite(page);
+  await editor.fill("# In-flight edit");
+  await page.keyboard.press("ControlOrMeta+S");
+  await waitForBlockedVaultWrite(page);
+  await editor.fill(original);
+  await destination.click();
+  await expect(editor).toBeDisabled();
+  await releaseVaultWrite(page);
+  await expectMarkdown(editor, "# Destination");
+  await expect(editor).toBeEnabled();
+  await page.locator(".file-tree-row.file").filter({ hasText: "Welcome to Onyx" }).click();
+  await expectMarkdown(editor, original);
+  await page.reload();
+  await page.locator(".file-tree-row.file").filter({ hasText: "Welcome to Onyx" }).click();
+  await expectMarkdown(editor, original);
+});

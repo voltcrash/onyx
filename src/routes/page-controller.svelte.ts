@@ -1653,7 +1653,7 @@ export function createPageController() {
 
   async function selectNote(id: string): Promise<void> {
     if (id === activeNoteId || transferState === "working") return;
-    if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
+    if (!(await settleDraft())) return;
     await loadNote(id);
     if (activeNoteId !== id) return;
     recentNoteIds = [id, ...recentNoteIds.filter((recentId) => recentId !== id)].slice(0, 8);
