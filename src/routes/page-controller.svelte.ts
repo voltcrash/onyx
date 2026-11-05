@@ -2096,7 +2096,7 @@ export function createPageController() {
   async function purgeFile(noteId: string): Promise<void> {
     if (!vault || transferState === "working") return;
     const note = await vault.getNote(noteId);
-    if (!note) return;
+    if (!note?.deletedAt) return;
     const confirmed = await confirmation.ask({
       eyebrow: "Trash",
       title: "Delete forever?",
@@ -2107,7 +2107,7 @@ export function createPageController() {
     if (!confirmed) return;
     if (!(await settleDraft())) return;
     try {
-      await vault.purgeNote(noteId);
+      await vault.purgeNote(noteId, note.deletedAt);
       await refreshFileTree();
       if (activeNoteId === noteId) {
         const notes = await vault.listNotes();

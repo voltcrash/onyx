@@ -400,3 +400,43 @@ test("keeps a rejected name available for correction", async ({ page }) => {
   await expect(page.locator('[data-folder-path="Ideas"]')).toBeVisible();
   await expect(name).toHaveCount(0);
 });
+
+test("does not purge a newer trash incarnation after confirmation in another tab", async ({
+  page,
+  context,
+}) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await page.getByRole("button", { name: "New file", exact: true }).click();
+  const name = page.getByRole("textbox", { name: "File name" });
+  await name.fill("Victim.md");
+  await name.press("Enter");
+  await expectMarkdown(editor, "");
+  await page.locator('[data-file-path="Victim.md"]').click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  await expect(page.locator('[data-file-path="Victim.md"]')).toHaveCount(0);
+  await openTrash(page);
+  await page.getByRole("button", { name: "Delete Victim forever", exact: true }).click();
+  const confirmation = page.getByRole("alertdialog", { name: "Delete forever?" });
+  await expect(confirmation).toBeVisible();
+  const other = await context.newPage();
+  await other.goto("/");
+  await expect(other.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await openTrash(other);
+  await other.getByRole("button", { name: "Restore Victim", exact: true }).click();
+  await other.getByRole("textbox", { name: "Markdown editor" }).fill("# New incarnation");
+  await other.keyboard.press("ControlOrMeta+S");
+  await expect(other.locator('[data-file-path="Victim.md"]')).toBeVisible();
+  await other.locator('[data-file-path="Victim.md"]').click({ button: "right" });
+  await other.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  await expect(other.locator('[data-file-path="Victim.md"]')).toHaveCount(0);
+  await page.bringToFront();
+  await confirmation.getByRole("button", { name: "Delete forever", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Restore New incarnation", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Restore New incarnation", exact: true }).click();
+  await expectMarkdown(editor, "# New incarnation");
+  await other.close();
+});
