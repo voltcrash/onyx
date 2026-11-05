@@ -1174,6 +1174,32 @@ export class Vault {
     });
   }
 
+  captureExport(): Promise<{
+    notes: Note[];
+    attachments: Array<{ metadata: AttachmentMetadata; file: Blob }>;
+  }> {
+    return this.#withLock(async (context) => {
+      const manifest = await this.createBackupManifest({ context });
+      const notes = await Promise.all(
+        manifest.notes.map(async (note) => ({
+          ...note,
+          markdown:
+            (await this.#database.getNoteMarkdown(note.id)) ??
+            (await this.#filesystem.readText(note.path)),
+        })),
+      );
+      const attachments = await Promise.all(
+        manifest.attachments.map(async (metadata) => ({
+          metadata,
+          file: new Blob([await (await this.#filesystem.read(metadata.path)).arrayBuffer()], {
+            type: metadata.type,
+          }),
+        })),
+      );
+      return { notes, attachments };
+    });
+  }
+
   captureGithubBackup(): Promise<{
     snapshot: VaultBackupSnapshot;
     manifest: VaultBackupManifest;

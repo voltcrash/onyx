@@ -199,6 +199,7 @@ export function createPageController() {
   let previewSettleTimer: number | undefined = $state();
   let pendingPreviewMarkdown = initialMarkdown;
   let printing = $state(false);
+  let printHtml = $state("");
   let searchSequence = 0;
   let settledSearchSequence = 0;
   let editor: MarkdownEditor | undefined = $state();
@@ -2192,8 +2193,9 @@ export function createPageController() {
       await importMarkdownFiles(vault, files);
       searchQuery = "";
       const notes = await vault.listNotes();
-      await loadNote(notes[0].id);
-      await runSearch("");
+      if (notes[0]) await loadNote(notes[0].id);
+      else resetActiveNote();
+      await refreshFileTree();
       pendingBackupCount = await vault.countPendingBackupOperations();
       transferState = "idle";
     } catch (error) {
@@ -2203,15 +2205,21 @@ export function createPageController() {
 
   // Browsers save PDFs through their own print dialog, which the print stylesheet feeds.
   async function savePdf(): Promise<void> {
+    const source = markdown;
+    const attachments = localAttachmentUrls;
+    const path = activeNoteSourcePath;
     await import("./styles/print.css");
-    updatePreviewImmediately(markdown);
-    await preview.render(markdown);
+    const renderer = await preview.loadMarkdownModule();
+    printHtml = renderer.renderMarkdown(source, (destination) =>
+      resolveLocalAttachmentUrl(destination, path, attachments),
+    );
     printing = true;
     try {
       await tick();
       window.print();
     } finally {
       printing = false;
+      printHtml = "";
     }
   }
 
@@ -2225,9 +2233,9 @@ export function createPageController() {
     if (transferState === "working") return;
     try {
       await write();
-      transferState = "idle";
     } catch (error) {
-      showTransferError(error, "The clipboard could not be written.");
+      transferMessage =
+        error instanceof Error ? error.message : "The clipboard could not be written.";
     }
   }
 
@@ -2240,13 +2248,17 @@ export function createPageController() {
 
   // Printing works from the rendered page, so another note is opened first.
   async function exportNoteAs(id: string, format: NoteFormat): Promise<void> {
-    if (format === "pdf") {
-      if (id !== activeNoteId) await selectNote(id);
-      if (id === activeNoteId) await savePdf();
-      return;
+    try {
+      if (format === "pdf") {
+        if (id !== activeNoteId) await selectNote(id);
+        if (id === activeNoteId) await savePdf();
+        return;
+      }
+      const source = await noteSource(id);
+      if (source) await noteOutput.download(source, format);
+    } catch (error) {
+      showTransferError(error, "The note could not be exported.");
     }
-    const source = await noteSource(id);
-    if (source) await noteOutput.download(source, format);
   }
 
   async function exportZip(): Promise<void> {
@@ -2300,6 +2312,8 @@ export function createPageController() {
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       showTransferError(error, "The notes could not be exported to that folder.");
+    } finally {
+      if (transferState === "working") transferState = "idle";
     }
   }
 
@@ -2726,13 +2740,17 @@ export function createPageController() {
         start: markdown.length,
         end: markdown.length,
       };
+    const urls: LocalAttachmentUrl[] = [];
+    const sourcePath = activeNoteSourcePath;
+    const folder = attachmentFolder;
+    const version = draftVersion;
+    let adopted = false;
     try {
       const snippets: string[] = [];
-      const urls: LocalAttachmentUrl[] = [];
       for (const file of files) {
         const attachment = await currentVault.addAttachment({
           contents: file,
-          folder: attachmentFolder,
+          folder,
           name: attachmentFileName(file),
           noteId,
         });
@@ -2745,16 +2763,24 @@ export function createPageController() {
           attachmentMarkdown(
             attachment.name,
             attachment.sourcePath ?? attachment.name,
-            activeNoteSourcePath,
+            sourcePath,
             attachment.type,
           ),
         );
       }
-      if (activeNoteId !== noteId) {
-        for (const url of urls) URL.revokeObjectURL(url.url);
+      if (
+        disposed ||
+        currentVault !== vault ||
+        activeNoteId !== noteId ||
+        version !== draftVersion
+      ) {
+        appendStorageNotice(
+          "The attachments were saved, but their links were not inserted because the note changed.",
+        );
         return;
       }
       localAttachmentUrls = [...localAttachmentUrls, ...urls];
+      adopted = true;
       const start = Math.min(target.start, target.end, markdown.length);
       const before = markdown.slice(0, start);
       const separator = before && !before.endsWith("\n") && snippets.length > 1 ? "\n" : "";
@@ -2767,6 +2793,9 @@ export function createPageController() {
       storageError = "";
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The file could not be attached.";
+      if (currentVault === vault && !disposed) await refreshFileTree().catch(() => undefined);
+    } finally {
+      if (!adopted) for (const url of urls) URL.revokeObjectURL(url.url);
     }
   }
 
@@ -3283,6 +3312,9 @@ export function createPageController() {
   }
 
   return {
+    get printHtml() {
+      return printHtml;
+    },
     get saveConflict() {
       return saveFailure === "conflict";
     },

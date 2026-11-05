@@ -171,12 +171,18 @@ export async function importMarkdownFiles(
 }
 
 export async function createMarkdownExport(vault: Vault): Promise<MarkdownTransferFile[]> {
-  const [notes, attachments] = await Promise.all([vault.listNotes(), vault.listAttachments()]);
+  const snapshot =
+    typeof vault.captureExport === "function" ? await vault.captureExport() : undefined;
+  const [notes, attachments] = snapshot
+    ? [snapshot.notes, snapshot.attachments.map((attachment) => attachment.metadata)]
+    : await Promise.all([vault.listNotes(), vault.listAttachments()]);
   const records: ExportRecord[] = [];
   const paths = new Set<string>();
 
   for (const note of notes.toReversed()) {
-    const value = await vault.getNote(note.id);
+    const value = snapshot
+      ? snapshot.notes.find((candidate) => candidate.id === note.id)
+      : await vault.getNote(note.id);
     if (!value) continue;
     const fallback = `${safeName(note.title)}.md`;
     const sourcePath = normalizeExportPath(note.sourcePath, fallback);
@@ -191,7 +197,9 @@ export async function createMarkdownExport(vault: Vault): Promise<MarkdownTransf
   }
 
   for (const metadata of attachments) {
-    const attachment = await vault.getAttachment(metadata.id);
+    const attachment = snapshot
+      ? snapshot.attachments.find((candidate) => candidate.metadata.id === metadata.id)
+      : await vault.getAttachment(metadata.id);
     if (!attachment) continue;
     const fallback = `attachments/${safeName(metadata.name)}`;
     const sourcePath = normalizeExportPath(metadata.sourcePath, fallback);
@@ -232,8 +240,14 @@ export async function createMarkdownZip(
   validateTransferFiles(files, resolvedLimits);
 
   const writer = new ZipWriter(new BlobWriter("application/zip"));
-  for (const file of files) await writer.add(file.path, new BlobReader(file.contents));
-  const archive = await writer.close();
+  let archive: Blob;
+  try {
+    for (const file of files) await writer.add(file.path, new BlobReader(file.contents));
+    archive = await writer.close();
+  } catch (error) {
+    await writer.close().catch(() => undefined);
+    throw error;
+  }
   assertWithinLimit(archive.size, resolvedLimits.maxArchiveBytes, "ZIP archive");
   return archive;
 }

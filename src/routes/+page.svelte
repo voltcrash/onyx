@@ -208,7 +208,7 @@
 {/if}
 
 {#if page.printing}
-	<div class="print-document paper-surface" aria-hidden="true"><article class="prose">{@html page.renderedMarkdown}</article></div>
+	<div class="print-document paper-surface" aria-hidden="true"><article class="prose">{@html page.printHtml}</article></div>
 {/if}
 
 <StatusNotices
