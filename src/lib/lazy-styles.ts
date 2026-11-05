@@ -1,5 +1,7 @@
-let dialogStylesPromise: Promise<void> | undefined;
-
+import { createLazyResource } from "./lazy-resource.js";
+const styles = createLazyResource(() =>
+  import("../routes/styles/dialogs.css").then(() => undefined),
+);
 export function loadDialogStyles(): Promise<void> {
-  return (dialogStylesPromise ??= import("../routes/styles/dialogs.css").then(() => undefined));
+  return styles.load();
 }

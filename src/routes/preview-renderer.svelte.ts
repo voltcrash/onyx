@@ -1,3 +1,4 @@
+import { createLazyResource } from "#lib/lazy-resource.ts";
 import {
   renderMarkdownBlocks as renderLiteMarkdownBlocks,
   type RenderedBlock,
@@ -35,7 +36,13 @@ export interface PreviewRendererHost {
  */
 export function createPreviewRenderer(host: PreviewRendererHost) {
   let markdownModule: MarkdownModule | undefined;
-  let markdownModulePromise: Promise<MarkdownModule> | undefined;
+  const markdownResource = createLazyResource(() =>
+    import("#lib/markdown.ts").then((module) => {
+      markdownModule = module;
+      revision += 1;
+      return module;
+    }),
+  );
   let revision = $state(0);
   // Undefined until first needed, and null once workers prove unavailable.
   let renderWorker: MarkdownRenderWorker | null | undefined;
@@ -66,11 +73,7 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
   });
 
   function loadMarkdownModule(): Promise<MarkdownModule> {
-    return (markdownModulePromise ??= import("#lib/markdown.ts").then((module) => {
-      markdownModule = module;
-      revision += 1;
-      return module;
-    }));
+    return markdownResource.load();
   }
 
   // Only first paint uses lite output; edits retain full blocks until the worker answers.

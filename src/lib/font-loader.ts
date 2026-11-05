@@ -1,3 +1,4 @@
+import { createLazyResource } from "./lazy-resource.js";
 import type { FontChoices, FontRole } from "./fonts.js";
 
 type FontLoader = () => Promise<unknown>;
@@ -39,16 +40,16 @@ const fontLoaders: Record<string, FontLoader> = {
     ),
 };
 
-const loadedFonts = new Map<string, Promise<void>>();
+const loadedFonts = new Map<string, ReturnType<typeof createLazyResource<void>>>();
 
 export function loadFont(id: string): Promise<void> {
   const loader = fontLoaders[id];
   if (!loader) return Promise.resolve();
   const existing = loadedFonts.get(id);
-  if (existing) return existing;
-  const load = loader().then(() => undefined);
-  loadedFonts.set(id, load);
-  return load;
+  if (existing) return existing.load();
+  const resource = createLazyResource(() => loader().then(() => undefined));
+  loadedFonts.set(id, resource);
+  return resource.load();
 }
 
 export function loadFontChoices(choices: FontChoices): Promise<void> {

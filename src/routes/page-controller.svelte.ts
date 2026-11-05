@@ -1,3 +1,4 @@
+import { createLazyResource } from "#lib/lazy-resource.ts";
 import { FileText } from "@lucide/svelte";
 import type {
   BackupState,
@@ -139,19 +140,10 @@ const AUTO_BACKUP_DELAY_MS = 2 * 60_000;
 // Matches the single-column breakpoint in the responsive stylesheet.
 const NARROW_VIEWPORT = "(max-width: 900px)";
 
-type GithubModule = typeof import("#lib/github.ts");
-type LazyStylesModule = typeof import("#lib/lazy-styles.ts");
-
-let githubModulePromise: Promise<GithubModule> | undefined;
-let lazyStylesModulePromise: Promise<LazyStylesModule> | undefined;
-
-function loadGithubModule(): Promise<GithubModule> {
-  return (githubModulePromise ??= import("#lib/github.ts"));
-}
-
-function loadLazyStylesModule(): Promise<LazyStylesModule> {
-  return (lazyStylesModulePromise ??= import("#lib/lazy-styles.ts"));
-}
+const githubResource = createLazyResource(() => import("#lib/github.ts"));
+const stylesResource = createLazyResource(() => import("#lib/lazy-styles.ts"));
+const loadGithubModule = () => githubResource.load();
+const loadLazyStylesModule = () => stylesResource.load();
 
 type SidebarState = { collapsed: boolean; open: boolean };
 
@@ -258,7 +250,9 @@ export function createPageController() {
   let localAttachmentUrls = $state.raw<LocalAttachmentUrl[]>([]);
   let imagePreview = $state<ImagePreviewState>();
   let imagePreviewRequest = 0;
-  let dialogStylesPromise: Promise<void> | undefined;
+  const dialogStyles = createLazyResource(() =>
+    loadLazyStylesModule().then((module) => module.loadDialogStyles()),
+  );
   let serviceWorkerTimer: number | undefined;
   let githubRestoreTimer: number | undefined;
   let settingsOpener: HTMLElement | undefined;
@@ -465,9 +459,7 @@ export function createPageController() {
   const confirmation = createConfirmation(() => loadDialogStyles());
 
   function loadDialogStyles(): Promise<void> {
-    return (dialogStylesPromise ??= loadLazyStylesModule().then((module) =>
-      module.loadDialogStyles(),
-    ));
+    return dialogStyles.load();
   }
 
   function applyStoredFontChoices(): void {
