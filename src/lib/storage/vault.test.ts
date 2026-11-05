@@ -83,3 +83,29 @@ describe("Vault backlinks", () => {
     expect(backlinks.map(({ id }) => id)).toEqual(["wiki", "relative"]);
   });
 });
+
+describe("Trash lifecycle guards", () => {
+  it("does not purge a restored note from a stale trash listing", async () => {
+    const remove = vi.fn();
+    const database = { getNote: vi.fn().mockResolvedValue({ id: "note", revision: 3 }) };
+    const coordination = { runExclusive: <T>(task: () => Promise<T>) => task() };
+    const vault = Reflect.construct(Vault, [database, { remove }, coordination]) as Vault;
+    await expect(vault.purgeNote("note", "2026-01-01")).resolves.toBe(false);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("does not purge a newer trash incarnation", async () => {
+    const database = { getNote: vi.fn().mockResolvedValue({ id: "note", deletedAt: "new" }) };
+    const coordination = { runExclusive: <T>(task: () => Promise<T>) => task() };
+    const vault = Reflect.construct(Vault, [database, {}, coordination]) as Vault;
+    await expect(vault.purgeNote("note", "old")).resolves.toBe(false);
+    await expect(
+      vault.addAttachment({
+        noteId: "note",
+        folder: "attachments",
+        name: "a",
+        contents: new Blob(),
+      }),
+    ).rejects.toThrow("Save the note");
+  });
+});

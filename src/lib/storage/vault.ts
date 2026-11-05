@@ -478,10 +478,14 @@ export class Vault {
   }
 
   /** Permanently deletes one trashed note and its files. Cannot be undone. */
-  async purgeNote(noteId: string): Promise<boolean> {
+  async purgeNote(noteId: string, expectedDeletedAt?: string): Promise<boolean> {
     return this.#withLock(async () => {
       const note = await this.#database.getNote(noteId);
-      if (!note) return false;
+      if (
+        !note?.deletedAt ||
+        (expectedDeletedAt !== undefined && note.deletedAt !== expectedDeletedAt)
+      )
+        return false;
       const attachments = await this.#database.getAttachments(noteId);
       const markdown =
         (await this.#database.getNoteMarkdown(noteId)) ??
@@ -541,7 +545,7 @@ export class Vault {
     const trashed = await this.listTrashedNotes();
     let purged = 0;
     for (const note of trashed) {
-      if (await this.purgeNote(note.id)) purged += 1;
+      if (await this.purgeNote(note.id, note.deletedAt)) purged += 1;
     }
     return purged;
   }
@@ -557,7 +561,7 @@ export class Vault {
     for (const note of trashed) {
       const deletedAt = note.deletedAt ? Date.parse(note.deletedAt) : Number.NaN;
       if (Number.isNaN(deletedAt) || deletedAt > cutoff) continue;
-      if (await this.purgeNote(note.id)) purged.push(note.id);
+      if (await this.purgeNote(note.id, note.deletedAt)) purged.push(note.id);
     }
     return purged;
   }
@@ -713,7 +717,8 @@ export class Vault {
   /** Stores a file for a note under `folder`, renaming it if that vault path is already taken. */
   async addAttachment(input: AddAttachmentInput): Promise<AttachmentMetadata> {
     return this.#withLock(async () => {
-      if (!(await this.#database.getNote(input.noteId))) {
+      const owner = await this.#database.getNote(input.noteId);
+      if (!owner || owner.deletedAt) {
         throw new Error("Save the note before adding attachments to it");
       }
       const taken = new Set(
