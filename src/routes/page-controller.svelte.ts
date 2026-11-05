@@ -1426,6 +1426,7 @@ export function createPageController() {
       vaults = registry.vaults;
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The vault name could not be saved.";
+      throw error;
     }
   }
 
@@ -3696,7 +3697,7 @@ export function createPageController() {
     },
     selectVault: workspaceCommand(selectVault, "navigation"),
     createVault: workspaceCommand(createVault),
-    renameVault: workspaceCommand(renameVault),
+    renameVault: workspaceCommand(renameVault, "mutation", true),
     createNote: workspaceCommand(createNote),
     queueSearch,
     openFind,

@@ -65,7 +65,7 @@
 		onSidebarSideChange: (side: 'left' | 'right') => void;
 		onSelectVault: (id: string) => void;
 		onCreateVault: () => void;
-		onRenameVault: (id: string, name: string) => void;
+		onRenameVault: (id: string, name: string) => Promise<void>;
 		onCreateNote: () => void;
 		onCreateFile: (folderPath: string, name: string) => Promise<void>;
 		onCreateFolder: (parentPath: string, name: string) => Promise<void>;
