@@ -273,6 +273,7 @@ export function createPageController() {
   let githubRestoreTimer: number | undefined;
   let settingsOpener: HTMLElement | undefined;
   let settingsRequest = 0;
+  let sidebarDragCleanup: (() => void) | undefined;
   const startupDeadline = Date.now() + 5_000;
   let paletteOpener: HTMLElement | undefined;
   let paletteSidebarState: SidebarState | undefined;
@@ -720,6 +721,7 @@ export function createPageController() {
       authenticationCleanup?.();
       confirmation.dispose();
       find.dispose();
+      sidebarDragCleanup?.();
       if (startupFrame !== undefined) cancelAnimationFrame(startupFrame);
       window.removeEventListener("beforeunload", onBeforeUnload);
       window.removeEventListener("keydown", onKeydown);
@@ -3726,12 +3728,14 @@ export function createPageController() {
     setSidebarSide,
     setSidebarWidth,
     saveSidebarWidth,
-    startSidebarDrag: (event: PointerEvent) =>
-      startSidebarDrag(event, {
+    startSidebarDrag: (event: PointerEvent) => {
+      sidebarDragCleanup?.();
+      sidebarDragCleanup = startSidebarDrag(event, {
         side: () => sidebarSide,
         setDropSide: (side) => (sidebarDropSide = side),
         dock: setSidebarSide,
-      }),
+      });
+    },
     insertSyntax,
     prefixLine,
     setSplitRatio,
