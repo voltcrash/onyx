@@ -16,6 +16,7 @@ import type { Vault } from "./storage/index.js";
 const auth = vi.hoisted(() => ({
   accessToken: undefined as string | undefined,
   tokenGate: undefined as Promise<void> | undefined,
+  tokenError: undefined as Error | undefined,
   refreshedAccessToken: undefined as string | undefined,
 }));
 
@@ -23,6 +24,7 @@ vi.mock("./auth-client.js", () => ({
   authClient: {
     getAccessToken: async () => {
       await auth.tokenGate;
+      if (auth.tokenError) throw auth.tokenError;
       return { data: { accessToken: auth.accessToken }, error: null };
     },
     signOut: async () => ({ data: { success: true }, error: null }),
@@ -34,6 +36,7 @@ vi.mock("./auth-client.js", () => ({
 afterEach(() => {
   auth.accessToken = undefined;
   auth.tokenGate = undefined;
+  auth.tokenError = undefined;
   auth.refreshedAccessToken = undefined;
   vi.unstubAllGlobals();
 });
@@ -70,6 +73,15 @@ describe("githubRequest", () => {
       retryAt: new Date(reset * 1_000),
     } satisfies Partial<GithubRequestError>);
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("clears an existing session when restoring credentials fails", async () => {
+    auth.accessToken = "token";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ id: 1, login: "onyx" })));
+    await restoreGithubSession();
+    auth.tokenError = new Error("Session unavailable");
+    await expect(restoreGithubSession()).rejects.toThrow("Session unavailable");
+    await expect(githubRequest("/user")).rejects.toThrow("Sign in with GitHub");
   });
 
   it("clears partial authentication when loading the GitHub user fails", async () => {

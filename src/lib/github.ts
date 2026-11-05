@@ -149,14 +149,14 @@ export class GithubRequestError extends Error {
 
 export async function restoreGithubSession(): Promise<GithubUser | undefined> {
   const generation = ++authenticationGeneration;
-  const token = await requestGithubSession();
-  if (generation !== authenticationGeneration) return undefined;
-  if (!token) {
-    clearGithubAuthentication();
-    return undefined;
-  }
-  accessToken = token;
   try {
+    const token = await requestGithubSession();
+    if (generation !== authenticationGeneration) return undefined;
+    if (!token) {
+      clearGithubAuthentication();
+      return undefined;
+    }
+    accessToken = token;
     const user = await githubRequest<GithubUserResponse>("/user");
     if (generation !== authenticationGeneration) return undefined;
     authenticatedUser = {
