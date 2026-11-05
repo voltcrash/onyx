@@ -296,3 +296,61 @@ for (const webLocks of [true, false]) {
     await expectMarkdown(editor, "# Local draft");
   });
 }
+
+test("recovers an interrupted replacement before an already-open tab continues", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill("# Durable original");
+  await page.keyboard.press("ControlOrMeta+S");
+  await expect(page.locator(".file-tree-row.file")).toContainText("Durable original");
+  const path = await page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve) => {
+      const request = indexedDB.open("onyx-vault");
+      request.onsuccess = () => resolve(request.result);
+    });
+    const notes = await new Promise<Array<{ path: string }>>((resolve) => {
+      const request = database.transaction("notes").objectStore("notes").getAll();
+      request.onsuccess = () => resolve(request.result);
+    });
+    database.close();
+    const root = await (await navigator.storage.getDirectory()).getDirectoryHandle("onyx");
+    const write = async (directory: FileSystemDirectoryHandle, name: string, text: string) => {
+      const writable = await (
+        await directory.getFileHandle(name, { create: true })
+      ).createWritable();
+      await writable.write(text);
+      await writable.close();
+    };
+    const recovery = await root.getDirectoryHandle(".onyx-recovery", { create: true });
+    const recoveryNotes = await recovery.getDirectoryHandle("notes", { create: true });
+    await recovery.getDirectoryHandle("attachments", { create: true });
+    const name = notes[0].path.slice("notes/".length);
+    await write(recoveryNotes, name, "# Durable original");
+    await write(root, ".onyx-replacement.json", JSON.stringify({ generation: "terminated-tab" }));
+    await write(await root.getDirectoryHandle("notes"), name, "# Uncommitted replacement");
+    return name;
+  });
+  await page.getByRole("button", { name: "Open the command palette" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(async (name) => {
+        try {
+          const root = await (await navigator.storage.getDirectory()).getDirectoryHandle("onyx");
+          return (
+            await (await (await root.getDirectoryHandle("notes")).getFileHandle(name)).getFile()
+          ).text();
+        } catch {
+          return undefined;
+        }
+      }, path),
+    )
+    .toBe("# Durable original");
+  await page.keyboard.press("Escape");
+  await editor.fill("# After recovery");
+  await page.keyboard.press("ControlOrMeta+S");
+  await page.reload();
+  await expectMarkdown(editor, "# After recovery");
+});

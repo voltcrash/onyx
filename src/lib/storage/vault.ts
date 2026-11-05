@@ -54,7 +54,7 @@ export class Vault {
   readonly #coordination: VaultCoordination;
   #nativeDirectoryName?: string;
   #nativeHandle?: FileSystemDirectoryHandle;
-  #nativeInitialized = false;
+  #storageReady = false;
   #nativeDirectoryPermission: VaultFileStorageStatus["nativeDirectoryPermission"];
   #activeOperation?: VaultOperationContext;
   readonly #pendingNoteFiles = new Set<string>();
@@ -158,7 +158,7 @@ export class Vault {
       await this.#database.setNativeDirectoryHandle(handle);
       this.#filesystem.attach(nativeFilesystem);
       this.#nativeHandle = handle;
-      this.#nativeInitialized = true;
+      this.#storageReady = true;
       this.#nativeDirectoryName = handle.name;
       this.#nativeDirectoryPermission = "granted";
       return this.getFileStorageStatus();
@@ -284,7 +284,7 @@ export class Vault {
 
   async #restoreNativeDirectory(): Promise<void> {
     await this.#withLock(() => this.#syncNativeDirectory());
-    this.#nativeInitialized = true;
+    this.#storageReady = true;
   }
 
   async #syncNativeDirectory(): Promise<void> {
@@ -1561,7 +1561,10 @@ export class Vault {
       const previous = this.#activeOperation;
       this.#activeOperation = operation;
       try {
-        if (this.#nativeInitialized) await this.#syncNativeDirectory();
+        if (this.#storageReady) {
+          await this.#filesystem.fallback.recover(await this.#database.getFileGeneration());
+          await this.#syncNativeDirectory();
+        }
         return await task(operation);
       } finally {
         this.#activeOperation = previous;

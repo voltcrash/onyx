@@ -237,6 +237,7 @@ describe("Native directory configuration changes", () => {
     let stored: FileSystemDirectoryHandle | undefined;
     const database = {
       getNativeDirectoryHandle: async () => stored,
+      getFileGeneration: async () => undefined,
       setNativeDirectoryHandle: async (handle: FileSystemDirectoryHandle) => {
         stored = handle;
       },
