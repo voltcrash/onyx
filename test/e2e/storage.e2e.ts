@@ -389,3 +389,73 @@ test("settles a reverted draft while its earlier save is still running", async (
   await page.locator(".file-tree-row.file").filter({ hasText: "Welcome to Onyx" }).click();
   await expectMarkdown(editor, original);
 });
+
+test("mirrors retained OPFS files after permanently deleting a sibling note", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "showDirectoryPicker", {
+      configurable: true,
+      value: async () =>
+        (await navigator.storage.getDirectory()).getDirectoryHandle("native-mirror-test", {
+          create: true,
+        }),
+    });
+  });
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expectMarkdown(editor, "");
+  await editor.fill("# Retained");
+  await page.keyboard.press("ControlOrMeta+S");
+  await expect(page.locator(".file-tree-row.file").filter({ hasText: "Retained" })).toBeVisible();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Storage choices", exact: true }).click();
+  await page.getByRole("button", { name: "Choose folder", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Disconnect folder", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Close settings" }).click();
+  await page.evaluate(() => {
+    const read = Reflect.get(Blob.prototype, "arrayBuffer") as Blob["arrayBuffer"];
+    const state = window as typeof window & { unreadableFiles: number };
+    state.unreadableFiles = 0;
+    Blob.prototype.arrayBuffer = async function () {
+      try {
+        return await read.call(this);
+      } catch (error) {
+        if (
+          this instanceof File &&
+          error instanceof DOMException &&
+          error.name === "NotReadableError"
+        )
+          state.unreadableFiles += 1;
+        throw error;
+      }
+    };
+  });
+
+  await page
+    .locator(".file-tree-row.file")
+    .filter({ hasText: "Welcome to Onyx" })
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  await page.keyboard.press("ControlOrMeta+g");
+  await page.getByRole("button", { name: "Delete Welcome to Onyx forever", exact: true }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Delete forever", exact: true })
+    .click();
+  await expect(page.getByText("Trash is empty.", { exact: true })).toBeVisible();
+  const mirrored = await page.evaluate(async () => {
+    const directory = await (
+      await (await navigator.storage.getDirectory()).getDirectoryHandle("native-mirror-test")
+    ).getDirectoryHandle("notes");
+    const texts: string[] = [];
+    for await (const [, handle] of directory.entries()) {
+      if (handle.kind === "file") texts.push(await (await handle.getFile()).text());
+    }
+    return {
+      texts,
+      unreadableFiles: (window as typeof window & { unreadableFiles: number }).unreadableFiles,
+    };
+  });
+  expect(mirrored).toEqual({ texts: ["# Retained"], unreadableFiles: 0 });
+});

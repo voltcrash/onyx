@@ -223,8 +223,16 @@ export class MirroredVaultFilesystem implements VaultFileStorage {
     files: Array<{ contents: Blob; path: string }>,
     commit: (generation?: string) => Promise<void>,
   ): Promise<void> {
-    await this.fallback.replace(files, commit);
-    await this.#runMirror((mirror) => mirror.replace(files, async () => undefined));
+    const snapshots = this.#mirror
+      ? await Promise.all(
+          files.map(async ({ path, contents }) => ({
+            path,
+            contents: new Blob([await contents.arrayBuffer()], { type: contents.type }),
+          })),
+        )
+      : files;
+    await this.fallback.replace(snapshots, commit);
+    await this.#runMirror((mirror) => mirror.replace(snapshots, async () => undefined));
   }
 
   async #runMirror(operation: (mirror: VaultFilesystem) => Promise<void>): Promise<void> {

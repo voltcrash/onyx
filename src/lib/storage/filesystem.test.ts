@@ -84,3 +84,39 @@ describe("Durable replacement recovery", () => {
     expect(await filesystem.readText("notes/new.md")).toBe("new");
   });
 });
+
+describe("Retained file replacement", () => {
+  it("materializes retained files before replacing both local and mirror trees", async () => {
+    let readable = true;
+    class RetainedFile extends Blob {
+      override arrayBuffer(): Promise<ArrayBuffer> {
+        if (!readable)
+          return Promise.reject(new DOMException("File was removed", "NotReadableError"));
+        return super.arrayBuffer();
+      }
+    }
+    const fallback = await VaultFilesystem.fromDirectory(memoryDirectory());
+    const mirror = await VaultFilesystem.fromDirectory(memoryDirectory());
+    for (const filesystem of [fallback, mirror]) {
+      await filesystem.writeText("notes/removed.md", "remove");
+      await filesystem.writeText("notes/retained.md", "retain");
+    }
+    const replace = fallback.replace.bind(fallback);
+    vi.spyOn(fallback, "replace").mockImplementation(async (files, commit) => {
+      await replace(files, commit);
+      readable = false;
+    });
+    const unavailable = vi.fn();
+    const filesystem = new MirroredVaultFilesystem(fallback, unavailable);
+    filesystem.attach(mirror);
+    const commit = vi.fn().mockResolvedValue(undefined);
+    await filesystem.replace(
+      [{ path: "notes/retained.md", contents: new RetainedFile(["retain"]) }],
+      commit,
+    );
+    expect(commit).toHaveBeenCalledOnce();
+    expect(unavailable).not.toHaveBeenCalled();
+    expect(await mirror.readText("notes/retained.md")).toBe("retain");
+    await expect(mirror.read("notes/removed.md")).rejects.toThrow();
+  });
+});
