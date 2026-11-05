@@ -1,3 +1,4 @@
+import { requestDatabaseLock } from "./database-lock.js";
 import type { VaultChangeEvent, VaultChangeKind } from "./types.js";
 
 interface VaultChangeMessage {
@@ -93,7 +94,7 @@ export class VaultCoordination {
 
 async function requestLock<T>(name: string, task: () => Promise<T>): Promise<T> {
   const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
-  if (!locks || typeof locks.request !== "function") return task();
+  if (!locks || typeof locks.request !== "function") return requestDatabaseLock(name, task);
   return locks.request(name, { mode: "exclusive" }, task);
 }
 

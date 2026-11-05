@@ -262,28 +262,37 @@ test("settles the latest draft before creating another note", async ({ page }) =
   await expectMarkdown(editor, "# Latest draft before navigation");
 });
 
-test("preserves a conflicted draft as a new note", async ({ page, context }) => {
-  await page.goto("/");
-  const editor = page.getByRole("textbox", { name: "Markdown editor" });
-  await expect(editor).toBeEnabled();
-  await page.clock.install();
-  await page.clock.pauseAt(new Date());
-  await editor.fill("# Local draft");
-  const other = await context.newPage();
-  await other.goto("/");
-  const remoteEditor = other.getByRole("textbox", { name: "Markdown editor" });
-  await expect(remoteEditor).toBeEnabled();
-  await remoteEditor.fill("# Remote edit");
-  await other.keyboard.press("ControlOrMeta+S");
-  await expect(other.locator(".file-tree-row.file")).toContainText("Remote edit");
-  await expect(page.getByRole("alert")).toContainText("changed in another tab");
-  await page.getByRole("button", { name: "Save a copy" }).click();
-  await expectMarkdown(editor, "# Local draft");
-  await expect(
-    page.locator(".file-tree-row.file").filter({ hasText: "conflict copy" }),
-  ).toHaveCount(1);
-  await other.close();
-  await page.reload();
-  await page.locator(".file-tree-row.file").filter({ hasText: "conflict copy" }).click();
-  await expectMarkdown(editor, "# Local draft");
-});
+for (const webLocks of [true, false]) {
+  test(`preserves a conflicted draft as a new note with Web Locks ${webLocks ? "enabled" : "unavailable"}`, async ({
+    page,
+    context,
+  }) => {
+    if (!webLocks)
+      await context.addInitScript(() => {
+        Object.defineProperty(navigator, "locks", { configurable: true, value: undefined });
+      });
+    await page.goto("/");
+    const editor = page.getByRole("textbox", { name: "Markdown editor" });
+    await expect(editor).toBeEnabled();
+    await page.clock.install();
+    await page.clock.pauseAt(new Date());
+    await editor.fill("# Local draft");
+    const other = await context.newPage();
+    await other.goto("/");
+    const remoteEditor = other.getByRole("textbox", { name: "Markdown editor" });
+    await expect(remoteEditor).toBeEnabled();
+    await remoteEditor.fill("# Remote edit");
+    await other.keyboard.press("ControlOrMeta+S");
+    await expect(other.locator(".file-tree-row.file")).toContainText("Remote edit");
+    await expect(page.getByRole("alert")).toContainText("changed in another tab");
+    await page.getByRole("button", { name: "Save a copy" }).click();
+    await expectMarkdown(editor, "# Local draft");
+    await expect(
+      page.locator(".file-tree-row.file").filter({ hasText: "conflict copy" }),
+    ).toHaveCount(1);
+    await other.close();
+    await page.reload();
+    await page.locator(".file-tree-row.file").filter({ hasText: "conflict copy" }).click();
+    await expectMarkdown(editor, "# Local draft");
+  });
+}

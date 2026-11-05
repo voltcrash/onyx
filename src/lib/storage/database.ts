@@ -45,9 +45,17 @@ export type StoreName =
 
 export class VaultDatabase {
   readonly #database: IDBDatabase;
+  #closed = false;
 
   private constructor(database: IDBDatabase) {
     this.#database = database;
+    database.onversionchange = () => this.close();
+  }
+
+  #transaction(stores: string | string[], mode: IDBTransactionMode): IDBTransaction {
+    if (this.#closed)
+      throw new Error("Storage changed in another tab. Reload Onyx before saving again.");
+    return this.#database.transaction(stores, mode);
   }
 
   static async open(name: string): Promise<VaultDatabase> {
@@ -104,12 +112,23 @@ export class VaultDatabase {
       }
     };
 
-    const database = await requestResult(request);
-    database.onversionchange = () => database.close();
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      let blocked = false;
+      request.onblocked = () => {
+        blocked = true;
+        reject(new Error("Close older Onyx tabs to upgrade storage"));
+      };
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        if (blocked) request.result.close();
+        else resolve(request.result);
+      };
+    });
     return new VaultDatabase(database);
   }
 
   close(): void {
+    this.#closed = true;
     this.#database.close();
   }
 
@@ -118,10 +137,7 @@ export class VaultDatabase {
   }
 
   async setNotePinned(noteId: string, pinned: boolean): Promise<boolean> {
-    const transaction = this.#database.transaction(
-      ["notes", "settings", "backupQueue"],
-      "readwrite",
-    );
+    const transaction = this.#transaction(["notes", "settings", "backupQueue"], "readwrite");
     const complete = transactionDone(transaction);
     try {
       const store = transaction.objectStore("notes");
@@ -161,7 +177,7 @@ export class VaultDatabase {
     searchPostings: SearchPosting[],
     operation: BackupOperation,
   ): Promise<void> {
-    const transaction = this.#database.transaction(
+    const transaction = this.#transaction(
       ["notes", "noteContents", "searchDocuments", "searchPostings", "backupQueue", "settings"],
       "readwrite",
     );
@@ -209,7 +225,7 @@ export class VaultDatabase {
   async getAttachments(noteId?: string): Promise<AttachmentMetadata[]> {
     if (!noteId) return this.#getAll<AttachmentMetadata>("attachments");
 
-    const transaction = this.#database.transaction("attachments", "readonly");
+    const transaction = this.#transaction("attachments", "readonly");
     const request = transaction.objectStore("attachments").index("noteId").getAll(noteId);
     const attachments = await requestResult<AttachmentMetadata[]>(request);
     await transactionDone(transaction);
@@ -218,10 +234,7 @@ export class VaultDatabase {
 
   async updateAttachments(attachments: AttachmentMetadata[]): Promise<void> {
     if (attachments.length === 0) return;
-    const transaction = this.#database.transaction(
-      ["attachments", "settings", "backupQueue"],
-      "readwrite",
-    );
+    const transaction = this.#transaction(["attachments", "settings", "backupQueue"], "readwrite");
     const complete = transactionDone(transaction);
     try {
       const store = transaction.objectStore("attachments");
@@ -241,10 +254,7 @@ export class VaultDatabase {
   }
 
   async putAttachment(attachment: AttachmentMetadata, operation: BackupOperation): Promise<void> {
-    const transaction = this.#database.transaction(
-      ["attachments", "backupQueue", "settings"],
-      "readwrite",
-    );
+    const transaction = this.#transaction(["attachments", "backupQueue", "settings"], "readwrite");
     const complete = transactionDone(transaction);
     try {
       transaction.objectStore("attachments").put(attachment);
@@ -280,10 +290,7 @@ export class VaultDatabase {
     noteContents: Map<string, string>;
     version: number;
   }> {
-    const transaction = this.#database.transaction(
-      ["backupQueue", "noteContents", "settings"],
-      "readonly",
-    );
+    const transaction = this.#transaction(["backupQueue", "noteContents", "settings"], "readonly");
     const [operations, noteContents, versionRecord] = await Promise.all([
       requestResult<BackupOperation[]>(transaction.objectStore("backupQueue").getAll()),
       requestResult<Array<{ markdown: string; noteId: string }>>(
@@ -317,7 +324,7 @@ export class VaultDatabase {
     }>,
     version: number,
   ): Promise<void> {
-    const transaction = this.#database.transaction(
+    const transaction = this.#transaction(
       ["notes", "searchDocuments", "searchPostings", "settings"],
       "readwrite",
     );
@@ -352,7 +359,7 @@ export class VaultDatabase {
     documents: SearchDocument[];
     notes: NoteMetadata[];
   }> {
-    const transaction = this.#database.transaction(["searchDocuments", "notes"], "readonly");
+    const transaction = this.#transaction(["searchDocuments", "notes"], "readonly");
     const documents = transaction.objectStore("searchDocuments");
     const notes = transaction.objectStore("notes");
     const [documentRecords, noteRecords] = await Promise.all([
@@ -369,7 +376,7 @@ export class VaultDatabase {
   }
 
   async getSearchPostings(term: string): Promise<SearchPosting[]> {
-    const transaction = this.#database.transaction("searchPostings", "readonly");
+    const transaction = this.#transaction("searchPostings", "readonly");
     const range = IDBKeyRange.bound([term], [`${term}\uffff`]);
     const postings = await requestResult<SearchPosting[]>(
       transaction.objectStore("searchPostings").getAll(range),
@@ -391,7 +398,7 @@ export class VaultDatabase {
   }
 
   async completeGithubBackup(state: GithubBackupState, ids: string[]): Promise<void> {
-    const transaction = this.#database.transaction(["settings", "backupQueue"], "readwrite");
+    const transaction = this.#transaction(["settings", "backupQueue"], "readwrite");
     const complete = transactionDone(transaction);
     transaction.objectStore("settings").put({ key: "githubBackup", value: state });
     for (const id of ids) transaction.objectStore("backupQueue").delete(id);
@@ -424,7 +431,7 @@ export class VaultDatabase {
   }
 
   async countBackupOperations(): Promise<number> {
-    const transaction = this.#database.transaction("backupQueue", "readonly");
+    const transaction = this.#transaction("backupQueue", "readonly");
     const count = await requestResult<number>(transaction.objectStore("backupQueue").count());
     await transactionDone(transaction);
     return count;
@@ -432,7 +439,7 @@ export class VaultDatabase {
 
   async removeBackupOperations(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
-    const transaction = this.#database.transaction(["backupQueue", "settings"], "readwrite");
+    const transaction = this.#transaction(["backupQueue", "settings"], "readwrite");
     const store = transaction.objectStore("backupQueue");
     for (const id of ids) store.delete(id);
     await advanceVaultVersion(transaction);
@@ -445,10 +452,7 @@ export class VaultDatabase {
     generation?: string,
   ): Promise<void> {
     if (attachmentIds.length === 0 && operations.length === 0) return;
-    const transaction = this.#database.transaction(
-      ["attachments", "backupQueue", "settings"],
-      "readwrite",
-    );
+    const transaction = this.#transaction(["attachments", "backupQueue", "settings"], "readwrite");
     const complete = transactionDone(transaction);
     try {
       const attachments = transaction.objectStore("attachments");
@@ -475,7 +479,7 @@ export class VaultDatabase {
     operations: BackupOperation[],
     generation?: string,
   ): Promise<void> {
-    const transaction = this.#database.transaction(
+    const transaction = this.#transaction(
       [
         "notes",
         "noteContents",
@@ -522,7 +526,7 @@ export class VaultDatabase {
     operation: BackupOperation,
     attachmentOperations: BackupOperation[] = [],
   ): Promise<boolean> {
-    const transaction = this.#database.transaction(
+    const transaction = this.#transaction(
       ["notes", "searchDocuments", "backupQueue", "settings"],
       "readwrite",
     );
@@ -578,7 +582,7 @@ export class VaultDatabase {
     attachmentOperations: BackupOperation[] = [],
     sourcePath?: string,
   ): Promise<boolean> {
-    const transaction = this.#database.transaction(
+    const transaction = this.#transaction(
       ["notes", "searchDocuments", "backupQueue", "settings"],
       "readwrite",
     );
@@ -642,7 +646,7 @@ export class VaultDatabase {
       githubBackup?: GithubBackupState;
     },
   ): Promise<void> {
-    const transaction = this.#database.transaction(
+    const transaction = this.#transaction(
       [
         "notes",
         "noteContents",
@@ -703,14 +707,14 @@ export class VaultDatabase {
   }
 
   async #get<T>(storeName: StoreName, key: IDBValidKey): Promise<T | undefined> {
-    const transaction = this.#database.transaction(storeName, "readonly");
+    const transaction = this.#transaction(storeName, "readonly");
     const value = await requestResult<T | undefined>(transaction.objectStore(storeName).get(key));
     await transactionDone(transaction);
     return value;
   }
 
   async #getAll<T>(storeName: StoreName, indexName?: string): Promise<T[]> {
-    const transaction = this.#database.transaction(storeName, "readonly");
+    const transaction = this.#transaction(storeName, "readonly");
     const source = indexName
       ? transaction.objectStore(storeName).index(indexName)
       : transaction.objectStore(storeName);
@@ -725,14 +729,14 @@ export class VaultDatabase {
   }
 
   async #deleteSetting(key: string): Promise<void> {
-    const transaction = this.#database.transaction("settings", "readwrite");
+    const transaction = this.#transaction("settings", "readwrite");
     transaction.objectStore("settings").delete(key);
     if (key !== VAULT_VERSION_KEY) await advanceVaultVersion(transaction);
     await transactionDone(transaction);
   }
 
   async #putSetting<T>(key: string, value: T): Promise<void> {
-    const transaction = this.#database.transaction(["settings", "backupQueue"], "readwrite");
+    const transaction = this.#transaction(["settings", "backupQueue"], "readwrite");
     transaction.objectStore("settings").put({ key, value } satisfies SettingRecord<T>);
     if (key === FILE_FOLDERS_KEY) await queueMetadata(transaction);
     if (key !== VAULT_VERSION_KEY) await advanceVaultVersion(transaction);
