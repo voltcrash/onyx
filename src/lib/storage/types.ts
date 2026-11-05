@@ -128,6 +128,7 @@ export interface VaultOperationOptions {
 
 export interface VaultBackupManifest {
   version: 1;
+  folders?: FolderMetadata[];
   notes: NoteMetadata[];
   attachments: AttachmentMetadata[];
 }

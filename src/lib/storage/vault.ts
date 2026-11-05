@@ -90,18 +90,16 @@ export class Vault {
     }
     try {
       const opfs = await VaultFilesystem.open(options.directoryName ?? DEFAULT_DIRECTORY_NAME);
+      const coordination = new VaultCoordination(
+        options.databaseName ?? DEFAULT_DATABASE_NAME,
+        options.directoryName ?? DEFAULT_DIRECTORY_NAME,
+      );
+      await coordination.runExclusive(async () => opfs.recover(await database.getFileGeneration()));
       let vault: Vault;
       const filesystem = new MirroredVaultFilesystem(opfs, (reason) => {
         vault.#nativeDirectoryPermission = reason === "permission" ? "prompt" : "error";
       });
-      vault = new Vault(
-        database,
-        filesystem,
-        new VaultCoordination(
-          options.databaseName ?? DEFAULT_DATABASE_NAME,
-          options.directoryName ?? DEFAULT_DIRECTORY_NAME,
-        ),
-      );
+      vault = new Vault(database, filesystem, coordination);
       await vault.#restoreNativeDirectory();
       // Tags only make search and filtering better, so a failed backfill must not block opening.
       await vault.#deriveMissingTags().catch(() => undefined);
@@ -673,6 +671,7 @@ export class Vault {
         }
       }
 
+      const awaitFolders = await this.#database.getFileFolders();
       const notes = [...existingNotes, ...importedNotes];
       const attachments = [...existingAttachments, ...importedAttachments];
       const documents = notes.map((note) =>
@@ -680,7 +679,7 @@ export class Vault {
       );
       await this.#filesystem.replace(
         [...existingNoteFiles, ...existingAttachmentFiles, ...importedFiles],
-        () =>
+        (generation) =>
           this.#database.replaceVault(
             notes,
             notes.map((note) => ({ noteId: note.id, markdown: markdownById.get(note.id) ?? "" })),
@@ -689,6 +688,7 @@ export class Vault {
             documents.flatMap(createSearchPostings),
             [...operations, ...importedOperations],
             version,
+            { folders: awaitFolders, generation },
           ),
       );
       this.#publish({ kind: "vault" });
@@ -1007,10 +1007,13 @@ export class Vault {
           createdAt: now,
         })),
       ];
-      await this.#filesystem.replace([], () =>
-        this.#database.replaceVault([], [], [], [], [], operations, version),
+      const pending = await this.#database.getBackupOperations();
+      await this.#filesystem.replace([], (generation) =>
+        this.#database.replaceVault([], [], [], [], [], [...pending, ...operations], version, {
+          folders: [],
+          generation,
+        }),
       );
-      await this.#database.setFileFolders([]);
       this.#publish({ kind: "vault" });
     });
   }
@@ -1086,6 +1089,8 @@ export class Vault {
       pendingPaths?: string[];
       restoredAt: string;
       context?: VaultOperationContext;
+      expectedVersion?: number;
+      githubBackup?: GithubBackupState;
     },
   ): Promise<VaultRestoreResult> {
     return this.#withLock(async () => {
@@ -1117,8 +1122,10 @@ export class Vault {
         .map((path) => restoreOperation(path, acceptedPaths.has(path), options.restoredAt))
         .filter((operation): operation is BackupOperation => operation !== undefined);
       const version = await this.#getVaultVersion();
+      if (options.expectedVersion !== undefined && options.expectedVersion !== version)
+        throw new VaultConflictError("vault", options.expectedVersion, version);
 
-      await this.#filesystem.replace(restoredFiles, async () => {
+      await this.#filesystem.replace(restoredFiles, async (generation) => {
         await this.#database.replaceVault(
           notes,
           notes.map((note) => ({ noteId: note.id, markdown: markdownByPath.get(note.path) ?? "" })),
@@ -1127,8 +1134,12 @@ export class Vault {
           documents.flatMap(createSearchPostings),
           operations,
           version,
+          {
+            folders: options.manifest?.folders ?? [],
+            generation,
+            githubBackup: options.githubBackup,
+          },
         );
-        await this.#database.setFileFolders([]);
       });
       this.#publish({ kind: "vault" });
       return { attachmentCount: attachments.length, noteCount: notes.length };

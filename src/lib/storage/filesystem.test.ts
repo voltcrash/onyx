@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { MirroredVaultFilesystem, type VaultFilesystem } from "./filesystem.js";
+import { MirroredVaultFilesystem, VaultFilesystem } from "./filesystem.js";
+
+import { memoryDirectory } from "../../../test/fixtures/filesystem.js";
 
 describe("MirroredVaultFilesystem", () => {
   it("continues in OPFS after native directory permission is lost", async () => {
@@ -38,5 +40,47 @@ describe("Mirror commit ownership", () => {
     expect(commit).toHaveBeenCalledOnce();
     expect(mirrorReplace).not.toHaveBeenCalled();
     expect(unavailable).not.toHaveBeenCalled();
+  });
+});
+
+// Recovery reads a new instance, as it would after an interrupted tab is reopened.
+describe("Durable replacement recovery", () => {
+  it("restores the previous generation after an interrupted commit", async () => {
+    const root = memoryDirectory();
+    const filesystem = await VaultFilesystem.fromDirectory(root);
+    await filesystem.writeText("notes/old.md", "old");
+    let release!: () => void;
+    let entered!: () => void;
+    const committing = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const pending = filesystem.replace(
+      [{ path: "notes/new.md", contents: new Blob(["new"]) }],
+      async () => {
+        entered();
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      },
+    );
+    await committing;
+    const reopened = Reflect.construct(VaultFilesystem, [root]) as VaultFilesystem;
+    await reopened.recover();
+    expect(await reopened.readText("notes/old.md")).toBe("old");
+    await expect(reopened.read("notes/new.md")).rejects.toThrow();
+    release();
+    await pending;
+  });
+
+  it("keeps a generation whose database commit completed", async () => {
+    const filesystem = await VaultFilesystem.fromDirectory(memoryDirectory());
+    await filesystem.writeText("notes/old.md", "old");
+    await filesystem.replace(
+      [{ path: "notes/new.md", contents: new Blob(["new"]) }],
+      async (generation) => {
+        await filesystem.recover(generation);
+      },
+    );
+    expect(await filesystem.readText("notes/new.md")).toBe("new");
   });
 });

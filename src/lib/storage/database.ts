@@ -332,6 +332,10 @@ export class VaultDatabase {
     await complete;
   }
 
+  getFileGeneration(): Promise<string | undefined> {
+    return this.#getSetting<string>("fileGeneration");
+  }
+
   getVaultVersion(): Promise<number> {
     return this.#getSetting<number>(VAULT_VERSION_KEY).then((version) => version ?? 0);
   }
@@ -610,6 +614,11 @@ export class VaultDatabase {
     postings: SearchPosting[],
     operations: BackupOperation[],
     expectedVersion?: number,
+    replacement?: {
+      folders: FolderMetadata[];
+      generation?: string;
+      githubBackup?: GithubBackupState;
+    },
   ): Promise<void> {
     const transaction = this.#database.transaction(
       [
@@ -650,6 +659,14 @@ export class VaultDatabase {
       for (const document of documents) stores.documents.put(document);
       for (const posting of postings) stores.postings.put(posting);
       for (const operation of operations) stores.operations.put(operation);
+      if (replacement) {
+        const settings = transaction.objectStore("settings");
+        settings.put({ key: FILE_FOLDERS_KEY, value: replacement.folders });
+        if (replacement.generation)
+          settings.put({ key: "fileGeneration", value: replacement.generation });
+        if (replacement.githubBackup)
+          settings.put({ key: "githubBackup", value: replacement.githubBackup });
+      }
       await advanceVaultVersion(transaction);
       await complete;
     } catch (error) {

@@ -5,7 +5,7 @@ export interface VaultFileStorage {
   remove(path: string, options?: { recursive?: boolean; ignoreMissing?: boolean }): Promise<void>;
   replace(
     files: Array<{ contents: Blob; path: string }>,
-    commit: () => Promise<void>,
+    commit: (generation?: string) => Promise<void>,
   ): Promise<void>;
   write(path: string, contents: Blob): Promise<void>;
   writeText(path: string, contents: string): Promise<void>;
@@ -33,7 +33,9 @@ export class VaultFilesystem implements VaultFileStorage {
   static async fromDirectory(root: FileSystemDirectoryHandle): Promise<VaultFilesystem> {
     await root.getDirectoryHandle("notes", { create: true });
     await root.getDirectoryHandle("attachments", { create: true });
-    return new VaultFilesystem(root);
+    const filesystem = new VaultFilesystem(root);
+    await filesystem.recover();
+    return filesystem;
   }
 
   async writeText(path: string, contents: string): Promise<void> {
@@ -78,31 +80,66 @@ export class VaultFilesystem implements VaultFileStorage {
 
   async replace(
     files: Array<{ contents: Blob; path: string }>,
-    commit: () => Promise<void>,
+    commit: (generation?: string) => Promise<void>,
   ): Promise<void> {
-    const previousFiles = await this.listFiles();
+    const generation = crypto.randomUUID();
+    const recoveryRoot = await this.#root.getDirectoryHandle(".onyx-recovery", { create: true });
+    const recovery = new VaultFilesystem(recoveryRoot);
+    await recovery.#replaceFiles(await this.listFiles());
+    await this.writeText(".onyx-replacement.json", JSON.stringify({ generation }));
     try {
       await this.#replaceFiles(files);
-      await commit();
+      await commit(generation);
     } catch (error) {
       try {
-        await this.#replaceFiles(previousFiles);
+        await this.recover();
       } catch (rollbackError) {
         throw new AggregateError(
           [error, rollbackError],
-          "Failed to restore the vault and roll back its files",
+          "Vault recovery is required before more writes",
         );
       }
       throw error;
     }
+    await this.#finishReplacement().catch(() => undefined);
+  }
+
+  async recover(committedGeneration?: string): Promise<void> {
+    let generation: string;
+    try {
+      const record = JSON.parse(await this.readText(".onyx-replacement.json")) as {
+        generation: string;
+      };
+      if (typeof record.generation !== "string") throw new Error("Invalid vault recovery journal");
+      generation = record.generation;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "NotFoundError") return;
+      throw error;
+    }
+    if (generation !== committedGeneration) {
+      const root = await this.#root.getDirectoryHandle(".onyx-recovery");
+      await this.#replaceFiles(await new VaultFilesystem(root).listFiles());
+    }
+    await this.#finishReplacement();
+  }
+
+  async #finishReplacement(): Promise<void> {
+    await this.#root.removeEntry(".onyx-replacement.json").catch(ignoreMissing);
+    await this.#root.removeEntry(".onyx-recovery", { recursive: true }).catch(ignoreMissing);
   }
 
   async #replaceFiles(files: Array<{ contents: Blob; path: string }>): Promise<void> {
+    const snapshots = await Promise.all(
+      files.map(async (file) => ({
+        path: file.path,
+        contents: new Blob([await file.contents.arrayBuffer()], { type: file.contents.type }),
+      })),
+    );
     await this.#root.removeEntry("notes", { recursive: true }).catch(ignoreMissing);
     await this.#root.removeEntry("attachments", { recursive: true }).catch(ignoreMissing);
     await this.#root.getDirectoryHandle("notes", { create: true });
     await this.#root.getDirectoryHandle("attachments", { create: true });
-    for (const file of files) await this.write(file.path, file.contents);
+    for (const file of snapshots) await this.write(file.path, file.contents);
   }
 
   async listFiles(): Promise<Array<{ contents: Blob; path: string }>> {
@@ -184,7 +221,7 @@ export class MirroredVaultFilesystem implements VaultFileStorage {
 
   async replace(
     files: Array<{ contents: Blob; path: string }>,
-    commit: () => Promise<void>,
+    commit: (generation?: string) => Promise<void>,
   ): Promise<void> {
     await this.fallback.replace(files, commit);
     await this.#runMirror((mirror) => mirror.replace(files, async () => undefined));
