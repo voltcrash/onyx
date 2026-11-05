@@ -591,7 +591,7 @@ export function createPageController() {
       void workspaceCommand(async () => {
         if (vaultId && vaultId !== activeVaultId) await selectVault(vaultId);
         await selectNote(noteId);
-      })();
+      }, "navigation")();
     });
   });
 
@@ -3718,13 +3718,13 @@ export function createPageController() {
     disconnectGitHub,
     moveNoteFocus,
     selectNote: workspaceCommand(selectNote, "navigation"),
-    openNoteLink: workspaceCommand(openNoteLink),
-    openWikiLink: workspaceCommand(openWikiLink),
+    openNoteLink: workspaceCommand(openNoteLink, "navigation"),
+    openWikiLink: workspaceCommand(openWikiLink, "navigation"),
     openTag,
     get backlinks() {
       return backlinks;
     },
-    openBacklink: workspaceCommand((id: string) => navigateToNote(id)),
+    openBacklink: workspaceCommand((id: string) => navigateToNote(id), "navigation"),
     createFile: workspaceCommand(createNote, "mutation", true),
     createFolder: workspaceCommand(createFolder, "mutation", true),
     renameFile: workspaceCommand(renameFile, "mutation", true),
