@@ -30,6 +30,7 @@ import {
 } from "#lib/markdown-utils.ts";
 import {
   browserStorageWarnings,
+  subscribePreferenceWriteFailures,
   detectBrowserStorageSupport,
   persistenceDeniedMessage,
   readLocalStorage,
@@ -543,9 +544,8 @@ export function createPageController() {
     const customRoles = (Object.keys(storedFonts) as FontRole[]).filter(
       (role) => storedFonts[role] !== defaultFontChoices[role],
     );
-    if (customRoles.length === 0) return;
-
     applyFontChoices(storedFonts);
+    if (customRoles.length === 0) return;
     void Promise.all(customRoles.map((role) => loadFont(storedFonts[role]))).then(
       () => {
         if (fontRevision === revision) applyFontChoices(storedFonts);
@@ -632,6 +632,25 @@ export function createPageController() {
       applyColorTheme(colorTheme);
     }
     applyStoredFontChoices();
+    const stopPreferenceWarnings = subscribePreferenceWriteFailures(() => {
+      appendStorageNotice(
+        "Browser preferences could not be saved. Changes apply to this tab until it closes.",
+      );
+    });
+    const onPreferenceChange = (event: StorageEvent) => {
+      if (event.key === null || event.key === "onyx-theme") {
+        theme = readThemePreference();
+        resolvedTheme = applyTheme(theme);
+      }
+      if (event.key === null || event.key === "onyx-color-theme") {
+        colorTheme = readColorTheme();
+        applyColorTheme(colorTheme);
+      }
+      if (event.key === null || event.key.startsWith("onyx:font-")) applyStoredFontChoices();
+      if (event.key === null || event.key === "onyx:keyboard-shortcuts")
+        shortcuts = readKeyboardShortcuts();
+    };
+    window.addEventListener("storage", onPreferenceChange);
     const stopThemeWatch = watchSystemTheme(() => {
       if (theme === "system") resolvedTheme = applyTheme(theme);
     });
@@ -730,6 +749,8 @@ export function createPageController() {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       narrowQuery?.removeEventListener("change", onViewportChange);
       stopThemeWatch();
+      stopPreferenceWarnings();
+      window.removeEventListener("storage", onPreferenceChange);
       if (saveTimer) window.clearTimeout(saveTimer);
       if (searchTimer) window.clearTimeout(searchTimer);
       if (previewFrame !== undefined) window.cancelAnimationFrame(previewFrame);
