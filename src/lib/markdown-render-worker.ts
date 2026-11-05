@@ -40,6 +40,8 @@ export class MarkdownRenderWorker {
   #active?: PendingRender & { id: number };
   #queued?: PendingRender;
   #failure?: Error;
+  #timeout: ReturnType<typeof setTimeout> | undefined;
+  #disposed = false;
 
   constructor(port: MarkdownWorkerPort) {
     this.#port = port;
@@ -69,13 +71,17 @@ export class MarkdownRenderWorker {
   }
 
   dispose(): void {
-    this.#port.terminate();
+    this.#disposed = true;
     this.#fail(new Error("The Markdown worker was stopped"));
   }
 
   #start(pending: PendingRender): void {
     const id = ++this.#nextId;
     this.#active = { ...pending, id };
+    this.#timeout = setTimeout(
+      () => this.#fail(new Error("The Markdown worker timed out")),
+      15_000,
+    );
     try {
       this.#port.postMessage({ id, ...pending.job });
     } catch (error) {
@@ -85,7 +91,9 @@ export class MarkdownRenderWorker {
 
   #receive(response: MarkdownRenderResponse): void {
     const active = this.#active;
-    if (!active || response.id !== active.id) return;
+    if (this.#failure || this.#disposed || !active || response.id !== active.id) return;
+    clearTimeout(this.#timeout);
+    this.#timeout = undefined;
     this.#active = undefined;
     if (response.error !== undefined) active.reject(new Error(response.error));
     else active.resolve(response.blocks);
@@ -95,6 +103,9 @@ export class MarkdownRenderWorker {
   }
 
   #fail(error: Error): void {
+    clearTimeout(this.#timeout);
+    this.#timeout = undefined;
+    this.#port.terminate();
     this.#failure ??= error;
     const pending = [this.#active, this.#queued];
     this.#active = undefined;

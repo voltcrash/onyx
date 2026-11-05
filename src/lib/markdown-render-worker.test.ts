@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import {
   MarkdownRenderWorker,
   type MarkdownRenderRequest,
@@ -81,4 +81,21 @@ describe("MarkdownRenderWorker", () => {
     port.reply({ id: port.requests[1]!.id, blocks: [] });
     await expect(next).resolves.toEqual([]);
   });
+});
+
+it("terminates a worker that stops replying and rejects its queue", async () => {
+  vi.useFakeTimers();
+  try {
+    const port = new FakePort();
+    const worker = new MarkdownRenderWorker(port);
+    const running = expect(worker.render(job("a"))).rejects.toThrow("timed out");
+    const queued = expect(worker.render(job("b"))).rejects.toThrow("timed out");
+    await vi.advanceTimersByTimeAsync(15_000);
+    await Promise.all([running, queued]);
+    expect(port.terminated).toBe(true);
+    port.reply({ id: 1, blocks: [block("late")] });
+    expect(worker.failed).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
 });
