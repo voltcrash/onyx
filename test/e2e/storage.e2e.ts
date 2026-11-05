@@ -351,6 +351,7 @@ test("recovers an interrupted replacement before an already-open tab continues",
   await page.keyboard.press("Escape");
   await editor.fill("# After recovery");
   await page.keyboard.press("ControlOrMeta+S");
+  await expect(page.locator(".file-tree-row.file")).toContainText("After recovery");
   await page.reload();
   await expectMarkdown(editor, "# After recovery");
 });
