@@ -183,7 +183,15 @@ export function createPageController() {
   let saveRun: Promise<boolean> | undefined;
   let saveRequested = false;
   let searchTimer: number | undefined = $state();
-  let searchPending = $state(false);
+  let searchState = $state<
+    | { status: "idle" }
+    | { status: "pending" | "ready"; query: string }
+    | { status: "failed"; query: string; message: string }
+  >({ status: "idle" });
+  const searchPending = $derived(
+    searchState.status === "pending" && Boolean(searchState.query.trim()),
+  );
+  const searchError = $derived(searchState.status === "failed" ? searchState.message : "");
   let previewFrame: number | undefined = $state();
   let previewSettleTimer: number | undefined = $state();
   let pendingPreviewMarkdown = initialMarkdown;
@@ -915,7 +923,7 @@ export function createPageController() {
     searchSequence += 1;
     noteLoadSequence += 1;
     searchQuery = "";
-    searchPending = false;
+    searchState = { status: "idle" };
     notePage = 0;
     results = [];
     folders = [];
@@ -2878,7 +2886,8 @@ export function createPageController() {
 
   function queueSearch(value: string): void {
     searchQuery = value;
-    searchPending = Boolean(value.trim());
+    searchSequence += 1;
+    searchState = { status: "pending", query: value };
     notePage = 0;
     if (searchTimer) window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => {
@@ -2907,19 +2916,33 @@ export function createPageController() {
               : 0,
         );
     notePage = 0;
-    searchPending = false;
+    searchState = { status: "idle" };
   }
 
   async function runSearch(query: string): Promise<void> {
-    if (!vault) return;
-    searchPending = Boolean(query.trim());
+    const opened = vault;
+    if (!opened || disposed) return;
     const sequence = ++searchSequence;
-    const nextResults = await vault.search(query);
-    if (sequence === searchSequence) {
+    searchState = { status: "pending", query };
+    try {
+      const nextResults = await opened.search(query);
+      if (disposed || opened !== vault || sequence !== searchSequence || query !== searchQuery)
+        return;
       results = nextResults;
       notePage = 0;
       notesLoaded = true;
-      searchPending = false;
+      searchState = { status: "ready", query };
+      settledSearchSequence = sequence;
+    } catch (error) {
+      if (disposed || opened !== vault || sequence !== searchSequence || query !== searchQuery)
+        return;
+      results = [];
+      searchState = {
+        status: "failed",
+        query,
+        message:
+          error instanceof Error ? error.message : "Search is unavailable. Try another query.",
+      };
       settledSearchSequence = sequence;
     }
   }
@@ -3186,7 +3209,7 @@ export function createPageController() {
     searchTimer = undefined;
     searchSequence += 1;
     searchQuery = "";
-    searchPending = false;
+    searchState = { status: "idle" };
     notePage = 0;
     void runSearch("");
   }
@@ -3231,6 +3254,9 @@ export function createPageController() {
     },
     get searchQuery() {
       return searchQuery;
+    },
+    get searchError() {
+      return searchError;
     },
     get searchPending() {
       return searchPending;

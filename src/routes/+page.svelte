@@ -78,7 +78,7 @@
 		transferState={page.transferState}
 		storageError={page.storageError}
 		paletteOpen={page.paletteOpen}
-		searchPending={page.searchPending}
+		searchPending={page.searchPending} searchError={page.searchError}
 		paletteItems={page.paletteItems}
 		settingsOpen={page.settingsOpen}
 		isOnline={page.isOnline}
