@@ -213,3 +213,15 @@ describe("Restore identity", () => {
     expect(replaceVault.mock.calls[0][7]).toMatchObject({ folders, generation: "restored" });
   });
 });
+
+it("does not clear a vault that changed after confirmation", async () => {
+  const replace = vi.fn();
+  const coordination = { runExclusive: <T>(task: () => Promise<T>) => task() };
+  const vault = Reflect.construct(Vault, [
+    { getVaultVersion: async () => 2 },
+    { replace },
+    coordination,
+  ]) as Vault;
+  await expect(vault.clear(1)).rejects.toThrow("changed in another tab");
+  expect(replace).not.toHaveBeenCalled();
+});

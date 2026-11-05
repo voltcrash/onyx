@@ -261,7 +261,7 @@
 			onConnectGithub={() => void page.connectGitHub()}
 			onDisconnectGithub={() => void page.disconnectGitHub()}
 			onCreateRepository={(name) => void page.createBackupRepository(name)}
-			onSelectRepository={(state) => void page.selectBackupRepository(state)}
+			onSelectRepository={(state) => page.selectBackupRepository(state)}
 			onForgetRepository={() => void page.forgetBackupRepository()}
 			onAutoBackupChange={(enabled) => void page.setAutoBackup(enabled)}
 			onBackup={() => void page.beginBackup()}

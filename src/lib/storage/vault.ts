@@ -1296,8 +1296,11 @@ export class Vault {
     }, options.context);
   }
 
-  async clear(): Promise<void> {
+  async clear(expectedVersion?: number): Promise<void> {
     await this.#withLock(async () => {
+      const actualVersion = await this.#getVaultVersion();
+      if (expectedVersion !== undefined && expectedVersion !== actualVersion)
+        throw new VaultConflictError("vault", expectedVersion, actualVersion);
       const now = new Date().toISOString();
       const [notes, attachments, version] = await Promise.all([
         this.#database.getNotes(),

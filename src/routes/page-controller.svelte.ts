@@ -294,6 +294,7 @@ export function createPageController() {
   function workspaceCommand<Args extends unknown[]>(
     action: (...args: Args) => Promise<void>,
     kind: "navigation" | "mutation" = "mutation",
+    propagate = false,
   ): (...args: Args) => Promise<void> {
     return async (...args) => {
       if (disposed) return;
@@ -310,6 +311,7 @@ export function createPageController() {
       } catch (error) {
         storageError =
           error instanceof Error ? error.message : "The operation could not be completed.";
+        if (propagate) throw error;
       } finally {
         workspaceOperation = undefined;
         const next = pendingNavigation;
@@ -924,7 +926,7 @@ export function createPageController() {
     }
   }
 
-  async function clearVault(): Promise<void> {
+  async function clearVault(expectedVersion?: number): Promise<void> {
     if (!vault || clearingVault) return;
     clearingVault = true;
     if (saveTimer) window.clearTimeout(saveTimer);
@@ -933,7 +935,7 @@ export function createPageController() {
     const pendingSave = saveRun;
     try {
       if (pendingSave) await pendingSave;
-      await vault.clear();
+      await vault.clear(expectedVersion);
       resetEditorAfterVaultClear();
       await runSearch("");
       pendingBackupCount = await vault.countPendingBackupOperations();
@@ -3788,7 +3790,7 @@ export function createPageController() {
     exportFolder: workspaceCommand(exportFolder),
     exportZip: workspaceCommand(exportZip),
     prepareVaultDeletion,
-    clearVault: workspaceCommand(clearVault),
+    clearVault: workspaceCommand(clearVault, "mutation", true),
     loadRestoreCommits,
     restoreSelectedCommit: workspaceCommand(restoreSelectedCommit),
     formatCommitDate,
