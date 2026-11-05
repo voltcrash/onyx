@@ -51,9 +51,50 @@ export function readVaultRegistry(): VaultRegistry {
   };
 }
 
-export function writeVaultRegistry(registry: VaultRegistry): void {
-  writeLocalStorage(REGISTRY_KEY, JSON.stringify(registry.vaults));
-  writeLocalStorage(ACTIVE_VAULT_KEY, registry.activeId);
+export async function loadVaultRegistry(): Promise<VaultRegistry> {
+  return persistRegistry();
+}
+
+export async function writeVaultRegistry(
+  registry: VaultRegistry,
+  changedId?: string,
+): Promise<VaultRegistry> {
+  return persistRegistry(registry, changedId);
+}
+
+function persistRegistry(update?: VaultRegistry, changedId?: string): Promise<VaultRegistry> {
+  return new Promise((resolve, reject) => {
+    const opening = indexedDB.open("onyx-registry", 1);
+    opening.onupgradeneeded = () => opening.result.createObjectStore("registry");
+    opening.onerror = () => reject(opening.error);
+    opening.onblocked = () =>
+      reject(new Error("Close other Onyx tabs to update the vault registry"));
+    opening.onsuccess = () => {
+      const database = opening.result;
+      const transaction = database.transaction("registry", "readwrite");
+      const store = transaction.objectStore("registry");
+      const request = store.get("vaults");
+      let registry: VaultRegistry;
+      request.onsuccess = () => {
+        registry = (request.result as VaultRegistry | undefined) ?? readVaultRegistry();
+        if (update) {
+          const merged = new Map(registry.vaults.map((vault) => [vault.id, vault]));
+          for (const vault of update.vaults)
+            if (!merged.has(vault.id) || vault.id === changedId) merged.set(vault.id, vault);
+          registry = { activeId: update.activeId, vaults: [...merged.values()] };
+        }
+        store.put(registry, "vaults");
+      };
+      transaction.oncomplete = () => {
+        database.close();
+        resolve(registry);
+      };
+      transaction.onabort = transaction.onerror = () => {
+        database.close();
+        reject(transaction.error ?? new Error("The vault registry could not be saved"));
+      };
+    };
+  });
 }
 
 export function createVaultDescriptor(name: string, existing: VaultDescriptor[]): VaultDescriptor {

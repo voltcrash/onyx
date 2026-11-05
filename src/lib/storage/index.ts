@@ -6,6 +6,7 @@ export {
   isDefaultVault,
   normalizeVaultName,
   readVaultRegistry,
+  loadVaultRegistry,
   suggestedRepositoryName,
   uniqueVaultName,
   vaultOptions,

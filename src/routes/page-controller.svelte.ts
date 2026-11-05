@@ -67,7 +67,7 @@ import {
   isDefaultVault,
   listedSearchResult,
   normalizeVaultName,
-  readVaultRegistry,
+  loadVaultRegistry,
   suggestedRepositoryName,
   uniqueVaultName,
   vaultOptions,
@@ -522,9 +522,6 @@ export function createPageController() {
 
   onMount(() => {
     revealStartupShell();
-    const registry = readVaultRegistry();
-    vaults = registry.vaults;
-    activeVaultId = registry.activeId;
     primaryModifier = detectPrimaryModifier();
     if (primaryModifier === "control" && markdown === initialMarkdown) {
       markdown = createInitialMarkdown(primaryModifier);
@@ -563,7 +560,17 @@ export function createPageController() {
     const stopThemeWatch = watchSystemTheme(() => {
       if (theme === "system") resolvedTheme = applyTheme(theme);
     });
-    void openVault()
+    void loadVaultRegistry()
+      .then(async (registry) => {
+        vaults = registry.vaults;
+        activeVaultId = registry.activeId;
+        await openVault();
+      })
+      .catch((error) => {
+        storageError =
+          error instanceof Error ? error.message : "The vault registry could not be opened.";
+        saveState = "error";
+      })
       .then(async () => {
         try {
           await goto("", {
@@ -1119,30 +1126,36 @@ export function createPageController() {
     }
   }
 
-  function persistVaultRegistry(): void {
-    writeVaultRegistry({ activeId: activeVaultId, vaults });
-  }
-
   async function selectVault(id: string): Promise<void> {
     if (id === activeVaultId || transferState === "working") return;
-    if (!vaults.some((candidate) => candidate.id === id)) return;
-    if (!(await settleDraft())) return;
-    activeVaultId = id;
-    persistVaultRegistry();
-    await reopenVault();
+    if (!vaults.some((candidate) => candidate.id === id) || !(await settleDraft())) return;
+    try {
+      const registry = await writeVaultRegistry({ activeId: id, vaults });
+      vaults = registry.vaults;
+      activeVaultId = id;
+      await reopenVault();
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "The vault could not be selected.";
+    }
   }
 
   async function createVault(name = "Notes"): Promise<void> {
-    if (transferState === "working") return;
-    if (!(await settleDraft())) return;
-    const descriptor = createVaultDescriptor(name, vaults);
-    vaults = [...vaults, descriptor];
-    activeVaultId = descriptor.id;
-    persistVaultRegistry();
-    await reopenVault();
+    if (transferState === "working" || !(await settleDraft())) return;
+    try {
+      const descriptor = createVaultDescriptor(name, vaults);
+      const registry = await writeVaultRegistry({
+        activeId: descriptor.id,
+        vaults: [...vaults, descriptor],
+      });
+      vaults = registry.vaults;
+      activeVaultId = descriptor.id;
+      await reopenVault();
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "The vault could not be created.";
+    }
   }
 
-  function renameVault(id: string, name: string): void {
+  async function renameVault(id: string, name: string): Promise<void> {
     const target = vaults.find((candidate) => candidate.id === id);
     const trimmed = normalizeVaultName(name);
     if (!target || !trimmed || trimmed === target.name) return;
@@ -1150,10 +1163,20 @@ export function createPageController() {
       trimmed,
       vaults.filter((candidate) => candidate.id !== id),
     );
-    vaults = vaults.map((candidate) =>
-      candidate.id === id ? { ...candidate, name: unique } : candidate,
-    );
-    persistVaultRegistry();
+    try {
+      const registry = await writeVaultRegistry(
+        {
+          activeId: activeVaultId,
+          vaults: vaults.map((candidate) =>
+            candidate.id === id ? { ...candidate, name: unique } : candidate,
+          ),
+        },
+        id,
+      );
+      vaults = registry.vaults;
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "The vault name could not be saved.";
+    }
   }
 
   async function reopenVault(): Promise<void> {
