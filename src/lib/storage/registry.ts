@@ -64,6 +64,10 @@ export async function writeVaultRegistry(
 
 function persistRegistry(update?: VaultRegistry, changedId?: string): Promise<VaultRegistry> {
   return new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") {
+      reject(new Error("IndexedDB is unavailable. Onyx cannot save notes in this browser."));
+      return;
+    }
     const opening = indexedDB.open("onyx-registry", 1);
     opening.onupgradeneeded = () => opening.result.createObjectStore("registry");
     opening.onerror = () => reject(opening.error);

@@ -265,6 +265,51 @@ export function createPageController() {
   let noteLoadSequence = 0;
   let fontRevision = 0;
   let clearingVault = false;
+  let disposed = false;
+  let vaultGeneration = 0;
+  let draftVersion = 0;
+  let workspaceOperation = $state<string>();
+  let pendingNavigation: (() => Promise<void>) | undefined;
+  let vaultPhase = $state<"closed" | "opening" | "ready" | "failed" | "closing">("closed");
+  let startupFrame: number | undefined;
+  let authenticationCleanup: (() => void) | undefined;
+  let authenticationRequest = 0;
+
+  function workspaceCommand<Args extends unknown[]>(
+    action: (...args: Args) => Promise<void>,
+    kind: "navigation" | "mutation" = "mutation",
+  ): (...args: Args) => Promise<void> {
+    return async (...args) => {
+      if (disposed) return;
+      if (workspaceOperation) {
+        if (kind === "navigation")
+          pendingNavigation = () => workspaceCommand(action, kind)(...args);
+        return;
+      }
+      workspaceOperation = kind;
+      try {
+        if (remoteSyncRun) await remoteSyncRun;
+        await action(...args);
+      } catch (error) {
+        storageError =
+          error instanceof Error ? error.message : "The operation could not be completed.";
+      } finally {
+        workspaceOperation = undefined;
+        const next = pendingNavigation;
+        pendingNavigation = undefined;
+        if (next && !disposed) void next();
+        else startRemoteSync();
+      }
+    };
+  }
+
+  const editorBlocked = $derived(
+    workspaceOperation !== undefined ||
+      (vaultPhase !== "ready" && vaultPhase !== "failed") ||
+      (vaultPhase === "ready" && !activeNoteId) ||
+      saveState === "loading" ||
+      clearingVault,
+  );
 
   const activeVault = $derived(
     vaults.find((candidate) => candidate.id === activeVaultId) ?? vaults[0],
@@ -288,7 +333,7 @@ export function createPageController() {
   );
   const noteTitle = $derived(titleFromMarkdown(markdown));
   const markdownLineCount = $derived(countLines(markdown));
-  const findCanEdit = $derived(saveState !== "loading" && transferState !== "working");
+  const findCanEdit = $derived(!editorBlocked && transferState !== "working");
   const find = createFindReplace({
     markdown: () => markdown,
     canEdit: () => findCanEdit,
@@ -297,7 +342,10 @@ export function createPageController() {
     rememberEditorState,
     updateMarkdown: (value) => updateMarkdown(value),
     revealSource: () => {
-      if (singlePaneMode && !sourcePaneVisible) showOnlyPane("source");
+      if (!sourcePaneVisible) {
+        if (singlePaneMode) showOnlyPane("source");
+        else toggleSourcePane();
+      }
     },
     openSidebar: () => {
       const previous = { collapsed: sidebarCollapsed, open: sidebarOpen };
@@ -352,7 +400,7 @@ export function createPageController() {
       hint,
       icon: FileText,
       keywords,
-      run: () => void selectNote(note.id),
+      run: () => void workspaceCommand(selectNote, "navigation")(note.id),
     };
   }
 
@@ -394,10 +442,10 @@ export function createPageController() {
 
   const paletteActions: PaletteActions = {
     shortcutLabel,
-    createNote: () => createNote(),
+    createNote: workspaceCommand(createNote),
     saveDraft,
     toggleTrash,
-    emptyTrash,
+    emptyTrash: workspaceCommand(emptyTrash),
     attachFile: () => attachmentInput?.click(),
     setAttachmentsHidden,
     openSettings,
@@ -414,16 +462,16 @@ export function createPageController() {
     setSidebarSide,
     setTheme,
     beginBackup,
-    openRestore,
+    openRestore: workspaceCommand(openRestore),
     importFolder: () => folderInput?.click(),
     importZip: () => zipInput?.click(),
-    exportFolder,
-    exportZip,
+    exportFolder: workspaceCommand(exportFolder),
+    exportZip: workspaceCommand(exportZip),
     resetFonts,
     resetShortcuts,
     ensurePersistentStorage,
     copyNoteAs,
-    exportNoteAs,
+    exportNoteAs: workspaceCommand(exportNoteAs),
   };
 
   const paletteItems = $derived<PaletteCommand[]>([
@@ -497,7 +545,9 @@ export function createPageController() {
     const editorReady = editorShell && getComputedStyle(editorShell).display === "grid";
 
     if (!appReady || !sidebarReady || !editorReady) {
-      window.requestAnimationFrame(revealStartupShell);
+      startupFrame = window.requestAnimationFrame(() => {
+        if (!disposed) revealStartupShell();
+      });
       return;
     }
 
@@ -507,8 +557,17 @@ export function createPageController() {
   $effect(() => {
     const noteId = page.state.onyxNoteId;
     untrack(() => {
-      if (typeof noteId !== "string" || !noteId || noteId === activeNoteId) return;
-      void selectNote(noteId);
+      const vaultId = page.state.onyxVaultId;
+      if (
+        typeof noteId !== "string" ||
+        !noteId ||
+        (noteId === activeNoteId && (!vaultId || vaultId === activeVaultId))
+      )
+        return;
+      void workspaceCommand(async () => {
+        if (vaultId && vaultId !== activeVaultId) await selectVault(vaultId);
+        await selectNote(noteId);
+      })();
     });
   });
 
@@ -554,14 +613,16 @@ export function createPageController() {
     });
     void loadVaultRegistry()
       .then(async (registry) => {
+        if (disposed) return;
         vaults = registry.vaults;
         activeVaultId = registry.activeId;
-        await openVault();
+        await workspaceCommand(openVault)();
       })
       .catch((error) => {
         storageError =
           error instanceof Error ? error.message : "The vault registry could not be opened.";
         saveState = "error";
+        vaultPhase = "failed";
       })
       .then(async () => {
         try {
@@ -569,7 +630,7 @@ export function createPageController() {
             shallow: true,
             replace: true,
             reset: false,
-            state: { onyxNoteId: activeNoteId },
+            state: { onyxVaultId: activeVaultId, onyxNoteId: activeNoteId },
           });
         } catch {
           // History is best-effort; the app works without it.
@@ -604,6 +665,14 @@ export function createPageController() {
     window.addEventListener("offline", onOffline);
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
+      disposed = true;
+      vaultGeneration += 1;
+      noteLoadSequence += 1;
+      searchSequence += 1;
+      authenticationRequest += 1;
+      authenticationCleanup?.();
+      confirmation.dispose();
+      if (startupFrame !== undefined) cancelAnimationFrame(startupFrame);
       window.removeEventListener("beforeunload", onBeforeUnload);
       window.removeEventListener("keydown", onKeydown);
       window.removeEventListener("online", onOnline);
@@ -635,7 +704,7 @@ export function createPageController() {
   }
 
   function scheduleServiceWorkerRegistration(): void {
-    if (serviceWorkerTimer !== undefined) return;
+    if (disposed || serviceWorkerTimer !== undefined) return;
     serviceWorkerTimer = window.setTimeout(() => {
       serviceWorkerTimer = undefined;
       registerServiceWorker();
@@ -643,7 +712,7 @@ export function createPageController() {
   }
 
   function scheduleGithubRestore(): void {
-    if (githubState === "loading" || githubRestoreTimer !== undefined) return;
+    if (disposed || githubState === "loading" || githubRestoreTimer !== undefined) return;
     const hasGithubCallback = new URLSearchParams(location.search).has("github");
     if (hasGithubCallback) {
       void restoreGitHub();
@@ -656,7 +725,8 @@ export function createPageController() {
   }
 
   async function restoreGitHub(): Promise<void> {
-    if (githubState === "loading") return;
+    if (disposed || githubState === "loading") return;
+    const request = ++authenticationRequest;
     if (githubRestoreTimer !== undefined) {
       window.clearTimeout(githubRestoreTimer);
       githubRestoreTimer = undefined;
@@ -668,7 +738,7 @@ export function createPageController() {
           shallow: true,
           replace: true,
           reset: false,
-          state: { onyxNoteId: page.state.onyxNoteId ?? activeNoteId },
+          state: { onyxVaultId: activeVaultId, onyxNoteId: page.state.onyxNoteId ?? activeNoteId },
         });
       } catch {
         // History is best-effort; the callback can still be handled.
@@ -690,9 +760,20 @@ export function createPageController() {
     }
     githubState = "loading";
     try {
-      githubUser = await (await loadGithubModule()).restoreGithubSession();
+      const github = await loadGithubModule();
+      if (disposed || request !== authenticationRequest) return;
+      authenticationCleanup ??= github.subscribeGithubAuthentication((user) => {
+        if (!disposed) {
+          githubUser = user;
+          githubState = user ? "connected" : "disconnected";
+        }
+      });
+      const user = await github.restoreGithubSession();
+      if (disposed || request !== authenticationRequest) return;
+      githubUser = user;
       githubState = githubUser ? "connected" : githubMessage ? "error" : "disconnected";
     } catch (error) {
+      if (disposed || request !== authenticationRequest) return;
       githubState = "error";
       githubMessage = error instanceof Error ? error.message : "GitHub authentication failed.";
     }
@@ -700,6 +781,9 @@ export function createPageController() {
 
   async function disconnectGitHub(): Promise<void> {
     if (!isOnline) return;
+    authenticationRequest += 1;
+    githubUser = undefined;
+    githubState = "disconnected";
     try {
       await (await loadGithubModule()).disconnectGithub();
       githubUser = undefined;
@@ -1079,12 +1163,24 @@ export function createPageController() {
   }
 
   async function openVault(): Promise<void> {
+    const generation = ++vaultGeneration;
+    vaultPhase = "opening";
     storageError = "";
     saveState = "loading";
     notesLoaded = false;
     try {
+      if (vaults.length === 0) {
+        const registry = await loadVaultRegistry();
+        vaults = registry.vaults;
+        activeVaultId = registry.activeId;
+      }
       readAttachmentPreferences();
-      vault = await Vault.open(activeVault ? vaultOptions(activeVault) : {});
+      const opened = await Vault.open(activeVault ? vaultOptions(activeVault) : {});
+      if (disposed || generation !== vaultGeneration) {
+        await opened.close();
+        return;
+      }
+      vault = opened;
       appendNativeDirectoryNotice();
       unsubscribeVault?.();
       unsubscribeVault = vault.subscribe(queueRemoteVaultSync);
@@ -1111,8 +1207,14 @@ export function createPageController() {
         vault.getGithubBackupState(),
         vault.countPendingBackupOperations(),
       ]);
+      vaultPhase = "ready";
       if (detectBrowserStorageSupport().persistentStorage) void ensurePersistentStorage();
     } catch (error) {
+      if (generation !== vaultGeneration || disposed) return;
+      const failed = vault;
+      vault = undefined;
+      await failed?.close();
+      vaultPhase = "failed";
       storageError = error instanceof Error ? error.message : "Your notes could not be opened.";
       saveState = "error";
     }
@@ -1179,11 +1281,17 @@ export function createPageController() {
     saveRequested = false;
     remoteChanges.length = 0;
     remoteSyncRequested = false;
+    vaultPhase = "closing";
+    vaultGeneration += 1;
     const previousVault = vault;
     vault = undefined;
     await previousVault?.close();
     resetEditorAfterVaultClear();
     githubBackup = undefined;
+    autoBackupPaused = false;
+    recentNoteIds = [];
+    paletteOpen = false;
+    find.close();
     pendingBackupCount = 0;
     backupState = "idle";
     backupMessage = "";
@@ -1237,6 +1345,7 @@ export function createPageController() {
     if (!vault) return;
     const currentVault = vault;
     const sequence = ++noteLoadSequence;
+    const version = draftVersion;
     const note = await currentVault.getNote(id);
     if (!note || note.deletedAt) return;
     const folder = attachmentFolder;
@@ -1269,7 +1378,12 @@ export function createPageController() {
         noteSourcePath: note.sourcePath,
       });
     }
-    if (sequence !== noteLoadSequence) {
+    if (
+      disposed ||
+      currentVault !== vault ||
+      sequence !== noteLoadSequence ||
+      version !== draftVersion
+    ) {
       for (const attachment of nextUrls) URL.revokeObjectURL(attachment.url);
       return;
     }
@@ -1278,6 +1392,7 @@ export function createPageController() {
     activeNoteSourcePath = note.sourcePath;
     activeNoteId = note.id;
     noteRevision = note.revision;
+    draftVersion += 1;
     markdown = note.markdown;
     updatePreviewImmediately(note.markdown);
     lastSavedMarkdown = note.markdown;
@@ -1290,7 +1405,11 @@ export function createPageController() {
   function queueRemoteVaultSync(change: VaultChangeEvent): void {
     remoteChanges.push(change);
     remoteSyncRequested = true;
-    if (remoteSyncRun) return;
+    startRemoteSync();
+  }
+
+  function startRemoteSync(): void {
+    if (disposed || workspaceOperation || remoteSyncRun || !remoteSyncRequested) return;
     const run = syncRemoteVault();
     remoteSyncRun = run;
     void run
@@ -1306,8 +1425,10 @@ export function createPageController() {
     while (remoteSyncRequested) {
       remoteSyncRequested = false;
       const changes = remoteChanges.splice(0);
-      if (!vault) continue;
-      const tree = await vault.listFileTree();
+      const opened = vault;
+      if (!opened || disposed) continue;
+      const tree = await opened.listFileTree();
+      if (opened !== vault || disposed) return;
       const notes = tree.notes;
       const activeChanged = changes.some(
         (change) => change.kind === "vault" || change.noteId === activeNoteId,
@@ -1329,10 +1450,11 @@ export function createPageController() {
       paletteNotes = notes;
       vaultAttachments = tree.attachments;
       trashedNotes = tree.trashedNotes;
-      [githubBackup, pendingBackupCount] = await Promise.all([
-        vault.getGithubBackupState(),
-        vault.countPendingBackupOperations(),
+      const backup = await Promise.all([
+        opened.getGithubBackupState(),
+        opened.countPendingBackupOperations(),
       ]);
+      if (opened === vault && !disposed) [githubBackup, pendingBackupCount] = backup;
     }
   }
 
@@ -1369,6 +1491,7 @@ export function createPageController() {
     if (id === activeNoteId || transferState === "working") return;
     if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
     await loadNote(id);
+    if (activeNoteId !== id) return;
     recentNoteIds = [id, ...recentNoteIds.filter((recentId) => recentId !== id)].slice(0, 8);
   }
 
@@ -1488,7 +1611,7 @@ export function createPageController() {
         shallow: true,
         replace: true,
         reset: false,
-        state: { onyxNoteId: sourceId },
+        state: { onyxVaultId: activeVaultId, onyxNoteId: sourceId },
       });
     } catch {
       // History is best-effort; navigation still works without it.
@@ -1496,7 +1619,11 @@ export function createPageController() {
     await selectNote(id);
     if (activeNoteId !== id) return;
     try {
-      await goto("", { shallow: true, reset: false, state: { onyxNoteId: id } });
+      await goto("", {
+        shallow: true,
+        reset: false,
+        state: { onyxVaultId: activeVaultId, onyxNoteId: id },
+      });
     } catch {
       // Ignore history failures after a successful navigation.
     }
@@ -1689,10 +1816,11 @@ export function createPageController() {
   }
 
   async function setNotePinned(noteId: string, pinned: boolean): Promise<void> {
-    if (!vault || transferState === "working") return;
+    if (!vault || transferState === "working" || !(await settleDraft())) return;
     try {
       const changed = await vault.setNotePinned(noteId, pinned);
       if (!changed) return;
+      if (activeNoteId === noteId) await loadNote(noteId);
       await refreshFileTree();
       storageError = "";
     } catch (error) {
@@ -2061,15 +2189,18 @@ export function createPageController() {
   }
 
   async function settleDraft(): Promise<boolean> {
-    if (markdown !== lastSavedMarkdown) return saveDraft();
     if (saveTimer) window.clearTimeout(saveTimer);
     saveTimer = undefined;
-    return saveRun ? await saveRun : true;
+    while (saveRun || markdown !== lastSavedMarkdown) {
+      if (!(await saveDraft())) return false;
+    }
+    return true;
   }
 
   function queueSave(): void {
     if (clearingVault) return;
     saveState = "unsaved";
+    if (saveRun) saveRequested = true;
     if (saveTimer) window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => void saveDraft(), 700);
   }
@@ -2097,26 +2228,37 @@ export function createPageController() {
       }
       saveRequested = false;
       if (!vault || !activeNoteId) return false;
+      const currentVault = vault;
+      const generation = vaultGeneration;
       const noteId = activeNoteId;
       const contents = markdown;
       const expectedRevision = noteRevision;
       saveState = "saving";
       try {
-        const savedNote = await vault.saveNote({
+        const savedNote = await currentVault.saveNote({
           id: noteId,
           title: titleFromMarkdown(contents),
           markdown: contents,
           expectedRevision,
         });
+        if (disposed || currentVault !== vault || generation !== vaultGeneration) return false;
         if (activeNoteId === noteId) {
           noteRevision = savedNote.revision;
           lastSavedMarkdown = contents;
           saveState = markdown === contents ? "saved" : "unsaved";
+          if (markdown !== contents) saveRequested = true;
           storageError = "";
         }
         appendNativeDirectoryNotice();
-        await refreshResultsAfterSave(savedNote);
-        pendingBackupCount = await vault.countPendingBackupOperations();
+        try {
+          await refreshResultsAfterSave(savedNote);
+          const pending = await currentVault.countPendingBackupOperations();
+          if (currentVault === vault && !disposed) pendingBackupCount = pending;
+        } catch {
+          appendStorageNotice(
+            "Your edit was saved, but the note list could not be refreshed. Reload to refresh it.",
+          );
+        }
       } catch (error) {
         saveRequested = false;
         if (activeNoteId === noteId) {
@@ -2136,6 +2278,7 @@ export function createPageController() {
     }
     if (options.recordHistory === false) editorHistory.clearPending();
     else editorHistory.record({ markdown, selection: getEditorSelection() });
+    draftVersion += 1;
     markdown = value;
     preview.ensureFullParser();
     queuePreview(value);
@@ -2388,7 +2531,7 @@ export function createPageController() {
       const selection = getEditorSelection(event.currentTarget);
       if (!selection) return;
       event.preventDefault();
-      void attachFiles(files, selection);
+      void workspaceCommand(attachFiles)(files, selection);
       return;
     }
     const text = event.clipboardData?.getData("text/plain");
@@ -2415,7 +2558,7 @@ export function createPageController() {
     if (!files.length || !isEditorTarget(event.currentTarget)) return;
     event.preventDefault();
     const selection = dropSelection(event) ?? getEditorSelection(event.currentTarget);
-    if (selection) void attachFiles(files, selection);
+    if (selection) void workspaceCommand(attachFiles)(files, selection);
   }
 
   function transferFiles(transfer: DataTransfer | null | undefined): File[] {
@@ -2551,7 +2694,7 @@ export function createPageController() {
     const request = ++imagePreviewRequest;
     const attachment = await currentVault.getAttachment(id);
     if (!attachment) return;
-    if (request !== imagePreviewRequest) return;
+    if (disposed || currentVault !== vault || request !== imagePreviewRequest) return;
     if (!attachment.metadata.type.startsWith("image/")) {
       openAttachmentInNewTabData(attachment);
       return;
@@ -2712,7 +2855,7 @@ export function createPageController() {
 
   function insertSyntax(before: string, after = before, placeholder = "text"): void {
     const target = editor;
-    if (!target) return;
+    if (!target || editorBlocked) return;
     const edit = toggleInlineSyntax(
       markdown,
       target.selectionStart,
@@ -2730,7 +2873,7 @@ export function createPageController() {
 
   function prefixLine(prefix: string): void {
     const target = editor;
-    if (!target) return;
+    if (!target || editorBlocked) return;
     const relativeCursor = target.selectionStart;
     const start = markdown.lastIndexOf("\n", relativeCursor - 1) + 1;
     updateMarkdown(`${markdown.slice(0, start)}${prefix}${markdown.slice(start)}`);
@@ -2743,6 +2886,20 @@ export function createPageController() {
 
   function handleShortcut(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;
+    if (confirmation.request || settingsOpen || restoreModalOpen || imagePreview) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (confirmation.request) confirmation.cancel();
+        else if (imagePreview) closeImagePreview();
+        else if (restoreModalOpen && restoreState !== "restoring") restoreModalOpen = false;
+        else if (settingsOpen && !clearingVault) closeSettings();
+      }
+      return;
+    }
+    if (workspaceOperation) {
+      if (event.metaKey || event.ctrlKey) event.preventDefault();
+      return;
+    }
     if (editor?.disabled && isEditorTarget(event.target)) return;
     if (
       find.isOpen &&
@@ -2807,7 +2964,8 @@ export function createPageController() {
     if (action === "commandPalette") togglePalette();
     else if (action === "findInNote") find.toggle();
     else if (action === "saveNote" && transferState !== "working") void saveDraft();
-    else if (action === "newNote" && transferState !== "working") void createNote();
+    else if (action === "newNote" && transferState !== "working")
+      void workspaceCommand(createNote)();
     else if (action === "searchNotes" || action === "focusSearch") focusSearch();
     else if (action === "cycleTheme") setTheme(nextThemePreference(theme));
     else if (action === "toggleSidebar") toggleSidebar();
@@ -2968,6 +3126,9 @@ export function createPageController() {
   }
 
   return {
+    get editorBlocked() {
+      return editorBlocked;
+    },
     get vaults() {
       return vaults;
     },
@@ -3310,9 +3471,9 @@ export function createPageController() {
     set zipInput(value: HTMLInputElement | undefined) {
       zipInput = value;
     },
-    selectVault,
-    createVault,
-    renameVault,
+    selectVault: workspaceCommand(selectVault, "navigation"),
+    createVault: workspaceCommand(createVault),
+    renameVault: workspaceCommand(renameVault),
     createNote,
     queueSearch,
     openFind: find.open,
@@ -3332,34 +3493,34 @@ export function createPageController() {
     connectGitHub,
     disconnectGitHub,
     moveNoteFocus,
-    selectNote,
-    openNoteLink,
-    openWikiLink,
+    selectNote: workspaceCommand(selectNote, "navigation"),
+    openNoteLink: workspaceCommand(openNoteLink),
+    openWikiLink: workspaceCommand(openWikiLink),
     openTag,
     get backlinks() {
       return backlinks;
     },
-    openBacklink: (id: string) => navigateToNote(id),
-    createFile: createNote,
-    createFolder,
-    renameFile,
-    renameFolder,
-    setFolderIcon,
-    setFolderPinned,
-    setNotePinned,
-    moveFile,
-    moveFolder,
-    deleteFile,
-    deleteFolder,
-    deleteAttachment,
-    restoreFile,
-    purgeFile,
-    emptyTrash,
+    openBacklink: workspaceCommand((id: string) => navigateToNote(id)),
+    createFile: workspaceCommand(createNote),
+    createFolder: workspaceCommand(createFolder),
+    renameFile: workspaceCommand(renameFile),
+    renameFolder: workspaceCommand(renameFolder),
+    setFolderIcon: workspaceCommand(setFolderIcon),
+    setFolderPinned: workspaceCommand(setFolderPinned),
+    setNotePinned: workspaceCommand(setNotePinned),
+    moveFile: workspaceCommand(moveFile),
+    moveFolder: workspaceCommand(moveFolder),
+    deleteFile: workspaceCommand(deleteFile),
+    deleteFolder: workspaceCommand(deleteFolder),
+    deleteAttachment: workspaceCommand(deleteAttachment),
+    restoreFile: workspaceCommand(restoreFile),
+    purgeFile: workspaceCommand(purgeFile),
+    emptyTrash: workspaceCommand(emptyTrash),
     toggleTrash,
     copyFilePath,
     changeNotePage,
     saveDraft,
-    openVault,
+    openVault: workspaceCommand(openVault),
     dismissStorageNotice,
     toggleSidebar,
     setSidebarSide,
@@ -3382,16 +3543,22 @@ export function createPageController() {
     togglePaneLayout,
     placePane,
     copyNoteAs,
-    exportNoteAs,
+    exportNoteAs: workspaceCommand(exportNoteAs),
     toggleScrollSync,
     handleEditorChange,
     handleEditorHistory,
     handleEditorPaste,
     handleEditorDragOver,
     handleEditorDrop,
-    attachSelectedFiles,
+    attachSelectedFiles: workspaceCommand(attachSelectedFiles),
     setAttachmentsHidden,
-    renameAttachmentFolder,
+    renameAttachmentFolder: async (name: string) => {
+      let result = false;
+      await workspaceCommand(async () => {
+        result = await renameAttachmentFolder(name);
+      })();
+      return result;
+    },
     previewAttachment,
     openAttachmentInNewTab,
     closeImagePreview,
@@ -3403,20 +3570,20 @@ export function createPageController() {
     resetFonts,
     setShortcut,
     resetShortcuts,
-    createBackupRepository,
-    selectBackupRepository,
-    forgetBackupRepository,
+    createBackupRepository: workspaceCommand(createBackupRepository),
+    selectBackupRepository: workspaceCommand(selectBackupRepository),
+    forgetBackupRepository: workspaceCommand(forgetBackupRepository),
     setAutoBackup,
     beginBackup,
-    openRestore,
-    importFolder,
-    importZip,
-    exportFolder,
-    exportZip,
+    openRestore: workspaceCommand(openRestore),
+    importFolder: workspaceCommand(importFolder),
+    importZip: workspaceCommand(importZip),
+    exportFolder: workspaceCommand(exportFolder),
+    exportZip: workspaceCommand(exportZip),
     prepareVaultDeletion,
-    clearVault,
+    clearVault: workspaceCommand(clearVault),
     loadRestoreCommits,
-    restoreSelectedCommit,
+    restoreSelectedCommit: workspaceCommand(restoreSelectedCommit),
     formatCommitDate,
     dismissBackupMessage() {
       backupMessage = "";

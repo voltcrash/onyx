@@ -28,6 +28,7 @@
 		findQuery: string;
 		findMatches: FindMatch[];
 		activeFindMatch: number;
+		editorBlocked: boolean;
 		saveState: SaveState;
 		transferState: TransferState;
 		hasContent: boolean;
@@ -62,7 +63,7 @@
 
 	let {
 		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedBlocks, displayedRenderedBlocks, scrollSync, markdown, markdownLineCount, findOpen, findQuery, findMatches, activeFindMatch,
-		saveState, transferState, hasContent, shortcuts, primaryModifier,
+		editorBlocked, saveState, transferState, hasContent, shortcuts, primaryModifier,
 		editor = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
 		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorHistory, onEditorPaste, onEditorDragOver, onEditorDrop, onNoteLink, onWikiLink, onTag, backlinks = [], onOpenBacklink
 	}: Props = $props();
@@ -167,7 +168,7 @@
 	});
 
 	$effect(() => {
-		if (editor) editor.disabled = saveState === 'loading' || transferState === 'working';
+		if (editor) editor.disabled = editorBlocked || transferState === 'working';
 	});
 
 	$effect(() => {

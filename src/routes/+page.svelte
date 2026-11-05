@@ -49,7 +49,7 @@
 
 <Seo {structuredData} />
 
-<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:sidebar-resizing={sidebarResizing} class:palette-open={page.paletteOpen} style={`--sidebar-width: ${page.sidebarWidth}px`} inert={page.settingsOpen || page.restoreModalOpen || page.imagePreview !== undefined}>
+<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:sidebar-resizing={sidebarResizing} class:palette-open={page.paletteOpen} style={`--sidebar-width: ${page.sidebarWidth}px`} inert={page.settingsOpen || page.restoreModalOpen || page.imagePreview !== undefined || page.confirmation !== undefined}>
 	<NotesSidebar
 		vaults={page.vaults}
 		activeVaultId={page.activeVaultId}
@@ -166,7 +166,8 @@
 		hasContent={page.hasContent}
 		shortcuts={page.shortcuts}
 		primaryModifier={page.primaryModifier}
-		bind:editor={page.editor}
+		editorBlocked={page.editorBlocked}
+        bind:editor={page.editor}
 		onRetryStorage={() => void (page.vault ? page.saveDraft() : page.openVault())}
 		onDismissStorageNotice={page.dismissStorageNotice}
 		onToggleSidebar={page.toggleSidebar}

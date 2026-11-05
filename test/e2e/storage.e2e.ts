@@ -199,3 +199,65 @@ test("keeps the editor usable and pauses GitHub features offline", async ({ cont
   await expect(page.getByText("Saving…", { exact: true })).toBeHidden();
   await page.keyboard.press("ControlOrMeta+S");
 });
+
+test("keeps newly created vaults discoverable without localStorage", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get: () => {
+        throw new DOMException("Unavailable", "SecurityError");
+      },
+    });
+  });
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await page.locator(".vault-trigger").click();
+  await page.getByRole("menuitem", { name: "New repository" }).click();
+  await expect(page.getByRole("tablist", { name: /Repositories/ }).getByRole("tab")).toHaveCount(2);
+  await expect(editor).toBeEnabled();
+  await editor.fill("# Durable vault");
+  await page.keyboard.press("ControlOrMeta+S");
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const request = indexedDB.open("onyx-registry");
+        const database = await new Promise<IDBDatabase>((resolve, reject) => {
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        const get = database.transaction("registry").objectStore("registry").get("vaults");
+        const value = await new Promise<{ vaults: unknown[] }>((resolve, reject) => {
+          get.onsuccess = () => resolve(get.result);
+          get.onerror = () => reject(get.error);
+        });
+        database.close();
+        return value.vaults.length;
+      }),
+    )
+    .toBe(2);
+  await expect(page.locator(".file-tree-row.file")).toContainText("Durable vault");
+  await page.reload();
+  await expectMarkdown(editor, "# Durable vault");
+});
+
+test("settles the latest draft before creating another note", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await blockNextVaultWrite(page);
+  await editor.fill("# Earlier draft");
+  await page.keyboard.press("ControlOrMeta+S");
+  await waitForBlockedVaultWrite(page);
+  await editor.fill("# Latest draft before navigation");
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect(editor).toBeDisabled();
+  await releaseVaultWrite(page);
+  await expectMarkdown(editor, "");
+  await expect(editor).toBeEnabled();
+  await page
+    .locator(".file-tree-row.file")
+    .filter({ hasText: "Latest draft before navigation" })
+    .click();
+  await expectMarkdown(editor, "# Latest draft before navigation");
+});
