@@ -1,5 +1,6 @@
 import {
   mapMarkdownProse,
+  frontmatterBounds,
   literalAt,
   parseMarkdownSource,
   plainText,
@@ -44,28 +45,16 @@ export function titleFromMarkdown(value: string, fallback = "Untitled"): string 
 
 /** The first non-blank line after any front matter, read without splitting the whole note. */
 function firstContentLine(value: string): string {
-  let opening = "";
-  let inFrontmatter = false;
-  let start = 0;
+  const frontmatter = frontmatterBounds(value);
+  let start = frontmatter?.bodyStart ?? 0;
   while (start <= value.length) {
     const newline = value.indexOf("\n", start);
     const end = newline === -1 ? value.length : newline;
     const line = value.slice(start, end).trim();
+    if (line) return line;
     start = end + 1;
-    if (inFrontmatter) {
-      if (line === opening || (opening === "---" && line === "...")) inFrontmatter = false;
-      continue;
-    }
-    if (!line) continue;
-    if (!opening && (line === "---" || line === "+++")) {
-      opening = line;
-      inFrontmatter = true;
-      continue;
-    }
-    return line;
   }
-  // Unclosed front matter is treated as ordinary text.
-  return inFrontmatter ? opening : "";
+  return "";
 }
 
 /** Counts whitespace-separated words, matching `value.trim().split(/\s+/)`, without allocating. */

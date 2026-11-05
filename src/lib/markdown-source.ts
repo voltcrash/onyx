@@ -150,3 +150,23 @@ export function mapMarkdownProse(source: string, transform: (prose: string) => s
   parts.push(transform(source.slice(cursor)));
   return parts.join("");
 }
+
+export function frontmatterBounds(
+  source: string,
+): { marker: "---" | "+++"; closingLine: number; bodyStart: number } | undefined {
+  const firstBreak = source.indexOf("\n");
+  if (firstBreak === -1) return;
+  const marker = source.slice(0, firstBreak).replace(/\r$/, "");
+  if (marker !== "---" && marker !== "+++") return;
+  let start = firstBreak + 1;
+  let lineNumber = 1;
+  while (start < source.length) {
+    const newline = source.indexOf("\n", start);
+    const end = newline === -1 ? source.length : newline;
+    const line = source.slice(start, end).replace(/[\t \r]+$/, "");
+    if (line === marker || (marker === "---" && line === "..."))
+      return { marker, closingLine: lineNumber, bodyStart: newline === -1 ? end : end + 1 };
+    start = end + 1;
+    lineNumber += 1;
+  }
+}

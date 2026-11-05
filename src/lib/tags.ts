@@ -1,3 +1,4 @@
+import { frontmatterBounds } from "./markdown-source.js";
 import { literalAt, parseMarkdownSource, visitProse } from "./markdown-source.js";
 
 // A tag starts after whitespace or at a line start, so URL fragments, entities and heading markers
@@ -24,31 +25,26 @@ export function extractTags(markdown: string): string[] {
   };
 
   const lines = markdown.split(/\r?\n/);
-  let index = 0;
-  if (lines[0]?.trim() === "---") {
-    const end = lines.findIndex(
-      (line, lineIndex) => lineIndex > 0 && /^(?:---|\.\.\.)\s*$/.test(line),
-    );
-    if (end > 0) {
-      for (let lineIndex = 1; lineIndex < end; lineIndex += 1) {
-        const match = lines[lineIndex]!.match(FRONTMATTER_TAGS);
-        if (!match) continue;
-        const inline = match[1]!.trim().replace(/^\[|\]$/g, "");
-        if (inline) {
-          for (const tag of inline.split(/[,\s]+/)) add(tag);
-          continue;
-        }
-        for (let item = lineIndex + 1; item < end; item += 1) {
-          const listItem = lines[item]!.match(/^\s*-\s+(.+)$/);
-          if (!listItem) break;
-          add(listItem[1]!);
-        }
+  const frontmatter = frontmatterBounds(markdown);
+  if (frontmatter?.marker === "---") {
+    const end = frontmatter.closingLine;
+    for (let lineIndex = 1; lineIndex < end; lineIndex += 1) {
+      const match = lines[lineIndex]!.match(FRONTMATTER_TAGS);
+      if (!match) continue;
+      const inline = match[1]!.trim().replace(/^\[|\]$/g, "");
+      if (inline) {
+        for (const tag of inline.split(/[,\s]+/)) add(tag);
+        continue;
       }
-      index = end + 1;
+      for (let item = lineIndex + 1; item < end; item += 1) {
+        const listItem = lines[item]!.match(/^\s*-\s+(.+)$/);
+        if (!listItem) break;
+        add(listItem[1]!);
+      }
     }
   }
 
-  const prose = lines.slice(index).join("\n");
+  const prose = markdown.slice(frontmatter?.bodyStart ?? 0);
   if (!/#\S/u.test(prose)) return [...tags].sort();
   visitProse(parseMarkdownSource(prose), (parent) => {
     if (parent.type === "link" || parent.type === "linkReference") return;
