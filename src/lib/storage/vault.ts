@@ -165,16 +165,6 @@ export class Vault {
     return this.#withLock(task);
   }
 
-  // A copy to restore if a deletion fails. The deletion still goes ahead when the stored file is
-  // already missing.
-  async #readForRollback(path: string): Promise<File | undefined> {
-    try {
-      return await this.#filesystem.read(path);
-    } catch {
-      return undefined;
-    }
-  }
-
   // Notes saved before tags were derived from their text get them once per vault.
   async #deriveMissingTags(): Promise<void> {
     if ((await this.#database.getDerivedTagsVersion()) >= DERIVED_TAGS_VERSION) return;
@@ -498,15 +488,6 @@ export class Vault {
       )
         return false;
       const attachments = await this.#database.getAttachments(noteId);
-      const markdown =
-        (await this.#database.getNoteMarkdown(noteId)) ??
-        (await this.#filesystem.readText(note.path).catch(() => ""));
-      const attachmentFiles = await Promise.all(
-        attachments.map(async (attachment) => ({
-          attachment,
-          file: await this.#readForRollback(attachment.path),
-        })),
-      );
       const now = new Date().toISOString();
       const operations: BackupOperation[] = [
         ...attachments.map((attachment): BackupOperation => ({
@@ -529,23 +510,18 @@ export class Vault {
         },
       ];
 
-      try {
-        await this.#filesystem.remove(note.path, { ignoreMissing: true });
-        for (const attachment of attachments) {
-          await this.#filesystem.remove(attachment.path, { ignoreMissing: true });
-        }
-        await this.#database.deleteNote(
+      const removed = new Set([note.path, ...attachments.map((attachment) => attachment.path)]);
+      const retained = (await this.#filesystem.listFiles()).filter(
+        (file) => !removed.has(file.path),
+      );
+      await this.#filesystem.replace(retained, (generation) =>
+        this.#database.deleteNote(
           noteId,
           attachments.map((attachment) => attachment.id),
           operations,
-        );
-      } catch (error) {
-        if (markdown) await this.#filesystem.writeText(note.path, markdown).catch(() => undefined);
-        for (const { attachment, file } of attachmentFiles) {
-          if (file) await this.#filesystem.write(attachment.path, file).catch(() => undefined);
-        }
-        throw error;
-      }
+          generation,
+        ),
+      );
       this.#publish({ kind: "note", noteId });
       return true;
     });
@@ -814,7 +790,6 @@ export class Vault {
     return this.#withLock(async () => {
       const attachment = await this.#database.getAttachment(id);
       if (!attachment) return undefined;
-      const file = await this.#readForRollback(attachment.path);
       const now = new Date().toISOString();
       const operation: BackupOperation = {
         id: crypto.randomUUID(),
@@ -825,13 +800,12 @@ export class Vault {
         revision: 1,
         createdAt: now,
       };
-      try {
-        await this.#filesystem.remove(attachment.path, { ignoreMissing: true });
-        await this.#database.deleteAttachments([attachment.id], [operation]);
-      } catch (error) {
-        if (file) await this.#filesystem.write(attachment.path, file).catch(() => undefined);
-        throw error;
-      }
+      const retained = (await this.#filesystem.listFiles()).filter(
+        (file) => file.path !== attachment.path,
+      );
+      await this.#filesystem.replace(retained, (generation) =>
+        this.#database.deleteAttachments([attachment.id], [operation], generation),
+      );
       this.#publish({ kind: "note", noteId: attachment.noteId });
       return attachment;
     });
@@ -849,12 +823,6 @@ export class Vault {
       );
       if (targeted.length === 0) return [];
       const now = new Date().toISOString();
-      const removed = await Promise.all(
-        targeted.map(async (attachment) => ({
-          attachment,
-          file: await this.#readForRollback(attachment.path),
-        })),
-      );
       const operations: BackupOperation[] = targeted.map((attachment): BackupOperation => ({
         id: crypto.randomUUID(),
         kind: "attachment:delete",
@@ -864,20 +832,17 @@ export class Vault {
         revision: 1,
         createdAt: now,
       }));
-      try {
-        for (const attachment of targeted) {
-          await this.#filesystem.remove(attachment.path, { ignoreMissing: true });
-        }
-        await this.#database.deleteAttachments(
+      const removed = new Set(targeted.map((attachment) => attachment.path));
+      const retained = (await this.#filesystem.listFiles()).filter(
+        (file) => !removed.has(file.path),
+      );
+      await this.#filesystem.replace(retained, (generation) =>
+        this.#database.deleteAttachments(
           targeted.map((attachment) => attachment.id),
           operations,
-        );
-      } catch (error) {
-        for (const { attachment, file } of removed) {
-          if (file) await this.#filesystem.write(attachment.path, file).catch(() => undefined);
-        }
-        throw error;
-      }
+          generation,
+        ),
+      );
       this.#publish({ kind: "vault" });
       return targeted;
     });

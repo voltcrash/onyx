@@ -430,7 +430,11 @@ export class VaultDatabase {
     await transactionDone(transaction);
   }
 
-  async deleteAttachments(attachmentIds: string[], operations: BackupOperation[]): Promise<void> {
+  async deleteAttachments(
+    attachmentIds: string[],
+    operations: BackupOperation[],
+    generation?: string,
+  ): Promise<void> {
     if (attachmentIds.length === 0 && operations.length === 0) return;
     const transaction = this.#database.transaction(
       ["attachments", "backupQueue", "settings"],
@@ -441,6 +445,8 @@ export class VaultDatabase {
       const attachments = transaction.objectStore("attachments");
       for (const attachmentId of attachmentIds) attachments.delete(attachmentId);
       for (const operation of operations) await queueOperation(transaction, operation);
+      if (generation)
+        transaction.objectStore("settings").put({ key: "fileGeneration", value: generation });
       await advanceVaultVersion(transaction);
       await complete;
     } catch (error) {
@@ -458,6 +464,7 @@ export class VaultDatabase {
     noteId: string,
     attachmentIds: string[],
     operations: BackupOperation[],
+    generation?: string,
   ): Promise<void> {
     const transaction = this.#database.transaction(
       [
@@ -484,6 +491,8 @@ export class VaultDatabase {
       const attachments = transaction.objectStore("attachments");
       for (const attachmentId of attachmentIds) attachments.delete(attachmentId);
       for (const operation of operations) await queueOperation(transaction, operation);
+      if (generation)
+        transaction.objectStore("settings").put({ key: "fileGeneration", value: generation });
       await advanceVaultVersion(transaction);
       await complete;
     } catch (error) {
