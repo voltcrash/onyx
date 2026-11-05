@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   backupVaultToGithub,
   createPrivateGithubRepository,
+  disconnectGithub,
   GithubBackupConflictError,
   GithubRequestError,
   githubRequest,
@@ -14,12 +15,17 @@ import type { Vault } from "./storage/index.js";
 
 const auth = vi.hoisted(() => ({
   accessToken: undefined as string | undefined,
+  tokenGate: undefined as Promise<void> | undefined,
   refreshedAccessToken: undefined as string | undefined,
 }));
 
 vi.mock("./auth-client.js", () => ({
   authClient: {
-    getAccessToken: async () => ({ data: { accessToken: auth.accessToken }, error: null }),
+    getAccessToken: async () => {
+      await auth.tokenGate;
+      return { data: { accessToken: auth.accessToken }, error: null };
+    },
+    signOut: async () => ({ data: { success: true }, error: null }),
     getSession: async () => ({ data: auth.accessToken ? { session: {} } : null, error: null }),
     refreshToken: async () => ({ data: { accessToken: auth.refreshedAccessToken }, error: null }),
   },
@@ -27,6 +33,7 @@ vi.mock("./auth-client.js", () => ({
 
 afterEach(() => {
   auth.accessToken = undefined;
+  auth.tokenGate = undefined;
   auth.refreshedAccessToken = undefined;
   vi.unstubAllGlobals();
 });
@@ -549,4 +556,39 @@ describe("backupVaultToGithub conflicts", () => {
     await expect(result).resolves.toMatchObject({ fileCount: 2 });
     expect(writes).toContain("PATCH /repos/onyx/vault/git/refs/heads/main");
   });
+});
+
+it("times out while reading a response body", async () => {
+  auth.accessToken = "token";
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ id: 1, login: "onyx" }))
+      .mockResolvedValue(new Response(new ReadableStream({ start() {} }))),
+  );
+  await restoreGithubSession();
+  vi.useFakeTimers();
+  try {
+    const request = githubRequest("/slow-body", { method: "POST" });
+    const rejected = expect(request).rejects.toThrow("timed out");
+    await vi.advanceTimersByTimeAsync(15_000);
+    await rejected;
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("does not restore a session that was disconnected while loading", async () => {
+  auth.accessToken = "late-token";
+  let release!: () => void;
+  auth.tokenGate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const restoring = restoreGithubSession();
+  await Promise.resolve();
+  await disconnectGithub();
+  release();
+  await expect(restoring).resolves.toBeUndefined();
+  await expect(githubRequest("/user")).rejects.toThrow("Sign in with GitHub");
 });

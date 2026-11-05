@@ -19,6 +19,15 @@ const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 let accessToken: string | undefined;
 let authenticatedUser: GithubUser | undefined;
 let sessionRefreshPromise: Promise<boolean> | undefined;
+let authenticationGeneration = 0;
+const authenticationListeners = new Set<(user: GithubUser | undefined) => void>();
+
+export function subscribeGithubAuthentication(
+  listener: (user: GithubUser | undefined) => void,
+): () => void {
+  authenticationListeners.add(listener);
+  return () => authenticationListeners.delete(listener);
+}
 
 export interface GithubUser {
   avatarUrl: string;
@@ -140,7 +149,9 @@ export class GithubRequestError extends Error {
 }
 
 export async function restoreGithubSession(): Promise<GithubUser | undefined> {
+  const generation = ++authenticationGeneration;
   const token = await requestGithubSession();
+  if (generation !== authenticationGeneration) return undefined;
   if (!token) {
     clearGithubAuthentication();
     return undefined;
@@ -148,15 +159,17 @@ export async function restoreGithubSession(): Promise<GithubUser | undefined> {
   accessToken = token;
   try {
     const user = await githubRequest<GithubUserResponse>("/user");
+    if (generation !== authenticationGeneration) return undefined;
     authenticatedUser = {
       avatarUrl: user.avatar_url,
       id: user.id,
       login: user.login,
       name: user.name,
     };
+    for (const listener of authenticationListeners) listener(authenticatedUser);
     return authenticatedUser;
   } catch (error) {
-    clearGithubAuthentication();
+    if (generation === authenticationGeneration) clearGithubAuthentication();
     throw error;
   }
 }
@@ -503,6 +516,7 @@ async function requestGithub<T>(
   init: RequestInit = {},
 ): Promise<GithubRequestResult<T>> {
   if (!accessToken) throw new Error("Sign in with GitHub before using backup and sync");
+  const generation = authenticationGeneration;
   const baseHeaders = new Headers(init.headers);
   baseHeaders.set("Accept", "application/vnd.github+json");
   if (init.body) baseHeaders.set("Content-Type", "application/json");
@@ -510,12 +524,16 @@ async function requestGithub<T>(
   let refreshed = false;
   for (let attempt = 0; attempt < MAX_REQUEST_ATTEMPTS; attempt += 1) {
     const tokenForRequest = accessToken;
-    if (!tokenForRequest) throw new Error("Sign in with GitHub before using backup and sync");
+    if (generation !== authenticationGeneration || !tokenForRequest)
+      throw new Error("Sign in with GitHub before using backup and sync");
     const headers = new Headers(baseHeaders);
     headers.set("Authorization", `Bearer ${tokenForRequest}`);
     let response: Response;
+    let body: unknown;
     try {
-      response = await fetchWithTimeout(`${API_ROOT}${path}`, { ...init, headers });
+      const completed = await fetchWithTimeout(`${API_ROOT}${path}`, { ...init, headers });
+      response = completed.response;
+      body = completed.data;
     } catch (error) {
       if (
         attempt === MAX_REQUEST_ATTEMPTS - 1 ||
@@ -524,19 +542,19 @@ async function requestGithub<T>(
       ) {
         throw error;
       }
-      await retryDelay(exponentialDelay(attempt));
+      await retryDelay(exponentialDelay(attempt), init.signal);
       continue;
     }
-    if (response.ok) return { data: (await response.json()) as T, response };
+    if (generation !== authenticationGeneration)
+      throw new Error("GitHub authentication changed during the request");
+    if (response.ok) return { data: body as T, response };
 
     if (response.status === 401 && !refreshed && attempt < MAX_REQUEST_ATTEMPTS - 1) {
       refreshed = true;
       if (await refreshGithubAccessToken(tokenForRequest)) continue;
     }
 
-    const result = (await response.json().catch(() => undefined)) as
-      | { message?: string }
-      | undefined;
+    const result = body as { message?: string } | undefined;
     const retryAt = githubRetryAt(response);
     const rateLimited = isRateLimited(response, result?.message);
     const delay = retryAt ? Math.max(0, retryAt.getTime() - Date.now()) : exponentialDelay(attempt);
@@ -546,7 +564,7 @@ async function requestGithub<T>(
       (rateLimited || RETRYABLE_STATUSES.has(response.status)) &&
       delay <= MAX_RETRY_DELAY_MS
     ) {
-      await retryDelay(delay);
+      await retryDelay(delay, init.signal);
       continue;
     }
     const message = rateLimited
@@ -587,13 +605,15 @@ async function refreshGithubAccessToken(rejectedToken: string): Promise<boolean>
   if (accessToken && accessToken !== rejectedToken) return true;
   if (sessionRefreshPromise) return sessionRefreshPromise;
 
-  sessionRefreshPromise = (async () => {
+  const generation = authenticationGeneration;
+  const refresh = (async () => {
     let token: string | undefined;
     try {
       token = await requestGithubSession(true);
     } catch {
       return false;
     }
+    if (generation !== authenticationGeneration) return false;
     if (!token) {
       clearGithubAuthentication();
       return false;
@@ -601,23 +621,30 @@ async function refreshGithubAccessToken(rejectedToken: string): Promise<boolean>
     accessToken = token;
     return true;
   })().finally(() => {
-    sessionRefreshPromise = undefined;
+    if (sessionRefreshPromise === refresh) sessionRefreshPromise = undefined;
   });
-  return sessionRefreshPromise;
+  sessionRefreshPromise = refresh;
+  return refresh;
 }
 
 function clearGithubAuthentication(): void {
+  authenticationGeneration += 1;
   accessToken = undefined;
   authenticatedUser = undefined;
+  sessionRefreshPromise = undefined;
+  for (const listener of authenticationListeners) listener(undefined);
 }
 
-async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+): Promise<GithubRequestResult<unknown>> {
   const controller = new AbortController();
   const externalSignal = init.signal;
   let timedOut = false;
   let timeout: ReturnType<typeof setTimeout> | undefined;
   let removeExternalListener: (() => void) | undefined;
-  const timeoutRequest = new Promise<Response>((_, reject) => {
+  const timeoutRequest = new Promise<GithubRequestResult<unknown>>((_, reject) => {
     timeout = setTimeout(() => {
       timedOut = true;
       controller.abort();
@@ -626,7 +653,7 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit): Pr
   });
   const requests = [timeoutRequest];
   if (externalSignal) {
-    const externalAbort = new Promise<Response>((_, reject) => {
+    const externalAbort = new Promise<GithubRequestResult<unknown>>((_, reject) => {
       const abort = () => {
         controller.abort(externalSignal.reason);
         reject(externalSignal.reason ?? new DOMException("The request was aborted", "AbortError"));
@@ -639,7 +666,16 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit): Pr
     });
     requests.push(externalAbort);
   }
-  requests.push(Promise.resolve().then(() => fetch(input, { ...init, signal: controller.signal })));
+  requests.push(
+    Promise.resolve().then(async () => {
+      const response = await fetch(input, { ...init, signal: controller.signal });
+      const data = await response.json().catch((error) => {
+        if (response.ok) throw error;
+        return undefined;
+      });
+      return { response, data };
+    }),
+  );
   try {
     return await Promise.race(requests);
   } catch (error) {
@@ -739,8 +775,20 @@ function exponentialDelay(attempt: number): number {
   return base + Math.floor(Math.random() * Math.max(1, base / 4));
 }
 
-function retryDelay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+function retryDelay(milliseconds: number, signal?: AbortSignal | null): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      reject(signal?.reason ?? new DOMException("The request was aborted", "AbortError"));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }, milliseconds);
+    if (signal?.aborted) abort();
+    else signal?.addEventListener("abort", abort, { once: true });
+  });
 }
 
 async function mapWithConcurrency<T, R>(
