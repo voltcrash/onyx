@@ -5,6 +5,7 @@ import type {
   VaultRestoreFile,
   VaultOperationContext,
 } from "./storage/index.js";
+import { githubTargetKey } from "./storage/types.js";
 import { authClient } from "./auth-client.js";
 
 const API_ROOT = "https://api.github.com";
@@ -231,31 +232,29 @@ export function backupVaultToGithub(
   backupState: GithubBackupState,
   options: GithubBackupOptions = {},
 ): Promise<GithubBackupResult> {
-  const runExclusive = (
-    vault as unknown as {
-      runExclusive?: (
-        task: (context: VaultOperationContext) => Promise<GithubBackupResult>,
-      ) => Promise<GithubBackupResult>;
-    }
-  ).runExclusive;
-  if (typeof runExclusive !== "function") {
-    return backupVaultToGithubUnlocked(vault, backupState, options);
-  }
-  return runExclusive.call(vault, (context) =>
-    backupVaultToGithubUnlocked(vault, backupState, options, context),
-  );
+  return typeof vault.runBackupExclusive === "function"
+    ? vault.runBackupExclusive(() => backupVaultToGithubUnlocked(vault, backupState, options))
+    : backupVaultToGithubUnlocked(vault, backupState, options);
 }
 
 async function backupVaultToGithubUnlocked(
   vault: Vault,
   backupState: GithubBackupState,
   options: GithubBackupOptions,
-  context?: VaultOperationContext,
 ): Promise<GithubBackupResult> {
+  const captured =
+    typeof vault.captureGithubBackup === "function" ? await vault.captureGithubBackup() : undefined;
+  if (captured) {
+    if (
+      !captured.configuration ||
+      githubTargetKey(captured.configuration) !== githubTargetKey(backupState)
+    )
+      throw new Error("The backup target changed. Start a new backup.");
+    backupState = captured.configuration;
+  }
   await validateGithubBackupRepository(backupState);
-  const snapshot = context
-    ? await vault.createBackupSnapshot({ context })
-    : await vault.createBackupSnapshot();
+  const snapshot = captured?.snapshot ?? (await vault.createBackupSnapshot());
+  const backupManifest = captured?.manifest ?? (await vault.createBackupManifest());
   const repositoryPath = repositoryApiPath(backupState);
   const branchPath = backupState.branch.split("/").map(encodeURIComponent).join("/");
   let parentSha: string | undefined;
@@ -291,6 +290,7 @@ async function backupVaultToGithubUnlocked(
   if (
     parentSha &&
     parentSha !== backupState.lastCommitSha &&
+    parentSha !== backupState.pendingCommitSha &&
     remoteBlobs.has(manifestPath) &&
     !options.replaceNewerBackup
   ) {
@@ -304,23 +304,20 @@ async function backupVaultToGithubUnlocked(
           ? { path, mode: "100644" as const, type: "blob" as const, sha: null }
           : undefined;
       }
+      const bytes = await change.contents.arrayBuffer();
+      const header = new TextEncoder().encode(`blob ${bytes.byteLength}\0`);
+      const input = new Uint8Array(header.length + bytes.byteLength);
+      input.set(header);
+      input.set(new Uint8Array(bytes), header.length);
+      const sha = [...new Uint8Array(await crypto.subtle.digest("SHA-1", input))]
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+      if (remoteBlobs.get(path) === sha) return undefined;
       const blob = await createGithubBlob(repositoryPath, change.contents);
-      if (remoteBlobs.get(path) === blob.sha) return undefined;
       return { path, mode: "100644" as const, type: "blob" as const, sha: blob.sha };
     })
   ).filter((entry) => entry !== undefined);
-  const manifest = new Blob(
-    [
-      JSON.stringify(
-        context
-          ? await vault.createBackupManifest({ context })
-          : await vault.createBackupManifest(),
-      ),
-    ],
-    {
-      type: "application/json",
-    },
-  );
+  const manifest = new Blob([JSON.stringify(backupManifest)], { type: "application/json" });
   const manifestBlob = await createGithubBlob(repositoryPath, manifest);
   const tree =
     remoteBlobs.get(manifestPath) === manifestBlob.sha
@@ -336,9 +333,14 @@ async function backupVaultToGithubUnlocked(
         ];
 
   if (tree.length === 0) {
-    if (context) await vault.acknowledgeBackupOperations(snapshot.operationIds, { context });
-    else await vault.acknowledgeBackupOperations(snapshot.operationIds);
-    return { fileCount: 0, state: backupState };
+    const state = { ...backupState, lastCommitSha: parentSha };
+    if (typeof vault.completeGithubBackup === "function")
+      return {
+        fileCount: 0,
+        state: await vault.completeGithubBackup(state, snapshot.operationIds),
+      };
+    await vault.acknowledgeBackupOperations(snapshot.operationIds);
+    return { fileCount: 0, state };
   }
 
   const createdTree = await githubRequest<GithubTreeResponse>(`${repositoryPath}/git/trees`, {
@@ -353,6 +355,8 @@ async function backupVaultToGithubUnlocked(
       parents: parentSha ? [parentSha] : [],
     }),
   });
+  if (typeof vault.recordPendingGithubCommit === "function")
+    await vault.recordPendingGithubCommit(backupState, commit.sha);
   if (parentSha) {
     await githubRequest(`${repositoryPath}/git/refs/heads/${branchPath}`, {
       method: "PATCH",
@@ -371,13 +375,15 @@ async function backupVaultToGithubUnlocked(
     lastBackedUpAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  if (context) {
-    await vault.saveGithubBackupState(state, { context });
-    await vault.acknowledgeBackupOperations(snapshot.operationIds, { context });
-  } else {
-    await vault.saveGithubBackupState(state);
-    await vault.acknowledgeBackupOperations(snapshot.operationIds);
+  if (typeof vault.completeGithubBackup === "function") {
+    return {
+      commitUrl: commit.html_url,
+      fileCount: tree.length,
+      state: await vault.completeGithubBackup(state, snapshot.operationIds),
+    };
   }
+  await vault.saveGithubBackupState(state);
+  await vault.acknowledgeBackupOperations(snapshot.operationIds);
   return { commitUrl: commit.html_url, fileCount: tree.length, state };
 }
 

@@ -38,7 +38,7 @@ import type {
   VaultOperationContext,
   VaultOperationOptions,
 } from "./types.js";
-import { VaultConflictError } from "./types.js";
+import { VaultConflictError, githubTargetKey } from "./types.js";
 
 const DEFAULT_DATABASE_NAME = "onyx-vault";
 const DEFAULT_DIRECTORY_NAME = "onyx";
@@ -1171,6 +1171,67 @@ export class Vault {
             right.score - left.score ||
             compareDescending(left.note.updatedAt, right.note.updatedAt),
         );
+    });
+  }
+
+  captureGithubBackup(): Promise<{
+    snapshot: VaultBackupSnapshot;
+    manifest: VaultBackupManifest;
+    configuration?: GithubBackupState;
+  }> {
+    return this.#withLock(async (context) => {
+      const snapshot = await this.createBackupSnapshot({ context });
+      const manifest = await this.createBackupManifest({ context });
+      const changes = new Map(snapshot.changes.map((change) => [change.path, change]));
+      const activePaths = new Set([
+        ...manifest.notes.map((note) => note.path),
+        ...manifest.attachments.map((attachment) => attachment.path),
+      ]);
+      for (const change of changes.values())
+        if (!activePaths.has(change.path)) change.contents = null;
+      for (const note of manifest.notes) {
+        const markdown =
+          (await this.#database.getNoteMarkdown(note.id)) ??
+          (await this.#filesystem.readText(note.path));
+        changes.set(note.path, {
+          path: note.path,
+          contents: new Blob([markdown], { type: "text/markdown;charset=utf-8" }),
+        });
+      }
+      for (const attachment of manifest.attachments)
+        changes.set(attachment.path, {
+          path: attachment.path,
+          contents: new Blob([await (await this.#filesystem.read(attachment.path)).arrayBuffer()]),
+        });
+      return {
+        snapshot: { ...snapshot, changes: [...changes.values()] },
+        manifest,
+        configuration: await this.#database.getGithubBackupState(),
+      };
+    });
+  }
+
+  async recordPendingGithubCommit(expected: GithubBackupState, sha: string): Promise<void> {
+    await this.#withLock(async () => {
+      const current = await this.#database.getGithubBackupState();
+      if (!current || githubTargetKey(current) !== githubTargetKey(expected))
+        throw new Error("The backup target changed. Start a new backup.");
+      await this.#database.setGithubBackupState({ ...current, pendingCommitSha: sha });
+    });
+  }
+
+  async completeGithubBackup(
+    state: GithubBackupState,
+    operationIds: string[],
+  ): Promise<GithubBackupState> {
+    return this.#withLock(async () => {
+      const current = await this.#database.getGithubBackupState();
+      if (!current || githubTargetKey(current) !== githubTargetKey(state))
+        throw new Error("The backup target changed. Start a new backup.");
+      const next = { ...state, autoBackup: current.autoBackup, pendingCommitSha: undefined };
+      await this.#database.completeGithubBackup(next, operationIds);
+      this.#publish({ kind: "backup" });
+      return next;
     });
   }
 

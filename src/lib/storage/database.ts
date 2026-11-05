@@ -390,6 +390,15 @@ export class VaultDatabase {
     return this.#deleteSetting("githubBackup");
   }
 
+  async completeGithubBackup(state: GithubBackupState, ids: string[]): Promise<void> {
+    const transaction = this.#database.transaction(["settings", "backupQueue"], "readwrite");
+    const complete = transactionDone(transaction);
+    transaction.objectStore("settings").put({ key: "githubBackup", value: state });
+    for (const id of ids) transaction.objectStore("backupQueue").delete(id);
+    await advanceVaultVersion(transaction);
+    await complete;
+  }
+
   getNativeDirectoryHandle(): Promise<FileSystemDirectoryHandle | undefined> {
     return this.#getSetting<FileSystemDirectoryHandle>(NATIVE_DIRECTORY_HANDLE_KEY);
   }

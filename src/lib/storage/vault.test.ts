@@ -150,3 +150,25 @@ describe("Atomic folder mutations", () => {
     expect(replaceVault.mock.calls[0][7].folders[0].path).toBe("new");
   });
 });
+
+describe("Backup baselines", () => {
+  it("captures every active file even after its queue was acknowledged", async () => {
+    const database = {
+      getNotes: async () => [{ id: "n", path: "notes/n.md", title: "Note", revision: 1, tags: [] }],
+      getAttachments: async () => [],
+      getFileFolders: async () => [],
+      getBackupOperations: async () => [],
+      getNoteMarkdown: async () => "saved before changing targets",
+      getGithubBackupState: async () => undefined,
+    };
+    const coordination = { runExclusive: <T>(task: () => Promise<T>) => task(), publish: vi.fn() };
+    const vault = Reflect.construct(Vault, [database, {}, coordination]) as Vault;
+    const captured = await vault.captureGithubBackup();
+    expect(captured.snapshot.operationIds).toEqual([]);
+    expect(captured.snapshot.changes.map((change) => change.path)).toEqual(["notes/n.md"]);
+    expect(await captured.snapshot.changes[0].contents!.text()).toBe(
+      "saved before changing targets",
+    );
+    expect(captured.manifest.notes[0].id).toBe("n");
+  });
+});

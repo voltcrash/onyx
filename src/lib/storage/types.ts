@@ -77,6 +77,7 @@ export interface GithubBackupState {
   branch: string;
   directory: string;
   lastCommitSha?: string;
+  pendingCommitSha?: string;
   lastBackedUpAt?: string;
   /** Back up pending changes on their own, shortly after editing stops. */
   autoBackup?: boolean;
@@ -203,4 +204,14 @@ export class VaultConflictError extends Error {
     );
     this.name = "VaultConflictError";
   }
+}
+
+export function githubTargetKey(state: GithubBackupState): string {
+  return JSON.stringify([
+    state.githubAccountId,
+    state.owner.toLowerCase(),
+    state.repository.toLowerCase(),
+    state.branch,
+    state.directory.replace(/^\/+|\/+$/g, ""),
+  ]);
 }
