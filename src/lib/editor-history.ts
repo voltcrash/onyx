@@ -47,6 +47,7 @@ export class EditorHistory {
 
   /** Steps back from `current`, returning the entry to restore. */
   undo(current: EditorHistoryEntry): EditorHistoryEntry | undefined {
+    this.#pending = undefined;
     const entry = this.#undo.pop();
     if (entry) this.#redo.push(current);
     return entry;
@@ -54,6 +55,7 @@ export class EditorHistory {
 
   /** Steps forward from `current`, returning the entry to restore. */
   redo(current: EditorHistoryEntry): EditorHistoryEntry | undefined {
+    this.#pending = undefined;
     const entry = this.#redo.pop();
     if (entry) this.#undo.push(current);
     return entry;

@@ -30,21 +30,23 @@ export function createFindReplace(host: FindReplaceHost) {
   let opener: HTMLElement | undefined;
   let restoreSidebar: (() => void) | undefined;
   let navigationSequence = 0;
+  let disposed = false;
 
   const matches = $derived(findTextMatches(host.markdown(), query, { matchCase, wholeWord }));
   const activeMatch = $derived(
     matches.length > 0 ? Math.min(Math.max(matchIndex, 0), matches.length - 1) : -1,
   );
 
-  function focusMatch(index: number, sequence = navigationSequence): void {
-    if (!open || sequence !== navigationSequence) return;
+  function focusMatch(index: number, sequence = navigationSequence, attempts = 0): void {
+    if (disposed || !open || sequence !== navigationSequence) return;
     const match = matches[index];
     if (!match) return;
 
     host.revealSource();
     const target = host.editor();
     if (!target) {
-      void tick().then(() => focusMatch(index, sequence));
+      if (attempts >= 2) return;
+      void tick().then(() => focusMatch(index, sequence, attempts + 1));
       return;
     }
 
@@ -72,6 +74,7 @@ export function createFindReplace(host: FindReplaceHost) {
   }
 
   function openFind(): void {
+    if (disposed) return;
     if (open) {
       requestAnimationFrame(() => {
         input?.focus();
@@ -174,6 +177,11 @@ export function createFindReplace(host: FindReplaceHost) {
     },
     open: openFind,
     close: closeFind,
+    dispose: () => {
+      disposed = true;
+      closeFind();
+      navigationSequence += 1;
+    },
     toggle: () => (open ? closeFind() : openFind()),
     setQuery: (value: string) => {
       query = value;

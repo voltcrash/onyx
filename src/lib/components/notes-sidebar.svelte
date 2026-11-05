@@ -314,6 +314,8 @@
 			? 'Opening…'
 			: saveState === 'error'
 				? 'Save failed'
+                : saveState === 'unsaved' ? 'Unsaved changes'
+                : saveState === 'saving' ? 'Saving…'
 				: githubState === 'connected' && githubUser
 					? `@${githubUser.login}`
 					: githubState === 'connected'

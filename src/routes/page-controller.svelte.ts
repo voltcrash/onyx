@@ -468,7 +468,7 @@ export function createPageController() {
     attachFile: () => attachmentInput?.click(),
     setAttachmentsHidden,
     openSettings,
-    openFind: () => find.open(),
+    openFind,
     insertSyntax,
     prefixLine,
     toggleCheckboxAtCaret,
@@ -715,6 +715,7 @@ export function createPageController() {
       authenticationRequest += 1;
       authenticationCleanup?.();
       confirmation.dispose();
+      find.dispose();
       if (startupFrame !== undefined) cancelAnimationFrame(startupFrame);
       window.removeEventListener("beforeunload", onBeforeUnload);
       window.removeEventListener("keydown", onKeydown);
@@ -880,7 +881,16 @@ export function createPageController() {
   function restoreModalFocus(opener: HTMLElement | undefined): void {
     if (!opener) return;
     requestAnimationFrame(() => {
-      if (paletteOpen || find.isOpen || settingsOpen) return;
+      if (
+        disposed ||
+        paletteOpen ||
+        find.isOpen ||
+        settingsOpen ||
+        restoreModalOpen ||
+        imagePreview ||
+        confirmation.request
+      )
+        return;
       if (opener.isConnected) opener.focus();
     });
   }
@@ -2098,6 +2108,10 @@ export function createPageController() {
   }
 
   function toggleTrash(): void {
+    if (!trashOpen) {
+      if (paletteOpen) closePalette();
+      find.close();
+    }
     trashOpen = !trashOpen;
   }
 
@@ -3104,8 +3118,10 @@ export function createPageController() {
     event.preventDefault();
 
     if (action === "commandPalette") togglePalette();
-    else if (action === "findInNote") find.toggle();
-    else if (action === "saveNote" && transferState !== "working" && !workspaceOperation)
+    else if (action === "findInNote") {
+      if (find.isOpen) find.close();
+      else openFind();
+    } else if (action === "saveNote" && transferState !== "working" && !workspaceOperation)
       void saveDraft();
     else if (action === "newNote" && transferState !== "working")
       void workspaceCommand(createNote)();
@@ -3200,19 +3216,19 @@ export function createPageController() {
   }
 
   function togglePalette(): void {
-    if (paletteOpen) {
-      const previousSidebarState = paletteSidebarState;
-      closePalette();
-      if (previousSidebarState) {
-        sidebarCollapsed = previousSidebarState.collapsed;
-        sidebarOpen = previousSidebarState.open;
-      }
-      return;
-    }
-    openPalette();
+    if (paletteOpen) closePalette();
+    else openPalette();
+  }
+
+  function openFind(): void {
+    if (paletteOpen) closePalette();
+    trashOpen = false;
+    find.open();
   }
 
   function openPalette(): void {
+    if (find.isOpen) find.close();
+    trashOpen = false;
     if (paletteOpen) {
       focusSearch();
       return;
@@ -3235,7 +3251,12 @@ export function createPageController() {
 
   function closePalette(): void {
     paletteOpen = false;
+    const previous = paletteSidebarState;
     paletteSidebarState = undefined;
+    if (previous) {
+      sidebarCollapsed = previous.collapsed;
+      sidebarOpen = previous.open;
+    }
     resetPaletteSearch();
     const opener = paletteOpener;
     paletteOpener = undefined;
@@ -3540,7 +3561,8 @@ export function createPageController() {
       return paletteOpen;
     },
     set paletteOpen(value: boolean) {
-      paletteOpen = value;
+      if (value) openPalette();
+      else closePalette();
     },
     get sidebarOpen() {
       return sidebarOpen;
@@ -3627,7 +3649,7 @@ export function createPageController() {
       return trashOpen;
     },
     set trashOpen(value: boolean) {
-      trashOpen = value;
+      if (value !== trashOpen) toggleTrash();
     },
     get zipInput() {
       return zipInput;
@@ -3638,9 +3660,9 @@ export function createPageController() {
     selectVault: workspaceCommand(selectVault, "navigation"),
     createVault: workspaceCommand(createVault),
     renameVault: workspaceCommand(renameVault),
-    createNote,
+    createNote: workspaceCommand(createNote),
     queueSearch,
-    openFind: find.open,
+    openFind,
     closeFind: find.close,
     setFindQuery: find.setQuery,
     setFindReplacement: find.setReplacement,
