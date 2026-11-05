@@ -187,3 +187,45 @@ test("customizes and persists keyboard shortcuts", async ({ page }) => {
   await page.keyboard.press("ControlOrMeta+Shift+Y");
   await expect(page.getByPlaceholder("Search notes or commands…")).toBeFocused();
 });
+
+test("reconciles appearance changes across open tabs", async ({ page, context }, testInfo) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  const second = await context.newPage();
+  await second.goto("/");
+  await expect(second.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Themes", exact: true }).click();
+  await page
+    .getByRole("radiogroup", { name: "Color theme" })
+    .getByRole("radio")
+    .filter({ has: page.getByText("Ocean", { exact: true }) })
+    .click();
+  await expect(second.locator("html")).toHaveAttribute("data-color-theme", "ocean");
+  await page.getByRole("button", { name: "Close settings" }).click();
+  await page.screenshot({ path: testInfo.outputPath("workspace.png"), fullPage: true });
+  await second.close();
+});
+
+test("reports a preference write failure after startup", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await page.evaluate(() => {
+    const setItem = Reflect.get(Storage.prototype, "setItem") as Storage["setItem"];
+    Storage.prototype.setItem = function (key, value) {
+      if (key === "onyx-color-theme") throw new DOMException("Full", "QuotaExceededError");
+      setItem.call(this, key, value);
+    };
+  });
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Themes", exact: true }).click();
+  await page
+    .getByRole("radiogroup", { name: "Color theme" })
+    .getByRole("radio")
+    .filter({ has: page.getByText("Ocean", { exact: true }) })
+    .click();
+  await expect(page.locator("html")).toHaveAttribute("data-color-theme", "ocean");
+  await expect(page.locator(".storage-notice")).toContainText(
+    "Browser preferences could not be saved",
+  );
+});
