@@ -1235,6 +1235,17 @@ export class Vault {
     });
   }
 
+  async setAutoBackup(enabled: boolean): Promise<GithubBackupState | undefined> {
+    return this.#withLock(async () => {
+      const current = await this.#database.getGithubBackupState();
+      if (!current) return undefined;
+      const next = { ...current, autoBackup: enabled, updatedAt: new Date().toISOString() };
+      await this.#database.setGithubBackupState(next);
+      this.#publish({ kind: "backup" });
+      return next;
+    });
+  }
+
   getGithubBackupState(): Promise<GithubBackupState | undefined> {
     return this.#withLock(() => this.#database.getGithubBackupState());
   }

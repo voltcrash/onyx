@@ -79,6 +79,7 @@ import {
   type VaultSearchResult,
 } from "#lib/storage/index.ts";
 import type { GithubBackupCommit, GithubUser } from "#lib/github.ts";
+import { githubTargetKey } from "#lib/storage/types.ts";
 import type {
   AttachmentMetadata,
   FolderMetadata,
@@ -200,6 +201,7 @@ export function createPageController() {
   let githubMessage = $state("");
   let githubBackup = $state<GithubBackupState>();
   let backupState = $state<BackupState>("idle");
+  let backupSequence = 0;
   let backupMessage = $state("");
   let backupCommitUrl = $state("");
   let settingsOpen = $state(false);
@@ -812,7 +814,7 @@ export function createPageController() {
 
   async function beginBackup(): Promise<void> {
     if (!isOnline || !vault || backupState === "backing-up") return;
-    if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
+    if (!(await settleDraft())) return;
     if (!githubBackup) {
       void openSettings("github").catch(() => undefined);
       return;
@@ -855,7 +857,13 @@ export function createPageController() {
         ...state,
         updatedAt: new Date().toISOString(),
       });
-      await vault.saveGithubBackupState(state);
+      const current = await vault.getGithubBackupState();
+      const target = { ...state, updatedAt: new Date().toISOString() };
+      await vault.saveGithubBackupState(
+        current && githubTargetKey(current) === githubTargetKey(target)
+          ? { ...current, ...state }
+          : state,
+      );
       githubBackup = await vault.getGithubBackupState();
       backupState = "idle";
       backupCommitUrl = "";
@@ -929,7 +937,7 @@ export function createPageController() {
   }
 
   async function createBackupRepository(name: string): Promise<void> {
-    if (!isOnline || !vault || !name.trim()) return;
+    if (!isOnline || !vault || !name.trim() || !(await settleDraft())) return;
     backupState = "backing-up";
     backupMessage = "Creating your private repository…";
     settingsOpen = false;
@@ -937,6 +945,7 @@ export function createPageController() {
       const configuration = await (await loadGithubModule()).createPrivateGithubRepository(name);
       await vault.saveGithubBackupState(configuration);
       githubBackup = configuration;
+      backupState = "idle";
       await runBackup(configuration);
     } catch (error) {
       showBackupError(error);
@@ -947,7 +956,9 @@ export function createPageController() {
     configuration: GithubBackupState,
     options: { replaceNewerBackup?: boolean; automatic?: boolean } = {},
   ): Promise<void> {
-    if (!isOnline || !vault) return;
+    if (disposed || !isOnline || !vault || backupState === "backing-up") return;
+    const opened = vault;
+    const sequence = ++backupSequence;
     const { automatic = false, ...backupOptions } = options;
     backupState = "backing-up";
     if (!automatic) {
@@ -955,11 +966,14 @@ export function createPageController() {
       backupMessage = "Preparing one GitHub commit…";
       backupCommitUrl = "";
     }
-    const github = await loadGithubModule();
+    let github: Awaited<ReturnType<typeof loadGithubModule>> | undefined;
     try {
-      const result = await github.backupVaultToGithub(vault, configuration, backupOptions);
+      github = await loadGithubModule();
+      const result = await github.backupVaultToGithub(opened, configuration, backupOptions);
+      const pending = await opened.countPendingBackupOperations();
+      if (disposed || opened !== vault || sequence !== backupSequence) return;
       githubBackup = result.state;
-      pendingBackupCount = await vault.countPendingBackupOperations();
+      pendingBackupCount = pending;
       if (automatic) {
         backupState = "idle";
         return;
@@ -970,17 +984,18 @@ export function createPageController() {
         ? `Backed up ${result.fileCount} ${result.fileCount === 1 ? "file" : "files"} in one commit.`
         : "Your GitHub backup is already up to date.";
     } catch (error) {
+      if (disposed || opened !== vault || sequence !== backupSequence) return;
       if (automatic) {
         autoBackupPaused = true;
         backupState = "error";
         backupCommitUrl = "";
         backupMessage =
-          error instanceof github.GithubBackupConflictError
+          github && error instanceof github.GithubBackupConflictError
             ? "Automatic backup paused because GitHub has a newer backup. Restore it from Settings → Backup & sync, or back up now to replace it."
             : `Automatic backup paused: ${error instanceof Error ? error.message : "the GitHub backup failed."} Back up now to try again.`;
         return;
       }
-      if (error instanceof github.GithubBackupConflictError) {
+      if (github && error instanceof github.GithubBackupConflictError) {
         await resolveBackupConflict(configuration);
         return;
       }
@@ -994,7 +1009,13 @@ export function createPageController() {
       pendingBackupCount > 0 &&
       isOnline &&
       githubState === "connected" &&
-      !autoBackupPaused;
+      !autoBackupPaused &&
+      backupState !== "backing-up" &&
+      workspaceOperation === undefined &&
+      vaultPhase === "ready" &&
+      saveState === "saved" &&
+      !restoreModalOpen &&
+      !confirmation.request;
     // Each new pending change restarts the wait, so backups run once editing settles.
     void pendingBackupCount;
     untrack(() => scheduleAutoBackup(due));
@@ -1010,7 +1031,19 @@ export function createPageController() {
   async function runAutoBackup(): Promise<void> {
     autoBackupTimer = undefined;
     const configuration = githubBackup;
-    if (!configuration?.autoBackup || !vault || backupState === "backing-up") return;
+    if (
+      disposed ||
+      !configuration?.autoBackup ||
+      !vault ||
+      !isOnline ||
+      githubState !== "connected" ||
+      autoBackupPaused ||
+      workspaceOperation ||
+      restoreModalOpen ||
+      confirmation.request ||
+      backupState === "backing-up"
+    )
+      return;
     if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
     await runBackup(configuration, { automatic: true });
   }
@@ -1018,8 +1051,7 @@ export function createPageController() {
   async function setAutoBackup(enabled: boolean): Promise<void> {
     if (!vault || !githubBackup) return;
     try {
-      await vault.saveGithubBackupState({ ...githubBackup, autoBackup: enabled });
-      githubBackup = await vault.getGithubBackupState();
+      githubBackup = await vault.setAutoBackup(enabled);
       if (enabled) autoBackupPaused = false;
     } catch (error) {
       showBackupError(error);
@@ -1027,6 +1059,7 @@ export function createPageController() {
   }
 
   async function resolveBackupConflict(configuration: GithubBackupState): Promise<void> {
+    const opened = vault;
     backupState = "idle";
     backupMessage = "";
     const replace = await confirmation.ask({
@@ -1036,6 +1069,13 @@ export function createPageController() {
       confirmLabel: "Back up anyway",
       danger: true,
     });
+    if (
+      disposed ||
+      opened !== vault ||
+      !githubBackup ||
+      githubTargetKey(githubBackup) !== githubTargetKey(configuration)
+    )
+      return;
     if (replace) {
       await runBackup(configuration, { replaceNewerBackup: true });
       return;
