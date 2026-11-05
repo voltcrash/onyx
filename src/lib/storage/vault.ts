@@ -5,8 +5,12 @@ import {
   type SearchPosting,
 } from "./database.js";
 import { detectBrowserStorageSupport } from "../browser-storage.js";
-import { normalizeAttachmentFolder, titleFromMarkdown } from "../markdown-utils.js";
-import { isPathWithin, movePath, noteFilePath } from "../paths.js";
+import {
+  normalizeAttachmentFolder,
+  titleFromMarkdown,
+  rewriteLocalLinks,
+} from "../markdown-utils.js";
+import { isPathWithin, movePath, noteFilePath, parentPath } from "../paths.js";
 import { linksToNote } from "../wikilinks.js";
 import { extractTags, normalizeTag, parseSearchQuery } from "../tags.js";
 import { VaultCoordination } from "./coordination.js";
@@ -561,6 +565,201 @@ export class Vault {
     await this.#withLock(async () => {
       await this.#database.setFileFolders(folders);
       this.#publish({ kind: "vault" });
+    });
+  }
+
+  async updateFileTree(
+    update: (tree: {
+      notes: Note[];
+      attachments: AttachmentMetadata[];
+      folders: FolderMetadata[];
+    }) => void,
+  ): Promise<void> {
+    await this.#withLock(async () => {
+      const version = await this.#getVaultVersion();
+      const metadata = await this.#database.getNotes();
+      const notes = await Promise.all(
+        metadata.map(async (note) => ({
+          ...note,
+          markdown:
+            (await this.#database.getNoteMarkdown(note.id)) ??
+            (await this.#filesystem.readText(note.path)),
+        })),
+      );
+      const attachments = await this.#database.getAttachments();
+      const folders = await this.#database.getFileFolders();
+      const previous = new Map(notes.map((note) => [note.id, JSON.stringify(note)]));
+      const previousAttachments = new Map(
+        attachments.map((attachment) => [attachment.id, attachment]),
+      );
+      const tree = { notes, attachments, folders };
+      update(tree);
+      const occupied = new Set<string>();
+      for (const note of tree.notes.filter((note) => !note.deletedAt)) {
+        const path = noteFilePath(note).toLocaleLowerCase();
+        if (occupied.has(path)) throw new Error("A note already uses that file path");
+        occupied.add(path);
+      }
+      const now = new Date().toISOString();
+      const operations = await this.#database.getBackupOperations();
+      const enqueue = (
+        kind: BackupOperation["kind"],
+        id: string,
+        noteId: string,
+        path: string,
+        revision = 1,
+      ) =>
+        operations.push({
+          id: crypto.randomUUID(),
+          kind,
+          entityId: id,
+          noteId,
+          path,
+          revision,
+          createdAt: now,
+        });
+      for (const note of tree.notes) {
+        if (previous.get(note.id) === JSON.stringify(note)) continue;
+        note.revision += 1;
+        note.updatedAt = now;
+        note.tags = extractTags(note.markdown);
+        note.size = utf8ByteLength(note.markdown);
+        enqueue(
+          note.deletedAt ? "note:delete" : "note:upsert",
+          note.id,
+          note.id,
+          note.path,
+          note.revision,
+        );
+        if (note.deletedAt)
+          for (const attachment of tree.attachments.filter(
+            (attachment) => attachment.noteId === note.id,
+          ))
+            enqueue("attachment:delete", attachment.id, note.id, attachment.path);
+      }
+      for (const [id, attachment] of previousAttachments) {
+        if (!tree.attachments.some((candidate) => candidate.id === id))
+          enqueue("attachment:delete", id, attachment.noteId, attachment.path);
+      }
+      enqueue("metadata:upsert", "vault", "vault", ".onyx.json");
+      const files = [
+        ...tree.notes.map((note) => ({
+          path: note.path,
+          contents: new Blob([note.markdown], { type: "text/markdown;charset=utf-8" }),
+        })),
+        ...(await Promise.all(
+          tree.attachments.map(async (attachment) => ({
+            path: attachment.path,
+            contents: await this.#filesystem.read(attachment.path),
+          })),
+        )),
+      ];
+      const documents = tree.notes.map((note) => toSearchDocument(note, note.markdown));
+      await this.#filesystem.replace(files, (generation) =>
+        this.#database.replaceVault(
+          tree.notes.map(({ markdown, ...note }) => {
+            void markdown;
+            return note;
+          }),
+          tree.notes.map((note) => ({ noteId: note.id, markdown: note.markdown })),
+          tree.attachments,
+          documents,
+          documents.flatMap(createSearchPostings),
+          operations,
+          version,
+          { folders: tree.folders, generation },
+        ),
+      );
+      this.#publish({ kind: "vault" });
+    });
+  }
+
+  async moveNote(noteId: string, nextPath: string, pinnedFolder: string): Promise<void> {
+    await this.updateFileTree((tree) => {
+      const note = tree.notes.find((candidate) => candidate.id === noteId && !candidate.deletedAt);
+      if (!note) throw new Error("The note no longer exists");
+      const previousPath = noteFilePath(note);
+      const paths = new Map<string, string>();
+      for (const attachment of tree.attachments) {
+        const path = attachment.sourcePath;
+        if (
+          attachment.noteId === noteId &&
+          path &&
+          isPathWithin(path, parentPath(previousPath)) &&
+          !isPathWithin(path, pinnedFolder)
+        )
+          paths.set(path, movePath(path, parentPath(previousPath), parentPath(nextPath)));
+      }
+      note.markdown = rewriteLocalLinks(
+        note.markdown,
+        previousPath,
+        nextPath,
+        (path) => paths.get(path) ?? path,
+      );
+      note.sourcePath = nextPath;
+      for (const attachment of tree.attachments) {
+        if (attachment.sourcePath && paths.has(attachment.sourcePath))
+          attachment.sourcePath = paths.get(attachment.sourcePath);
+      }
+    });
+  }
+
+  async moveFolder(
+    from: string,
+    to: string,
+    pinnedFolder: string,
+    moveAttachments = false,
+  ): Promise<void> {
+    if (!from || isPathWithin(to, from)) throw new Error("A folder cannot be moved into itself");
+    await this.updateFileTree((tree) => {
+      const destinations = new Set<string>();
+      for (const folder of tree.folders) {
+        const next = isPathWithin(folder.path, from)
+          ? movePath(folder.path, from, to)
+          : folder.path;
+        if (destinations.has(next.toLocaleLowerCase()))
+          throw new Error("A folder already uses that path");
+        destinations.add(next.toLocaleLowerCase());
+        folder.path = next;
+      }
+      const movedAttachments = new Map<string, string>();
+      for (const attachment of tree.attachments) {
+        const path = attachment.sourcePath;
+        if (
+          path &&
+          isPathWithin(path, from) &&
+          (moveAttachments || !isPathWithin(path, pinnedFolder))
+        ) {
+          const next = movePath(path, from, to);
+          movedAttachments.set(path, next);
+          attachment.sourcePath = next;
+        }
+      }
+      const attachmentPaths = tree.attachments.flatMap((attachment) =>
+        attachment.sourcePath ? [attachment.sourcePath.toLocaleLowerCase()] : [],
+      );
+      if (new Set(attachmentPaths).size !== attachmentPaths.length)
+        throw new Error("An attachment already uses that path");
+      for (const note of tree.notes) {
+        if (note.deletedAt) continue;
+        const previousPath = noteFilePath(note);
+        const nextPath = isPathWithin(parentPath(previousPath), from)
+          ? movePath(previousPath, from, to)
+          : previousPath;
+        note.markdown = rewriteLocalLinks(
+          note.markdown,
+          previousPath,
+          nextPath,
+          (path) =>
+            movedAttachments.get(path) ??
+            (isPathWithin(path, pinnedFolder)
+              ? path
+              : isPathWithin(path, from)
+                ? movePath(path, from, to)
+                : path),
+        );
+        if (nextPath !== previousPath) note.sourcePath = nextPath;
+      }
     });
   }
 

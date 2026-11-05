@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
+import { memoryDirectory } from "../../../test/fixtures/filesystem.js";
+import { MirroredVaultFilesystem, VaultFilesystem } from "./filesystem.js";
 import { utf8ByteLength, Vault } from "./vault.js";
 
 describe("Vault saves", () => {
@@ -107,5 +109,44 @@ describe("Trash lifecycle guards", () => {
         contents: new Blob(),
       }),
     ).rejects.toThrow("Save the note");
+  });
+});
+
+describe("Atomic folder mutations", () => {
+  it("rolls files back when the folder metadata commit fails", async () => {
+    const fileStorage = await VaultFilesystem.fromDirectory(memoryDirectory());
+    await fileStorage.writeText("notes/n.md", "[image](../attachments/a.png)");
+    const replaceVault = vi.fn().mockRejectedValue(new Error("commit rejected"));
+    const database = {
+      getNotes: async () => [
+        {
+          id: "n",
+          title: "Note",
+          sourcePath: "old/Note.md",
+          path: "notes/n.md",
+          revision: 1,
+          tags: [],
+          createdAt: "",
+          updatedAt: "",
+          size: 0,
+        },
+      ],
+      getNoteMarkdown: async () => "[image](../attachments/a.png)",
+      getAttachments: async () => [],
+      getFileFolders: async () => [{ id: "f", path: "old", createdAt: "", updatedAt: "" }],
+      getBackupOperations: async () => [],
+      getVaultVersion: async () => 1,
+      replaceVault,
+    };
+    const coordination = { runExclusive: <T>(task: () => Promise<T>) => task(), publish: vi.fn() };
+    const vault = Reflect.construct(Vault, [
+      database,
+      new MirroredVaultFilesystem(fileStorage, vi.fn()),
+      coordination,
+    ]) as Vault;
+    await expect(vault.moveFolder("old", "new", "attachments")).rejects.toThrow("commit rejected");
+    expect(await fileStorage.readText("notes/n.md")).toBe("[image](../attachments/a.png)");
+    expect(replaceVault.mock.calls[0][0][0].sourcePath).toBe("new/Note.md");
+    expect(replaceVault.mock.calls[0][7].folders[0].path).toBe("new");
   });
 });

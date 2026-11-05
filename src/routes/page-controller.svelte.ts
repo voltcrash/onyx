@@ -22,7 +22,6 @@ import {
   parseRelativeNoteLink,
   pasteUrlOverSelection,
   resolveLocalAttachmentUrl,
-  rewriteLocalLinks,
   titleFromMarkdown,
   toggleCheckboxes,
   toggleInlineSyntax,
@@ -111,7 +110,6 @@ import {
   fileStem,
   isPathWithin,
   joinPath,
-  movePath,
   normalizeFileName,
   normalizeFolderName,
   noteFilePath,
@@ -1576,14 +1574,8 @@ export function createPageController() {
       ) {
         throw new Error(`A file named “${name}” already exists here.`);
       }
-      const saved = await vault.saveNote({
-        id: note.id,
-        title: note.title,
-        markdown: note.markdown,
-        sourcePath: path,
-        expectedRevision: note.revision,
-      });
-      if (activeNoteId === noteId) await loadNote(saved.id);
+      await vault.moveNote(note.id, path, attachmentFolder);
+      if (activeNoteId === noteId) await loadNote(note.id);
       storageError = "";
       await refreshFileTree();
     } catch (error) {
@@ -1596,55 +1588,13 @@ export function createPageController() {
   }
 
   async function renameFolder(path: string, requestedName: string): Promise<void> {
-    if (!vault || transferState === "working") return;
-    if (isAttachmentFolderPath(path)) {
-      if (path === attachmentFolder) {
-        await renameAttachmentFolder(requestedName);
-        return;
-      }
-      if (!(await settleDraft())) return;
-      try {
-        const name = normalizeFolderName(requestedName);
-        const nextPath = joinPath(parentPath(path), name);
-        if (nextPath.toLocaleLowerCase() === path.toLocaleLowerCase()) return;
-        const moved = await vault.moveAttachmentFolder(path, nextPath);
-        const movedPaths = new Map(
-          moved.map((attachment) => [
-            movePath(attachment.sourcePath ?? "", nextPath, path),
-            attachment.sourcePath ?? "",
-          ]),
-        );
-        if (movedPaths.size) {
-          const notes = await vault.listNotes();
-          for (const metadata of notes) {
-            const note = await vault.getNote(metadata.id);
-            if (!note) continue;
-            const notePath = noteFilePath(note);
-            const fixed = rewriteLocalLinks(note.markdown, notePath, notePath, (target) =>
-              movedPaths.get(target),
-            );
-            if (fixed === note.markdown) continue;
-            await vault.saveNote({
-              id: note.id,
-              title: note.title,
-              markdown: fixed,
-              expectedRevision: note.revision,
-            });
-          }
-        }
-        await relocateFolder(path, nextPath);
-        storageError = "";
-        await refreshFileTree();
-      } catch (error) {
-        storageError = error instanceof Error ? error.message : "The folder could not be renamed.";
-      }
+    if (!vault || transferState === "working" || !(await settleDraft())) return;
+    if (path === attachmentFolder) {
+      await renameAttachmentFolder(requestedName);
       return;
     }
-    if (!(await settleDraft())) return;
     try {
-      const name = normalizeFolderName(requestedName);
-      const nextPath = joinPath(parentPath(path), name);
-      await relocateFolder(path, nextPath);
+      await relocateFolder(path, joinPath(parentPath(path), normalizeFolderName(requestedName)));
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The folder could not be renamed.";
     }
@@ -1731,125 +1681,29 @@ export function createPageController() {
   }
 
   async function moveFile(noteId: string, targetFolder: string): Promise<void> {
-    if (!vault || transferState === "working") return;
-    if (!(await settleDraft())) return;
+    if (!vault || transferState === "working" || !(await settleDraft())) return;
     try {
       const note = await vault.getNote(noteId);
       if (!note) return;
-      const currentPath = noteFilePath(note);
-      const nextPath = joinPath(targetFolder, basename(currentPath));
-      if (nextPath.toLocaleLowerCase() === currentPath.toLocaleLowerCase()) return;
-      const notes = await vault.listNotes();
-      if (
-        notes.some(
-          (candidate) =>
-            candidate.id !== noteId &&
-            noteFilePath(candidate).toLocaleLowerCase() === nextPath.toLocaleLowerCase(),
-        )
-      ) {
-        throw new Error(`A file named “${basename(nextPath)}” already exists here.`);
-      }
-      const saved = await vault.saveNote({
-        id: note.id,
-        title: note.title,
-        markdown: rewriteLocalLinks(note.markdown, currentPath, nextPath, pinnedAttachmentLinks),
-        sourcePath: nextPath,
-        expectedRevision: note.revision,
-      });
-      await vault.moveAttachmentSourcePaths(
-        note.id,
-        parentPath(currentPath),
-        parentPath(nextPath),
+      await vault.moveNote(
+        noteId,
+        joinPath(targetFolder, basename(noteFilePath(note))),
         attachmentFolder,
       );
-      if (activeNoteId === noteId) await loadNote(saved.id);
-      storageError = "";
+      if (activeNoteId === noteId) await loadNote(noteId);
       await refreshFileTree();
+      pendingBackupCount = await vault.countPendingBackupOperations();
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The file could not be moved.";
     }
   }
 
   async function relocateFolder(path: string, nextPath: string): Promise<void> {
-    if (!vault || nextPath.toLocaleLowerCase() === path.toLocaleLowerCase()) return;
-    const notes = await vault.listNotes();
-    const existingFolders = await vault.listFolders();
-    const affectedNotes = notes.filter((note) => isPathWithin(noteFolderPath(note), path));
-    const affectedNoteIds = new Set(affectedNotes.map((note) => note.id));
-    const nextFolders = existingFolders.map((folder) =>
-      isPathWithin(folder.path, path)
-        ? {
-            ...folder,
-            path: movePath(folder.path, path, nextPath),
-            updatedAt: new Date().toISOString(),
-          }
-        : folder,
-    );
-
-    const currentFolderPaths = new Set([
-      ...existingFolders.map((folder) => folder.path),
-      ...notes.map((note) => noteFolderPath(note)).filter(Boolean),
-    ]);
-    const nextFolderPaths = new Set<string>();
-    for (const currentFolderPath of currentFolderPaths) {
-      const candidate = isPathWithin(currentFolderPath, path)
-        ? movePath(currentFolderPath, path, nextPath)
-        : currentFolderPath;
-      const key = candidate.toLocaleLowerCase();
-      if (nextFolderPaths.has(key)) {
-        throw new Error(`A folder named “${basename(nextPath)}” already exists here.`);
-      }
-      nextFolderPaths.add(key);
-    }
-
-    const movedNotePaths = new Set<string>();
-    for (const note of affectedNotes) {
-      const sourcePath = noteFilePath(note);
-      const nextSourcePath = movePath(sourcePath, path, nextPath);
-      const key = nextSourcePath.toLocaleLowerCase();
-      if (
-        movedNotePaths.has(key) ||
-        notes.some(
-          (candidate) =>
-            !affectedNoteIds.has(candidate.id) &&
-            noteFilePath(candidate).toLocaleLowerCase() === key,
-        )
-      ) {
-        throw new Error(`A file named “${basename(nextSourcePath)}” already exists here.`);
-      }
-      movedNotePaths.add(key);
-    }
-
-    const fullNotes = await Promise.all(
-      affectedNotes.map(async (note) => {
-        const fullNote = await vault!.getNote(note.id);
-        if (!fullNote)
-          throw new Error(`The file “${basename(noteFilePath(note))}” could not be moved.`);
-        return { note, markdown: fullNote.markdown };
-      }),
-    );
-    for (const { note, markdown: noteMarkdown } of fullNotes) {
-      const sourcePath = noteFilePath(note);
-      const nextSourcePath = movePath(sourcePath, path, nextPath);
-      await vault.saveNote({
-        id: note.id,
-        title: note.title,
-        markdown: rewriteLocalLinks(
-          noteMarkdown,
-          sourcePath,
-          nextSourcePath,
-          pinnedAttachmentLinks,
-        ),
-        sourcePath: nextSourcePath,
-        expectedRevision: note.revision,
-      });
-      await vault.moveAttachmentSourcePaths(note.id, path, nextPath, attachmentFolder);
-    }
-    await vault.saveFolders(nextFolders);
-    folders = nextFolders;
-    if (activeNoteId && affectedNoteIds.has(activeNoteId)) await loadNote(activeNoteId);
-    storageError = "";
+    if (!vault || path === nextPath) return;
+    await vault.moveFolder(path, nextPath, attachmentFolder, isAttachmentFolderPath(path));
+    if (activeNoteId) await loadNote(activeNoteId);
     await refreshFileTree();
+    pendingBackupCount = await vault.countPendingBackupOperations();
   }
 
   async function moveFolder(path: string, targetParent: string): Promise<void> {
@@ -1901,14 +1755,16 @@ export function createPageController() {
       : [];
     if (!(await settleDraft())) return;
     try {
-      for (const note of affectedNotes) await vault.trashNote(note.id);
-      if (attached.length) await vault.deleteAttachmentFolder(path);
-      const existingFolders = await vault.listFolders();
-      const nextFolders = existingFolders.filter(
-        (folder) => folder.path !== path && !folder.path.startsWith(`${path}/`),
-      );
-      await vault.saveFolders(nextFolders);
-      folders = nextFolders;
+      await vault.updateFileTree((tree) => {
+        const now = new Date().toISOString();
+        for (const note of tree.notes)
+          if (!note.deletedAt && isPathWithin(noteFolderPath(note), path)) note.deletedAt = now;
+        if (attached.length)
+          tree.attachments = tree.attachments.filter(
+            (attachment) => !attachment.sourcePath || !isPathWithin(attachment.sourcePath, path),
+          );
+        tree.folders = tree.folders.filter((folder) => !isPathWithin(folder.path, path));
+      });
       const remaining = await refreshFileTree();
       if (activeNoteId && affectedNotes.some((note) => note.id === activeNoteId)) {
         if (remaining[0]) await loadNote(remaining[0].id);
@@ -2652,37 +2508,9 @@ export function createPageController() {
     if (transferState === "working" || !(await settleDraft())) return false;
     const currentVault = vault;
     try {
-      const notes = await currentVault.listNotes();
-      if (
-        notes.some((note) => isPathWithin(noteFilePath(note), next)) ||
-        folders.some((folder) => isPathWithin(folder.path, next))
-      ) {
-        throw new Error(`“${next}” already holds notes. Choose another name for attachments.`);
-      }
-      const moved = await currentVault.moveAttachmentFolder(previous, next);
-      const movedPaths = new Map(
-        moved.map((attachment) => [
-          movePath(attachment.sourcePath ?? "", next, previous),
-          attachment.sourcePath ?? "",
-        ]),
-      );
-      if (movedPaths.size) {
-        for (const metadata of notes) {
-          const note = await currentVault.getNote(metadata.id);
-          if (!note) continue;
-          const path = noteFilePath(note);
-          const rewritten = rewriteLocalLinks(note.markdown, path, path, (target) =>
-            movedPaths.get(target),
-          );
-          if (rewritten === note.markdown) continue;
-          await currentVault.saveNote({
-            id: note.id,
-            title: note.title,
-            markdown: rewritten,
-            expectedRevision: note.revision,
-          });
-        }
-      }
+      if (folders.some((folder) => isPathWithin(folder.path, next)))
+        throw new Error("Choose an unused attachment folder");
+      await currentVault.moveFolder(previous, next, previous, true);
       attachmentFolder = next;
       writeLocalStorage(attachmentPreferenceKey("attachment-folder"), next);
       if (activeNoteId) await loadNote(activeNoteId);
@@ -2747,10 +2575,6 @@ export function createPageController() {
     return type.startsWith("image/")
       ? new Blob([file], { type })
       : new Blob([file], { type: "application/octet-stream" });
-  }
-
-  function pinnedAttachmentLinks(path: string): string | undefined {
-    return isPathWithin(path, attachmentFolder) ? path : undefined;
   }
 
   function setFont(role: FontRole, id: string): void {
