@@ -380,3 +380,23 @@ test("stores pasted images in the attachments folder with GitHub-style links", a
   await page.keyboard.press("Escape");
   await expect(page.locator(".attachment-folder-row")).toHaveCount(0);
 });
+
+test("keeps a rejected name available for correction", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  const newFolder = page.getByRole("button", { name: "New folder", exact: true });
+  await newFolder.click();
+  const name = page.getByRole("textbox", { name: "Folder name" });
+  await name.fill("Plans");
+  await name.press("Enter");
+  await expect(page.locator('[data-folder-path="Plans"]')).toBeVisible();
+  await newFolder.click();
+  await name.fill("Plans");
+  await name.press("Enter");
+  await expect(name).toHaveAttribute("aria-invalid", "true");
+  await expect(name).toHaveValue("Plans");
+  await name.fill("Ideas");
+  await name.press("Enter");
+  await expect(page.locator('[data-folder-path="Ideas"]')).toBeVisible();
+  await expect(name).toHaveCount(0);
+});

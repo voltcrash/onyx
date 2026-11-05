@@ -102,11 +102,11 @@
 		onCreateVault={() => void page.createVault()}
 		onRenameVault={page.renameVault}
 		onCreateNote={() => void page.createNote()}
-		onCreateFile={(folder, name) => void page.createFile(folder, name)}
-		onCreateFolder={(folder, name) => void page.createFolder(folder, name)}
+		onCreateFile={page.createFile}
+		onCreateFolder={page.createFolder}
 		onDeleteAttachment={(id) => void page.deleteAttachment(id)}
-		onRenameFile={(id, name) => void page.renameFile(id, name)}
-		onRenameFolder={(path, name) => void page.renameFolder(path, name)}
+		onRenameFile={page.renameFile}
+		onRenameFolder={page.renameFolder}
 		onSetFolderIcon={(path, icon) => void page.setFolderIcon(path, icon)}
 		onSetFolderPinned={(path, pinned) => void page.setFolderPinned(path, pinned)}
 		onSetNotePinned={(id, pinned) => void page.setNotePinned(id, pinned)}
@@ -142,7 +142,7 @@
 		onChangePage={page.changeNotePage}
 		onContentWidthChange={page.setContentWidth}
 	/>
-	<button type="button" class="sidebar-resize" aria-label={`Resize notes sidebar, ${page.sidebarWidth} pixels wide`} title="Drag to resize; snaps to the default width" onpointerdown={startSidebarResize} onpointermove={trackSidebarResize} onpointerup={endSidebarResize} onpointercancel={endSidebarResize} onkeydown={nudgeSidebarResize}></button>
+	<button type="button" class="sidebar-resize" aria-label={`Resize notes sidebar, ${page.sidebarWidth} pixels wide`} title="Drag to resize; snaps to the default width" onpointerdown={startSidebarResize} onpointermove={trackSidebarResize} onpointerup={endSidebarResize} onpointercancel={endSidebarResize} onlostpointercapture={endSidebarResize} onkeydown={nudgeSidebarResize}></button>
 
 	<MarkdownWorkspace
 		storageNotice={page.storageNotice}

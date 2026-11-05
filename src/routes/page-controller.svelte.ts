@@ -272,6 +272,8 @@ export function createPageController() {
   let serviceWorkerTimer: number | undefined;
   let githubRestoreTimer: number | undefined;
   let settingsOpener: HTMLElement | undefined;
+  let settingsRequest = 0;
+  const startupDeadline = Date.now() + 5_000;
   let paletteOpener: HTMLElement | undefined;
   let paletteSidebarState: SidebarState | undefined;
   let unsubscribeVault: (() => void) | undefined;
@@ -301,13 +303,15 @@ export function createPageController() {
       if (workspaceOperation) {
         if (kind === "navigation")
           pendingNavigation = () => workspaceCommand(action, kind)(...args);
+        if (propagate) throw new Error("Another workspace operation is still running. Try again.");
         return;
       }
       workspaceOperation = kind;
       try {
         if (remoteSyncRun) await remoteSyncRun;
         await action(...args);
-        if (vault && vaultPhase === "ready") observedVaultVersion = await vault.getVersion();
+        if (vault && vaultPhase === "ready")
+          observedVaultVersion = await vault.getVersion().catch(() => observedVaultVersion);
       } catch (error) {
         storageError =
           error instanceof Error ? error.message : "The operation could not be completed.";
@@ -563,7 +567,7 @@ export function createPageController() {
     const sidebarReady = sidebarDisplay === "flex" || sidebarDisplay === "none";
     const editorReady = editorShell && getComputedStyle(editorShell).display === "grid";
 
-    if (!appReady || !sidebarReady || !editorReady) {
+    if ((!appReady || !sidebarReady || !editorReady) && Date.now() < startupDeadline) {
       startupFrame = window.requestAnimationFrame(() => {
         if (!disposed) revealStartupShell();
       });
@@ -741,9 +745,10 @@ export function createPageController() {
 
   function registerServiceWorker(): void {
     if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker
-        .register("/service-worker.js", { type: "module" })
-        .catch(() => undefined);
+      void navigator.serviceWorker.register("/service-worker.js", { type: "module" }).catch(() => {
+        if (!disposed)
+          appendStorageNotice("Offline support could not be initialized. Reload to try again.");
+      });
     }
   }
 
@@ -866,12 +871,14 @@ export function createPageController() {
     if (!settingsOpen && document.activeElement instanceof HTMLElement) {
       settingsOpener = document.activeElement;
     }
+    const request = ++settingsRequest;
     settingsSection = target;
     await loadDialogStyles();
-    settingsOpen = true;
+    if (!disposed && request === settingsRequest) settingsOpen = true;
   }
 
   function closeSettings(): void {
+    settingsRequest += 1;
     settingsOpen = false;
     const opener = settingsOpener;
     settingsOpener = undefined;
@@ -1776,8 +1783,8 @@ export function createPageController() {
 
   async function createNote(parent = "", requestedName = ""): Promise<void> {
     if (!vault || transferState === "working") return;
+    if (!(await settleDraft())) throw new Error("Save or recover the current draft first.");
     saveState = "loading";
-    if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
     try {
       const name = normalizeFileName(requestedName || "Untitled");
       const path = joinPath(parent, name);
@@ -1798,7 +1805,8 @@ export function createPageController() {
       requestAnimationFrame(() => editor?.focus());
     } catch (error) {
       storageError = error instanceof Error ? error.message : "A new note could not be created.";
-      saveState = "error";
+      saveState = markdown === lastSavedMarkdown ? "saved" : "error";
+      throw error;
     }
   }
 
@@ -1825,7 +1833,7 @@ export function createPageController() {
 
   async function renameFile(noteId: string, requestedName: string): Promise<void> {
     if (!vault || transferState === "working") return;
-    if (!(await settleDraft())) return;
+    if (!(await settleDraft())) throw new Error("Save or recover the current draft first.");
     try {
       const note = await vault.getNote(noteId);
       if (!note) return;
@@ -1847,6 +1855,7 @@ export function createPageController() {
       await refreshFileTree();
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The file could not be renamed.";
+      throw error;
     }
   }
 
@@ -1855,15 +1864,18 @@ export function createPageController() {
   }
 
   async function renameFolder(path: string, requestedName: string): Promise<void> {
-    if (!vault || transferState === "working" || !(await settleDraft())) return;
+    if (!vault || transferState === "working") return;
+    if (!(await settleDraft())) throw new Error("Save or recover the current draft first.");
     if (path === attachmentFolder) {
-      await renameAttachmentFolder(requestedName);
+      if (!(await renameAttachmentFolder(requestedName)))
+        throw new Error(storageError || "The folder could not be renamed.");
       return;
     }
     try {
       await relocateFolder(path, joinPath(parentPath(path), normalizeFolderName(requestedName)));
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The folder could not be renamed.";
+      throw error;
     }
   }
 
@@ -1937,6 +1949,7 @@ export function createPageController() {
     if (activeNoteId) await loadNote(activeNoteId);
     await refreshFileTree();
     pendingBackupCount = await vault.countPendingBackupOperations();
+    storageError = "";
   }
 
   async function moveFolder(path: string, targetParent: string): Promise<void> {
@@ -3412,7 +3425,8 @@ export function createPageController() {
       return settingsOpen;
     },
     set settingsOpen(value: boolean) {
-      settingsOpen = value;
+      if (value) void openSettings(settingsSection);
+      else closeSettings();
     },
     get settingsSection() {
       return settingsSection;
@@ -3687,10 +3701,10 @@ export function createPageController() {
       return backlinks;
     },
     openBacklink: workspaceCommand((id: string) => navigateToNote(id)),
-    createFile: workspaceCommand(createNote),
-    createFolder: workspaceCommand(createFolder),
-    renameFile: workspaceCommand(renameFile),
-    renameFolder: workspaceCommand(renameFolder),
+    createFile: workspaceCommand(createNote, "mutation", true),
+    createFolder: workspaceCommand(createFolder, "mutation", true),
+    renameFile: workspaceCommand(renameFile, "mutation", true),
+    renameFolder: workspaceCommand(renameFolder, "mutation", true),
     setFolderIcon: workspaceCommand(setFolderIcon),
     setFolderPinned: workspaceCommand(setFolderPinned),
     setNotePinned: workspaceCommand(setNotePinned),
