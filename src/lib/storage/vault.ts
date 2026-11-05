@@ -606,10 +606,16 @@ export class Vault {
     return this.#withLock(() => this.#database.getFileFolders());
   }
 
-  async saveFolders(folders: FolderMetadata[]): Promise<void> {
-    await this.#withLock(async () => {
-      await this.#database.setFileFolders(folders);
+  async updateFolders(
+    update: (folders: FolderMetadata[], notes: NoteMetadata[]) => FolderMetadata[],
+  ): Promise<FolderMetadata[]> {
+    return this.#withLock(async () => {
+      const folders = await this.#database.getFileFolders();
+      const notes = activeNotes(await this.#database.getNotes());
+      const next = update(folders, notes);
+      await this.#database.setFileFolders(next);
       this.#publish({ kind: "vault" });
+      return next;
     });
   }
 
@@ -757,16 +763,23 @@ export class Vault {
   ): Promise<void> {
     if (!from || isPathWithin(to, from)) throw new Error("A folder cannot be moved into itself");
     await this.updateFileTree((tree) => {
+      const folderPaths = new Set(tree.folders.map((folder) => folder.path));
+      for (const note of tree.notes.filter((note) => !note.deletedAt)) {
+        for (let folder = parentPath(noteFilePath(note)); folder; folder = parentPath(folder))
+          folderPaths.add(folder);
+      }
       const destinations = new Set<string>();
-      for (const folder of tree.folders) {
-        const next = isPathWithin(folder.path, from)
-          ? movePath(folder.path, from, to)
-          : folder.path;
+      for (const path of folderPaths) {
+        const next = isPathWithin(path, from) ? movePath(path, from, to) : path;
         if (destinations.has(next.toLocaleLowerCase()))
           throw new Error("A folder already uses that path");
         destinations.add(next.toLocaleLowerCase());
-        folder.path = next;
       }
+      for (const folder of tree.folders)
+        if (isPathWithin(folder.path, from)) {
+          folder.path = movePath(folder.path, from, to);
+          folder.updatedAt = new Date().toISOString();
+        }
       const movedAttachments = new Map<string, string>();
       for (const attachment of tree.attachments) {
         const path = attachment.sourcePath;

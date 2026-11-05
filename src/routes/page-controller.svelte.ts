@@ -1794,36 +1794,23 @@ export function createPageController() {
 
   async function createFolder(parent = "", requestedName = ""): Promise<void> {
     if (!vault || transferState === "working") return;
-    try {
-      const name = normalizeFolderName(requestedName || "New folder");
-      const path = joinPath(parent, name);
-      const notes = await vault.listNotes();
-      const existingFolders = await vault.listFolders();
-      const noteFolders = notes.flatMap((note) => {
-        const folder = noteFolderPath(note);
-        return folder ? [folder] : [];
-      });
+    const name = normalizeFolderName(requestedName || "New folder");
+    const path = joinPath(parent, name);
+    folders = await vault.updateFolders((existing, notes) => {
       if (
-        [...existingFolders.map((folder) => folder.path), ...noteFolders].some(
-          (candidate) => candidate.toLocaleLowerCase() === path.toLocaleLowerCase(),
-        )
-      ) {
+        [
+          ...existing.map((folder) => folder.path),
+          ...notes.map((note) => noteFolderPath(note)),
+        ].some((candidate) => isPathWithin(candidate.toLocaleLowerCase(), path.toLocaleLowerCase()))
+      )
         throw new Error(`A folder named “${name}” already exists here.`);
-      }
       const now = new Date().toISOString();
-      const folder: FolderMetadata = {
-        id: crypto.randomUUID(),
-        path,
-        createdAt: now,
-        updatedAt: now,
-      };
-      await vault.saveFolders([...existingFolders, folder]);
-      searchQuery = "";
-      await refreshFileTree();
-      storageError = "";
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "A new folder could not be created.";
-    }
+      return [...existing, { id: crypto.randomUUID(), path, createdAt: now, updatedAt: now }];
+    });
+    searchQuery = "";
+    await refreshFileTree();
+    pendingBackupCount = await vault.countPendingBackupOperations();
+    storageError = "";
   }
 
   async function renameFile(noteId: string, requestedName: string): Promise<void> {
@@ -1870,72 +1857,37 @@ export function createPageController() {
     }
   }
 
-  async function setFolderIcon(path: string, icon?: FolderIcon): Promise<void> {
-    if (!vault || transferState === "working" || isAttachmentFolderPath(path)) return;
-    try {
-      const existingFolders = await vault.listFolders();
-      const current = existingFolders.find((folder) => folder.path === path);
-      if (!current && !icon) return;
-      if (current?.icon === icon) return;
+  async function updateFolderAppearance(
+    path: string,
+    changes: Pick<Partial<FolderMetadata>, "icon" | "pinned">,
+  ): Promise<void> {
+    if (!vault || transferState === "working") return;
+    folders = await vault.updateFolders((existing) => {
+      const current = existing.find((folder) => folder.path === path);
+      if (!current && !changes.icon && !changes.pinned) return existing;
       const now = new Date().toISOString();
-      const nextFolders = current
-        ? existingFolders.map((folder) => {
-            if (folder.path !== path) return folder;
-            const next = { ...folder, updatedAt: now };
-            if (icon) next.icon = icon;
-            else delete next.icon;
-            return next;
-          })
-        : [
-            ...existingFolders,
-            {
-              id: crypto.randomUUID(),
-              path,
-              createdAt: now,
-              updatedAt: now,
-              icon,
-            },
-          ];
-      await vault.saveFolders(nextFolders);
-      folders = nextFolders;
-      storageError = "";
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The folder icon could not be saved.";
-    }
+      const next: FolderMetadata = {
+        ...(current ?? { id: crypto.randomUUID(), path, createdAt: now }),
+        ...changes,
+        updatedAt: now,
+      };
+      if (!next.icon) delete next.icon;
+      if (!next.pinned) delete next.pinned;
+      return current
+        ? existing.map((folder) => (folder.path === path ? next : folder))
+        : [...existing, next];
+    });
+    pendingBackupCount = await vault.countPendingBackupOperations();
+    storageError = "";
+  }
+
+  async function setFolderIcon(path: string, icon?: FolderIcon): Promise<void> {
+    if (isAttachmentFolderPath(path)) return;
+    await updateFolderAppearance(path, { icon });
   }
 
   async function setFolderPinned(path: string, pinned: boolean): Promise<void> {
-    if (!vault || transferState === "working") return;
-    try {
-      const existingFolders = await vault.listFolders();
-      const current = existingFolders.find((folder) => folder.path === path);
-      if (!current && !pinned) return;
-      if (current?.pinned === pinned) return;
-      const now = new Date().toISOString();
-      const nextFolders = current
-        ? existingFolders.map((folder) => {
-            if (folder.path !== path) return folder;
-            const next = { ...folder, updatedAt: now };
-            if (pinned) next.pinned = true;
-            else delete next.pinned;
-            return next;
-          })
-        : [
-            ...existingFolders,
-            {
-              id: crypto.randomUUID(),
-              path,
-              createdAt: now,
-              updatedAt: now,
-              pinned: true,
-            },
-          ];
-      await vault.saveFolders(nextFolders);
-      folders = nextFolders;
-      storageError = "";
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The folder pin could not be saved.";
-    }
+    await updateFolderAppearance(path, { pinned });
   }
 
   async function setNotePinned(noteId: string, pinned: boolean): Promise<void> {
@@ -2626,6 +2578,7 @@ export function createPageController() {
   }
 
   function runEditorIndent(target: EventTarget | null, outdent: boolean): boolean {
+    if (editorBlocked) return false;
     if (!editor || !isEditorTarget(target)) return false;
     const edit = indentEditorLines(
       editor.value,
@@ -2642,6 +2595,7 @@ export function createPageController() {
   }
 
   function toggleCheckboxAtCaret(): boolean {
+    if (editorBlocked) return false;
     if (!editor) return false;
     const edit = toggleCheckboxes(editor.value, editor.selectionStart, editor.selectionEnd);
     if (!edit) return false;
@@ -3084,11 +3038,10 @@ export function createPageController() {
       }
       return;
     }
-    if (workspaceOperation) {
-      if (event.metaKey || event.ctrlKey) event.preventDefault();
+    if (workspaceOperation && shortcutMatchesEvent(shortcuts.newNote, event, primaryModifier)) {
+      event.preventDefault();
       return;
     }
-    if (editor?.disabled && isEditorTarget(event.target)) return;
     if (
       find.isOpen &&
       !event.altKey &&
@@ -3121,6 +3074,7 @@ export function createPageController() {
     }
 
     if (action && isEditorShortcutAction(action)) {
+      if (editorBlocked && action !== "copySelection" && action !== "selectAll") return;
       if (!isEditorTarget(event.target)) return;
       if (runEditorShortcut(action, event.target)) event.preventDefault();
       return;
@@ -3151,7 +3105,8 @@ export function createPageController() {
 
     if (action === "commandPalette") togglePalette();
     else if (action === "findInNote") find.toggle();
-    else if (action === "saveNote" && transferState !== "working") void saveDraft();
+    else if (action === "saveNote" && transferState !== "working" && !workspaceOperation)
+      void saveDraft();
     else if (action === "newNote" && transferState !== "working")
       void workspaceCommand(createNote)();
     else if (action === "searchNotes" || action === "focusSearch") focusSearch();
