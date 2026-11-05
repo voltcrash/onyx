@@ -129,14 +129,13 @@ export class Vault {
     const handle = await globalThis.showDirectoryPicker({ id: "onyx-vault", mode: "readwrite" });
     const permission = await handle.requestPermission({ mode: "readwrite" });
     if (permission !== "granted") {
-      this.#nativeDirectoryName = handle.name;
-      this.#nativeDirectoryPermission = permission;
       return this.getFileStorageStatus();
     }
     return this.#withLock(async () => {
       const nativeFilesystem = await VaultFilesystem.fromDirectory(handle);
       await this.#filesystem.copyTo(nativeFilesystem);
       await this.#database.setNativeDirectoryHandle(handle);
+      this.#filesystem.attach(nativeFilesystem);
       this.#nativeDirectoryName = handle.name;
       this.#nativeDirectoryPermission = "granted";
       return this.getFileStorageStatus();
@@ -145,8 +144,8 @@ export class Vault {
 
   async disconnectNativeDirectory(): Promise<VaultFileStorageStatus> {
     return this.#withLock(async () => {
-      this.#filesystem.detach();
       await this.#database.deleteNativeDirectoryHandle();
+      this.#filesystem.detach();
       this.#nativeDirectoryName = undefined;
       this.#nativeDirectoryPermission = detectBrowserStorageSupport().directoryPicker
         ? "not-configured"
@@ -252,7 +251,11 @@ export class Vault {
       const permission = await handle.queryPermission({ mode: "readwrite" });
       this.#nativeDirectoryPermission = permission;
       if (permission !== "granted") return;
-      this.#filesystem.attach(await VaultFilesystem.fromDirectory(handle));
+      await this.#withLock(async () => {
+        const mirror = await VaultFilesystem.fromDirectory(handle);
+        await this.#filesystem.copyTo(mirror);
+        this.#filesystem.attach(mirror);
+      });
     } catch {
       this.#nativeDirectoryPermission = "denied";
     }

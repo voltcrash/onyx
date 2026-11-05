@@ -149,9 +149,7 @@ export class MirroredVaultFilesystem implements VaultFileStorage {
   }
 
   async copyTo(mirror: VaultFilesystem): Promise<void> {
-    for (const file of await this.fallback.listFiles())
-      await mirror.write(file.path, file.contents);
-    this.attach(mirror);
+    await mirror.replace(await this.fallback.listFiles(), async () => undefined);
   }
 
   listFiles(): Promise<Array<{ contents: Blob; path: string }>> {
@@ -188,17 +186,8 @@ export class MirroredVaultFilesystem implements VaultFileStorage {
     files: Array<{ contents: Blob; path: string }>,
     commit: () => Promise<void>,
   ): Promise<void> {
-    await this.fallback.replace(files, async () => {
-      const mirror = this.#mirror;
-      if (!mirror) return commit();
-      try {
-        await mirror.replace(files, commit);
-      } catch (error) {
-        this.detach();
-        this.onMirrorUnavailable(isPermissionError(error) ? "permission" : "error");
-        await commit();
-      }
-    });
+    await this.fallback.replace(files, commit);
+    await this.#runMirror((mirror) => mirror.replace(files, async () => undefined));
   }
 
   async #runMirror(operation: (mirror: VaultFilesystem) => Promise<void>): Promise<void> {

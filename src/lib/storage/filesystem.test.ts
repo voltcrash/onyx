@@ -22,3 +22,21 @@ describe("MirroredVaultFilesystem", () => {
     expect(onMirrorUnavailable).toHaveBeenCalledWith("permission");
   });
 });
+
+describe("Mirror commit ownership", () => {
+  it("does not replay a failed metadata commit or blame the mirror", async () => {
+    const commit = vi.fn().mockRejectedValue(new Error("database unavailable"));
+    const replace = vi.fn().mockImplementation(async (_files, apply) => apply());
+    const unavailable = vi.fn();
+    const filesystem = new MirroredVaultFilesystem(
+      { replace } as unknown as VaultFilesystem,
+      unavailable,
+    );
+    const mirrorReplace = vi.fn();
+    filesystem.attach({ replace: mirrorReplace } as unknown as VaultFilesystem);
+    await expect(filesystem.replace([], commit)).rejects.toThrow("database unavailable");
+    expect(commit).toHaveBeenCalledOnce();
+    expect(mirrorReplace).not.toHaveBeenCalled();
+    expect(unavailable).not.toHaveBeenCalled();
+  });
+});
