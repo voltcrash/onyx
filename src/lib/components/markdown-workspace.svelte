@@ -28,6 +28,8 @@
 		findQuery: string;
 		findMatches: FindMatch[];
 		activeFindMatch: number;
+		saveConflict: boolean;
+		onSaveConflictCopy: () => void;
 		editorBlocked: boolean;
 		saveState: SaveState;
 		transferState: TransferState;
@@ -63,7 +65,7 @@
 
 	let {
 		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedBlocks, displayedRenderedBlocks, scrollSync, markdown, markdownLineCount, findOpen, findQuery, findMatches, activeFindMatch,
-		editorBlocked, saveState, transferState, hasContent, shortcuts, primaryModifier,
+		saveConflict, onSaveConflictCopy, editorBlocked, saveState, transferState, hasContent, shortcuts, primaryModifier,
 		editor = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
 		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorHistory, onEditorPaste, onEditorDragOver, onEditorDrop, onNoteLink, onWikiLink, onTag, backlinks = [], onOpenBacklink
 	}: Props = $props();
@@ -466,7 +468,8 @@
 		<div class="storage-error" role="alert">
 			<CloudOff size={16} />
 			<span>{storageError} Your current text stays open, but it may be lost when this tab closes. Copy it somewhere safe if the retry keeps failing.</span>
-			<button onclick={onRetryStorage}>Try again</button>
+			{#if saveConflict}<button onclick={onSaveConflictCopy}>Save a copy</button>{/if}
+            <button onclick={onRetryStorage}>Try again</button>
 			<button onclick={onReload}>Reload</button>
 		</div>
 	{/if}

@@ -166,7 +166,9 @@
 		hasContent={page.hasContent}
 		shortcuts={page.shortcuts}
 		primaryModifier={page.primaryModifier}
-		editorBlocked={page.editorBlocked}
+		saveConflict={page.saveConflict}
+      onSaveConflictCopy={() => void page.saveConflictCopy()}
+      editorBlocked={page.editorBlocked}
         bind:editor={page.editor}
 		onRetryStorage={() => void (page.vault ? page.saveDraft() : page.openVault())}
 		onDismissStorageNotice={page.dismissStorageNotice}

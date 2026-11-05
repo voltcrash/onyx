@@ -73,6 +73,7 @@ import {
   uniqueVaultName,
   vaultOptions,
   Vault,
+  VaultConflictError,
   writeVaultRegistry,
   type VaultChangeEvent,
   type VaultDescriptor,
@@ -178,6 +179,8 @@ export function createPageController() {
   let splitRatio = $state(50);
   let contentWidth = $state(DEFAULT_CONTENT_WIDTH);
   let saveState = $state<SaveState>("loading");
+  let saveFailure = $state<"conflict" | "storage">();
+  let observedVaultVersion = 0;
   let notesLoaded = $state(false);
   let saveTimer: number | undefined = $state();
   let saveRun: Promise<boolean> | undefined;
@@ -302,6 +305,7 @@ export function createPageController() {
       try {
         if (remoteSyncRun) await remoteSyncRun;
         await action(...args);
+        if (vault && vaultPhase === "ready") observedVaultVersion = await vault.getVersion();
       } catch (error) {
         storageError =
           error instanceof Error ? error.message : "The operation could not be completed.";
@@ -670,6 +674,30 @@ export function createPageController() {
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden" && markdown !== lastSavedMarkdown) void saveDraft();
+      if (document.visibilityState === "visible") {
+        const opened = vault;
+        if (opened)
+          void opened
+            .getVersion()
+            .then((version) => {
+              if (!disposed && opened === vault && version !== observedVaultVersion)
+                queueRemoteVaultSync({
+                  kind: "vault",
+                  occurredAt: new Date().toISOString(),
+                  sourceId: "resume",
+                });
+            })
+            .catch(() =>
+              appendStorageNotice(
+                "The vault could not be refreshed. Reload Onyx to reconnect storage.",
+              ),
+            );
+        void loadVaultRegistry()
+          .then((registry) => {
+            if (!disposed) vaults = registry.vaults;
+          })
+          .catch(() => undefined);
+      }
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     window.addEventListener("keydown", onKeydown);
@@ -1291,6 +1319,7 @@ export function createPageController() {
         vault.getGithubBackupState(),
         vault.countPendingBackupOperations(),
       ]);
+      observedVaultVersion = await vault.getVersion();
       vaultPhase = "ready";
       if (detectBrowserStorageSupport().persistentStorage) void ensurePersistentStorage();
     } catch (error) {
@@ -1482,6 +1511,7 @@ export function createPageController() {
     lastSavedMarkdown = note.markdown;
     editorHistory.reset();
     saveState = "saved";
+    saveFailure = undefined;
     storageError = "";
     sidebarOpen = false;
   }
@@ -1518,10 +1548,13 @@ export function createPageController() {
         (change) => change.kind === "vault" || change.noteId === activeNoteId,
       );
       const hasUnsavedDraft = markdown !== lastSavedMarkdown;
-      if (activeChanged && hasUnsavedDraft) {
+      const changedRevision =
+        tree.notes.find((note) => note.id === activeNoteId)?.revision !== noteRevision;
+      if (activeChanged && hasUnsavedDraft && changedRevision) {
         storageError = "This note changed in another tab. Reload it before saving.";
         saveState = "error";
-      } else if (activeChanged && activeNoteId) {
+        saveFailure = "conflict";
+      } else if (activeChanged && activeNoteId && !hasUnsavedDraft) {
         const activeNote = notes.find((note) => note.id === activeNoteId);
         if (activeNote) await loadNote(activeNote.id);
         else resetActiveNote();
@@ -1538,7 +1571,10 @@ export function createPageController() {
         opened.getGithubBackupState(),
         opened.countPendingBackupOperations(),
       ]);
-      if (opened === vault && !disposed) [githubBackup, pendingBackupCount] = backup;
+      if (opened === vault && !disposed) {
+        [githubBackup, pendingBackupCount] = backup;
+        observedVaultVersion = await opened.getVersion();
+      }
     }
   }
 
@@ -2332,6 +2368,7 @@ export function createPageController() {
           saveState = markdown === contents ? "saved" : "unsaved";
           if (markdown !== contents) saveRequested = true;
           storageError = "";
+          saveFailure = undefined;
         }
         appendNativeDirectoryNotice();
         try {
@@ -2348,11 +2385,32 @@ export function createPageController() {
         if (activeNoteId === noteId) {
           storageError = error instanceof Error ? error.message : "Autosave failed.";
           saveState = "error";
+          saveFailure = error instanceof VaultConflictError ? "conflict" : "storage";
         }
         return false;
       }
     }
     return true;
+  }
+
+  async function saveConflictCopy(): Promise<void> {
+    const opened = vault;
+    if (!opened || saveFailure !== "conflict") return;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = undefined;
+    saveRequested = false;
+    const contents = markdown;
+    const base = `${titleFromMarkdown(contents).replace(/[\\/]/g, "-")} (conflict copy)`;
+    const taken = new Set(
+      (await opened.listNotes()).map((note) => noteFilePath(note).toLocaleLowerCase()),
+    );
+    let name = normalizeFileName(base);
+    for (let index = 2; taken.has(name.toLocaleLowerCase()); index += 1)
+      name = normalizeFileName(`${base} ${index}`);
+    const copy = await opened.saveNote({ title: base, markdown: contents, sourcePath: name });
+    await loadNote(copy.id);
+    await refreshFileTree();
+    pendingBackupCount = await opened.countPendingBackupOperations();
   }
 
   function updateMarkdown(value: string, options: { recordHistory?: boolean } = {}): void {
@@ -3225,6 +3283,10 @@ export function createPageController() {
   }
 
   return {
+    get saveConflict() {
+      return saveFailure === "conflict";
+    },
+    saveConflictCopy: workspaceCommand(saveConflictCopy),
     get editorBlocked() {
       return editorBlocked;
     },
