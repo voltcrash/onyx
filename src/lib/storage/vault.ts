@@ -268,6 +268,16 @@ export class Vault {
         throw new VaultConflictError(id, input.expectedRevision, actualRevision);
       }
 
+      if (existing?.deletedAt) throw new Error("Restore the note from Trash before editing it");
+      if (input.sourcePath) {
+        const occupied = (await this.#database.getNotes()).some(
+          (note) =>
+            note.id !== id &&
+            !note.deletedAt &&
+            note.sourcePath?.toLocaleLowerCase() === input.sourcePath!.toLocaleLowerCase(),
+        );
+        if (occupied) throw new Error("A note already uses that file path");
+      }
       const now = new Date().toISOString();
       const path = existing?.path ?? `notes/${id}.md`;
       const markdown = input.markdown;
@@ -1032,7 +1042,9 @@ export class Vault {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         const { operations, noteContents, version } = await this.#getBackupSnapshotRecords();
         const latestByPath = new Map<string, BackupOperation>();
-        for (const operation of operations) latestByPath.set(operation.path, operation);
+        for (const operation of operations) {
+          if (operation.kind !== "metadata:upsert") latestByPath.set(operation.path, operation);
+        }
 
         const changes = await Promise.all(
           [...latestByPath.values()].map(async (operation) => {
@@ -1068,14 +1080,16 @@ export class Vault {
 
   async createBackupManifest(options: VaultOperationOptions = {}): Promise<VaultBackupManifest> {
     return this.#withLock(async () => {
-      const [notes, attachments] = await Promise.all([
+      const [notes, attachments, folders] = await Promise.all([
         this.#database.getNotes(),
         this.#database.getAttachments(),
+        this.#database.getFileFolders(),
       ]);
       const activeNotes = notes.filter((note) => !note.deletedAt);
       const activeIds = new Set(activeNotes.map((note) => note.id));
       return {
         version: 1,
+        folders,
         notes: activeNotes,
         attachments: attachments.filter((attachment) => activeIds.has(attachment.noteId)),
       };

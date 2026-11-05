@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   createSearchPostings,
+  orderedBackupOperations,
   diffSearchPostings,
   type SearchDocument,
   type SearchPosting,
@@ -62,4 +63,21 @@ describe("diffSearchPostings", () => {
       ),
     ).toEqual({ removed: ["gone"], written: [posting("changed", 2), posting("added", 1)] });
   });
+});
+
+it("orders same-millisecond backup changes by their persisted sequence", () => {
+  const operation = {
+    kind: "note:upsert" as const,
+    entityId: "n",
+    noteId: "n",
+    path: "notes/n.md",
+    revision: 1,
+    createdAt: "same",
+  };
+  expect(
+    orderedBackupOperations([
+      { ...operation, id: "a", sequence: 2 },
+      { ...operation, id: "z", sequence: 1 },
+    ]).map((op) => op.id),
+  ).toEqual(["z", "a"]);
 });

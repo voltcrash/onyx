@@ -87,9 +87,11 @@ export type BackupOperationKind =
   | "attachment:delete"
   | "attachment:upsert"
   | "note:delete"
-  | "note:upsert";
+  | "note:upsert"
+  | "metadata:upsert";
 
 export interface BackupOperation {
+  sequence?: number;
   id: VaultId;
   kind: BackupOperationKind;
   entityId: VaultId;
