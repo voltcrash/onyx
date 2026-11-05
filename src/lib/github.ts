@@ -3,7 +3,6 @@ import type {
   Vault,
   VaultBackupManifest,
   VaultRestoreFile,
-  VaultOperationContext,
 } from "./storage/index.js";
 import { githubTargetKey } from "./storage/types.js";
 import { authClient } from "./auth-client.js";
@@ -426,6 +425,19 @@ export async function restoreVaultFromGithub(
   vault: Vault,
   backupState: GithubBackupState,
   commitSha: string,
+  options: { expectedVersion?: number } = {},
+): Promise<GithubRestoreResult> {
+  const expectedVersion = options.expectedVersion ?? (await vault.getVersion());
+  const restore = () =>
+    restoreVaultFromGithubUnlocked(vault, { ...backupState }, commitSha, expectedVersion);
+  return vault.runBackupExclusive(restore);
+}
+
+async function restoreVaultFromGithubUnlocked(
+  vault: Vault,
+  backupState: GithubBackupState,
+  commitSha: string,
+  expectedVersion: number,
 ): Promise<GithubRestoreResult> {
   if (!/^[0-9a-f]{40}$/i.test(commitSha)) throw new Error("Select a valid GitHub backup commit");
   await validateGithubBackupRepository(backupState);
@@ -457,13 +469,12 @@ export async function restoreVaultFromGithub(
       contents: await downloadGithubBlob(repositoryPath, sha),
     }),
   );
-  if (!files.some((file) => file.path.startsWith("notes/"))) {
-    throw new Error("The selected commit does not contain an Onyx vault in that directory");
-  }
   const manifestSha = selectedBlobs.get(".onyx.json");
   const manifest = manifestSha
     ? await parseBackupManifest(await downloadGithubBlob(repositoryPath, manifestSha))
     : undefined;
+  if (!manifest && !files.some((file) => file.path.startsWith("notes/")))
+    throw new Error("The selected commit does not contain an Onyx vault in that directory");
   const changedPaths = new Set<string>();
   for (const [path, sha] of selectedBlobs) {
     if (isVaultFile(path) && currentBlobs.get(path) !== sha) changedPaths.add(path);
@@ -473,38 +484,20 @@ export async function restoreVaultFromGithub(
   }
   const restoredAt =
     selectedCommit.committer?.date ?? selectedCommit.author?.date ?? new Date().toISOString();
-  const applyRestore = async (context?: VaultOperationContext): Promise<GithubRestoreResult> => {
-    const result = context
-      ? await vault.restoreBackup(files, {
-          manifest,
-          pendingPaths: [...changedPaths],
-          restoredAt,
-          context,
-        })
-      : await vault.restoreBackup(files, {
-          manifest,
-          pendingPaths: [...changedPaths],
-          restoredAt,
-        });
-    const state: GithubBackupState = {
-      ...backupState,
-      lastCommitSha: selectedCommit.sha,
-      updatedAt: new Date().toISOString(),
-    };
-    if (context) await vault.saveGithubBackupState(state, { context });
-    else await vault.saveGithubBackupState(state);
-    return { ...result, state };
+  const state: GithubBackupState = {
+    ...backupState,
+    lastCommitSha: selectedCommit.sha,
+    pendingCommitSha: undefined,
+    updatedAt: new Date().toISOString(),
   };
-  const runExclusive = (
-    vault as unknown as {
-      runExclusive?: (
-        task: (context: VaultOperationContext) => Promise<GithubRestoreResult>,
-      ) => Promise<GithubRestoreResult>;
-    }
-  ).runExclusive;
-  return typeof runExclusive === "function"
-    ? runExclusive.call(vault, applyRestore)
-    : applyRestore();
+  const result = await vault.restoreBackup(files, {
+    manifest,
+    pendingPaths: [...changedPaths],
+    restoredAt,
+    expectedVersion,
+    githubBackup: state,
+  });
+  return { ...result, state };
 }
 
 export async function githubRequest<T>(path: `/${string}`, init: RequestInit = {}): Promise<T> {

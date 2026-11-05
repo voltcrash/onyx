@@ -172,3 +172,44 @@ describe("Backup baselines", () => {
     expect(captured.manifest.notes[0].id).toBe("n");
   });
 });
+
+describe("Restore identity", () => {
+  it("rejects a changed local vault before replacing any files", async () => {
+    const replace = vi.fn();
+    const coordination = { runExclusive: <T>(task: () => Promise<T>) => task() };
+    const vault = Reflect.construct(Vault, [
+      { getVaultVersion: async () => 2 },
+      { replace },
+      coordination,
+    ]) as Vault;
+    await expect(
+      vault.restoreBackup([], {
+        manifest: { version: 1, notes: [], attachments: [] },
+        restoredAt: "now",
+        expectedVersion: 1,
+      }),
+    ).rejects.toThrow("changed in another tab");
+    expect(replace).not.toHaveBeenCalled();
+  });
+  it("restores an empty manifest and its folders in the same commit", async () => {
+    const replaceVault = vi.fn();
+    const coordination = { runExclusive: <T>(task: () => Promise<T>) => task(), publish: vi.fn() };
+    const vault = Reflect.construct(Vault, [
+      { getVaultVersion: async () => 1, replaceVault },
+      {
+        replace: async (_files: unknown, commit: (generation: string) => Promise<void>) =>
+          commit("restored"),
+      },
+      coordination,
+    ]) as Vault;
+    const folders = [{ id: "f", path: "empty", createdAt: "", updatedAt: "" }];
+    await expect(
+      vault.restoreBackup([], {
+        manifest: { version: 1, notes: [], attachments: [], folders },
+        restoredAt: "now",
+        expectedVersion: 1,
+      }),
+    ).resolves.toEqual({ noteCount: 0, attachmentCount: 0 });
+    expect(replaceVault.mock.calls[0][7]).toMatchObject({ folders, generation: "restored" });
+  });
+});

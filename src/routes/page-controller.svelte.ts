@@ -209,6 +209,8 @@ export function createPageController() {
   // Set when an automatic backup fails, so it does not retry until the user backs up by hand.
   let autoBackupPaused = $state(false);
   let restoreModalOpen = $state(false);
+  let restoreSequence = 0;
+  let restoreSource: { configuration: GithubBackupState; version: number } | undefined;
   let restoreState = $state<RestoreState>("idle");
   let restoreMessage = $state("");
   let restoreCommits = $state<GithubBackupCommit[]>([]);
@@ -650,7 +652,7 @@ export function createPageController() {
     };
     const onOffline = () => {
       isOnline = false;
-      restoreModalOpen = false;
+      if (restoreState !== "restoring") restoreModalOpen = false;
       if (githubRestoreTimer !== undefined) {
         window.clearTimeout(githubRestoreTimer);
         githubRestoreTimer = undefined;
@@ -1088,23 +1090,44 @@ export function createPageController() {
     };
   }
 
+  function invalidateRestoreSource(): void {
+    restoreSequence += 1;
+    restoreSource = undefined;
+    selectedRestoreSha = "";
+    restoreCommits = [];
+    restoreState = "idle";
+  }
+
   async function loadRestoreCommits(): Promise<void> {
-    if (!isOnline || !restoreOwner.trim() || !restoreRepository.trim() || !restoreBranch.trim())
+    if (
+      !isOnline ||
+      !vault ||
+      restoreState === "restoring" ||
+      !restoreOwner.trim() ||
+      !restoreRepository.trim() ||
+      !restoreBranch.trim()
+    )
       return;
+    const opened = vault;
+    const sequence = ++restoreSequence;
     restoreState = "loading";
     restoreMessage = "";
     selectedRestoreSha = "";
+    restoreSource = undefined;
     try {
-      restoreCommits = await (
-        await loadGithubModule()
-      ).listGithubBackupCommits(restoreConfiguration());
-      selectedRestoreSha = restoreCommits[0]?.sha ?? "";
-      restoreMessage =
-        restoreCommits.length === 0
-          ? "No backup commits were found in this repository and directory."
-          : "";
+      const configuration = restoreConfiguration();
+      const commits = await (await loadGithubModule()).listGithubBackupCommits(configuration);
+      const version = await opened.getVersion();
+      if (disposed || sequence !== restoreSequence || opened !== vault) return;
+      restoreSource = { configuration, version };
+      restoreCommits = commits;
+      selectedRestoreSha = commits[0]?.sha ?? "";
+      restoreMessage = commits.length
+        ? ""
+        : "No backup commits were found in this repository and directory.";
       restoreState = "idle";
     } catch (error) {
+      if (disposed || sequence !== restoreSequence || opened !== vault) return;
       restoreCommits = [];
       restoreState = "error";
       restoreMessage =
@@ -1113,7 +1136,17 @@ export function createPageController() {
   }
 
   async function restoreSelectedCommit(): Promise<void> {
-    if (!isOnline || !vault || !selectedRestoreSha || restoreState === "restoring") return;
+    if (
+      !isOnline ||
+      !vault ||
+      !restoreSource ||
+      !selectedRestoreSha ||
+      restoreState === "restoring"
+    )
+      return;
+    const opened = vault;
+    const source = restoreSource;
+    const sha = selectedRestoreSha;
     if (!(await settleDraft())) return;
     const previousSaveState = saveState;
     if (saveTimer) window.clearTimeout(saveTimer);
@@ -1127,21 +1160,24 @@ export function createPageController() {
     try {
       const result = await (
         await loadGithubModule()
-      ).restoreVaultFromGithub(vault, restoreConfiguration(), selectedRestoreSha);
+      ).restoreVaultFromGithub(opened, source.configuration, sha, {
+        expectedVersion: source.version,
+      });
+      if (disposed || opened !== vault) return;
       githubBackup = result.state;
       pendingBackupCount = await vault.countPendingBackupOperations();
       const notes = await vault.listNotes();
       folders = await vault.listFolders();
       searchQuery = "";
-      await loadNote(notes[0].id);
+      if (notes[0]) await loadNote(notes[0].id);
+      else resetActiveNote();
       vaultAttachments = await vault.listAttachments();
       await runSearch("");
       restoreModalOpen = false;
       restoreState = "idle";
       backupState = "success";
       backupMessage = `Restored ${result.noteCount} ${result.noteCount === 1 ? "note" : "notes"} and ${result.attachmentCount} ${result.attachmentCount === 1 ? "attachment" : "attachments"} from GitHub.`;
-      backupCommitUrl =
-        restoreCommits.find((commit) => commit.sha === selectedRestoreSha)?.url ?? "";
+      backupCommitUrl = restoreCommits.find((commit) => commit.sha === sha)?.url ?? "";
     } catch (error) {
       saveState = previousSaveState;
       restoreState = "error";
@@ -3253,7 +3289,9 @@ export function createPageController() {
       return restoreModalOpen;
     },
     set restoreModalOpen(value: boolean) {
+      if (restoreState === "restoring") return;
       restoreModalOpen = value;
+      if (!value) invalidateRestoreSource();
     },
     get restoreState() {
       return restoreState;
@@ -3268,31 +3306,40 @@ export function createPageController() {
       return selectedRestoreSha;
     },
     set selectedRestoreSha(value: string) {
+      if (restoreState === "restoring") return;
       selectedRestoreSha = value;
     },
     get restoreOwner() {
       return restoreOwner;
     },
     set restoreOwner(value: string) {
+      if (restoreState === "restoring" || value === restoreOwner) return;
       restoreOwner = value;
+      invalidateRestoreSource();
     },
     get restoreRepository() {
       return restoreRepository;
     },
     set restoreRepository(value: string) {
+      if (restoreState === "restoring" || value === restoreRepository) return;
       restoreRepository = value;
+      invalidateRestoreSource();
     },
     get restoreBranch() {
       return restoreBranch;
     },
     set restoreBranch(value: string) {
+      if (restoreState === "restoring" || value === restoreBranch) return;
       restoreBranch = value;
+      invalidateRestoreSource();
     },
     get restoreDirectory() {
       return restoreDirectory;
     },
     set restoreDirectory(value: string) {
+      if (restoreState === "restoring" || value === restoreDirectory) return;
       restoreDirectory = value;
+      invalidateRestoreSource();
     },
     get theme() {
       return theme;
