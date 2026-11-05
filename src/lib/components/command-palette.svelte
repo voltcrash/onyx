@@ -33,6 +33,7 @@
 </script>
 
 <script lang="ts">
+	import { nextEnabledIndex } from '#lib/palette-navigation.ts';
 	import { LoaderCircle, Search } from '@lucide/svelte';
 
 	interface Props {
@@ -74,7 +75,7 @@
 
 	$effect(() => {
 		const first = matches.findIndex((item) => !item.disabled);
-		activeIndex = first === -1 ? 0 : first;
+		activeIndex = first;
 	});
 
 	$effect(() => {
@@ -123,12 +124,7 @@
 
 	function move(delta: number): void {
 		if (matches.length === 0) return;
-		let next = activeIndex;
-		for (let step = 0; step < matches.length; step += 1) {
-			next = (next + delta + matches.length) % matches.length;
-			if (!matches[next]?.disabled) break;
-		}
-		activeIndex = next;
+		activeIndex = nextEnabledIndex(matches,activeIndex,delta);
 		scrollActiveIntoView();
 	}
 
