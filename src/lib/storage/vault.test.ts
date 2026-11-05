@@ -225,3 +225,40 @@ it("does not clear a vault that changed after confirmation", async () => {
   await expect(vault.clear(1)).rejects.toThrow("changed in another tab");
   expect(replace).not.toHaveBeenCalled();
 });
+
+describe("Native directory configuration changes", () => {
+  it("stops mirroring after another tab disconnects the native folder", async () => {
+    const native = memoryDirectory("external");
+    Object.assign(native, {
+      queryPermission: async () => "granted",
+      requestPermission: async () => "granted",
+    });
+    vi.stubGlobal("showDirectoryPicker", async () => native);
+    let stored: FileSystemDirectoryHandle | undefined;
+    const database = {
+      getNativeDirectoryHandle: async () => stored,
+      setNativeDirectoryHandle: async (handle: FileSystemDirectoryHandle) => {
+        stored = handle;
+      },
+      getNote: async () => undefined,
+      putNote: async () => undefined,
+    };
+    const fallback = await VaultFilesystem.fromDirectory(memoryDirectory());
+    const filesystem = new MirroredVaultFilesystem(fallback, () => undefined);
+    const coordination = { runExclusive: <T>(task: () => Promise<T>) => task(), publish: vi.fn() };
+    const vault = Reflect.construct(Vault, [database, filesystem, coordination]) as Vault;
+    try {
+      await vault.connectNativeDirectory();
+      await vault.saveNote({ id: "n", title: "N", markdown: "mirrored" });
+      stored = undefined;
+      await vault.saveNote({ id: "n", title: "N", markdown: "local only" });
+      expect(await (await VaultFilesystem.fromDirectory(native)).readText("notes/n.md")).toBe(
+        "mirrored",
+      );
+      expect(await fallback.readText("notes/n.md")).toBe("local only");
+      expect(vault.getFileStorageStatus().mode).toBe("opfs");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

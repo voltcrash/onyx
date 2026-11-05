@@ -53,6 +53,8 @@ export class Vault {
   readonly #filesystem: MirroredVaultFilesystem;
   readonly #coordination: VaultCoordination;
   #nativeDirectoryName?: string;
+  #nativeHandle?: FileSystemDirectoryHandle;
+  #nativeInitialized = false;
   #nativeDirectoryPermission: VaultFileStorageStatus["nativeDirectoryPermission"];
   #activeOperation?: VaultOperationContext;
   readonly #pendingNoteFiles = new Set<string>();
@@ -155,6 +157,8 @@ export class Vault {
       await this.#filesystem.copyTo(nativeFilesystem);
       await this.#database.setNativeDirectoryHandle(handle);
       this.#filesystem.attach(nativeFilesystem);
+      this.#nativeHandle = handle;
+      this.#nativeInitialized = true;
       this.#nativeDirectoryName = handle.name;
       this.#nativeDirectoryPermission = "granted";
       return this.getFileStorageStatus();
@@ -165,6 +169,7 @@ export class Vault {
     return this.#withLock(async () => {
       await this.#database.deleteNativeDirectoryHandle();
       this.#filesystem.detach();
+      this.#nativeHandle = undefined;
       this.#nativeDirectoryName = undefined;
       this.#nativeDirectoryPermission = detectBrowserStorageSupport().directoryPicker
         ? "not-configured"
@@ -278,21 +283,39 @@ export class Vault {
   }
 
   async #restoreNativeDirectory(): Promise<void> {
+    await this.#withLock(() => this.#syncNativeDirectory());
+    this.#nativeInitialized = true;
+  }
+
+  async #syncNativeDirectory(): Promise<void> {
     if (!detectBrowserStorageSupport().directoryPicker) return;
     try {
       const handle = await this.#database.getNativeDirectoryHandle();
-      if (!handle) return;
+      if (!handle) {
+        this.#filesystem.detach();
+        this.#nativeHandle = undefined;
+        this.#nativeDirectoryName = undefined;
+        this.#nativeDirectoryPermission = "not-configured";
+        return;
+      }
       this.#nativeDirectoryName = handle.name;
       const permission = await handle.queryPermission({ mode: "readwrite" });
+      const same =
+        this.#nativeHandle &&
+        (this.#nativeHandle === handle || (await this.#nativeHandle.isSameEntry(handle)));
+      if (same && permission === "granted" && this.#nativeDirectoryPermission === "granted") return;
+      this.#filesystem.detach();
+      this.#nativeHandle = undefined;
       this.#nativeDirectoryPermission = permission;
       if (permission !== "granted") return;
-      await this.#withLock(async () => {
-        const mirror = await VaultFilesystem.fromDirectory(handle);
-        await this.#filesystem.copyTo(mirror);
-        this.#filesystem.attach(mirror);
-      });
+      const mirror = await VaultFilesystem.fromDirectory(handle);
+      await this.#filesystem.copyTo(mirror);
+      this.#filesystem.attach(mirror);
+      this.#nativeHandle = handle;
     } catch {
-      this.#nativeDirectoryPermission = "denied";
+      this.#filesystem.detach();
+      this.#nativeHandle = undefined;
+      this.#nativeDirectoryPermission = "error";
     }
   }
 
@@ -1538,6 +1561,7 @@ export class Vault {
       const previous = this.#activeOperation;
       this.#activeOperation = operation;
       try {
+        if (this.#nativeInitialized) await this.#syncNativeDirectory();
         return await task(operation);
       } finally {
         this.#activeOperation = previous;
