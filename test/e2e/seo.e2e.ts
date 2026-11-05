@@ -3,7 +3,7 @@ import { canonicalUrl, publicPaths } from "../../src/lib/site.ts";
 
 for (const path of publicPaths) {
   test(`public HTML is indexable without JavaScript: ${path}`, async ({ request }) => {
-    const response = await request.get(`http://localhost:4173${path}?utm_source=seo-test`);
+    const response = await request.get(`${path}?utm_source=seo-test`);
     expect(response.status()).toBe(200);
     expect(response.headers()["x-robots-tag"] ?? "").not.toContain("noindex");
     const html = await response.text();
@@ -21,16 +21,16 @@ for (const path of publicPaths) {
 }
 
 test("sitemap and AI discovery list only public product pages", async ({ request }) => {
-  const sitemap = await request.get("http://localhost:4173/sitemap.xml");
+  const sitemap = await request.get("/sitemap.xml");
   expect(sitemap.headers()["content-type"]).toMatch(/(?:application|text)\/xml/);
   const xml = await sitemap.text();
   expect([...xml.matchAll(/<loc>/g)]).toHaveLength(publicPaths.length);
   for (const path of publicPaths) expect(xml).toContain(`<loc>${canonicalUrl(path)}</loc>`);
-  const robots = await request.get("http://localhost:4173/robots.txt");
+  const robots = await request.get("/robots.txt");
   const rules = await robots.text();
   expect(rules).toContain("User-agent: *\nAllow: /\nDisallow: /api/");
   expect(rules).toContain(`Sitemap: ${canonicalUrl("/sitemap.xml")}`);
-  const llms = await request.get("http://localhost:4173/llms.txt");
+  const llms = await request.get("/llms.txt");
   expect(llms.headers()["content-type"]).toContain("text/plain");
   const reference = await llms.text();
   expect(reference).toContain(`(${canonicalUrl("/")})`);
@@ -39,11 +39,11 @@ test("sitemap and AI discovery list only public product pages", async ({ request
 
 test("errors and authentication responses remain excluded", async ({ request }) => {
   for (const path of ["/missing", "/api/auth/get-session"]) {
-    const response = await request.get(`http://localhost:4173${path}`);
+    const response = await request.get(`${path}`);
     expect(response.headers()["x-robots-tag"]).toContain("noindex");
   }
   for (const path of ["/about", "/guides/offline-markdown-editor"]) {
-    const response = await request.get(`http://localhost:4173${path}`);
+    const response = await request.get(`${path}`);
     expect(response.status()).toBe(404);
     expect(response.headers()["x-robots-tag"]).toContain("noindex");
   }

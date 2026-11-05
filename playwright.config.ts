@@ -15,5 +15,5 @@ export default defineConfig({
   testMatch: "**/*.e2e.{ts,js}",
   // Hosted CI runners are small, and parallel workers there starve the preview server of CPU.
   workers: env.CI ? 1 : undefined,
-  use: { trace: "retain-on-failure" },
+  use: { baseURL: `http://localhost:${port}`, trace: "retain-on-failure" },
 });
