@@ -212,3 +212,7 @@ describe("outputFileName", () => {
     expect(outputFileName("   ", "pdf")).toBe("note.pdf");
   });
 });
+
+it("formats tags without treating quoted angle brackets as tag boundaries", () => {
+  expect(formatHtmlSource('<p title="a > b">text</p>')).toBe('<p title="a > b">\n  text\n</p>');
+});

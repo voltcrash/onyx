@@ -1,4 +1,10 @@
-import { literalAt, parseMarkdownSource, plainText, type SourceNode } from "./markdown-source.js";
+import {
+  mapMarkdownProse,
+  literalAt,
+  parseMarkdownSource,
+  plainText,
+  type SourceNode,
+} from "./markdown-source.js";
 import {
   basename,
   decodePath,
@@ -232,37 +238,27 @@ export function rewriteLocalLinks(
 ): string {
   const previousDirectory = parentPath(previousNotePath ?? "");
   const nextDirectory = parentPath(nextNotePath ?? "");
-  let fence: string | undefined;
-  return markdown
-    .split("\n")
-    .map((line) => {
-      const marker = line.match(/^\s{0,3}(`{3,}|~{3,})/)?.[1];
-      if (marker && (!fence || (marker[0] === fence[0] && marker.length >= fence.length))) {
-        fence = fence ? undefined : marker;
-        return line;
-      }
-      if (fence) return line;
-      return line.replace(
-        /(\]\()(<[^>\n]*>|[^)\s]+)/g,
-        (match, opening: string, rawDestination: string) => {
-          const bracketed = rawDestination.startsWith("<");
-          const destination = bracketed ? rawDestination.slice(1, -1) : rawDestination;
-          if (/^(?:[a-z][a-z\d+.-]*:|#|[\\/])/i.test(destination)) return match;
-          const suffixIndex = destination.search(/[?#]/);
-          const path = suffixIndex === -1 ? destination : destination.slice(0, suffixIndex);
-          const suffix = suffixIndex === -1 ? "" : destination.slice(suffixIndex);
-          const decoded = decodePath(path);
-          const resolved = resolveRelativePath(previousDirectory, decoded);
-          const target = resolved ? mapPath(resolved) : undefined;
-          if (!target) return match;
-          const relative = relativePath(nextDirectory, target);
-          return bracketed
-            ? `${opening}<${relative}${suffix}>`
-            : `${opening}${encodePath(relative)}${suffix}`;
-        },
-      );
-    })
-    .join("\n");
+  return mapMarkdownProse(markdown, (prose) =>
+    prose.replace(
+      /(\]\()(<[^>\n]*>|[^)\s]+)/g,
+      (match, opening: string, rawDestination: string) => {
+        const bracketed = rawDestination.startsWith("<");
+        const destination = bracketed ? rawDestination.slice(1, -1) : rawDestination;
+        if (/^(?:[a-z][a-z\d+.-]*:|#|[\\/])/i.test(destination)) return match;
+        const suffixIndex = destination.search(/[?#]/);
+        const path = suffixIndex === -1 ? destination : destination.slice(0, suffixIndex);
+        const suffix = suffixIndex === -1 ? "" : destination.slice(suffixIndex);
+        const decoded = decodePath(path);
+        const resolved = resolveRelativePath(previousDirectory, decoded);
+        const target = resolved ? mapPath(resolved) : undefined;
+        if (!target) return match;
+        const relative = relativePath(nextDirectory, target);
+        return bracketed
+          ? `${opening}<${relative}${suffix}>`
+          : `${opening}${encodePath(relative)}${suffix}`;
+      },
+    ),
+  );
 }
 
 export interface ListEnterResult {

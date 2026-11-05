@@ -1,5 +1,6 @@
 import { BlobReader, BlobWriter, ZipReader, ZipWriter, type Entry } from "@zip.js/zip.js";
 
+import { mapMarkdownProse } from "./markdown-source.js";
 import { titleFromMarkdown } from "./markdown-utils.js";
 import {
   basename,
@@ -593,23 +594,25 @@ async function rewriteMarkdownLinks(
     return `${encodePath(relativePath(exportDirectory, exportPath))}${suffix}`;
   };
 
-  const withInlineLinks = markdown.replace(
-    /(!?\[[^\]]*\]\(\s*)(<[^>\n]+>|[^\s)\n]+)/g,
-    (match, prefix: string, destination: string) => {
-      const angleBrackets = destination.startsWith("<") && destination.endsWith(">");
-      const rawDestination = angleBrackets ? destination.slice(1, -1) : destination;
-      const rewritten = rewrite(rawDestination);
-      if (!rewritten) return match;
-      return `${prefix}${angleBrackets ? `<${rewritten}>` : rewritten}`;
-    },
-  );
-  return withInlineLinks.replace(
-    /(!?\[\[)([^\]|#]+)(?=\||#|\]\])/g,
-    (match, prefix: string, destination: string) => {
-      const rewritten = rewrite(destination);
-      return rewritten ? `${prefix}${rewritten}` : match;
-    },
-  );
+  return mapMarkdownProse(markdown, (prose) => {
+    const withInlineLinks = prose.replace(
+      /(!?\[[^\]]*\]\(\s*)(<[^>\n]+>|[^\s)\n]+)/g,
+      (match, prefix: string, destination: string) => {
+        const angleBrackets = destination.startsWith("<") && destination.endsWith(">");
+        const rawDestination = angleBrackets ? destination.slice(1, -1) : destination;
+        const rewritten = rewrite(rawDestination);
+        if (!rewritten) return match;
+        return `${prefix}${angleBrackets ? `<${rewritten}>` : rewritten}`;
+      },
+    );
+    return withInlineLinks.replace(
+      /(!?\[\[)([^\]|#]+)(?=\||#|\]\])/g,
+      (match, prefix: string, destination: string) => {
+        const rewritten = rewrite(destination);
+        return rewritten ? `${prefix}${rewritten}` : match;
+      },
+    );
+  });
 }
 
 function resolveLinkPath(directory: string, destination: string): string | undefined {

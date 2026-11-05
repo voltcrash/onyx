@@ -1,4 +1,10 @@
-import { literalAt, parseMarkdownSource, visitProse, type SourceNode } from "./markdown-source.js";
+import {
+  opaqueSourceRanges,
+  literalAt,
+  parseMarkdownSource,
+  visitProse,
+  type SourceNode,
+} from "./markdown-source.js";
 import {
   decodePath,
   encodePath,
@@ -16,8 +22,6 @@ interface LinkableNote {
 }
 
 const WIKI_LINK = /(!?)\[\[([^\]|\n]+?)(?:\|[^\]\n]+?)?\]\]/g;
-const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
-const INLINE_CODE = /(`+)[\s\S]*?\1/g;
 
 /** Splits `Note#Heading` into the note name and the heading it points at. */
 export function splitWikiTarget(target: string): { name: string; fragment: string } {
@@ -70,19 +74,19 @@ export function resolveWikiLink<T extends LinkableNote>(
 
 /** The note's text with code blocks and code spans blanked, so links inside code are ignored. */
 export function stripCode(markdown: string): string {
-  let fence: string | undefined;
-  return markdown
-    .split(/\r?\n/)
-    .map((line) => {
-      const marker = line.match(FENCE)?.[1];
-      if (marker) {
-        if (!fence) fence = marker;
-        else if (marker[0] === fence[0] && marker.length >= fence.length) fence = undefined;
-        return "";
-      }
-      return fence ? "" : line.replace(INLINE_CODE, " ");
-    })
-    .join("\n");
+  let cursor = 0;
+  const parts: string[] = [];
+  for (const range of opaqueSourceRanges(markdown)) {
+    parts.push(
+      markdown.slice(cursor, range.start),
+      range.type === "inlineCode"
+        ? " "
+        : markdown.slice(range.start, range.end).replace(/[^\n]/g, ""),
+    );
+    cursor = range.end;
+  }
+  parts.push(markdown.slice(cursor));
+  return parts.join("");
 }
 
 /** Whether `markdown`, the text of the note at `sourcePath`, links to `target`. */

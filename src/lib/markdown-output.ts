@@ -78,7 +78,7 @@ export function formatHtmlSource(html: string): string {
       text += html.slice(index);
       break;
     }
-    const end = html.indexOf(">", start);
+    const end = htmlTagEnd(html, start);
     if (end === -1) {
       text += html.slice(index);
       break;
@@ -94,17 +94,21 @@ export function formatHtmlSource(html: string): string {
     }
     if (PRESERVED_TAGS.has(name) && !closing) {
       const closeIndex = html.toLowerCase().indexOf(`</${name}`, end + 1);
-      let closeEnd = closeIndex === -1 ? -1 : html.indexOf(">", closeIndex);
+      let closeEnd = closeIndex === -1 ? -1 : htmlTagEnd(html, closeIndex);
       if (name === "svg") {
         closeEnd = -1;
         const tags = /<\/?svg\b[^>]*>/gi;
         tags.lastIndex = start;
         let nesting = 0;
         for (let match; (match = tags.exec(html));) {
-          if (match[0].startsWith("</")) nesting -= 1;
-          else if (!match[0].endsWith("/>")) nesting += 1;
+          const end = htmlTagEnd(html, match.index);
+          if (end === -1) break;
+          const tag = html.slice(match.index, end + 1);
+          tags.lastIndex = end + 1;
+          if (tag.startsWith("</")) nesting -= 1;
+          else if (!tag.endsWith("/>")) nesting += 1;
           if (nesting === 0) {
-            closeEnd = tags.lastIndex - 1;
+            closeEnd = end;
             break;
           }
         }
@@ -123,6 +127,18 @@ export function formatHtmlSource(html: string): string {
   }
   flushText();
   return lines.join("\n");
+}
+
+function htmlTagEnd(html: string, start: number): number {
+  let quote: "'" | '"' | undefined;
+  for (let index = start + 1; index < html.length; index += 1) {
+    const character = html[index];
+    if (quote) {
+      if (character === quote) quote = undefined;
+    } else if (character === "'" || character === '"') quote = character;
+    else if (character === ">") return index;
+  }
+  return -1;
 }
 
 /** Formats rendered blocks one at a time; joined by `HTML_SOURCE_SEPARATOR` they read as `formatHtmlSource`. */
