@@ -196,6 +196,8 @@ test("moves deleted notes to trash, restores them, and deletes them forever", as
   await file.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await expect(file).toBeHidden();
+  // Workspace commands issued while another is still running are ignored.
+  await expect(editor).toBeEnabled();
   await expect(page.getByRole("button", { name: "Close trash" })).toBeHidden();
 
   // Trash opens as its own sidebar panel with its keyboard shortcut.
@@ -214,6 +216,7 @@ test("moves deleted notes to trash, restores them, and deletes them forever", as
   await restored.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await expect(restored).toBeHidden();
+  await expect(editor).toBeEnabled();
   await openTrash(page);
   await page.getByRole("button", { name: "Delete Trashme forever", exact: true }).click();
   const confirmDialog = page.getByRole("alertdialog", { name: "Delete forever?" });
@@ -221,11 +224,13 @@ test("moves deleted notes to trash, restores them, and deletes them forever", as
   await expect(confirmDialog.getByRole("button", { name: "Cancel" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(confirmDialog).toBeHidden();
+  await expect(editor).toBeEnabled();
   await expect(page.getByRole("button", { name: "Restore Trashme", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Delete Trashme forever", exact: true }).click();
   await confirmDialog.getByRole("button", { name: "Delete forever" }).click();
   await expect(page.getByRole("button", { name: "Restore Trashme", exact: true })).toBeHidden();
   await expect(page.getByText("Trash is empty")).toBeVisible();
+  await expect(editor).toBeEnabled();
   await page.getByRole("button", { name: "Close trash" }).click();
 
   // Empty trash permanently deletes every trashed note at once.
@@ -240,6 +245,7 @@ test("moves deleted notes to trash, restores them, and deletes them forever", as
   await second.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await expect(second).toBeHidden();
+  await expect(editor).toBeEnabled();
   await openTrash(page);
   await page.getByRole("button", { name: "Empty trash", exact: true }).click();
   await page
