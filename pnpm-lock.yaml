@@ -203,8 +203,8 @@ importers:
         specifier: ^0.19.1
         version: 0.19.1
       pele:
-        specifier: ^1.12.0
-        version: 1.12.0
+        specifier: ^1.13.0
+        version: 1.13.0
       rehype-highlight:
         specifier: ^7.0.2
         version: 7.0.2
@@ -2252,8 +2252,8 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
-  pele@1.12.0:
-    resolution: {integrity: sha512-3OdOK6rvkaTB569R4/I8U0H82MqPRxj7vfkbowa2rRhgSBPFhvWlfFy5eae0jP+2A6hE8abE17nsdyxJz2VBiQ==}
+  pele@1.13.0:
+    resolution: {integrity: sha512-Ie8UKY9x00MsuR3jO6AzUwzK2Z6MIV3Tf4EDdITiuk8Uaz8K7g0R082WqsqNaSU8DdgkrRvZThzhit83mi/uiw==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -4318,7 +4318,7 @@ snapshots:
 
   pathe@2.0.3: {}
 
-  pele@1.12.0: {}
+  pele@1.13.0: {}
 
   picocolors@1.1.1: {}
 
