@@ -416,6 +416,8 @@ test("does not purge a newer trash incarnation after confirmation in another tab
   await page.locator('[data-file-path="Victim.md"]').click({ button: "right" });
   await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await expect(page.locator('[data-file-path="Victim.md"]')).toHaveCount(0);
+  // Workspace commands issued while another is still running are ignored.
+  await expect(editor).toBeEnabled();
   await openTrash(page);
   await page.getByRole("button", { name: "Delete Victim forever", exact: true }).click();
   const confirmation = page.getByRole("alertdialog", { name: "Delete forever?" });
@@ -436,6 +438,7 @@ test("does not purge a newer trash incarnation after confirmation in another tab
   await expect(
     page.getByRole("button", { name: "Restore New incarnation", exact: true }),
   ).toBeVisible();
+  await expect(editor).toBeEnabled();
   await page.getByRole("button", { name: "Restore New incarnation", exact: true }).click();
   await expectMarkdown(editor, "# New incarnation");
   await other.close();

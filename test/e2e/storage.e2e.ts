@@ -437,6 +437,8 @@ test("mirrors retained OPFS files after permanently deleting a sibling note", as
     .filter({ hasText: "Welcome to Onyx" })
     .click({ button: "right" });
   await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  // Workspace commands issued while another is still running are ignored.
+  await expect(editor).toBeEnabled();
   await page.keyboard.press("ControlOrMeta+g");
   await page.getByRole("button", { name: "Delete Welcome to Onyx forever", exact: true }).click();
   await page
