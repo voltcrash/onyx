@@ -87,7 +87,7 @@
     "@tailwindcss/vite": "^4.3.4",
     "@typescript/native": "npm:typescript@latest",
     "clsx": "^2.1.1",
-    "shadcn-svelte": "^1.7.2",
+    "shadcn-svelte": "^1.8.0",
     "svelte": "^5.57.3",
     "svelte-check": "^4.7.8",
     "tailwind-merge": "^3.7.0",
