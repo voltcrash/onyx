@@ -339,7 +339,7 @@ test("recovers an interrupted replacement before an already-open tab continues",
       page.evaluate(async (name) => {
         try {
           const root = await (await navigator.storage.getDirectory()).getDirectoryHandle("onyx");
-          return (
+          return await (
             await (await (await root.getDirectoryHandle("notes")).getFileHandle(name)).getFile()
           ).text();
         } catch {
