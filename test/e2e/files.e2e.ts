@@ -92,6 +92,8 @@ test("pins folders and individual files and remembers their pins", async ({ page
   const folderName = page.getByRole("textbox", { name: "Folder name" });
   await folderName.fill("Aardvark");
   await folderName.press("Enter");
+  await expect(page.locator('[data-folder-path="Aardvark"]')).toBeVisible();
+  await expect(editor).toBeEnabled();
 
   await page.getByRole("button", { name: "New folder", exact: true }).click();
   const pinnedFolderName = page.getByRole("textbox", { name: "Folder name" });
