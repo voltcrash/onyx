@@ -1,6 +1,5 @@
 node_modules
 .turbo
-.vercel-ci
 
 # Output
 .output
