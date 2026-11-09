@@ -25,6 +25,19 @@ test("non-production hostnames remain excluded", async ({ request }) => {
   expect(response.headers()["x-robots-tag"]).toContain("noindex");
 });
 
+test("static assets retain security headers and the service worker can update", async ({
+  request,
+}) => {
+  for (const path of ["/service-worker.js", "/manifest.webmanifest", "/icons/icon.svg"]) {
+    const response = await request.get(path);
+    expect(response.status()).toBe(200);
+    expect(response.headers()["x-content-type-options"]).toBe("nosniff");
+    expect(response.headers()["referrer-policy"]).toBe("no-referrer");
+    if (path !== "/icons/icon.svg")
+      expect(response.headers()["cache-control"]).toContain("no-cache");
+  }
+});
+
 test("sitemap and AI discovery list only public product pages", async ({ request }) => {
   const sitemap = await request.get("/sitemap.xml");
   expect(sitemap.headers()["content-type"]).toMatch(/(?:application|text)\/xml/);
