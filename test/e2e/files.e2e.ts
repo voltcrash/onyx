@@ -398,6 +398,7 @@ test("keeps a rejected name available for correction", async ({ page }) => {
   await name.fill("Plans");
   await name.press("Enter");
   await expect(page.locator('[data-folder-path="Plans"]')).toBeVisible();
+  await expect(name).toHaveCount(0);
   await newFolder.click();
   await name.fill("Plans");
   await name.press("Enter");

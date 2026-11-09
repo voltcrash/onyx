@@ -1,6 +1,4 @@
 node_modules
-.turbo
-.vercel-ci
 
 # Output
 .output
@@ -26,6 +24,7 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 # Playwright
 test-results
+playwright-report
 !.vscode/
 !.vscode/settings.json
 !.vscode/extensions.json
