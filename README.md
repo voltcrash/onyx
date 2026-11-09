@@ -148,7 +148,8 @@ Onyx requests the `repo` scope so it can create private repositories and write b
 - `src/service-worker/index.ts` caches the application shell for offline use.
 
 The app uses SvelteKit, TypeScript, Tailwind CSS, shadcn-svelte, and Vite+. It is configured for
-Vercel deployment.
+Cloudflare Workers deployment through Wrangler. See [deployment](docs/deployment.md) for
+account setup, secrets, domain cutover, previews, and rollback.
 
 ## Development
 
@@ -176,14 +177,15 @@ them.
 ## Continuous integration
 
 [GitHub Actions](https://github.com/voltcrash/onyx/actions/workflows/ci.yml) runs on pull requests
-and pushes to `main`, and can also be started manually. Two independent Ubuntu jobs run in parallel:
+and pushes to `main`, and can also be started manually. Two independent Ubuntu validation jobs
+run in parallel:
 
-| Job                                | Validation                                              |
-| ---------------------------------- | ------------------------------------------------------- |
-| Lint, types and unit tests         | `vp check`, `vp run check`, and `vp test`               |
-| Production build and browser tests | `vp run test:e2e` builds once, then tests with Chromium |
+| Job                                | Validation                                                                                                   |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Lint, types and unit tests         | `vp check`, `vp run check`, and `vp test`                                                                    |
+| Production build and browser tests | `vp run test:e2e` builds once, then tests the Worker in Chromium; `vp run deploy:check` validates its bundle |
 
-Both jobs use `setup-vp` to select Node.js from `package.json`, Vite+ from the workspace catalog,
+All jobs use `setup-vp` to select Node.js from `package.json`, Vite+ from the workspace catalog,
 and pnpm from `packageManager`. Dependencies are installed through `vp` with a frozen lockfile;
 the pnpm download store is cached by platform and lockfile. Browser binaries and test results
 are not cached. Chromium and its system dependencies are installed only in the browser job.
@@ -197,9 +199,16 @@ The browser job keeps Playwright's single worker to avoid starving the preview s
 starts a fresh production build, so a separate build job would duplicate that work. Focused tests
 (`test.only`) fail CI. Failures produce GitHub annotations, an HTML report, screenshots, and traces;
 reports and `test-results/` are uploaded for seven days. Download the `playwright-failures` artifact
-from the failed run to inspect them. No job needs GitHub OAuth credentials, a deployment, or an
-external service; GitHub API calls in the browser tests are intercepted locally. Vercel remains
-the deployment target.
+from the failed run to inspect them. Validation jobs need no real GitHub OAuth credentials or
+deployment. Auth handler tests use
+fixed placeholders, and GitHub API calls in the browser tests are intercepted locally.
+Playwright serves the production build through Wrangler and the local Workers runtime.
+
+After both jobs pass on a push to the current `main` commit, a deployment job publishes the
+Worker and assets with Wrangler. Production deployments are serialized. Pull requests never
+deploy production. Configure the repository secret `CLOUDFLARE_API_TOKEN` and variable
+`CLOUDFLARE_ACCOUNT_ID`; keep OAuth credentials in Worker secrets. See
+[deployment](docs/deployment.md) for the CLI setup and first cutover.
 
 To reproduce CI locally on Ubuntu:
 
