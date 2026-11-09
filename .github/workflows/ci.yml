@@ -23,6 +23,7 @@ jobs:
         uses: voidzero-dev/setup-vp@v1.22.0
         with:
           node-version-file: package.json
+          cache: true
           run-install: |
             args: ['--frozen-lockfile']
       - name: Check formatting, lint and TypeScript
@@ -45,6 +46,7 @@ jobs:
         uses: voidzero-dev/setup-vp@v1.22.0
         with:
           node-version-file: package.json
+          cache: true
           run-install: |
             args: ['--frozen-lockfile']
       - name: Install Chromium and system dependencies
