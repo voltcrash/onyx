@@ -1,4 +1,9 @@
-import { BETTER_AUTH_SECRET, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET } from "$app/env/private";
+import {
+  BETTER_AUTH_SECRET,
+  BETTER_AUTH_URL,
+  GITHUB_CLIENT_ID,
+  GITHUB_CLIENT_SECRET,
+} from "$app/env/private";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 
 const SESSION_LENGTH_SECONDS = 7 * 24 * 60 * 60;
@@ -26,6 +31,7 @@ export function getAuth(): ReturnType<typeof createAuth> {
 
 function createAuth(secret: string, clientId: string, clientSecret: string) {
   const options = {
+    baseURL: BETTER_AUTH_URL?.trim() || undefined,
     secret,
     socialProviders: {
       github: {
