@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "onyx",
+  "main": ".svelte-kit/cloudflare/_worker.js",
+  "compatibility_date": "2026-11-09",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "onyx.voltcrash.com", "custom_domain": true }],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".svelte-kit/cloudflare",
+  },
+  "vars": {
+    "DEPLOYMENT_ENV": "production",
+    "BETTER_AUTH_URL": "https://onyx.voltcrash.com",
+  },
+  "observability": { "enabled": true },
+  "env": {
+    "preview": {
+      "name": "onyx-preview",
+      "workers_dev": true,
+      "preview_urls": false,
+      "routes": [],
+      "vars": { "DEPLOYMENT_ENV": "preview", "BETTER_AUTH_URL": "" },
+    },
+  },
+}
