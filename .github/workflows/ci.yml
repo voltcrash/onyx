@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Lint, types and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Vite+ and install dependencies
+        uses: voidzero-dev/setup-vp@v1.22.0
+        with:
+          node-version-file: package.json
+          run-install: |
+            args: ['--frozen-lockfile']
+      - name: Check formatting, lint and TypeScript
+        run: vp check
+      - name: Check Svelte, themes and service worker
+        run: vp run check
+      - name: Unit tests
+        run: vp test
+
+  e2e:
+    name: Production build and browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Vite+ and install dependencies
+        uses: voidzero-dev/setup-vp@v1.22.0
+        with:
+          node-version-file: package.json
+          run-install: |
+            args: ['--frozen-lockfile']
+      - name: Install Chromium and system dependencies
+        run: vp exec playwright install --with-deps chromium
+      - name: Build and test in Chromium
+        run: vp run test:e2e
