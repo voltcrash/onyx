@@ -16,10 +16,12 @@ vault. The page head describes the application, never the active note. Local not
 not public server routes.
 
 The sitemap lists only `/`. Authentication and error responses send `noindex`, including
-the removed `/about` and `/guides/*` URLs. Vercel builds with `VERCEL_ENV=preview` or
-`development` also exclude indexing through the `X-Robots-Tag` header. Vercel deployment
-protection should remain enabled for private preview deployments. Robots exclusions are
-crawl instructions, not access controls.
+the removed `/about` and `/guides/*` URLs. Dynamic responses are indexable only with
+`DEPLOYMENT_ENV=production` and the canonical production origin. Cloudflare previews, local
+development, and unknown environments send
+`X-Robots-Tag: noindex, nofollow`. The production Worker disables `workers.dev` and version
+preview URLs; the separate preview Worker has no production secrets. Use Cloudflare Access
+if a preview needs access control. Robots exclusions are crawl instructions, not access controls.
 
 `User-agent: *` permits public crawling, including Googlebot, Bingbot, OAI-SearchBot,
 ChatGPT-User, Claude-SearchBot and Claude-User, while excluding `/api/`. Avoid adding
@@ -66,5 +68,7 @@ are decisions made by each provider and cannot be guaranteed by a code change.
 Run `vp check`, `vp run check`, `vp test` and `vp run test:e2e`. The SEO end-to-end tests
 inspect initial HTML and HTTP headers, canonical URLs with tracking parameters, JSON-LD,
 sitemap coverage, crawl directives, plain-text discovery, unknown and removed pages, and
-authentication. Rebuild with `VERCEL_ENV=preview` to
-verify preview responses are excluded before deploying a new hosting configuration.
+authentication. The indexing policy has unit coverage for preview, development, missing environments,
+non-production hosts, and auth/error responses. The browser suite checks canonical metadata and
+local-host response headers through the Workers runtime. Use `vp run deploy:preview` to verify
+a deployed preview before changing hosting; see [deployment](deployment.md).
