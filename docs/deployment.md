@@ -99,8 +99,6 @@ transfer those browser files. Do not clear browser site data during the migratio
    return `X-Robots-Tag: noindex, nofollow` on dynamic pages.
 6. Disconnect the Vercel Git integration and remove its project-domain association once Workers
    is verified. Keep the old deployment available for rollback until the cutover is stable.
-   `vercel.json` disables Git deployments; remove it or enable `git.deploymentEnabled` if
-   restoring Vercel Git deployments.
 
 Avoid adding a Cloudflare cache rule that caches HTML or `/api/auth/*` responses. Hashed assets
 receive immutable caching from the adapter. `_headers` applies security headers to static assets
