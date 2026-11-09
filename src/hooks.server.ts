@@ -1,5 +1,5 @@
-import { VERCEL_ENV } from "$app/env/private";
-import { publicPaths, discoveryPaths } from "#lib/site.ts";
+import { DEPLOYMENT_ENV } from "$app/env/private";
+import { isIndexableResponse } from "#lib/server/indexing.ts";
 import { building } from "$app/env";
 import { getAuth, isGithubAuthConfigured } from "#lib/server/auth.ts";
 import { svelteKitHandler } from "better-auth/svelte-kit";
@@ -25,10 +25,7 @@ export const handle: Handle = async ({ event, resolve }) => {
         })
     : await resolve(event);
   const headers = new Headers(response.headers);
-  const indexable =
-    response.status === 200 &&
-    [...publicPaths, ...discoveryPaths].includes(event.url.pathname) &&
-    (!VERCEL_ENV || VERCEL_ENV === "production");
+  const indexable = isIndexableResponse(event.url, response.status, DEPLOYMENT_ENV);
   headers.set(
     "X-Robots-Tag",
     indexable ? "index, follow, max-image-preview:large" : "noindex, nofollow",

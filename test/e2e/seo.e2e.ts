@@ -2,10 +2,9 @@ import { expect, test } from "@playwright/test";
 import { canonicalUrl, publicPaths } from "../../src/lib/site.ts";
 
 for (const path of publicPaths) {
-  test(`public HTML is indexable without JavaScript: ${path}`, async ({ request }) => {
+  test(`public HTML has canonical metadata without JavaScript: ${path}`, async ({ request }) => {
     const response = await request.get(`${path}?utm_source=seo-test`);
     expect(response.status()).toBe(200);
-    expect(response.headers()["x-robots-tag"] ?? "").not.toContain("noindex");
     const html = await response.text();
     expect(html).not.toMatch(/noindex|nofollow|nosnippet/);
     expect(html).toContain(`rel="canonical" href="${canonicalUrl(path)}"`);
@@ -19,6 +18,25 @@ for (const path of publicPaths) {
       expect(JSON.parse(script[1])["@context"]).toBe("https://schema.org");
   });
 }
+
+test("non-production hostnames remain excluded", async ({ request }) => {
+  const response = await request.get("/");
+  expect(response.status()).toBe(200);
+  expect(response.headers()["x-robots-tag"]).toContain("noindex");
+});
+
+test("static assets retain security headers and the service worker can update", async ({
+  request,
+}) => {
+  for (const path of ["/service-worker.js", "/manifest.webmanifest", "/icons/icon.svg"]) {
+    const response = await request.get(path);
+    expect(response.status()).toBe(200);
+    expect(response.headers()["x-content-type-options"]).toBe("nosniff");
+    expect(response.headers()["referrer-policy"]).toBe("no-referrer");
+    if (path !== "/icons/icon.svg")
+      expect(response.headers()["cache-control"]).toContain("no-cache");
+  }
+});
 
 test("sitemap and AI discovery list only public product pages", async ({ request }) => {
   const sitemap = await request.get("/sitemap.xml");
