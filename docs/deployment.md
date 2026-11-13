@@ -111,7 +111,7 @@ The [CI workflow](../.github/workflows/ci.yml) runs checks and browser tests on 
 and pushes to `main`. The browser job also validates the deployment bundle with Wrangler's
 dry-run. CI has no Cloudflare deployment credentials.
 
-Like Caret, the separate [Production deployment workflow](../.github/workflows/production-release.yml)
+The separate [Production deployment workflow](../.github/workflows/production-release.yml)
 runs after successful main-push CI or a manual retry. It checks out the exact CI commit and
 requires that commit's latest main-push CI run to have completed successfully before building.
 Pull request, fork, failed, and cancelled CI runs cannot deploy. Deployment uses the existing
