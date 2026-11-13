@@ -1,5 +1,4 @@
 import { expect, test } from "@playwright/test";
-import themeCatalog from "../../src/lib/theme-catalog.json" with { type: "json" };
 import {
   blockNextVaultWrite,
   expectMarkdown,
@@ -88,10 +87,7 @@ test("keeps startup usable when localStorage and persistent storage are unavaila
   await page.goto("/");
 
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-color-theme",
-    themeCatalog.defaultColorTheme,
-  );
+  await expect(page.locator("html")).toHaveAttribute("data-color-theme", "ember");
   await expect(page.getByRole("status")).toContainText("Browser settings cannot be saved");
   await expect(page.getByRole("status")).toContainText("Persistent storage is unavailable");
 });
