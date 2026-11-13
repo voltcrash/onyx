@@ -26,6 +26,16 @@ test("offers additional color themes and persists the selection", async ({ page 
   await expect(page.locator("html")).toHaveAttribute("data-color-theme", "solarized");
 });
 
+test("preserves a saved Monochrome theme instead of applying the new default", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("onyx-color-theme", "monochrome"));
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await expect(page.locator("html")).toHaveAttribute("data-color-theme", "monochrome");
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await expect(page.locator("html")).toHaveAttribute("data-color-theme", "monochrome");
+});
+
 test("opens general settings on Editor and the storage shortcut on Storage choices", async ({
   page,
 }) => {
