@@ -3,7 +3,7 @@
     "mode": "onyx-theme",
     "color": "onyx-color-theme"
   },
-  "defaultColorTheme": "monochrome",
+  "defaultColorTheme": "ember",
   "themes": {
     "ember": {
       "label": "Ember",

@@ -29,10 +29,10 @@
     root.dataset.themePreference = preference;
     root.dataset.colorTheme = colorThemes.includes(storedColorTheme ?? "")
       ? storedColorTheme
-      : "monochrome";
+      : "ember";
   } catch {
     root.dataset.theme = systemDark ? "dark" : "light";
     root.dataset.themePreference = "system";
-    root.dataset.colorTheme = "monochrome";
+    root.dataset.colorTheme = "ember";
   }
 })();
