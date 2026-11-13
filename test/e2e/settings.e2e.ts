@@ -4,10 +4,7 @@ import themeCatalog from "../../src/lib/theme-catalog.json" with { type: "json" 
 test("offers additional color themes and persists the selection", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-color-theme",
-    themeCatalog.defaultColorTheme,
-  );
+  await expect(page.locator("html")).toHaveAttribute("data-color-theme", "ember");
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Themes", exact: true }).click();
