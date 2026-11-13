@@ -55,6 +55,17 @@ jobs:
             const { requireSuccessfulProductionCI } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/production-validation.mjs`);
             const run = await requireSuccessfulProductionCI({ github, context, sha: process.env.DEPLOYMENT_SHA });
             await core.summary.addLink('Validated Onyx CI', run.html_url).write();
+      - name: Check production credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            if [[ -z "${!key}" ]]; then
+              echo "::error::Configure $key in the Production environment or repository Actions settings. See docs/deployment.md."
+              exit 1
+            fi
+          done
       - name: Set up Vite+ and install dependencies
         uses: voidzero-dev/setup-vp@cab1ab9eaff52d4857875f4f2c016e36af8f2c76 # v1.22.0
         with:
