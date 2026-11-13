@@ -107,21 +107,68 @@ headers and CSP through SvelteKit.
 
 ## Continuous deployment
 
-GitHub Actions runs checks and browser tests on pull requests and pushes to `main`. The browser
-job also validates the deployment bundle with Wrangler's dry-run. Successful pushes to the
-current `main` commit then run `vp run deploy`; pull requests never deploy production or receive
-Cloudflare deployment credentials.
+The [CI workflow](../.github/workflows/ci.yml) runs checks and browser tests on pull requests
+and pushes to `main`. The browser job also validates the deployment bundle with Wrangler's
+dry-run. CI has no Cloudflare deployment credentials.
 
-Configure the repository secret and variable using the GitHub CLI:
+The separate [Production deployment workflow](../.github/workflows/production-release.yml)
+runs after successful main-push CI or a manual retry. It checks out the exact CI commit and
+requires that commit's latest main-push CI run to have completed successfully before building.
+Pull request, fork, failed, and cancelled CI runs cannot deploy. Deployment uses the existing
+`Production` GitHub environment and serializes releases without cancelling an active upload.
+
+The workflow builds once, validates the bundle with Wrangler's dry-run, then deploys that
+bundle. Just before deployment, it skips snapshots that are no longer the latest `main`
+commit so a delayed CI completion cannot roll production back. It does not create numbered
+GitHub releases or change the application version.
+
+### Cloudflare account API token
+
+In Cloudflare, open **Manage account → Account API tokens → Create Token** and create a custom
+token named `onyx-github-production-release`. Grant only:
+
+| Scope   | Permission       | Access       |
+| ------- | ---------------- | ------------ |
+| Account | Workers Scripts  | Write / Edit |
+| Account | Account Settings | Read         |
+| Zone    | Zone             | Read         |
+| Zone    | Workers Routes   | Write / Edit |
+
+Restrict account resources to the account hosting Onyx and zone resources to `voltcrash.com`.
+Onyx needs no D1, Queues, KV, or R2 permissions. DNS Edit is only needed for a manual DNS cutover,
+not normal Worker releases. Avoid a client IP filter for GitHub-hosted runners. If you set an
+expiration, rotate the GitHub secret before it expires. See Cloudflare's
+[account API tokens](https://developers.cloudflare.com/fundamentals/api/get-started/account-owned-tokens/)
+and [permission reference](https://developers.cloudflare.com/fundamentals/api/reference/permissions/).
+
+Copy the token when Cloudflare displays it; its value is shown only once. Store it in the
+`Production` GitHub environment, and keep the account ID as a repository variable:
 
 ```sh
-gh secret set CLOUDFLARE_API_TOKEN
+gh secret set CLOUDFLARE_API_TOKEN --env Production
 gh variable set CLOUDFLARE_ACCOUNT_ID
 ```
 
-The token used by CI needs Workers Scripts Edit, Account Settings Read, Zone Read, and Workers
-Routes Edit. OAuth credentials stay in Worker secrets, not GitHub Actions. Vite+ setup selects
-Node and pnpm from `package.json`; Cloudflare's default build image is not used.
+These commands prompt for their values. A repository-level token secret is also supported;
+an environment secret takes precedence. Missing inputs fail before dependency installation.
+OAuth credentials and `BETTER_AUTH_SECRET` stay in Worker secrets, not GitHub Actions.
+Subsequent Wrangler deployments preserve them. Vite+ setup selects Node and pnpm from
+`package.json`; Cloudflare's default build image is not used.
+
+### Retry a production release
+
+After fixing credentials or a transient deployment failure, use **Actions → Production deployment
+→ Run workflow** on `main`, or run:
+
+```sh
+gh workflow run production-release.yml --ref main
+```
+
+A manual retry still requires successful **push** CI for that exact commit. Manually dispatching
+CI or passing pull request checks does not satisfy this gate. If main-push CI failed, rerun that
+CI run first. A failed production release leaves the successful CI run intact; no empty commit
+is needed to retry deployment. Check the production workflow's summary for its validated CI link
+or a superseded-snapshot notice, and the `Production` environment for deployment history.
 
 Production has `workers.dev` and version preview URLs disabled. The separately named
 `onyx-preview` Worker has no production domain and uses `DEPLOYMENT_ENV=preview`. Wrangler
