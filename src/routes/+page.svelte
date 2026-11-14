@@ -145,6 +145,9 @@
 	<button type="button" class="sidebar-resize" aria-label={`Resize notes sidebar, ${page.sidebarWidth} pixels wide`} title="Drag to resize; snaps to the default width" onpointerdown={startSidebarResize} onpointermove={trackSidebarResize} onpointerup={endSidebarResize} onpointercancel={endSidebarResize} onlostpointercapture={endSidebarResize} onkeydown={nudgeSidebarResize}></button>
 
 	<MarkdownWorkspace
+    outline={page.outline} unlinkedMentions={page.unlinkedMentions}
+    onOutline={(heading, index) => void page.navigateOutline(heading, index)}
+    onLinkMention={(mention) => void page.linkUnlinkedMention(mention)}
 		storageNotice={page.storageNotice}
 		storageError={page.storageError}
 		sourcePaneVisible={page.sourcePaneVisible}

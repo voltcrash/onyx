@@ -1,3 +1,4 @@
+import { noteOutline, type NoteMention, type NoteHeading } from "#lib/note-insights.ts";
 import { createHistoryController } from "./history-controller.svelte.ts";
 import { createFileTreeController } from "./file-tree-controller.svelte.ts";
 import { createPreferencesController } from "./preferences-controller.svelte.ts";
@@ -543,6 +544,8 @@ export function createPageController() {
   let vaultAttachments = $state<AttachmentMetadata[]>([]);
   let trashedNotes = $state<NoteMetadata[]>([]);
   let backlinks = $state.raw<NoteMetadata[]>([]);
+  let unlinkedMentions = $state.raw<Array<NoteMention & { noteId: string; title: string }>>([]);
+  const outline = $derived(noteOutline(markdown));
   let backlinksSequence = 0;
   let paletteOpen = $state(false);
   let paletteNotes = $state<NoteMetadata[]>([]);
@@ -1627,14 +1630,21 @@ export function createPageController() {
     const noteId = activeNoteId;
     const sequence = ++backlinksSequence;
     let next: NoteMetadata[] = [];
+    let mentions: typeof unlinkedMentions = [];
     if (currentVault && noteId) {
       try {
-        next = await currentVault.listBacklinks(noteId);
+        [next, mentions] = await Promise.all([
+          currentVault.listBacklinks(noteId),
+          currentVault.listUnlinkedMentions(noteId),
+        ]);
       } catch {
         next = [];
       }
     }
-    if (sequence === backlinksSequence) backlinks = next;
+    if (sequence === backlinksSequence) {
+      backlinks = next;
+      unlinkedMentions = mentions;
+    }
   }
 
   $effect(() => {
@@ -1642,6 +1652,28 @@ export function createPageController() {
     void paletteNotes;
     untrack(() => void refreshBacklinks());
   });
+
+  async function linkUnlinkedMention(mention: (typeof unlinkedMentions)[number]): Promise<void> {
+    if (!vault || !(await settleDraft())) return;
+    try {
+      await vault.linkMention(mention.noteId, activeNoteId, mention.start, mention.end);
+      await refreshFileTree();
+      await refreshBacklinks();
+      pendingBackupCount = await vault.countPendingBackupOperations();
+    } catch (cause) {
+      storageError = cause instanceof Error ? cause.message : "The mention could not be linked.";
+    }
+  }
+
+  async function navigateOutline(heading: NoteHeading, index: number): Promise<void> {
+    editor?.revealRange(heading.start, heading.end);
+    await tick();
+    const element = document.querySelectorAll<HTMLElement>(
+      ".rendered-pane article :is(h1,h2,h3,h4,h5,h6)",
+    )[index];
+    if (element?.id) await scrollToNoteFragment(element.id);
+    else element?.scrollIntoView();
+  }
 
   function openTag(tag: string): void {
     openPalette();
@@ -2650,6 +2682,14 @@ export function createPageController() {
   }
 
   return {
+    get outline() {
+      return outline;
+    },
+    get unlinkedMentions() {
+      return unlinkedMentions;
+    },
+    navigateOutline,
+    linkUnlinkedMention: workspaceCommand(linkUnlinkedMention),
     configureEncryption: githubController.configureEncryption,
     get restorePassphrase() {
       return githubController.restorePassphrase;
