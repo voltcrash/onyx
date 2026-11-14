@@ -73,3 +73,30 @@ it("cancels a pending merge unlock when its dialog closes", async () => {
   expect(controller.mergeUnlock).toBe(false);
   expect(controller.backupMessage).toContain("cancelled");
 });
+
+it.each([
+  { active: "deleted", notes: ["remaining"], selected: "remaining" },
+  { active: "deleted", notes: [], selected: undefined },
+  { active: "", notes: ["remote"], selected: "remote" },
+  { active: "active", notes: ["other", "active"], selected: "active" },
+])(
+  "refreshes the merged workspace with $active active and $notes remaining",
+  async ({ active, notes, selected }) => {
+    const { host, controller } = fixture(async () => ({ state: configuration }));
+    host.activeNoteId = active;
+    Object.assign(host.vault!, {
+      listNotes: async () => notes.map((id) => ({ id })),
+      listFolders: async () => [{ id: "folder" }],
+      listAttachments: async () => [{ id: "attachment" }],
+    });
+    host.loadNote = vi.fn();
+    host.resetActiveNote = vi.fn();
+    host.runSearch = vi.fn();
+    await controller.runBackup(configuration, { mergeNewerBackup: true });
+    if (selected) expect(host.loadNote).toHaveBeenCalledWith(selected);
+    else expect(host.resetActiveNote).toHaveBeenCalledOnce();
+    expect(host.runSearch).toHaveBeenCalledWith("");
+    expect(host.folders).toEqual([{ id: "folder" }]);
+    expect(host.vaultAttachments).toEqual([{ id: "attachment" }]);
+  },
+);

@@ -327,12 +327,7 @@ export function createGithubController(host: ControllerHost) {
         ...backupOptions,
         requestPassphrase: requestMergePassphrase,
       });
-      if (options.mergeNewerBackup && host.activeNoteId) {
-        await host.loadNote(host.activeNoteId);
-        await host.runSearch(host.searchQuery);
-        host.folders = await opened.listFolders();
-        host.vaultAttachments = await opened.listAttachments();
-      }
+      if (options.mergeNewerBackup) await refreshMergedWorkspace(opened);
       const pending = await opened.countPendingBackupOperations();
       if (host.disposed || opened !== host.vault || sequence !== backupSequence) return;
       githubBackup = result.state;
@@ -364,6 +359,17 @@ export function createGithubController(host: ControllerHost) {
       }
       showBackupError(error);
     }
+  }
+
+  async function refreshMergedWorkspace(opened: Vault): Promise<void> {
+    if (host.disposed || opened !== host.vault) return;
+    const notes = await opened.listNotes();
+    host.folders = await opened.listFolders();
+    host.vaultAttachments = await opened.listAttachments();
+    const selected = notes.find((note) => note.id === host.activeNoteId) ?? notes[0];
+    if (selected) await host.loadNote(selected.id);
+    else host.resetActiveNote();
+    await host.runSearch(host.searchQuery);
   }
 
   function scheduleAutoBackup(due: boolean): void {
