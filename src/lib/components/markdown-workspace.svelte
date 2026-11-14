@@ -3,7 +3,6 @@
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, PanelLeft, PencilLine, X } from '@lucide/svelte';
 	import type { FindMatch } from '#lib/find-replace.ts';
-	import type { EditorSelection } from '#lib/editor-history.ts';
 	import { MarkdownEditor } from '#lib/markdown-editor.ts';
 	import { enhanceMermaidPreview } from '#lib/mermaid-preview.ts';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '#lib/keyboard-shortcuts.ts';
@@ -56,8 +55,7 @@
 		onResizeEnd: () => void;
 		onPlacePane: (pane: 'source' | 'rendered', edge: PaneEdge) => void;
 		onReload: () => void;
-		onMarkdownChange: (value: string, before: EditorSelection) => void;
-		onEditorHistory: (direction: 'undo' | 'redo') => void;
+		onMarkdownChange: (value: string) => void;
 		onEditorPaste: (event: ClipboardEvent) => void;
 		onEditorDragOver: (event: DragEvent) => void;
 		onEditorDrop: (event: DragEvent) => void;
@@ -72,7 +70,7 @@
 		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedBlocks, displayedRenderedBlocks, scrollSync, markdown, markdownLineCount, findOpen, findQuery, findMatches, activeFindMatch,
 		saveConflict, onSaveConflictCopy, editorBlocked, saveState, transferState, hasContent, shortcuts, primaryModifier,
 		editor = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
-		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorHistory, onEditorPaste, onEditorDragOver, onEditorDrop, onNoteLink, onWikiLink, onTag, backlinks = [], onOpenBacklink
+		splitRatio, contentWidth, onToggleSourcePane, resolvedTheme, colorTheme, onToggleRenderedPane, onResize, onResizeEnd, onPlacePane, onReload, onMarkdownChange, onEditorPaste, onEditorDragOver, onEditorDrop, onNoteLink, onWikiLink, onTag, backlinks = [], onOpenBacklink
 	}: Props = $props();
 
 	type RenderedLink = { open: () => void };
@@ -146,11 +144,10 @@
 			doc: untrack(() => markdown),
 			label: 'Markdown editor',
 			placeholder: EDITOR_PLACEHOLDER,
-			onChange: (value, before) => {
+			onChange: (value) => {
 				scrollDriver = 'source';
-				onMarkdownChange(value, before);
+				onMarkdownChange(value);
 			},
-			onHistory: (direction) => onEditorHistory(direction),
 			onSelectionChange: () => handlePaneInteraction('source'),
 			onLayout: () => queueScrollSync(scrollDriver),
 			onPaste: (event) => onEditorPaste(event),
