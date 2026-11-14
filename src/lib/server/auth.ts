@@ -4,9 +4,7 @@ import {
   GITHUB_CLIENT_ID,
   GITHUB_CLIENT_SECRET,
 } from "$app/env/private";
-import { betterAuth, type BetterAuthOptions } from "better-auth";
-
-const SESSION_LENGTH_SECONDS = 7 * 24 * 60 * 60;
+import { createAuth } from "./auth-options.ts";
 
 let authInstance: ReturnType<typeof createAuth> | undefined;
 
@@ -25,36 +23,6 @@ export function getAuth(): ReturnType<typeof createAuth> {
     throw new Error("GitHub authentication is not configured");
   }
 
-  authInstance = createAuth(secret, clientId, clientSecret);
+  authInstance = createAuth(secret, clientId, clientSecret, BETTER_AUTH_URL?.trim() || undefined);
   return authInstance;
-}
-
-function createAuth(secret: string, clientId: string, clientSecret: string) {
-  const options = {
-    baseURL: BETTER_AUTH_URL?.trim() || undefined,
-    secret,
-    socialProviders: {
-      github: {
-        clientId,
-        clientSecret,
-        scope: ["repo"],
-      },
-    },
-    session: {
-      expiresIn: SESSION_LENGTH_SECONDS,
-      cookieCache: {
-        enabled: true,
-        maxAge: SESSION_LENGTH_SECONDS,
-        refreshCache: true,
-        strategy: "jwe",
-      },
-    },
-    account: {
-      storeAccountCookie: true,
-      storeStateStrategy: "cookie",
-    },
-    advanced: { cookiePrefix: "onyx" },
-  } satisfies BetterAuthOptions;
-
-  return betterAuth(options);
 }

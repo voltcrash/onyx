@@ -230,7 +230,6 @@
       onConfigureEncryption={page.configureEncryption}
 			vault={page.vault}
 			vaultName={page.vaultName}
-			suggestedRepositoryName={page.suggestedRepositoryName}
 			isOnline={page.isOnline}
 			githubUser={page.githubUser}
 			githubState={page.githubState}
@@ -265,7 +264,6 @@
 			onClose={page.closeSettings}
 			onConnectGithub={() => void page.connectGitHub()}
 			onDisconnectGithub={() => void page.disconnectGitHub()}
-			onCreateRepository={(name) => void page.createBackupRepository(name)}
 			onSelectRepository={(state) => page.selectBackupRepository(state)}
 			onForgetRepository={() => void page.forgetBackupRepository()}
 			onAutoBackupChange={(enabled) => void page.setAutoBackup(enabled)}

@@ -33,7 +33,7 @@ adds private backup and cross-device restore.
 - Import Markdown folders or ZIP archives, including locally referenced attachments.
 - Export the complete vault to a folder when the browser supports the File System Access API, or
   download it as a ZIP in other browsers.
-- Optionally sign in with GitHub, select or create a private repository, back up pending changes in
+- Optionally sign in with GitHub, select an installed private repository, back up pending changes in
   one commit, and restore the vault on this or another device. Backups can run automatically once
   editing settles.
 - Continue editing offline after the app has been loaded; GitHub actions pause until connectivity
@@ -101,12 +101,14 @@ vaults should also be exported or backed up.
 GitHub is not required to create, edit, search, import, or export notes. Signing in only enables an
 off-device backup that can be restored on another device.
 
-Onyx authenticates through Better Auth's GitHub provider. Better Auth handles the OAuth flow and
+Onyx authenticates with a GitHub App through Better Auth's GitHub provider. Better Auth handles the OAuth flow and
 keeps the session and GitHub account data in signed, encrypted HTTP-only cookies; the active access
-token exists only in browser memory. Vault data is sent from the browser directly to
+short-lived user access token exists only in browser memory. Expired tokens are refreshed using
+the encrypted account cookie; refresh credentials stay in HTTP-only cookies. Vault data is sent from the browser directly to
 `api.github.com` and does not pass through the Onyx server.
 
-Backups target private, active repositories where the connected account has write access. A backup
+Backups target private, active repositories selected in the App installation where the connected
+account has write access. A backup
 coalesces pending changes by path and advances the configured branch without force-pushing. Restore
 downloads the files from a chosen commit, replaces the local notes and attachments, and rebuilds the
 IndexedDB metadata and search index. Current backups contain an Onyx manifest; older backups can be
@@ -121,10 +123,18 @@ With **Back up automatically** on, Onyx backs up pending changes two minutes aft
 while the device is online. A failed or conflicting automatic backup pauses automatic backups until
 the next manual one.
 
-Create a GitHub OAuth App, configure its callback URL as
-`https://your-onyx-domain.example/api/auth/callback/github`, and set the variables listed in
-[`.env.example`](.env.example). `BETTER_AUTH_SECRET` must contain at least 32 random characters.
-Onyx requests the `repo` scope so it can create private repositories and write backup commits.
+Create a GitHub App with repository **Contents: read and write**, mandatory **Metadata: read**,
+and account **Email addresses: read** (used by Better Auth for sign-in). Leave all other permissions
+off and keep user access-token expiration enabled. Set its callback to
+`https://your-onyx-domain.example/api/auth/callback/github` and configure
+[`.env.example`](.env.example), including the App slug for the installation link.
+See [deployment setup and migration](docs/deployment.md#github-app-setup-and-migration).
+
+Create repositories on GitHub, then install the App on **only selected repositories**.
+Onyx deliberately does not request administration permission or create repositories.
+Existing users sign in again after upgrading and install the App on their existing backup
+repository. Local notes, the saved backup target, encryption settings, and commit history are
+preserved; no new repository or initial backup is required.
 
 ## Sidebar sorting
 
@@ -259,7 +269,7 @@ The browser job keeps Playwright's single worker to avoid starving the preview s
 starts a fresh production build, so a separate build job would duplicate that work. Focused tests
 (`test.only`) fail CI. Failures produce GitHub annotations, an HTML report, screenshots, and traces;
 reports and `test-results/` are uploaded for seven days. Download the `playwright-failures` artifact
-from the failed run to inspect them. Validation jobs need no real GitHub OAuth credentials or
+from the failed run to inspect them. Validation jobs need no real GitHub App credentials or
 deployment. Auth handler tests use
 fixed placeholders, and GitHub API calls in the browser tests are intercepted locally.
 Playwright serves the production build through Wrangler and the local Workers runtime.
@@ -267,7 +277,7 @@ Playwright serves the production build through Wrangler and the local Workers ru
 After both jobs pass on a push to the current `main` commit, a deployment job publishes the
 Worker and assets with Wrangler. Production deployments are serialized. Pull requests never
 deploy production. Configure the repository secret `CLOUDFLARE_API_TOKEN` and variable
-`CLOUDFLARE_ACCOUNT_ID`; keep OAuth credentials in Worker secrets. See
+`CLOUDFLARE_ACCOUNT_ID`; keep GitHub App credentials in Worker secrets. See
 [deployment](docs/deployment.md) for the CLI setup and first cutover.
 
 To reproduce CI locally on Ubuntu:

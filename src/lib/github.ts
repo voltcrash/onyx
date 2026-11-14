@@ -199,41 +199,24 @@ export async function disconnectGithub(): Promise<void> {
   if (result.error) throw new Error(result.error.message || "GitHub could not be disconnected");
 }
 
-export async function createPrivateGithubRepository(name: string): Promise<GithubBackupState> {
-  const user = requireAuthenticatedUser();
-  const repositoryName = name.trim();
-  if (!/^[\w.-]+$/.test(repositoryName)) {
-    throw new Error(
-      "Use only letters, numbers, periods, hyphens, or underscores in the repository name",
+export async function listGithubRepositories(): Promise<GithubRepository[]> {
+  const installations = await collectGithubPages<{ id: number }>(
+    "/user/installations",
+    new URLSearchParams({ per_page: "100" }),
+    100,
+    "installations",
+  );
+  const repositories: GithubRepositoryResponse[] = [];
+  for (const installation of installations) {
+    repositories.push(
+      ...(await collectGithubPages<GithubRepositoryResponse>(
+        `/user/installations/${installation.id}/repositories`,
+        new URLSearchParams({ per_page: "100" }),
+        100,
+        "repositories",
+      )),
     );
   }
-  const repository = await githubRequest<GithubRepositoryResponse>("/user/repos", {
-    method: "POST",
-    body: JSON.stringify({
-      name: repositoryName,
-      description: "Private backup of an Onyx vault",
-      private: true,
-      auto_init: true,
-    }),
-  });
-  if (!repository.private) throw new Error("GitHub did not create a private repository");
-  return {
-    githubAccountId: user.id,
-    githubAccountLogin: user.login,
-    owner: repository.owner.login,
-    repository: repository.name,
-    branch: repository.default_branch || "main",
-    directory: "vault",
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-export async function listGithubRepositories(): Promise<GithubRepository[]> {
-  const repositories = await collectGithubPages<GithubRepositoryResponse>(
-    "/user/repos",
-    new URLSearchParams({ per_page: "100", sort: "pushed" }),
-    100,
-  );
   return repositories
     .filter(
       (repository) =>
@@ -662,7 +645,10 @@ async function requestGithubSession(forceRefresh = false): Promise<string | unde
     : await authClient.getAccessToken({ useAccountCookie: true });
   if (token.error) {
     if (token.error.status === 401) return undefined;
-    throw new Error(token.error.message || "GitHub authentication could not be restored");
+    throw new GithubRequestError(
+      token.error.status,
+      token.error.message || "GitHub authentication could not be restored",
+    );
   }
   return token.data?.accessToken;
 }
@@ -676,7 +662,14 @@ async function refreshGithubAccessToken(rejectedToken: string): Promise<boolean>
     let token: string | undefined;
     try {
       token = await requestGithubSession(true);
-    } catch {
+    } catch (error) {
+      if (
+        generation === authenticationGeneration &&
+        error instanceof GithubRequestError &&
+        error.status >= 400 &&
+        error.status < 500
+      )
+        clearGithubAuthentication();
       return false;
     }
     if (generation !== authenticationGeneration) return false;
@@ -769,19 +762,20 @@ async function collectGithubPages<T>(
   path: `/${string}`,
   parameters: URLSearchParams,
   pageSize: number,
+  envelope?: "installations" | "repositories",
 ): Promise<T[]> {
   const items: T[] = [];
   if (!parameters.has("page")) parameters.set("page", "1");
   let page = 1;
   let nextPath = withGithubQuery(path, parameters);
   while (true) {
-    const result = await requestGithub<T[]>(nextPath);
-    items.push(...result.data);
+    const result = await requestGithub<T[] | Record<string, T[]>>(nextPath);
+    const entries = envelope
+      ? (result.data as Record<string, T[]>)[envelope]
+      : (result.data as T[]);
+    items.push(...entries);
     const linkedNextPath = nextGithubPage(result.response);
-    if (
-      linkedNextPath === null ||
-      (linkedNextPath === undefined && result.data.length < pageSize)
-    ) {
+    if (linkedNextPath === null || (linkedNextPath === undefined && entries.length < pageSize)) {
       return items;
     }
     if (linkedNextPath) {
@@ -906,7 +900,17 @@ export async function validateGithubBackupRepository(state: GithubBackupState): 
     );
   }
   validateBackupConfiguration(state);
-  const repository = await githubRequest<GithubRepositoryResponse>(repositoryApiPath(state));
+  const repository = await githubRequest<GithubRepositoryResponse>(repositoryApiPath(state)).catch(
+    (error: unknown) => {
+      if (error instanceof GithubRequestError && error.status === 404) {
+        throw new GithubRequestError(
+          404,
+          `Install the Onyx GitHub App on ${state.owner}/${state.repository} (or check the signed-in account), then retry. Your existing backup is unchanged.`,
+        );
+      }
+      throw error;
+    },
+  );
   if (
     repository.owner.login.toLowerCase() !== state.owner.toLowerCase() ||
     repository.name.toLowerCase() !== state.repository.toLowerCase()

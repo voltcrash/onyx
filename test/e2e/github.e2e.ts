@@ -47,18 +47,22 @@ test("binds a backup repository to the authenticated GitHub account", async ({ p
           name: account.login,
         }),
       });
-    } else if (url.pathname === "/user/repos") {
+    } else if (url.pathname === "/user/installations") {
+      await route.fulfill({ json: { installations: [{ id: 42 }] } });
+    } else if (url.pathname === "/user/installations/42/repositories") {
       await route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify([
-          {
-            default_branch: "main",
-            name: "onyx-vault",
-            owner: { login: "octocat" },
-            permissions: { push: true },
-            private: true,
-          },
-        ]),
+        body: JSON.stringify({
+          repositories: [
+            {
+              default_branch: "main",
+              name: "onyx-vault",
+              owner: { login: "octocat" },
+              permissions: { push: true },
+              private: true,
+            },
+          ],
+        }),
       });
     } else if (url.pathname === "/repos/octocat/onyx-vault") {
       repositoryChecks += 1;
@@ -115,18 +119,22 @@ test("refuses to upload a backup when its repository is public", async ({ page }
           name: "Octo Cat",
         }),
       });
-    } else if (url.pathname === "/user/repos") {
+    } else if (url.pathname === "/user/installations") {
+      await route.fulfill({ json: { installations: [{ id: 42 }] } });
+    } else if (url.pathname === "/user/installations/42/repositories") {
       await route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify([
-          {
-            default_branch: "main",
-            name: "onyx-vault",
-            owner: { login: "octocat" },
-            permissions: { push: true },
-            private: true,
-          },
-        ]),
+        body: JSON.stringify({
+          repositories: [
+            {
+              default_branch: "main",
+              name: "onyx-vault",
+              owner: { login: "octocat" },
+              permissions: { push: true },
+              private: true,
+            },
+          ],
+        }),
       });
     } else if (url.pathname === "/repos/octocat/onyx-vault") {
       await route.fulfill({
@@ -353,8 +361,10 @@ for (const mode of ["overwrite", "merge"] as const)
           login: "octocat",
           name: null,
         });
-      } else if (url.pathname === "/user/repos") {
-        await json([repository]);
+      } else if (url.pathname === "/user/installations") {
+        await route.fulfill({ json: { installations: [{ id: 42 }] } });
+      } else if (url.pathname === "/user/installations/42/repositories") {
+        await json({ repositories: [repository] });
       } else if (url.pathname === "/repos/octocat/onyx-vault") {
         await json(repository);
       } else if (url.pathname.endsWith("/git/ref/heads/main")) {
@@ -447,8 +457,10 @@ test("backs up automatically once editing settles", async ({ page }) => {
     };
     if (url.pathname === "/user") {
       await json({ avatar_url: "https://example.com/a.png", id: 1, login: "octocat", name: null });
-    } else if (url.pathname === "/user/repos") {
-      await json([repository]);
+    } else if (url.pathname === "/user/installations") {
+      await route.fulfill({ json: { installations: [{ id: 42 }] } });
+    } else if (url.pathname === "/user/installations/42/repositories") {
+      await json({ repositories: [repository] });
     } else if (url.pathname === "/repos/octocat/onyx-vault") {
       await json(repository);
     } else if (url.pathname.endsWith("/git/ref/heads/main")) {
@@ -521,7 +533,8 @@ test("encrypts uploads and restores with a passphrase after reloading", async ({
       private: true,
     };
     if (path === "/user") return json({ avatar_url: "", id: 1, login: "octocat", name: null });
-    if (path === "/user/repos") return json([repository]);
+    if (path === "/user/installations") return json({ installations: [{ id: 42 }] });
+    if (path === "/user/installations/42/repositories") return json({ repositories: [repository] });
     if (path === "/repos/octocat/onyx-vault") return json(repository);
     if (path.endsWith("/git/ref/heads/main"))
       return head ? json({ object: { sha: head } }) : json({}, 404);

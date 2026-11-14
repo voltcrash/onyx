@@ -51,7 +51,6 @@ import {
   listedSearchResult,
   normalizeVaultName,
   loadVaultRegistry,
-  suggestedRepositoryName,
   uniqueVaultName,
   vaultOptions,
   Vault,
@@ -2717,9 +2716,6 @@ export function createPageController() {
     get vaultName() {
       return activeVault?.name ?? "Notes";
     },
-    get suggestedRepositoryName() {
-      return suggestedRepositoryName(activeVault);
-    },
     get activeNoteId() {
       return activeNoteId;
     },
@@ -3176,7 +3172,6 @@ export function createPageController() {
     resetFonts: preferencesController.resetFonts,
     setShortcut: preferencesController.setShortcut,
     resetShortcuts: preferencesController.resetShortcuts,
-    createBackupRepository: workspaceCommand(githubController.createBackupRepository),
     selectBackupRepository: workspaceCommand(githubController.selectBackupRepository),
     forgetBackupRepository: workspaceCommand(githubController.forgetBackupRepository),
     setAutoBackup: githubController.setAutoBackup,
