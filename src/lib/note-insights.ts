@@ -43,6 +43,8 @@ export function findUnlinkedMentions(markdown: string, names: string[]): NoteMen
     `(?<![\\p{L}\\p{N}_])(?:${unique.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})(?![\\p{L}\\p{N}_])`,
     "giu",
   );
+  if (!pattern.test(markdown)) return [];
+  pattern.lastIndex = 0;
   const mentions: NoteMention[] = [];
   visitProse(parseMarkdownSource(markdown), (node) => {
     if (["link", "linkReference", "image", "imageReference", "definition"].includes(node.type))

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vite-plus/test";
+import * as source from "./markdown-source.ts";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { findUnlinkedMentions, noteOutline } from "./note-insights.ts";
 
 describe("note insights", () => {
@@ -43,4 +44,19 @@ it("keeps nested headings while returning no outline for long prose-only notes",
   expect(
     noteOutline(Array.from({ length: 1000 }, (_, index) => `Paragraph ${index}.`).join("\n\n")),
   ).toEqual([]);
+});
+
+it("does not parse unrelated notes when looking for mentions", () => {
+  const parse = vi.spyOn(source, "parseMarkdownSource");
+  try {
+    expect(findUnlinkedMentions("Unrelated prose.\n\n".repeat(5000), ["Garden"])).toEqual([]);
+    expect(parse).not.toHaveBeenCalled();
+    expect(findUnlinkedMentions("garden and Garden", ["Garden"]).map(({ text }) => text)).toEqual([
+      "garden",
+      "Garden",
+    ]);
+    expect(parse).toHaveBeenCalledTimes(1);
+  } finally {
+    parse.mockRestore();
+  }
 });
