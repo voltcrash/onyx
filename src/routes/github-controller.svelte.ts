@@ -293,24 +293,6 @@ export function createGithubController(host: ControllerHost) {
     }
   }
 
-  async function createBackupRepository(name: string): Promise<void> {
-    if (!host.isOnline || !host.vault || !name.trim() || !(await host.settleDraft())) return;
-    backupState = "backing-up";
-    backupMessage = "Creating your private repository…";
-    host.settingsOpen = false;
-    try {
-      const configuration = await (
-        await host.loadGithubModule()
-      ).createPrivateGithubRepository(name);
-      await host.vault.saveGithubBackupState(configuration);
-      githubBackup = configuration;
-      backupState = "idle";
-      await runBackup(configuration);
-    } catch (error) {
-      showBackupError(error);
-    }
-  }
-
   async function runBackup(
     configuration: GithubBackupState,
     options: { replaceNewerBackup?: boolean; mergeNewerBackup?: boolean; automatic?: boolean } = {},
@@ -471,7 +453,7 @@ export function createGithubController(host: ControllerHost) {
   function showBackupError(error: unknown): void {
     backupState = "error";
     backupMessage = isGithubStatus(error, 422)
-      ? "GitHub could not create that repository or update its branch. Check the name and try again."
+      ? "GitHub could not update the backup branch. Check the repository and branch settings."
       : error instanceof Error
         ? error.message
         : "The GitHub backup failed.";
@@ -630,7 +612,6 @@ export function createGithubController(host: ControllerHost) {
     beginBackup,
     selectBackupRepository,
     forgetBackupRepository,
-    createBackupRepository,
     runBackup,
     scheduleAutoBackup,
     runAutoBackup,
