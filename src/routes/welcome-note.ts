@@ -116,7 +116,7 @@ Press \`?\` to see every shortcut and change any of them in **Settings → Keybo
 ## Good to know
 
 - Onyx is built for personal vaults. It does not offer real-time collaboration or automatic merging of edits from several devices.
-- Notes are not end-to-end encrypted. A private GitHub repository is private, not encrypted.
+- GitHub backups can be end-to-end encrypted with an optional passphrase in Settings. Note and attachment contents are encrypted; file names and metadata remain visible. Keep the passphrase safe: Onyx cannot recover it.
 - The source code is at https://github.com/voltcrash/onyx.
 
 Happy writing.`;

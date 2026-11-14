@@ -125,6 +125,20 @@ Create a GitHub OAuth App, configure its callback URL as
 [`.env.example`](.env.example). `BETTER_AUTH_SECRET` must contain at least 32 random characters.
 Onyx requests the `repo` scope so it can create private repositories and write backup commits.
 
+## Encrypted backups
+
+Opt in under **Settings → Backup & sync** by setting and confirming a passphrase.
+The next backup uploads every note and attachment encrypted in one commit. AES-256-GCM
+uses a fresh 96-bit IV per file and authenticates its path. PBKDF2-SHA256 derives a
+non-extractable key with a random 128-bit salt and 600,000 iterations. Only KDF parameters,
+salt, and an encrypted key check are stored in the manifest. The passphrase never leaves
+the device or enters persistent storage; keys last only for the session.
+
+After reloading, unlock backups in Settings or enter the passphrase when restoring.
+A wrong passphrase leaves local notes untouched. Existing unencrypted backups still
+restore normally. File names and note metadata remain visible, local notes are not
+encrypted, and older Git commits retain their original contents.
+
 ## Backup conflict merging
 
 When another device has backed up first, choose **Merge (recommended)** to combine
