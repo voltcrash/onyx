@@ -15,7 +15,7 @@
 
 
 <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
-	<Dialog.Content class="image-preview-dialog [width:min(100%,_1080px)] [max-height:min(100%,_900px)] flex flex-col overflow-hidden border border-line-strong rounded-xl bg-paper [box-shadow:var(--shadow-lg)]" aria-labelledby="image-preview-title">
+	<Dialog.Content class="image-preview-dialog [width:min(100%,_1080px)] max-h-[min(calc(100dvh-40px),900px)] flex flex-col overflow-hidden border border-line-strong rounded-xl bg-paper [box-shadow:var(--shadow-lg)]" aria-labelledby="image-preview-title">
 		<div class="image-preview-header flex items-start justify-between gap-4 pt-4 px-4.5 pb-3.5 [border-bottom:1px_solid_var(--line-soft)]">
 			<div class="image-preview-heading min-w-0 [&_span]:text-accent [&_span]:text-ui-10 [&_span]:font-bold [&_span]:[letter-spacing:0.13em] [&_span]:uppercase [&_h2]:mt-1 [&_h2]:mx-0 [&_h2]:mb-0 [&_h2]:overflow-hidden [&_h2]:text-ink [&_h2]:[font-family:'Newsreader_Variable',_Georgia,_serif] [&_h2]:text-ui-20 [&_h2]:font-medium [&_h2]:[letter-spacing:-0.025em] [&_h2]:text-ellipsis [&_h2]:whitespace-nowrap">
 				<span>Image preview</span>
