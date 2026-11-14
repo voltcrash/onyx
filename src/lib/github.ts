@@ -1,3 +1,4 @@
+import { mergeBackupFiles, type MergeVault } from "./backup-merge.ts";
 import type {
   GithubBackupState,
   Vault,
@@ -134,6 +135,7 @@ export class GithubBackupConflictError extends Error {
 export interface GithubBackupOptions {
   /** Back up even when the branch moved past this device's last backup or restore. */
   replaceNewerBackup?: boolean;
+  mergeNewerBackup?: boolean;
 }
 
 export class GithubRequestError extends Error {
@@ -254,6 +256,7 @@ async function backupVaultToGithubUnlocked(
   backupState: GithubBackupState,
   options: GithubBackupOptions,
 ): Promise<GithubBackupResult> {
+  const expectedVersion = options.mergeNewerBackup ? await vault.getVersion() : undefined;
   const captured =
     typeof vault.captureGithubBackup === "function" ? await vault.captureGithubBackup() : undefined;
   if (captured) {
@@ -306,6 +309,34 @@ async function backupVaultToGithubUnlocked(
     remoteBlobs.has(manifestPath) &&
     !options.replaceNewerBackup
   ) {
+    if (options.mergeNewerBackup) {
+      const remote = await readGithubBackup(repositoryPath, backupState.directory, parentSha);
+      const base = backupState.lastCommitSha
+        ? await readGithubBackup(repositoryPath, backupState.directory, backupState.lastCommitSha)
+        : { manifest: { version: 1 as const, notes: [], attachments: [] }, files: [] };
+      const merged = await mergeBackupFiles(
+        base,
+        {
+          manifest: backupManifest,
+          files: snapshot.changes.flatMap((change) =>
+            change.contents ? [{ path: change.path, contents: change.contents }] : [],
+          ),
+        },
+        remote,
+      );
+      await vault.restoreBackup(merged.files, {
+        manifest: merged.manifest,
+        restoredAt: new Date().toISOString(),
+        expectedVersion,
+        pendingPaths: [...new Set([...remote.files, ...merged.files].map((file) => file.path))],
+        githubBackup: { ...backupState, lastCommitSha: parentSha },
+      });
+      return backupVaultToGithubUnlocked(
+        vault,
+        { ...backupState, lastCommitSha: parentSha },
+        { ...options, mergeNewerBackup: false },
+      );
+    }
     throw new GithubBackupConflictError(parentSha);
   }
   const pendingTree = (
@@ -963,4 +994,25 @@ async function parseBackupManifest(blob: Blob): Promise<VaultBackupManifest> {
     throw new Error("The selected commit has an invalid Onyx backup manifest");
   }
   return manifest as VaultBackupManifest;
+}
+
+async function readGithubBackup(
+  repositoryPath: `/repos/${string}`,
+  directory: string,
+  commitSha: string,
+): Promise<MergeVault> {
+  const commit = await githubRequest<GithubCommitResponse>(
+    `${repositoryPath}/git/commits/${commitSha}`,
+  );
+  const tree = await getGithubTree(repositoryPath, commit.tree.sha);
+  const blobs = vaultBlobs(tree, directory);
+  const manifestSha = blobs.get(".onyx.json");
+  if (!manifestSha) throw new Error("The backup has no Onyx manifest to merge");
+  const manifest = await parseBackupManifest(await downloadGithubBlob(repositoryPath, manifestSha));
+  const files = await mapWithConcurrency(
+    [...blobs].filter(([path]) => isVaultFile(path)),
+    GITHUB_FILE_CONCURRENCY,
+    async ([path, sha]) => ({ path, contents: await downloadGithubBlob(repositoryPath, sha) }),
+  );
+  return { manifest, files };
 }

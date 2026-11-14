@@ -120,7 +120,7 @@ export async function mergeBackupFiles(
         const copy = {
           ...r,
           id: conflictId,
-          path: `attachments/${conflictId}/${(r as AttachmentMetadata).name}`,
+          path: `attachments/${(r as AttachmentMetadata).noteId}/${conflictId}`,
           sourcePath: `${r.sourcePath ?? (r as AttachmentMetadata).name}.conflict-${date}-${conflictId}`,
         } as AttachmentMetadata;
         const contents = maps[2]!.get(r.path);
