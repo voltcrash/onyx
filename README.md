@@ -125,6 +125,14 @@ Create a GitHub OAuth App, configure its callback URL as
 [`.env.example`](.env.example). `BETTER_AUTH_SECRET` must contain at least 32 random characters.
 Onyx requests the `repo` scope so it can create private repositories and write backup commits.
 
+## Backup conflict merging
+
+When another device has backed up first, choose **Merge (recommended)** to combine
+changes against the last backed-up or restored commit. Concurrent edits keep the local
+note and add the remote version as a dated conflict sibling. Edits survive deletions;
+unchanged files accept deletions. The union is committed on the remote head without a
+force push. Restore and overwrite remain available.
+
 ## Local note history
 
 Use **Show note history** in the command palette to preview and restore earlier text.
