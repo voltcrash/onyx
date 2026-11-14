@@ -604,6 +604,5 @@ test("encrypts uploads and restores with a passphrase after reloading", async ({
     .fill("test backup passphrase");
   await dialog.getByRole("button", { name: "Restore selected", exact: true }).click();
   await expect(dialog).toBeHidden();
-  await page.getByRole("button", { name: "Close settings" }).click();
   await expectMarkdown(editor, "# Private original");
 });

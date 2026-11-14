@@ -109,3 +109,35 @@ test("keeps inbound links working after a rename and move", async ({ page }) => 
     .click();
   await expectMarkdown(editor, /# Garden/);
 });
+
+test("navigates the outline and turns an unlinked mention into a backlink", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await createNote(page, "Garden.md", "# Garden\n\n## Tomatoes\n\nWater daily.");
+  await createNote(page, "Journal.md", "# Journal\n\nVisited Garden today. `Garden`");
+  await page.locator('[data-file-path="Garden.md"]').click();
+  await page.getByText("Outline", { exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Outline", exact: true })
+    .getByRole("button", { name: "Tomatoes", exact: true })
+    .click();
+  await expect
+    .poll(() =>
+      editor.evaluate(
+        (element) =>
+          (element as HTMLElement & { markdownEditor?: { selectionStart: number } }).markdownEditor
+            ?.selectionStart,
+      ),
+    )
+    .toBe(10);
+  const mentions = page.getByRole("navigation", { name: "Unlinked mentions" });
+  await expect(mentions).toContainText("Visited Garden today.");
+  await mentions.getByRole("button", { name: "Link mention in Journal" }).click();
+  await expect(mentions).toBeHidden();
+  await page
+    .getByRole("navigation", { name: "Linked from" })
+    .getByRole("button", { name: "Journal" })
+    .click();
+  await expectMarkdown(editor, "# Journal\n\nVisited [[Garden|Garden]] today. `Garden`");
+});
