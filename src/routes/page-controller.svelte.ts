@@ -98,7 +98,7 @@ import {
   DEFAULT_CONTENT_WIDTH,
   DEFAULT_SIDEBAR_WIDTH,
 } from "#lib/layout.ts";
-import { EditorHistory, type EditorSelection } from "#lib/editor-history.ts";
+import type { EditorSelection } from "#lib/markdown-editor.ts";
 import type { MarkdownEditor } from "#lib/markdown-editor.ts";
 import { onMount, tick, untrack } from "svelte";
 import { goto } from "$app/navigation";
@@ -172,6 +172,7 @@ export function createPageController() {
       return markdown;
     },
     set markdown(value) {
+      editor?.resetHistory();
       markdown = value;
     },
     get lastSavedMarkdown() {
@@ -291,6 +292,7 @@ export function createPageController() {
       return markdown;
     },
     set markdown(value) {
+      editor?.resetHistory();
       markdown = value;
     },
     get localAttachmentUrls() {
@@ -417,6 +419,7 @@ export function createPageController() {
       return markdown;
     },
     set markdown(value) {
+      editor?.resetHistory();
       markdown = value;
     },
     get lastSavedMarkdown() {
@@ -556,7 +559,6 @@ export function createPageController() {
   let sidebarSide = $state<SidebarSide>("left");
   let sidebarWidth = $state(DEFAULT_SIDEBAR_WIDTH);
   let sidebarDropSide = $state<SidebarSide | undefined>();
-  const editorHistory = new EditorHistory();
   let noteList: HTMLElement | undefined = $state();
   let activeNoteSourcePath: string | undefined = $state();
   // Replaced rather than mutated, so a render can be matched to the list it resolved against.
@@ -659,8 +661,6 @@ export function createPageController() {
     canEdit: () => findCanEdit,
     editor: () => editor,
     editorSelection: () => getEditorSelection(),
-    rememberEditorState,
-    updateMarkdown: (value) => updateMarkdown(value),
     revealSource: () => {
       if (!sourcePaneVisible) {
         if (singlePaneMode) showOnlyPane("source");
@@ -1209,7 +1209,7 @@ export function createPageController() {
     updatePreviewImmediately("");
     saveState = "saved";
     storageError = "";
-    editorHistory.reset();
+    editor?.resetHistory();
   }
 
   $effect(() => {
@@ -1479,7 +1479,7 @@ export function createPageController() {
     markdown = note.markdown;
     updatePreviewImmediately(note.markdown);
     lastSavedMarkdown = note.markdown;
-    editorHistory.reset();
+    editor?.resetHistory();
     saveState = "saved";
     saveFailure = undefined;
     storageError = "";
@@ -1557,7 +1557,7 @@ export function createPageController() {
     markdown = "";
     updatePreviewImmediately("");
     lastSavedMarkdown = "";
-    editorHistory.reset();
+    editor?.resetHistory();
     saveState = "saved";
   }
 
@@ -1862,13 +1862,8 @@ export function createPageController() {
     pendingBackupCount = await opened.countPendingBackupOperations();
   }
 
-  function updateMarkdown(value: string, options: { recordHistory?: boolean } = {}): void {
-    if (value === markdown) {
-      editorHistory.clearPending();
-      return;
-    }
-    if (options.recordHistory === false) editorHistory.clearPending();
-    else editorHistory.record({ markdown, selection: getEditorSelection() });
+  function updateMarkdown(value: string): void {
+    if (value === markdown) return;
     draftVersion += 1;
     markdown = value;
     preview.ensureFullParser();
@@ -1988,20 +1983,8 @@ export function createPageController() {
     writeLocalStorage("onyx:scroll-sync", String(scrollSync));
   }
 
-  function captureEditorState(): void {
-    const selection = getEditorSelection();
-    if (selection) editorHistory.capture({ markdown, selection });
-  }
-
-  /** An edit typed into the editor, with the selection it started from. */
-  function handleEditorChange(value: string, before: EditorSelection): void {
-    editorHistory.remember({ markdown, selection: before });
+  function handleEditorChange(value: string): void {
     updateMarkdown(value);
-  }
-
-  function handleEditorHistory(direction: "undo" | "redo"): void {
-    if (direction === "undo") undo();
-    else redo();
   }
 
   function isEditorTarget(target: EventTarget | null): boolean {
@@ -2017,44 +2000,25 @@ export function createPageController() {
     return { start: editor.selectionStart, end: editor.selectionEnd };
   }
 
-  function restoreEditorSelection(selection: EditorSelection): void {
-    if (!editor) return;
-    requestAnimationFrame(() => {
-      editor?.focus();
-      editor?.setSelectionRange(
-        Math.min(selection.start, markdown.length),
-        Math.min(selection.end, markdown.length),
-      );
-    });
-  }
-
-  function rememberEditorState(selection = getEditorSelection()): void {
-    if (selection) editorHistory.remember({ markdown, selection });
-  }
-
   function undo(): boolean {
-    const entry = editorHistory.undo({ markdown, selection: getEditorSelection() });
-    if (!entry) return false;
-    updateMarkdown(entry.markdown, { recordHistory: false });
-    if (entry.selection) restoreEditorSelection(entry.selection);
-    return true;
+    return editor?.undo() ?? false;
   }
 
   function redo(): boolean {
-    const entry = editorHistory.redo({ markdown, selection: getEditorSelection() });
-    if (!entry) return false;
-    updateMarkdown(entry.markdown, { recordHistory: false });
-    if (entry.selection) restoreEditorSelection(entry.selection);
-    return true;
+    return editor?.redo() ?? false;
   }
 
   function replaceEditorSelection(selection: EditorSelection, replacement: string): boolean {
     const start = Math.min(selection.start, selection.end);
     const end = Math.max(selection.start, selection.end);
     if (start === end && replacement.length === 0) return false;
-    rememberEditorState(selection);
-    updateMarkdown(`${markdown.slice(0, start)}${replacement}${markdown.slice(end)}`);
-    restoreEditorSelection({ start: start + replacement.length, end: start + replacement.length });
+    if (!editor) return false;
+    editor.setSelectionRange(start, end);
+    editor.edit(`${markdown.slice(0, start)}${replacement}${markdown.slice(end)}`, {
+      start: start + replacement.length,
+      end: start + replacement.length,
+    });
+    editor.focus();
     return true;
   }
 
@@ -2067,11 +2031,7 @@ export function createPageController() {
       editor.selectionEnd,
       outdent ? -1 : 1,
     );
-    captureEditorState();
-    // Placed synchronously so no deferred caret restore can race later input.
-    editor.value = edit.value;
-    editor.setSelectionRange(edit.start, edit.end);
-    updateMarkdown(edit.value);
+    editor.edit(edit.value, edit);
     return true;
   }
 
@@ -2080,11 +2040,7 @@ export function createPageController() {
     if (!editor) return false;
     const edit = toggleCheckboxes(editor.value, editor.selectionStart, editor.selectionEnd);
     if (!edit) return false;
-    captureEditorState();
-    // Placed synchronously so no deferred caret restore can race later input.
-    editor.value = edit.value;
-    editor.setSelectionRange(edit.start, edit.end);
-    updateMarkdown(edit.value);
+    editor.edit(edit.value, edit);
     return true;
   }
 
@@ -2434,11 +2390,8 @@ export function createPageController() {
       after,
       placeholder,
     );
-    updateMarkdown(edit.value);
-    requestAnimationFrame(() => {
-      target.focus();
-      target.setSelectionRange(edit.start, edit.end);
-    });
+    target.edit(edit.value, edit);
+    target.focus();
   }
 
   function prefixLine(prefix: string): void {
@@ -2446,12 +2399,12 @@ export function createPageController() {
     if (!target || editorBlocked) return;
     const relativeCursor = target.selectionStart;
     const start = markdown.lastIndexOf("\n", relativeCursor - 1) + 1;
-    updateMarkdown(`${markdown.slice(0, start)}${prefix}${markdown.slice(start)}`);
-    requestAnimationFrame(() => {
-      target.focus();
-      const nextCursor = relativeCursor + prefix.length;
-      target.setSelectionRange(nextCursor, nextCursor);
+    const nextCursor = relativeCursor + prefix.length;
+    target.edit(`${markdown.slice(0, start)}${prefix}${markdown.slice(start)}`, {
+      start: nextCursor,
+      end: nextCursor,
     });
+    target.focus();
   }
 
   function handleShortcut(event: KeyboardEvent): void {
@@ -3200,7 +3153,6 @@ export function createPageController() {
     exportNoteAs: workspaceCommand(transferController.exportNoteAs),
     toggleScrollSync,
     handleEditorChange,
-    handleEditorHistory,
     handleEditorPaste,
     handleEditorDragOver,
     handleEditorDrop,
