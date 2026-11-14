@@ -521,7 +521,7 @@ async function restoreVaultFromGithubUnlocked(
     ? await unlockBackupKey(manifest.encryption, passphrase)
     : undefined;
   const files = await mapWithConcurrency(
-    [...selectedBlobs.entries()].filter(([path]) => isVaultFile(path)),
+    manifestBlobs(selectedBlobs, manifest),
     GITHUB_FILE_CONCURRENCY,
     async ([path, sha]): Promise<VaultRestoreFile> => ({
       path,
@@ -1022,6 +1022,19 @@ async function parseBackupManifest(blob: Blob): Promise<VaultBackupManifest> {
   return manifest as VaultBackupManifest;
 }
 
+function manifestBlobs(
+  blobs: Map<string, string>,
+  manifest?: VaultBackupManifest,
+): Array<[string, string]> {
+  const paths = manifest
+    ? new Set([
+        ...manifest.notes.map((note) => note.path),
+        ...manifest.attachments.map((attachment) => attachment.path),
+      ])
+    : undefined;
+  return [...blobs].filter(([path]) => isVaultFile(path) && (!paths || paths.has(path)));
+}
+
 async function readGithubBackup(
   repositoryPath: `/repos/${string}`,
   directory: string,
@@ -1039,7 +1052,7 @@ async function readGithubBackup(
     ? await unlockBackupKey(manifest.encryption)
     : undefined;
   const files = await mapWithConcurrency(
-    [...blobs].filter(([path]) => isVaultFile(path)),
+    manifestBlobs(blobs, manifest),
     GITHUB_FILE_CONCURRENCY,
     async ([path, sha]) => ({
       path,
