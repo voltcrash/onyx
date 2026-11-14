@@ -91,3 +91,26 @@ test("keeps replacement input focused when match navigation finishes", async ({ 
   await page.getByRole("button", { name: "Replace", exact: true }).click();
   await expectMarkdown(editor, "Needle once. Signal twice.");
 });
+
+test("undoes and redoes replacements as separate editor transactions", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill("cat cat cat");
+  await editor.press("ControlOrMeta+f");
+  await page.getByRole("searchbox", { name: "Find in note" }).fill("cat");
+  await page.getByRole("textbox", { name: "Replace with" }).fill("dog");
+  await page.getByRole("button", { name: "Replace", exact: true }).click();
+  await expectMarkdown(editor, "dog cat cat");
+  await page.getByRole("button", { name: "Replace all", exact: true }).click();
+  await expectMarkdown(editor, "dog dog dog");
+  await editor.press("ControlOrMeta+f");
+  await editor.press("ControlOrMeta+z");
+  await expectMarkdown(editor, "dog cat cat");
+  await editor.press("ControlOrMeta+z");
+  await expectMarkdown(editor, "cat cat cat");
+  await editor.press("ControlOrMeta+Shift+z");
+  await expectMarkdown(editor, "dog cat cat");
+  await editor.press("ControlOrMeta+Shift+z");
+  await expectMarkdown(editor, "dog dog dog");
+});
