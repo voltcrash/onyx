@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectMarkdown } from "./helpers.ts";
 import themeCatalog from "../../src/lib/theme-catalog.json" with { type: "json" };
 
 test("loads widgets on demand, traps dialog focus, and respects the production CSP", async ({
@@ -129,9 +130,13 @@ test("navigates nested context menus and the vault switcher from the keyboard", 
   await expect(folder).toBeFocused();
 
   const vault = page.locator(".vault-trigger");
+  const menu = page.getByRole("menu", { name: "Repositories" });
+  await vault.click();
+  await expect(menu).toBeVisible();
+  await vault.click({ delay: 50 });
+  await expect(menu).toBeHidden();
   await vault.focus();
   await vault.press("ArrowDown");
-  const menu = page.getByRole("menu", { name: "Repositories" });
   await expect(menu).toBeVisible();
   await page.keyboard.press("End");
   await expect(menu.getByRole("menuitem", { name: "New repository" })).toBeFocused();
@@ -144,4 +149,34 @@ test("navigates nested context menus and the vault switcher from the keyboard", 
   await rename.fill("Research");
   await rename.press("Enter");
   await expect(vault).toContainText("Research");
+});
+
+test("keeps palette keystrokes out of the note while widgets load", async ({ page }) => {
+  const requested = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  await page.route("**/menus.*.css", async (route) => {
+    requested.resolve();
+    await release.promise;
+    await route.continue();
+  });
+  try {
+    await page.goto("/");
+    const editor = page.getByRole("textbox", { name: "Markdown editor" });
+    await expect(editor).toBeEnabled();
+    await editor.fill("# Keep this note");
+    await editor.press("ControlOrMeta+k");
+    await requested.promise;
+    await page.keyboard.type("search while loading");
+    await expectMarkdown(editor, "# Keep this note");
+    release.resolve();
+    const input = page.getByRole("combobox", { name: "Search notes and commands" });
+    await expect(input).toBeFocused();
+    await page.keyboard.type("sidebar");
+    await expect(input).toHaveValue("sidebar");
+    await input.press("Escape");
+    await expect(editor).toBeFocused();
+    await expectMarkdown(editor, "# Keep this note");
+  } finally {
+    release.resolve();
+  }
 });
