@@ -1,3 +1,4 @@
+import { createHistoryController } from "./history-controller.svelte.ts";
 import { createFileTreeController } from "./file-tree-controller.svelte.ts";
 import { createPreferencesController } from "./preferences-controller.svelte.ts";
 import { createTransferController } from "./transfer-controller.svelte.ts";
@@ -789,6 +790,15 @@ export function createPageController() {
   };
 
   const paletteItems = $derived<PaletteCommand[]>([
+    {
+      id: "note-history",
+      group: "Notes",
+      label: "Show note history",
+      keywords: "versions snapshots restore",
+      icon: FileText,
+      disabled: !activeNoteId,
+      run: () => void history.show(),
+    },
     ...paletteNoteItems,
     ...paletteCommands(
       {
@@ -816,6 +826,18 @@ export function createPageController() {
       paletteActions,
     ),
   ]);
+
+  const history = createHistoryController({
+    vault: () => vault,
+    noteId: () => activeNoteId,
+    settle: settleDraft,
+    prepare: loadDialogStyles,
+    reload: async () => {
+      await loadNote(activeNoteId);
+      await refreshFileTree();
+      pendingBackupCount = await vault!.countPendingBackupOperations();
+    },
+  });
 
   const noteOutput = createNoteOutput(() => preview.loadMarkdownModule());
   const confirmation = createConfirmation(() => loadDialogStyles());
@@ -2628,6 +2650,7 @@ export function createPageController() {
   }
 
   return {
+    history,
     get printHtml() {
       return transferController.printHtml;
     },
