@@ -28,7 +28,7 @@ adds private backup and cross-device restore.
   file, and the PDF view prints through the browser's print dialog, where it can be saved as a PDF.
 - Choose a light, dark, or system theme. System follows the operating system preference, updates
   when that preference changes, and the selected mode is saved in this browser.
-- Choose from twelve color themes. Monochrome is the default: Ember, Monochrome, Ocean, Forest,
+- Choose from twelve color themes. Ember is the default: Ember, Monochrome, Ocean, Forest,
   Graphite, Marigold, Espresso, Ink, Lavender, Burgundy, Rose, and Solarized are available.
 - Import Markdown folders or ZIP archives, including locally referenced attachments.
 - Export the complete vault to a folder when the browser supports the File System Access API, or
