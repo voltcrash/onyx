@@ -1,6 +1,6 @@
 import { DEPLOYMENT_ENV } from "$app/env/private";
 import { isIndexableResponse } from "#lib/server/indexing.ts";
-import { building } from "$app/env";
+import { building, version } from "$app/env";
 import { getAuth, isGithubAuthConfigured } from "#lib/server/auth.ts";
 import { svelteKitHandler } from "better-auth/svelte-kit";
 import type { Handle } from "@sveltejs/kit/hooks";
@@ -23,7 +23,10 @@ export const handle: Handle = async ({ event, resolve }) => {
           headers: { "Content-Type": "application/json" },
           status: 503,
         })
-    : await resolve(event);
+    : await resolve(event, {
+        // Unhashed startup assets name their deployment so service workers can spot older copies.
+        transformPageChunk: ({ html }) => html.replaceAll("%onyx.version%", version),
+      });
   const headers = new Headers(response.headers);
   const indexable = isIndexableResponse(event.url, response.status, DEPLOYMENT_ENV);
   headers.set(

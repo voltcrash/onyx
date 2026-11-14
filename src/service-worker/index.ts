@@ -6,10 +6,9 @@ import { self } from "$app/service-worker";
 
 const CACHE = `onyx-${version}`;
 const APP_SHELL = resolve("/");
-const PRECACHE = [
-  ...immutable.map(({ path }) => `${APP_SHELL}${path}`),
-  ...assets.map(({ path }) => asset(path)),
-];
+const IMMUTABLE = immutable.map(({ path }) => `${APP_SHELL}${path}`);
+const STATIC = assets.map(({ path }) => asset(path));
+const PRECACHE = [...IMMUTABLE, ...STATIC];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll([...PRECACHE, APP_SHELL])));
@@ -51,7 +50,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (PRECACHE.includes(url.pathname)) {
+  if (IMMUTABLE.includes(url.pathname)) {
     // Vite varies CORS headers by Origin, but these static asset contents are identical.
     event.respondWith(
       caches
@@ -59,6 +58,20 @@ self.addEventListener("fetch", (event) => {
         .then(
           async (cache) => (await cache.match(request, { ignoreVary: true })) ?? fetch(request),
         ),
+    );
+    return;
+  }
+
+  if (STATIC.includes(url.pathname)) {
+    // Unhashed files keep their URL across deployments. A document fetched while an update
+    // waits names a newer version, so only this version's documents may use this cache.
+    event.respondWith(
+      fetchNavigation(
+        () => fetch(request),
+        async () =>
+          (await caches.open(CACHE)).match(request, { ignoreSearch: true, ignoreVary: true }),
+        url.searchParams.get("v") === version,
+      ),
     );
   }
 });

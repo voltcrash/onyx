@@ -56,6 +56,14 @@ than static imports in lazy Svelte components: SvelteKit otherwise adds those
 component styles to the initial document. The first-paint fallback remains in
 `static/startup.css`, in the base layer so route utilities can replace it.
 
+Unhashed startup files keep one URL across deployments, so the shell adds its
+deployment version (`?v=`). The service worker serves its own cached copy only
+for that version and fetches any other from the network. An open tab can leave
+an older worker active while a newer document loads. Without the version, that
+worker would pair its older `startup.css` with the newer route styles. An
+unlayered `font: inherit` reset there once overrode every form control's
+utility font size.
+
 A production build on 2026-11-14, compared with main `7bb0197`, had this footprint:
 
 | Initial route assets   |    Before |     After |  Change |
