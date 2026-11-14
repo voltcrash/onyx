@@ -9,6 +9,7 @@
 </script>
 <Menu.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
   <Menu.Content class="vault-menu min-w-50 max-w-65" customAnchor={anchor} align="start" sideOffset={5}
+    onInteractOutside={(event) => { if (event.target instanceof Node && anchor.contains(event.target)) event.preventDefault(); }}
     aria-label="Repositories" onCloseAutoFocus={(event) => { event.preventDefault(); if (document.activeElement === document.body) anchor.focus(); }}>
     <Menu.RadioGroup value={activeVaultId}>
     {#each vaults as vault (vault.id)}
