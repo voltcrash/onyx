@@ -224,7 +224,14 @@ test("moves deleted notes to trash, restores them, and deletes them forever", as
   await expect(confirmDialog.getByRole("button", { name: "Cancel" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(confirmDialog).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "Delete Trashme forever", exact: true }),
+  ).toBeFocused();
   await expect(editor).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Restore Trashme", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Delete Trashme forever", exact: true }).click();
+  await page.locator(".modal-backdrop").click({ position: { x: 4, y: 4 } });
+  await expect(confirmDialog).toBeHidden();
   await expect(page.getByRole("button", { name: "Restore Trashme", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Delete Trashme forever", exact: true }).click();
   await confirmDialog.getByRole("button", { name: "Delete forever" }).click();
