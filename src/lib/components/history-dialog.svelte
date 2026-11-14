@@ -5,7 +5,7 @@
 </script>
 
 <Dialog.Root open onOpenChange={(open) => { if (!open && !history.busy) history.close(); }}>
-  <Dialog.Content class="history-dialog-surface [width:min(100%,_410px)] overflow-hidden border border-line-strong rounded-xl bg-paper [box-shadow:var(--shadow-lg)]" aria-labelledby="history-title" onEscapeKeydown={(event) => { if (history.busy) event.preventDefault(); }} onInteractOutside={(event) => { if (history.busy) event.preventDefault(); }}>
+  <Dialog.Content interactOutsideBehavior="ignore" class="history-dialog-surface [width:min(100%,_410px)] overflow-hidden border border-line-strong rounded-xl bg-paper [box-shadow:var(--shadow-lg)]" aria-labelledby="history-title" onEscapeKeydown={(event) => { if (history.busy) event.preventDefault(); }}>
     <h2 id="history-title">Note history</h2>
     <p>Local snapshots, saved at most every five minutes. Rewrites and restores preserve the prior text.</p>
     <nav class="flex flex-wrap gap-2" aria-label="Snapshots">
