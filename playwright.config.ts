@@ -21,6 +21,7 @@ export default defineConfig({
       // Fixed placeholders exercise the real auth handler without external credentials.
       "--var BETTER_AUTH_SECRET:onyx-e2e-placeholder-secret-never-use-in-production",
       "--var GITHUB_CLIENT_ID:onyx-e2e-placeholder",
+      "--var GITHUB_APP_SLUG:onyx-e2e-placeholder",
       "--var GITHUB_CLIENT_SECRET:onyx-e2e-placeholder",
     ].join(" "),
     port,
