@@ -69,6 +69,11 @@ test("prunes snapshots to fifty after a real save", async ({ page }) => {
   await editor.fill("# Latest retained version");
   await page.keyboard.press("ControlOrMeta+s");
   await expect(page.getByText("Saving…", { exact: true })).toBeHidden();
+  await expect(
+    page
+      .locator(".note-list")
+      .getByRole("button", { name: "Latest retained version", exact: true }),
+  ).toHaveAttribute("aria-current", "true");
   const snapshots = await page.evaluate(async (noteId) => {
     const database = await new Promise<IDBDatabase>((resolve) => {
       const request = indexedDB.open("onyx-vault");
