@@ -100,7 +100,7 @@ test("keeps inbound links working after a rename and move", async ({ page }) => 
   const folder = page.getByRole("textbox", { name: "Folder name" });
   await folder.fill("Archive");
   await folder.press("Enter");
-  const plants = page.locator(".note-list").getByRole("button", { name: "Plants", exact: true });
+  const plants = page.locator('[data-file-path="Plants.md"]');
   await plants.dragTo(page.getByRole("button", { name: "Archive", exact: true }));
   await expectMarkdown(editor, "[[Plants#Tomatoes|plants]] [garden](Archive/Plants.md)");
   await page
