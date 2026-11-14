@@ -550,7 +550,7 @@
 		<div bind:this={renderedPaneElement} class="rendered-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} data-sveltekit-preload-data="false" data-sveltekit-preload-code="false" onmousedown={handleRenderedMouseDown} onclick={handleRenderedClick} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onwheelcapture={() => handlePaneInteraction('rendered')} onpointerdowncapture={() => handlePaneInteraction('rendered')} ontouchstartcapture={() => handlePaneInteraction('rendered')} onkeydowncapture={() => handlePaneInteraction('rendered')} onloadcapture={() => queueScrollSync(scrollDriver)}>
 			{#if hasContent}
 				{#if outline.length}
-          <details class="backlinks"><summary>Outline</summary><nav aria-label="Outline"><ol>{#each outline as heading, index}<li style:margin-left={`${(heading.depth - 1) * 0.5}rem`}><button onclick={() => onOutline(heading, index)}>{heading.text}</button></li>{/each}</ol></nav></details>
+          <details class="note-outline"><summary>Outline</summary><nav aria-label="Outline"><ol>{#each outline as heading, index}<li style:margin-left={`${(heading.depth - 1) * 0.5}rem`}><button onclick={() => onOutline(heading, index)}>{heading.text}</button></li>{/each}</ol></nav></details>
         {/if}
         <article class="prose" {@attach mountPreview}>
 					{#each keyedRenderedBlocks as block (block.key)}
