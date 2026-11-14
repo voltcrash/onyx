@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { fetchNavigation } from "./offline-navigation.js";
 
 describe("offline navigation", () => {
@@ -27,4 +27,32 @@ describe("offline navigation", () => {
       ),
     ).toBe(response);
   });
+});
+
+it("opens the cached app shell without waiting for the network", async () => {
+  const network = vi.fn(() => new Promise<Response>(() => {}));
+  const shell = new Response("installed shell");
+  expect(await fetchNavigation(network, async () => shell, true)).toBe(shell);
+  expect(network).not.toHaveBeenCalled();
+});
+
+it("fetches the shell if its cache is missing or unavailable", async () => {
+  const response = new Response("fresh shell");
+  for (const cached of [
+    async () => undefined,
+    async () => {
+      throw new Error("cache unavailable");
+    },
+  ]) {
+    const network = vi.fn(async () => response);
+    expect(await fetchNavigation(network, cached, true)).toBe(response);
+    expect(network).toHaveBeenCalledTimes(1);
+  }
+});
+
+it("keeps network errors and responses for callback and non-shell navigations", async () => {
+  const response = new Response("not found", { status: 404 });
+  const cached = vi.fn(async () => new Response("shell"));
+  expect(await fetchNavigation(async () => response, cached)).toBe(response);
+  expect(cached).not.toHaveBeenCalled();
 });
