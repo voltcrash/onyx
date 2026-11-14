@@ -202,8 +202,10 @@ Focused reactive controllers handle GitHub backup and restore in
 - `src/lib/markdown-editor.ts` adapts CodeMirror to the controller's editing, selection, find,
   clipboard, and scroll-sync workflows. Undo and redo use Onyx's document history; opening another note starts a fresh history.
 - `src/lib/components/` contains focused workspace, navigation, dialog, and status components.
-- `src/routes/styles/` separates base tokens, application shell, editor, dialog, command-palette,
-  responsive, and print styles.
+- App chrome uses Tailwind utilities and the themed shadcn-svelte primitives in
+  `src/lib/components/ui/`. `src/routes/styles/` retains note/CodeMirror, print, Mermaid,
+  generated themes, and the lazy utility entry points. See [styling](docs/styling.md)
+  for the boundary, size scale, and theme mappings.
 - `src/lib/theme-catalog.json` is the source of truth for theme metadata and preference keys;
   `src/lib/theme-tokens.json` contains the semantic palette overrides. Run `vp run themes:generate`
   after changing either file; it updates the static CSS. The document applies the mode and palette
