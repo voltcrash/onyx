@@ -311,6 +311,7 @@
 				message={page.confirmation.message}
 				confirmLabel={page.confirmation.confirmLabel}
 				danger={page.confirmation.danger}
+        alternatives={page.confirmation.alternatives}
 				onConfirm={page.confirmAction}
 				onCancel={page.cancelAction}
 			/>

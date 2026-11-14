@@ -253,7 +253,7 @@ export function createGithubController(host: ControllerHost) {
 
   async function runBackup(
     configuration: GithubBackupState,
-    options: { replaceNewerBackup?: boolean; automatic?: boolean } = {},
+    options: { replaceNewerBackup?: boolean; mergeNewerBackup?: boolean; automatic?: boolean } = {},
   ): Promise<void> {
     if (host.disposed || !host.isOnline || !host.vault || backupState === "backing-up") return;
     const opened = host.vault;
@@ -269,6 +269,12 @@ export function createGithubController(host: ControllerHost) {
     try {
       github = await host.loadGithubModule();
       const result = await github.backupVaultToGithub(opened, configuration, backupOptions);
+      if (options.mergeNewerBackup && host.activeNoteId) {
+        await host.loadNote(host.activeNoteId);
+        await host.runSearch(host.searchQuery);
+        host.folders = await opened.listFolders();
+        host.vaultAttachments = await opened.listAttachments();
+      }
       const pending = await opened.countPendingBackupOperations();
       if (host.disposed || opened !== host.vault || sequence !== backupSequence) return;
       githubBackup = result.state;
@@ -343,10 +349,27 @@ export function createGithubController(host: ControllerHost) {
     const opened = host.vault;
     backupState = "idle";
     backupMessage = "";
+    let choice: "merge" | "restore" | undefined;
     const replace = await host.confirmation.ask({
       eyebrow: "Backup & sync",
       title: "GitHub has a newer backup",
-      message: `Another device backed up to ${configuration.owner}/${configuration.repository} after this device last backed up or restored. Restore that backup to bring its notes here, which replaces the notes on this device. Or back up anyway to make this device's notes the latest backup; the other backup stays in the repository history.`,
+      message: `Another device backed up to ${configuration.owner}/${configuration.repository} after this device last backed up or restored. Merge to combine both devices and preserve conflicts as sibling notes. Restore that backup to bring its notes here, which replaces the notes on this device. Or back up anyway to make this device's notes the latest backup; the other backup stays in the repository history.`,
+      alternatives: [
+        {
+          label: "Merge (recommended)",
+          action: () => {
+            choice = "merge";
+            host.confirmation.cancel();
+          },
+        },
+        {
+          label: "Restore",
+          action: () => {
+            choice = "restore";
+            host.confirmation.cancel();
+          },
+        },
+      ],
       confirmLabel: "Back up anyway",
       danger: true,
     });
@@ -357,6 +380,14 @@ export function createGithubController(host: ControllerHost) {
       githubTargetKey(githubBackup) !== githubTargetKey(configuration)
     )
       return;
+    if (choice === "merge") {
+      await runBackup(configuration, { mergeNewerBackup: true });
+      return;
+    }
+    if (choice === "restore") {
+      await openRestore();
+      return;
+    }
     if (replace) {
       await runBackup(configuration, { replaceNewerBackup: true });
       return;

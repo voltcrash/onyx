@@ -4,6 +4,7 @@ export interface ConfirmationOptions {
   message: string;
   confirmLabel: string;
   danger?: boolean;
+  alternatives?: Array<{ label: string; action(): void }>;
 }
 
 export interface ConfirmationRequest extends ConfirmationOptions {

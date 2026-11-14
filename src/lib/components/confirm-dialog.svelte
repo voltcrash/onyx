@@ -7,11 +7,12 @@
 		message: string;
 		confirmLabel: string;
 		danger?: boolean;
+    alternatives?: Array<{ label: string; action(): void }>;
 		onConfirm: () => void;
 		onCancel: () => void;
 	}
 
-	let { eyebrow, title, message, confirmLabel, danger = false, onConfirm, onCancel }: Props = $props();
+	let { eyebrow, title, message, confirmLabel, danger = false, alternatives = [], onConfirm, onCancel }: Props = $props();
 
 	// Escape answers the dialog alone, so panels underneath stay open.
 	function handleKeydown(event: KeyboardEvent): void {
@@ -27,6 +28,7 @@
 		<div class="modal-title"><div><span>{eyebrow}</span><h2 id="confirm-title">{title}</h2></div></div>
 		<p id="confirm-message" class="confirm-message">{message}</p>
 		<div class="modal-actions">
+      {#each alternatives as alternative}<button type="button" onclick={alternative.action}>{alternative.label}</button>{/each}
 			<button type="button" onclick={onCancel}>Cancel</button>
 			<button type="button" class="primary" class:danger onclick={onConfirm}>{confirmLabel}</button>
 		</div>
