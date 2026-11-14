@@ -325,6 +325,11 @@ for (const mode of ["overwrite", "merge"] as const)
   test(`asks before resolving a newer backup with ${mode}`, async ({ page }) => {
     const remoteSha = "a".repeat(40);
     const writes: string[] = [];
+    let releaseMerge!: () => void;
+    const mergeGate = new Promise<void>((resolve) => {
+      releaseMerge = resolve;
+    });
+    let mergeDownloading = false;
 
     await mockGithubSession(page);
     await page.route("https://api.github.com/**", async (route) => {
@@ -363,6 +368,8 @@ for (const mode of ["overwrite", "merge"] as const)
       } else if (url.pathname.endsWith("/git/trees/base")) {
         await json({ sha: "base", tree: [{ path: "vault/.onyx.json", type: "blob", sha: "m" }] });
       } else if (url.pathname.endsWith("/git/blobs/m")) {
+        mergeDownloading = true;
+        if (mode === "merge") await mergeGate;
         await json({
           encoding: "base64",
           content: btoa(JSON.stringify({ version: 1, notes: [], attachments: [] })),
@@ -402,10 +409,19 @@ for (const mode of ["overwrite", "merge"] as const)
     ).toBeVisible();
     expect(writes).toEqual([]);
 
+    await expect(page.locator('[aria-label="Markdown editor"]')).toBeEnabled();
     await page.getByRole("button", { name: "Back up now" }).click();
     await dialog
       .getByRole("button", { name: mode === "merge" ? "Merge (recommended)" : "Back up anyway" })
       .click();
+    if (mode === "merge") {
+      await expect.poll(() => mergeDownloading).toBe(true);
+      try {
+        await expect(page.locator('[aria-label="Markdown editor"]')).toBeDisabled();
+      } finally {
+        releaseMerge();
+      }
+    }
     await expect(page.getByText(/Backed up \d+ files? in one commit/).first()).toBeVisible();
     expect(writes).toContain("PATCH /repos/octocat/onyx-vault/git/refs/heads/main");
   });
