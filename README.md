@@ -126,6 +126,12 @@ Create a GitHub OAuth App, configure its callback URL as
 [`.env.example`](.env.example). `BETTER_AUTH_SECRET` must contain at least 32 random characters.
 Onyx requests the `repo` scope so it can create private repositories and write backup commits.
 
+## Sidebar sorting
+
+Use the sidebar's sort controls to order notes by name, modified date, or created date,
+ascending or descending. Pinned notes stay first in each folder. The choice is retained
+in this browser and safely falls back to name order when storage is unavailable.
+
 ## Templates and daily notes
 
 Put reusable notes in **Templates**, then choose **New note from template** in the
