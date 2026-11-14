@@ -24,6 +24,9 @@ test("previews and restores a local version and keeps the replaced text", async 
   await dialog.getByRole("button", { name: "Restore snapshot" }).click();
   await dialog.getByRole("button", { name: "Close history" }).click();
   await expectMarkdown(editor, "# First version");
+  await expect(
+    page.locator(".note-list").getByRole("button", { name: "First version", exact: true }),
+  ).toHaveAttribute("aria-current", "true");
   await page.reload();
   await expectMarkdown(page.getByRole("textbox", { name: "Markdown editor" }), "# First version");
 });

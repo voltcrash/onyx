@@ -334,6 +334,7 @@ export class Vault {
       const note = tree.notes.find((note) => note.id === noteId && !note.deletedAt);
       if (!note) throw new Error("The note no longer exists");
       note.markdown = snapshot.markdown;
+      note.title = titleFromMarkdown(snapshot.markdown);
     });
   }
 
