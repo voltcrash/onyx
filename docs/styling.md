@@ -83,3 +83,8 @@ Run `vp run ci`. The browser suites cover responsive layout, resizing and drag
 and drop, dialogs, menus, keyboard commands, and startup behavior.
 `chrome.e2e.ts` additionally checks lazy widget loading, focus, all theme variants,
 and production CSP violations.
+
+Let the dialog primitive capture focus and block background interaction. Do not
+make its opener inert before the lazy component mounts: that clears browser
+focus before the library can remember where to return it. The controller still
+ignores application shortcuts while a dialog is open.
