@@ -483,3 +483,127 @@ test("backs up automatically once editing settles", async ({ page }) => {
   await page.getByRole("button", { name: "Backup & sync", exact: true }).click();
   await expect(page.getByText("Up to date")).toBeVisible();
 });
+
+test("encrypts uploads and restores with a passphrase after reloading", async ({ page }) => {
+  const blobs = new Map<string, string>();
+  const tree = new Map<string, string>();
+  let head: string | undefined;
+  let counter = 0;
+  const nextSha = () => (++counter).toString(16).padStart(40, "0");
+  await mockGithubSession(page);
+  await page.route("https://api.github.com/**", async (route) => {
+    const request = route.request(),
+      path = new URL(request.url()).pathname,
+      method = request.method();
+    const json = (body: unknown, status = 200) =>
+      route.fulfill({ contentType: "application/json", status, body: JSON.stringify(body) });
+    const repository = {
+      default_branch: "main",
+      name: "onyx-vault",
+      owner: { login: "octocat" },
+      permissions: { push: true },
+      private: true,
+    };
+    if (path === "/user") return json({ avatar_url: "", id: 1, login: "octocat", name: null });
+    if (path === "/user/repos") return json([repository]);
+    if (path === "/repos/octocat/onyx-vault") return json(repository);
+    if (path.endsWith("/git/ref/heads/main"))
+      return head ? json({ object: { sha: head } }) : json({}, 404);
+    if (method === "POST" && path.endsWith("/git/blobs")) {
+      const body = request.postDataJSON() as { content: string };
+      const sha = nextSha();
+      blobs.set(sha, body.content);
+      return json({ sha });
+    }
+    if (method === "GET" && path.includes("/git/blobs/"))
+      return json({ encoding: "base64", content: blobs.get(path.split("/").at(-1)!) });
+    if (method === "POST" && path.endsWith("/git/trees")) {
+      const body = request.postDataJSON() as { tree: Array<{ path: string; sha: string | null }> };
+      for (const file of body.tree) {
+        if (file.sha) tree.set(file.path, file.sha);
+        else tree.delete(file.path);
+      }
+      return json({ sha: "tree", tree: [] });
+    }
+    if (method === "GET" && path.includes("/git/trees/"))
+      return json({
+        sha: "tree",
+        tree: [...tree].map(([path, sha]) => ({ path, sha, type: "blob" })),
+      });
+    if (method === "POST" && path.endsWith("/git/commits"))
+      return json({
+        sha: nextSha(),
+        html_url: "https://github.com/c/encrypted",
+        tree: { sha: "tree" },
+      });
+    if (path.includes("/git/commits/"))
+      return json({
+        sha: head,
+        tree: { sha: "tree" },
+        committer: { date: new Date().toISOString() },
+      });
+    if (path.endsWith("/git/refs") || path.endsWith("/git/refs/heads/main")) {
+      const body = request.postDataJSON() as { sha: string; force?: boolean };
+      expect(body.force).not.toBe(true);
+      head = body.sha;
+      return json({ object: { sha: head } });
+    }
+    if (path.endsWith("/commits"))
+      return json([
+        {
+          sha: head,
+          html_url: "https://github.com/c/encrypted",
+          author: { login: "octocat" },
+          commit: {
+            message: "Encrypted backup",
+            author: { name: "octocat", date: new Date().toISOString() },
+            committer: null,
+          },
+        },
+      ]);
+    return route.abort();
+  });
+  await page.goto("/");
+  await expect(page.getByText("@octocat").first()).toBeVisible({ timeout: 12_000 });
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await editor.fill("# Private original");
+  await page.keyboard.press("ControlOrMeta+s");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Backup & sync", exact: true }).click();
+  await page.getByLabel("Repository", { exact: true }).selectOption("octocat/onyx-vault");
+  await page.getByRole("button", { name: "Use this repository" }).click();
+  await page.getByLabel("Encryption passphrase", { exact: true }).fill("test backup passphrase");
+  await page
+    .getByLabel("Confirm encryption passphrase", { exact: true })
+    .fill("test backup passphrase");
+  await page.getByRole("button", { name: "Enable encrypted backups" }).click();
+  await expect(
+    page.getByText("Encryption unlocked for this session.", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Back up now" }).click();
+  await expect(page.getByText(/Backed up \d+ files? in one commit/).first()).toBeVisible();
+  const manifest = JSON.parse(atob(blobs.get(tree.get("vault/.onyx.json")!)!)) as {
+    encryption: { kdf: string };
+    notes: Array<{ path: string }>;
+  };
+  expect(manifest.encryption.kdf).toBe("PBKDF2-SHA256");
+  expect(atob(blobs.get(tree.get(`vault/${manifest.notes[0]!.path}`)!)!)).not.toContain(
+    "Private original",
+  );
+  await page.reload();
+  await expect(page.getByText("@octocat").first()).toBeVisible({ timeout: 12_000 });
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Backup & sync", exact: true }).click();
+  await page.getByRole("button", { name: "Restore a commit", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Choose a backup commit" });
+  await dialog.getByLabel("Backup passphrase (encrypted backups only)").fill("wrong");
+  await dialog.getByRole("button", { name: "Restore selected", exact: true }).click();
+  await expect(dialog.getByText(/passphrase is incorrect/)).toBeVisible();
+  await dialog
+    .getByLabel("Backup passphrase (encrypted backups only)")
+    .fill("test backup passphrase");
+  await dialog.getByRole("button", { name: "Restore selected", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await page.getByRole("button", { name: "Close settings" }).click();
+  await expectMarkdown(editor, "# Private original");
+});
