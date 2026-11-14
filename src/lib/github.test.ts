@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
   backupVaultToGithub,
-  createPrivateGithubRepository,
   disconnectGithub,
   GithubBackupConflictError,
   GithubRequestError,
@@ -10,6 +9,7 @@ import {
   listGithubBackupCommits,
   listGithubRepositories,
   restoreGithubSession,
+  validateGithubBackupRepository,
 } from "./github.js";
 import type { Vault } from "./storage/index.js";
 
@@ -17,6 +17,7 @@ const auth = vi.hoisted(() => ({
   accessToken: undefined as string | undefined,
   tokenGate: undefined as Promise<void> | undefined,
   tokenError: undefined as Error | undefined,
+  refreshError: undefined as Error | undefined,
   refreshedAccessToken: undefined as string | undefined,
 }));
 
@@ -29,7 +30,10 @@ vi.mock("./auth-client.js", () => ({
     },
     signOut: async () => ({ data: { success: true }, error: null }),
     getSession: async () => ({ data: auth.accessToken ? { session: {} } : null, error: null }),
-    refreshToken: async () => ({ data: { accessToken: auth.refreshedAccessToken }, error: null }),
+    refreshToken: async () => {
+      if (auth.refreshError) throw auth.refreshError;
+      return { data: { accessToken: auth.refreshedAccessToken }, error: null };
+    },
   },
 }));
 
@@ -37,6 +41,7 @@ afterEach(() => {
   auth.accessToken = undefined;
   auth.tokenGate = undefined;
   auth.tokenError = undefined;
+  auth.refreshError = undefined;
   auth.refreshedAccessToken = undefined;
   vi.unstubAllGlobals();
 });
@@ -208,12 +213,15 @@ describe("githubRequest", () => {
       if (url.pathname === "/user") {
         return Response.json({ avatar_url: "avatar", id: 1, login: "onyx", name: null });
       }
-      if (url.pathname === "/user/repos") {
-        return Response.json(
-          url.searchParams.get("page") === "2"
-            ? [repository("repo-100")]
-            : Array.from({ length: 100 }, (_, index) => repository(`repo-${index}`)),
-        );
+      if (url.pathname === "/user/installations")
+        return Response.json({ installations: [{ id: 42 }] });
+      if (url.pathname === "/user/installations/42/repositories") {
+        return Response.json({
+          repositories:
+            url.searchParams.get("page") === "2"
+              ? [repository("repo-100")]
+              : Array.from({ length: 100 }, (_, index) => repository(`repo-${index}`)),
+        });
       }
       if (url.pathname === "/repos/onyx/vault") return Response.json(repository("vault"));
       if (url.pathname === "/repos/onyx/vault/commits") {
@@ -254,7 +262,7 @@ describe("githubRequest", () => {
     );
     expect(
       requests
-        .filter(({ pathname }) => pathname === "/user/repos")
+        .filter(({ pathname }) => pathname === "/user/installations/42/repositories")
         .map((url) => url.searchParams.get("page")),
     ).toEqual(["1", "2"]);
     expect(
@@ -264,7 +272,7 @@ describe("githubRequest", () => {
     ).toEqual(["1", "2"]);
   });
 
-  it("backs up to a newly created repository after initializing its default branch", async () => {
+  it("backs up to an existing repository without administration access", async () => {
     auth.accessToken = "token";
     const initialCommitSha = "a".repeat(40);
     const commitSha = "b".repeat(40);
@@ -292,14 +300,6 @@ describe("githubRequest", () => {
       requests.push({ body: typeof init?.body === "string" ? init.body : undefined, method, path });
       if (path === "/user") {
         return Response.json({ avatar_url: "avatar", id: 1, login: "onyx", name: null });
-      }
-      if (path === "/user/repos" && method === "POST") {
-        return Response.json({
-          default_branch: "main",
-          name: "vault",
-          owner: { login: "onyx" },
-          private: true,
-        });
       }
       if (path === "/repos/onyx/vault" && method === "GET") {
         return Response.json({
@@ -340,7 +340,15 @@ describe("githubRequest", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await restoreGithubSession();
-    const state = await createPrivateGithubRepository("vault");
+    const state = {
+      githubAccountId: 1,
+      githubAccountLogin: "onyx",
+      owner: "onyx",
+      repository: "vault",
+      branch: "main",
+      directory: "vault",
+      updatedAt: new Date().toISOString(),
+    };
     const acknowledgeBackupOperations = vi.fn();
     const saveGithubBackupState = vi.fn();
     const vault = {
@@ -357,13 +365,7 @@ describe("githubRequest", () => {
       fileCount: 2,
       state: { lastCommitSha: commitSha },
     });
-    expect(
-      JSON.parse(requests.find((request) => request.path === "/user/repos")!.body!),
-    ).toMatchObject({
-      auto_init: true,
-      name: "vault",
-      private: true,
-    });
+    expect(requests.some((request) => request.path === "/user/repos")).toBe(false);
     expect(requests).toContainEqual(
       expect.objectContaining({ method: "PATCH", path: "/repos/onyx/vault/git/refs/heads/main" }),
     );
@@ -639,4 +641,47 @@ it("does not restore a session that was disconnected while loading", async () =>
   release();
   await expect(restoring).resolves.toBeUndefined();
   await expect(githubRequest("/user")).rejects.toThrow("Sign in with GitHub");
+});
+
+it("explains installation access when an existing backup repository is unavailable", async () => {
+  auth.accessToken = "token";
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ id: 1, login: "onyx" }))
+      .mockResolvedValueOnce(Response.json({ message: "Not Found" }, { status: 404 })),
+  );
+  await restoreGithubSession();
+  await expect(
+    validateGithubBackupRepository({
+      githubAccountId: 1,
+      githubAccountLogin: "onyx",
+      owner: "onyx",
+      repository: "vault",
+      branch: "main",
+      directory: "vault",
+      updatedAt: new Date().toISOString(),
+    }),
+  ).rejects.toThrow("Install the Onyx GitHub App on onyx/vault");
+});
+
+it.each([
+  [new Error("Network unavailable"), false],
+  [new GithubRequestError(400, "Refresh token revoked"), true],
+])("only forgets authentication after a permanent refresh rejection", async (error, cleared) => {
+  auth.accessToken = "token";
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ id: 1, login: "onyx" }))
+      .mockResolvedValueOnce(Response.json({ message: "Expired" }, { status: 401 }))
+      .mockResolvedValueOnce(Response.json({ id: 1, login: "onyx" })),
+  );
+  await restoreGithubSession();
+  auth.refreshError = error;
+  await expect(githubRequest("/resource")).rejects.toMatchObject({ status: 401 });
+  if (cleared) await expect(githubRequest("/user")).rejects.toThrow("Sign in");
+  else await expect(githubRequest("/user")).resolves.toMatchObject({ id: 1 });
 });
