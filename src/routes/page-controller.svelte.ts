@@ -3240,6 +3240,10 @@ export function createPageController() {
     prepareVaultDeletion,
     clearVault: workspaceCommand(clearVault, "mutation", true),
     loadRestoreCommits: githubController.loadRestoreCommits,
+    get mergeUnlock() {
+      return githubController.mergeUnlock;
+    },
+    submitMergeUnlock: githubController.submitMergeUnlock,
     restoreSelectedCommit: workspaceCommand(githubController.restoreSelectedCommit),
     formatCommitDate,
     dismissBackupMessage() {

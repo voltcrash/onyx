@@ -1,4 +1,4 @@
-import { createBackupKey, unlockBackupKey } from "#lib/backup-crypto.ts";
+import { createBackupKey, unlockBackupKey, type BackupEncryption } from "#lib/backup-crypto.ts";
 import type { ConfirmationOptions, ConfirmationRequest } from "./confirmation.svelte.ts";
 import type {
   BackupState,
@@ -96,6 +96,42 @@ export function createGithubController(host: ControllerHost) {
 
   let restoreDirectory = $state("vault");
   let restorePassphrase = $state("");
+
+  let mergeUnlock = $state(false);
+  let pendingUnlock:
+    | { encryption: BackupEncryption; resolve: (passphrase: string | undefined) => void }
+    | undefined;
+
+  async function requestMergePassphrase(encryption: BackupEncryption): Promise<string | undefined> {
+    await host.loadDialogStyles();
+    restorePassphrase = "";
+    restoreMessage = "Enter the passphrase for this backup to continue merging.";
+    restoreState = "idle";
+    mergeUnlock = true;
+    restoreModalOpen = true;
+    return new Promise((resolve) => {
+      pendingUnlock = { encryption, resolve };
+    });
+  }
+
+  async function submitMergeUnlock(): Promise<void> {
+    const pending = pendingUnlock;
+    if (!pending || restoreState === "restoring") return;
+    restoreState = "restoring";
+    const passphrase = restorePassphrase;
+    restorePassphrase = "";
+    try {
+      await unlockBackupKey(pending.encryption, passphrase);
+      pendingUnlock = undefined;
+      mergeUnlock = false;
+      restoreModalOpen = false;
+      restoreState = "idle";
+      pending.resolve(passphrase);
+    } catch (error) {
+      restoreState = "error";
+      restoreMessage = error instanceof Error ? error.message : "The backup could not be unlocked.";
+    }
+  }
 
   async function configureEncryption(passphrase: string, enabled = true): Promise<void> {
     const opened = host.vault,
@@ -287,7 +323,10 @@ export function createGithubController(host: ControllerHost) {
     let github: Awaited<ReturnType<typeof host.loadGithubModule>> | undefined;
     try {
       github = await host.loadGithubModule();
-      const result = await github.backupVaultToGithub(opened, configuration, backupOptions);
+      const result = await github.backupVaultToGithub(opened, configuration, {
+        ...backupOptions,
+        requestPassphrase: requestMergePassphrase,
+      });
       if (options.mergeNewerBackup && host.activeNoteId) {
         await host.loadNote(host.activeNoteId);
         await host.runSearch(host.searchQuery);
@@ -561,6 +600,10 @@ export function createGithubController(host: ControllerHost) {
     }
   }
   return {
+    submitMergeUnlock,
+    get mergeUnlock() {
+      return mergeUnlock;
+    },
     configureEncryption,
     get restorePassphrase() {
       return restorePassphrase;
@@ -652,6 +695,12 @@ export function createGithubController(host: ControllerHost) {
     },
     set restoreModalOpen(value) {
       restoreModalOpen = value;
+      if (!value && pendingUnlock) {
+        pendingUnlock.resolve(undefined);
+        pendingUnlock = undefined;
+        mergeUnlock = false;
+        restorePassphrase = "";
+      }
     },
     get restoreSequence() {
       return restoreSequence;

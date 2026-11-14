@@ -140,3 +140,30 @@ it.each(["restore", "merge"])(
     expect(requests.some((path) => path.endsWith("/git/blobs/plaintext"))).toBe(false);
   },
 );
+
+it("unlocks remote and base descriptors separately before merging", async () => {
+  const { vault, state, restoreBackup, manifests } = await encryptedFixture();
+  forgetBackupKeys();
+  const requestPassphrase = vi.fn().mockResolvedValue("secret");
+  await expect(
+    backupVaultToGithub(vault, state, { mergeNewerBackup: true, requestPassphrase }),
+  ).rejects.toThrow("upload stopped");
+  expect(requestPassphrase.mock.calls.map(([descriptor]) => descriptor)).toEqual(
+    manifests.map((manifest) => manifest.encryption),
+  );
+  expect(restoreBackup).toHaveBeenCalledOnce();
+});
+
+it.each(["wrong", undefined])(
+  "leaves local data untouched when merge unlock returns %s",
+  async (passphrase) => {
+    const { vault, state, restoreBackup } = await encryptedFixture();
+    forgetBackupKeys();
+    const requestPassphrase = vi.fn().mockResolvedValue(passphrase);
+    await expect(
+      backupVaultToGithub(vault, state, { mergeNewerBackup: true, requestPassphrase }),
+    ).rejects.toThrow();
+    expect(requestPassphrase).toHaveBeenCalledOnce();
+    expect(restoreBackup).not.toHaveBeenCalled();
+  },
+);

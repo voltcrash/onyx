@@ -3,6 +3,7 @@ import {
   decryptBackupFile,
   unlockBackupKey,
   forgetBackupKeys,
+  type BackupEncryption,
 } from "./backup-crypto.ts";
 import { mergeBackupFiles, type MergeVault } from "./backup-merge.ts";
 import type {
@@ -142,6 +143,7 @@ export interface GithubBackupOptions {
   /** Back up even when the branch moved past this device's last backup or restore. */
   replaceNewerBackup?: boolean;
   mergeNewerBackup?: boolean;
+  requestPassphrase?: (encryption: BackupEncryption) => Promise<string | undefined>;
 }
 
 export class GithubRequestError extends Error {
@@ -278,7 +280,10 @@ async function backupVaultToGithubUnlocked(
   const backupManifest = captured?.manifest ?? (await vault.createBackupManifest());
   backupManifest.encryption = backupState.encryption;
   const encryptionKey = backupState.encryption
-    ? await unlockBackupKey(backupState.encryption)
+    ? await unlockMergeKey(
+        backupState.encryption,
+        options.mergeNewerBackup ? options.requestPassphrase : undefined,
+      )
     : undefined;
   const repositoryPath = repositoryApiPath(backupState);
   const branchPath = backupState.branch.split("/").map(encodeURIComponent).join("/");
@@ -320,9 +325,19 @@ async function backupVaultToGithubUnlocked(
     !options.replaceNewerBackup
   ) {
     if (options.mergeNewerBackup) {
-      const remote = await readGithubBackup(repositoryPath, backupState.directory, parentSha);
+      const remote = await readGithubBackup(
+        repositoryPath,
+        backupState.directory,
+        parentSha,
+        options.requestPassphrase,
+      );
       const base = backupState.lastCommitSha
-        ? await readGithubBackup(repositoryPath, backupState.directory, backupState.lastCommitSha)
+        ? await readGithubBackup(
+            repositoryPath,
+            backupState.directory,
+            backupState.lastCommitSha,
+            options.requestPassphrase,
+          )
         : { manifest: { version: 1 as const, notes: [], attachments: [] }, files: [] };
       const merged = await mergeBackupFiles(
         base,
@@ -1035,10 +1050,25 @@ function manifestBlobs(
   return [...blobs].filter(([path]) => isVaultFile(path) && (!paths || paths.has(path)));
 }
 
+async function unlockMergeKey(
+  encryption: BackupEncryption,
+  requestPassphrase?: GithubBackupOptions["requestPassphrase"],
+): Promise<CryptoKey> {
+  try {
+    return await unlockBackupKey(encryption);
+  } catch (error) {
+    if (!requestPassphrase) throw error;
+    const passphrase = await requestPassphrase(encryption);
+    if (!passphrase) throw new Error("Backup unlock was cancelled. Local notes have not changed.");
+    return unlockBackupKey(encryption, passphrase);
+  }
+}
+
 async function readGithubBackup(
   repositoryPath: `/repos/${string}`,
   directory: string,
   commitSha: string,
+  requestPassphrase?: GithubBackupOptions["requestPassphrase"],
 ): Promise<MergeVault> {
   const commit = await githubRequest<GithubCommitResponse>(
     `${repositoryPath}/git/commits/${commitSha}`,
@@ -1049,7 +1079,7 @@ async function readGithubBackup(
   if (!manifestSha) throw new Error("The backup has no Onyx manifest to merge");
   const manifest = await parseBackupManifest(await downloadGithubBlob(repositoryPath, manifestSha));
   const encryptionKey = manifest.encryption
-    ? await unlockBackupKey(manifest.encryption)
+    ? await unlockMergeKey(manifest.encryption, requestPassphrase)
     : undefined;
   const files = await mapWithConcurrency(
     manifestBlobs(blobs, manifest),

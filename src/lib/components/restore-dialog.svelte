@@ -6,6 +6,8 @@
 
 	interface Props {
 		isOnline: boolean;
+    mergeUnlock: boolean;
+    onUnlock: () => void;
 		restoreState: RestoreState;
 		restoreMessage: string;
 		restoreCommits: GithubBackupCommit[];
@@ -23,7 +25,7 @@
 	}
 
 	let {
-		isOnline, restoreState, restoreMessage, restoreCommits, pendingBackupCount,
+		isOnline, mergeUnlock, onUnlock, restoreState, restoreMessage, restoreCommits, pendingBackupCount,
 		selectedRestoreSha = $bindable(), restoreOwner = $bindable(), restoreRepository = $bindable(),
 		restoreBranch = $bindable(), restoreDirectory = $bindable(), restorePassphrase = $bindable(), onClose, onLoadCommits, onRestore,
 		formatCommitDate
@@ -44,7 +46,8 @@
 
 <div class="modal-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget && restoreState !== 'restoring') onClose(); }}>
 	<div id="restore-dialog" class="shortcut-modal restore-modal" role="dialog" aria-modal="true" aria-labelledby="restore-title" aria-describedby="restore-warning" aria-busy={restoreState === 'loading' || restoreState === 'restoring'} tabindex="-1" use:manageModalFocus>
-		<div class="modal-title"><div><span>GitHub restore</span><h2 id="restore-title">Choose a backup commit</h2></div><button type="button" class="icon-button" aria-label="Close GitHub restore" disabled={restoreState === 'restoring'} onclick={onClose}><X size={18} /></button></div>
+		<div class="modal-title"><div><span>GitHub {mergeUnlock ? 'merge' : 'restore'}</span><h2 id="restore-title">{mergeUnlock ? 'Unlock backup to merge' : 'Choose a backup commit'}</h2></div><button type="button" class="icon-button" aria-label="Close GitHub restore" disabled={restoreState === 'restoring'} onclick={onClose}><X size={18} /></button></div>
+    {#if !mergeUnlock}
 		<form class="restore-source" onsubmit={(event) => { event.preventDefault(); onLoadCommits(); }}>
 			<label>Owner<input disabled={restoreState === 'restoring'} bind:value={restoreOwner} required autocomplete="off" /></label>
 			<label>Repository<input disabled={restoreState === 'restoring'} bind:value={restoreRepository} required autocomplete="off" /></label>
@@ -66,8 +69,14 @@
 				{#if restoreMessage}<div class="restore-placeholder" class:error={restoreState === 'error'}>{restoreMessage}</div>{/if}
 			{/if}
 		</div>
+    {:else if restoreMessage}<div class="restore-placeholder" class:error={restoreState === 'error'}>{restoreMessage}</div>{/if}
 		<label>Backup passphrase (encrypted backups only)<input type="password" autocomplete="off" bind:value={restorePassphrase} disabled={restoreState === "restoring"} /></label>
+    {#if mergeUnlock}
+    <div id="restore-warning" class="restore-warning">Unlocking lets Onyx combine both backups while preserving conflicting notes.</div>
+    <div class="modal-actions"><button type="button" disabled={restoreState === 'restoring'} onclick={onClose}>Cancel</button><button class="primary" type="button" disabled={!restorePassphrase || restoreState === 'restoring'} onclick={onUnlock}>{restoreState === 'restoring' ? 'Unlocking…' : 'Unlock and merge'}</button></div>
+    {:else}
     <div id="restore-warning" class="restore-warning"><strong>This replaces the local vault.</strong> Notes and attachments currently on this device will be removed and replaced by the selected commit.{#if pendingBackupCount > 0} {pendingBackupCount} pending {pendingBackupCount === 1 ? 'change has' : 'changes have'} not been backed up to GitHub.{/if}</div>
 		<div class="modal-actions"><button type="button" disabled={restoreState === 'restoring'} onclick={onClose}>Cancel</button><button class="primary danger" type="button" disabled={!isOnline || !selectedRestoreSha || restoreState === 'restoring'} onclick={requestRestore}>{#if restoreState === 'restoring'}<LoaderCircle class="spin" size={15} />{:else}<CloudDownload size={15} />{/if} {restoreState === 'restoring' ? 'Restoring…' : pendingChangesConfirmed ? 'Confirm restore' : 'Restore selected'}</button></div>
+    {/if}
 	</div>
 </div>

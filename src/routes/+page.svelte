@@ -290,6 +290,8 @@
 	{#await import('#lib/components/restore-dialog.svelte') then { default: RestoreDialog }}
 		<RestoreDialog
 			isOnline={page.isOnline}
+      mergeUnlock={page.mergeUnlock}
+      onUnlock={() => void page.submitMergeUnlock()}
 			restoreState={page.restoreState}
 			restoreMessage={page.restoreMessage}
 			restoreCommits={page.restoreCommits}
