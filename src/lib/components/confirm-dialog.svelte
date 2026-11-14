@@ -25,7 +25,7 @@
 		<div class="modal-actions flex justify-end gap-2 pt-3.5 px-5.5 pb-4.5 [border-top:1px_solid_var(--line-soft)] [&_button]:h-8.5 [&_button]:flex [&_button]:items-center [&_button]:gap-1.75 [&_button]:py-0 [&_button]:px-3 [&_button]:border [&_button]:border-line [&_button]:rounded-md [&_button]:bg-surface [&_button]:cursor-pointer [&_button]:text-ui-12 [&_button:disabled]:cursor-wait [&_button:disabled]:opacity-55">
       {#each alternatives as alternative}<button type="button" onclick={alternative.action}>{alternative.label}</button>{/each}
 			<Dialog.Cancel bind:ref={cancelButton}>Cancel</Dialog.Cancel>
-			<button type="button" class="primary [.modal-actions_button&]:border-solid-bg [.modal-actions_button&]:bg-solid-bg [.modal-actions_button&]:text-on-solid" class:danger onclick={onConfirm}>{confirmLabel}</button>
+			<button type="button" class="primary [.modal-actions_button&]:border-solid-bg [.modal-actions_button&]:bg-solid-bg [.modal-actions_button&]:text-on-solid [.modal-actions_button&.danger]:border-danger-solid [.modal-actions_button&.danger]:bg-danger-solid [.modal-actions_button&.danger]:text-white" class:danger onclick={onConfirm}>{confirmLabel}</button>
 		</div>
 	</Dialog.Content>
 </Dialog.Root>

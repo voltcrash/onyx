@@ -11,7 +11,8 @@
 	import GithubIcon from './github-icon.svelte';
 	import VaultSwitcher from './vault-switcher.svelte';
 	import FindReplace from './find-replace.svelte';
-	import CommandPalette, { type PaletteControl, type PaletteItem } from './command-palette.svelte';
+	import type { PaletteControl, PaletteItem } from './command-palette.svelte';
+	import type { MenuEntry } from './file-context-menu.svelte';
 	import type { GithubState, SaveState, TransferState } from './app-types';
 	import { noteFormats, type NoteFormat } from './note-formats';
 
@@ -175,7 +176,7 @@
 		tag: Tag,
 	};
 
-	let contextSubmenu = $state<'export' | 'copy' | 'folder-icon'>();
+
 	let naming = $state<NamingState>();
 	let namingBusy = $state(false);
 	let namingError = $state('');
@@ -329,21 +330,12 @@
 	);
 	const docStatusTone = $derived(saveState === 'error' || githubState === 'error' ? 'error' : saveState === 'loading' ? 'busy' : 'ok');
 
-	function menuPositionFromPoint(x: number, y: number): { x: number; y: number } {
-		const width = 210;
-		const height = 320;
-		return {
-			x: Math.max(8, Math.min(x, globalThis.innerWidth - width - 8)),
-			y: Math.max(8, Math.min(y, globalThis.innerHeight - height - 8)),
-		};
-	}
-
 	function menuPosition(event: MouseEvent): { x: number; y: number } {
-		return menuPositionFromPoint(event.clientX, event.clientY);
-	}
+    return { x: event.clientX, y: event.clientY };
+  }
 
 	function showFolderContextMenu(path: string, x: number, y: number): void {
-		contextMenu = { kind: 'folder', path, ...menuPositionFromPoint(x, y) };
+		contextMenu = { kind: 'folder', path, x, y };
 	}
 
 	function showAttachmentContextMenu(attachment: AttachmentMetadata, x: number, y: number): void {
@@ -352,12 +344,12 @@
 			kind: 'attachment',
 			id: attachment.id,
 			path: attachment.sourcePath ?? attachment.name,
-			...menuPositionFromPoint(x, y),
+			x, y,
 		};
 	}
 
 	function showFileContextMenu(result: VaultSearchResult, x: number, y: number): void {
-		contextMenu = { kind: 'file', id: result.note.id, path: notePath(result), pinned: result.note.pinned === true, ...menuPositionFromPoint(x, y) };
+		contextMenu = { kind: 'file', id: result.note.id, path: notePath(result), pinned: result.note.pinned === true, x, y };
 	}
 
 	function openRootContextMenu(event: MouseEvent): void {
@@ -465,7 +457,6 @@
 
 	function closeContextMenu(): void {
 		contextMenu = undefined;
-		contextSubmenu = undefined;
 	}
 
 	async function beginNaming(state: NamingState): Promise<void> {
@@ -876,7 +867,59 @@
 		switchVaultBy(dx < 0 ? 1 : -1);
 	}
 
+  function contextEntries(): MenuEntry[] {
+    const menu = contextMenu;
+    if (!menu) return [];
+    const disabled = transferState === 'working';
+    const position: MenuEntry[] = [
+      { label: 'Sidebar on the left', icon: PanelLeft, checked: sidebarSide === 'left', radio: true, action: () => contextSetSidebarSide('left') },
+      { label: 'Sidebar on the right', icon: PanelRight, checked: sidebarSide === 'right', radio: true, action: () => contextSetSidebarSide('right') },
+    ];
+    const copyPath: MenuEntry = { label: 'Copy relative path', icon: Copy, action: contextCopyPath };
+    if (menu.kind === 'sidebar') return position;
+    if (menu.kind === 'root' || menu.kind === 'folder') {
+      const entries: MenuEntry[] = [
+        { label: 'New file', icon: FilePlus2, disabled, action: contextCreateFile },
+        { label: 'New folder', icon: FolderPlus, disabled, action: contextCreateFolder }, {},
+      ];
+      if (menu.kind === 'root') return [...entries, ...position];
+      const pinned = folderPinnedForPath(menu.path);
+      entries.push(
+        { label: pinned ? 'Unpin folder' : 'Pin folder', icon: Pin, checked: pinned, disabled, action: contextToggleFolderPinned },
+        { label: 'Rename', icon: Pencil, disabled, action: contextRenameFolder },
+      );
+      if (!isAttachmentPath(menu.path)) entries.push({
+        label: 'Set icon', icon: Folder, disabled, iconGrid: true, children: [
+          { label: 'Default folder icon', icon: Folder, checked: !folderIconForPath(menu.path), radio: true, action: () => contextSetFolderIcon() },
+          ...folderIconOptions.map(option => ({ label: option.label, icon: folderIconComponents[option.id],
+            checked: folderIconForPath(menu.path) === option.id, radio: true, action: () => contextSetFolderIcon(option.id) })),
+        ],
+      });
+      return [...entries, copyPath, { label: 'Delete', icon: Trash2, danger: true, disabled, action: contextDeleteFolder }];
+    }
+    if (menu.kind === 'attachment') return [
+      { label: 'Open in new tab', icon: ExternalLink, disabled, action: contextOpenAttachment }, copyPath, {},
+      { label: 'Delete', icon: Trash2, danger: true, disabled, action: contextDeleteAttachment },
+    ];
+    return [
+      { label: 'Open', icon: FileText, disabled, action: contextOpenFile },
+      { label: menu.pinned ? 'Unpin file' : 'Pin file', icon: Pin, checked: menu.pinned, disabled, action: contextToggleNotePinned },
+      { label: 'Rename', icon: Pencil, disabled, action: contextRenameFile }, copyPath, {},
+      { label: 'Export as', icon: Download, disabled, children: noteFormats.map(format => ({ label: format.label, action: () => contextExportAs(format.id) })) },
+      { label: 'Copy as', icon: Copy, disabled, children: noteFormats.filter(format => format.copyable).map(format => ({ label: format.label, action: () => contextCopyAs(format.id) })) }, {},
+      { label: 'Delete', icon: Trash2, danger: true, disabled, action: contextDeleteFile },
+    ];
+  }
+
 	function handleWindowKeydown(event: KeyboardEvent): void {
+    if (event.defaultPrevented || (event.target instanceof Element && event.target.closest('[role="dialog"], [role="alertdialog"], [role="menu"]'))) return;
+    if ((event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) && event.target instanceof HTMLElement && event.target.matches('[data-folder-path], [data-file-path], [data-attachment-path]')) {
+      event.preventDefault();
+      const bounds = event.target.getBoundingClientRect();
+      event.target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: bounds.left + 12, clientY: bounds.bottom }));
+      return;
+    }
+
 		if (event.key === 'Escape') {
 			if (contextMenu) closeContextMenu();
 			else if (naming && !namingBusy) cancelNaming();
@@ -888,48 +931,12 @@
 
 <svelte:window onkeydown={handleWindowKeydown} />
 
-{#snippet sidebarPositionItems()}
-	<button role="menuitemradio" aria-checked={sidebarSide === 'left'} onclick={() => contextSetSidebarSide('left')}><PanelLeft size={15} /><span>Sidebar on the left</span></button>
-	<button role="menuitemradio" aria-checked={sidebarSide === 'right'} onclick={() => contextSetSidebarSide('right')}><PanelRight size={15} /><span>Sidebar on the right</span></button>
-{/snippet}
-
-{#snippet formatSubmenu(kind: 'export' | 'copy', label: string, formats: typeof noteFormats)}
-	<div class="file-context-group" role="none" onmouseenter={() => (contextSubmenu = kind)} onmouseleave={() => (contextSubmenu = undefined)}>
-		<button role="menuitem" aria-haspopup="menu" aria-expanded={contextSubmenu === kind} disabled={transferState === 'working'} onclick={() => (contextSubmenu = contextSubmenu === kind ? undefined : kind)}>
-			{#if kind === 'export'}<Download size={15} />{:else}<Copy size={15} />{/if}<span>{label}</span><ChevronRight size={14} />
-		</button>
-		{#if contextSubmenu === kind}
-			<div class="file-context-menu file-context-submenu" role="menu" aria-label={label}>
-				{#each formats as format (format.id)}
-					<button role="menuitem" onclick={() => (kind === 'export' ? contextExportAs(format.id) : contextCopyAs(format.id))}><span>{format.label}</span></button>
-				{/each}
-			</div>
-		{/if}
-	</div>
-{/snippet}
-
-{#snippet folderIconSubmenu()}
-	<div class="file-context-group" role="none" onmouseenter={() => (contextSubmenu = 'folder-icon')} onmouseleave={() => (contextSubmenu = undefined)}>
-		<button role="menuitem" aria-haspopup="menu" aria-expanded={contextSubmenu === 'folder-icon'} disabled={transferState === 'working'} onclick={() => (contextSubmenu = 'folder-icon')}>
-			<Palette size={15} /><span>Set icon</span><ChevronRight size={14} />
-		</button>
-		{#if contextSubmenu === 'folder-icon'}
-			{@const folderPath = contextMenu?.kind === 'folder' ? contextMenu.path : ''}
-			<div class="file-context-menu file-context-submenu folder-icon-submenu" role="menu" aria-label="Set folder icon">
-				<button class="folder-icon-option" role="menuitemradio" aria-checked={folderIconForPath(folderPath) === undefined} aria-label="Default folder icon" title="Default folder icon" onclick={() => contextSetFolderIcon()}><Folder size={17} /></button>
-				{#each folderIconOptions as option (option.id)}
-					{@const Icon = folderIconComponents[option.id]}
-					<button class="folder-icon-option" role="menuitemradio" aria-checked={folderIconForPath(folderPath) === option.id} aria-label={option.label} title={option.label} onclick={() => contextSetFolderIcon(option.id)}><Icon size={17} /></button>
-				{/each}
-			</div>
-		{/if}
-	</div>
-{/snippet}
-
-<aside class="sidebar" aria-label="Notes" oncontextmenu={openSidebarContextMenu} bind:this={sidebarElement} ontouchstart={handleSidebarTouchStart} ontouchend={handleSidebarTouchEnd} ontouchcancel={() => (touchStart = undefined)}>
-	<div class="notes-heading"><div class="notes-title"><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions"><button class="icon-button search-palette-button" type="button" aria-label="Open the command palette" aria-haspopup="listbox" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Search notes and commands (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><Search size={19} aria-hidden="true" /></button><button class="icon-button sidebar-toggle" onpointerdown={onSidebarDragStart} aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button></div></div>
+<aside class="sidebar [overscroll-behavior-x:none] [grid-row:1_/_-1] [grid-column:1] flex flex-col min-h-0 pt-3 px-3 pb-2 [border-right:1px_solid_var(--line)] bg-sidebar [.sidebar-collapsed_&]:hidden [&_h1]:m-0 [&_h1]:[font-family:'Newsreader_Variable',_Georgia,_'Times_New_Roman',_serif] [&_h1]:text-ui-24 [&_h1]:font-medium [&_h1]:[letter-spacing:-0.035em] [.sidebar-right_&]:[grid-column:2] [.sidebar-right_&]:[border-right:0] [.sidebar-right_&]:[border-left:1px_solid_var(--line)] [@media((max-width:_900px))]:fixed! [@media((max-width:_900px))]:[inset:0_auto_0_0]! [@media((max-width:_900px))]:z-20! [@media((max-width:_900px))]:flex! [@media((max-width:_900px))]:w-64.5! [@media((max-width:_900px))]:[box-shadow:var(--shadow-panel)]! [@media((max-width:_900px))]:[transform:translateX(-105%)]! [@media((max-width:_900px))]:[transition:transform_0.22s_ease]! [@media((max-width:_900px))]:[.sidebar-collapsed_&]:fixed! [@media((max-width:_900px))]:[.sidebar-collapsed_&]:[inset:0_auto_0_0]! [@media((max-width:_900px))]:[.sidebar-collapsed_&]:z-20! [@media((max-width:_900px))]:[.sidebar-collapsed_&]:flex! [@media((max-width:_900px))]:[.sidebar-collapsed_&]:w-64.5! [@media((max-width:_900px))]:[.sidebar-collapsed_&]:[box-shadow:var(--shadow-panel)]! [@media((max-width:_900px))]:[.sidebar-collapsed_&]:[transform:translateX(-105%)]! [@media((max-width:_900px))]:[.sidebar-collapsed_&]:[transition:transform_0.22s_ease]! [@media((max-width:_900px))]:[.sidebar-right_&]:[inset:0_0_0_auto]! [@media((max-width:_900px))]:[.sidebar-right_&]:[transform:translateX(105%)]! [@media((max-width:_900px))]:[.sidebar-right.sidebar-collapsed_&]:[inset:0_0_0_auto]! [@media((max-width:_900px))]:[.sidebar-right.sidebar-collapsed_&]:[transform:translateX(105%)]! [@media((max-width:_900px))]:[.sidebar-open_&]:[transform:translateX(0)]! [@media((max-width:_900px))]:[.sidebar-right.sidebar-open_&]:[transform:translateX(0)]!" aria-label="Notes" oncontextmenu={openSidebarContextMenu} bind:this={sidebarElement} ontouchstart={handleSidebarTouchStart} ontouchend={handleSidebarTouchEnd} ontouchcancel={() => (touchStart = undefined)}>
+	<div class="notes-heading flex items-center justify-between gap-1.5 mt-0 mr-1.75 mb-3 ml-1.75"><div class="notes-title flex items-center min-w-0 gap-1.75"><VaultSwitcher {vaults} {activeVaultId} disabled={transferState === 'working'} {onSelectVault} {onCreateVault} {onRenameVault} /></div><div class="notes-actions flex items-center gap-1.5"><button class="icon-button search-palette-button border-0 bg-transparent cursor-pointer w-8.5 h-8.5 grid place-items-center rounded-md text-muted [transition:background_0.15s_ease,_color_0.15s_ease] [&:hover]:bg-subtle-strong [&:hover]:text-ink [.sidebar-footer_&]:w-7 [.sidebar-footer_&]:h-7" type="button" aria-label="Open the command palette" aria-haspopup="listbox" aria-expanded={paletteOpen} aria-controls="command-palette" title={`Search notes and commands (${formatShortcut(shortcuts.commandPalette, primaryModifier)})`} onclick={onOpenPalette}><Search size={19} aria-hidden="true" /></button><button class="icon-button sidebar-toggle border-0 bg-transparent cursor-pointer w-8.5 h-8.5 grid place-items-center rounded-md text-muted [transition:background_0.15s_ease,_color_0.15s_ease] [&:hover]:bg-subtle-strong [&:hover]:text-ink [.sidebar-footer_&]:w-7 [.sidebar-footer_&]:h-7 [touch-action:none] [-webkit-touch-callout:none] select-none" onpointerdown={onSidebarDragStart} aria-label="Hide notes sidebar" title={`Toggle sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button></div></div>
 	{#if paletteOpen}
+		{#await Promise.all([import('./command-palette.svelte'), import('#lib/lazy-styles.ts').then((styles) => styles.loadMenuStyles())]) then [{ default: CommandPalette }]}
 		<CommandPalette items={paletteItems} controls={paletteControls} query={searchQuery} loading={searchPending} error={searchError} bind:searchInput onQueryChange={onSearch} onClose={onClosePalette} />
+		{/await}
 	{:else if findOpen}
 		<FindReplace
 			query={findQuery}
@@ -953,38 +960,38 @@
 			onClose={onCloseFind}
 		/>
 	{:else if trashOpen}
-		<div class="sidebar-panel trash-panel" aria-label="Trash">
-			<div class="trash-panel-header">
-				<div class="trash-panel-title"><strong>Trash</strong><span>Deleted notes stay here for 30 days.</span></div>
-				<button class="icon-button" type="button" aria-label="Close trash" title={`Close trash (${formatShortcut(shortcuts.openTrash, primaryModifier)})`} onclick={onToggleTrash}><X size={17} /></button>
+		<div class="sidebar-panel trash-panel flex-1 min-h-0 flex flex-col overflow-y-auto [scrollbar-width:thin]" aria-label="Trash">
+			<div class="trash-panel-header flex items-start justify-between gap-2 pt-2.75 pr-1 pb-1.5 pl-2.5">
+				<div class="trash-panel-title flex flex-col gap-0.5 [&_>_strong]:text-ink [&_>_strong]:text-ui-13 [&_>_strong]:[font-weight:650] [&_>_span]:text-faint [&_>_span]:text-ui-11"><strong>Trash</strong><span>Deleted notes stay here for 30 days.</span></div>
+				<button class="icon-button border-0 bg-transparent cursor-pointer w-8.5 h-8.5 grid place-items-center rounded-md text-muted [transition:background_0.15s_ease,_color_0.15s_ease] [&:hover]:bg-subtle-strong [&:hover]:text-ink [.sidebar-footer_&]:w-7 [.sidebar-footer_&]:h-7" type="button" aria-label="Close trash" title={`Close trash (${formatShortcut(shortcuts.openTrash, primaryModifier)})`} onclick={onToggleTrash}><X size={17} /></button>
 			</div>
 			{#if trashedNotes.length === 0}
-				<div class="trash-empty">Trash is empty.</div>
+				<div class="trash-empty py-1.5 px-2.5 text-faint text-ui-11">Trash is empty.</div>
 			{:else}
-				<ul class="trash-list">
+				<ul class="trash-list flex-1 min-h-0 flex flex-col gap-0.5 m-0 pt-0 pr-1 pb-0 pl-0 overflow-y-auto [list-style:none] [scrollbar-width:thin]">
 					{#each trashedNotes as trashed (trashed.id)}
-						<li class="trash-row" title={trashedNoteDeletedLabel(trashed)}>
-							<button class="trash-name" onclick={() => onRestoreFile(trashed.id)} title={`Restore ${trashedNoteLabel(trashed)}`}>
+						<li class="trash-row flex items-center gap-0.5 pt-0.5 pr-1 pb-0.5 pl-2.5 rounded-md [&:hover]:bg-subtle" title={trashedNoteDeletedLabel(trashed)}>
+							<button class="trash-name min-w-0 flex-1 flex items-center gap-2 py-1.5 px-1 border-0 bg-transparent text-ink-soft cursor-pointer text-ui-12 text-left [&_>_span]:min-w-0 [&_>_span]:overflow-hidden [&_>_span]:text-ellipsis [&_>_span]:whitespace-nowrap [&:hover]:text-ink" onclick={() => onRestoreFile(trashed.id)} title={`Restore ${trashedNoteLabel(trashed)}`}>
 								<FileText size={15} /><span>{trashedNoteLabel(trashed)}</span>
 							</button>
-							<button class="trash-icon-button" aria-label={`Restore ${trashedNoteLabel(trashed)}`} title="Restore" disabled={transferState === 'working'} onclick={() => onRestoreFile(trashed.id)}><Undo2 size={14} /></button>
-							<button class="trash-icon-button danger" aria-label={`Delete ${trashedNoteLabel(trashed)} forever`} title="Delete forever" disabled={transferState === 'working'} onclick={() => onPurgeFile(trashed.id)}><X size={14} /></button>
+							<button class="trash-icon-button grid flex-none place-items-center w-6.5 h-6.5 border-0 rounded-md bg-transparent text-faint cursor-pointer [&:hover:not(:disabled)]:bg-subtle-strong [&:hover:not(:disabled)]:text-ink [&:disabled]:opacity-45 [&:disabled]:cursor-not-allowed" aria-label={`Restore ${trashedNoteLabel(trashed)}`} title="Restore" disabled={transferState === 'working'} onclick={() => onRestoreFile(trashed.id)}><Undo2 size={14} /></button>
+							<button class="trash-icon-button danger grid flex-none place-items-center w-6.5 h-6.5 border-0 rounded-md bg-transparent text-faint cursor-pointer [&:hover:not(:disabled)]:bg-subtle-strong [&:hover:not(:disabled)]:text-ink [&:disabled]:opacity-45 [&:disabled]:cursor-not-allowed [.file-context-menu_button&]:text-danger [.file-context-menu_button&:hover:not(:disabled)]:bg-danger-bg [.file-context-menu_button&:hover:not(:disabled)]:text-danger [.trash-icon-button&:hover:not(:disabled)]:bg-danger-bg [.trash-icon-button&:hover:not(:disabled)]:text-danger [.settings-danger_button&]:border-danger-border [.settings-danger_button&]:bg-surface [.settings-danger_button&]:text-danger [.settings-danger_button&:hover]:border-accent-strong [.settings-danger_button&:hover]:text-danger-strong [.modal-actions_button&]:border-danger-solid [.modal-actions_button&]:bg-danger-solid [.modal-actions_button&]:[color:#fff]" aria-label={`Delete ${trashedNoteLabel(trashed)} forever`} title="Delete forever" disabled={transferState === 'working'} onclick={() => onPurgeFile(trashed.id)}><X size={14} /></button>
 						</li>
 					{/each}
 				</ul>
-				<button class="trash-empty-button" disabled={transferState === 'working'} onclick={onEmptyTrash}>Empty trash</button>
+				<button class="trash-empty-button [align-self:flex-start] mt-0.5 mr-0 mb-0.5 ml-2.5 py-1.25 px-2.25 border border-line rounded-md bg-transparent text-danger cursor-pointer text-ui-11 [&:hover:not(:disabled)]:bg-danger-bg [&:disabled]:opacity-45 [&:disabled]:cursor-not-allowed" disabled={transferState === 'working'} onclick={onEmptyTrash}>Empty trash</button>
 			{/if}
 		</div>
 	{:else}
-		<div class="sidebar-panel files-panel" bind:this={swipePanel}>
-			<div class="file-toolbar">
-				<div class="result-count" aria-live="polite">{results.length} {results.length === 1 ? 'note' : 'notes'}</div>
-				<div class="file-actions" aria-label="File actions">
-					<button class="file-action" aria-label="New file" title="New file" disabled={transferState === 'working'} onclick={() => void beginNaming({ action: 'create-file', parentPath: '' })}><FilePlus2 size={16} /></button>
-					<button class="file-action" aria-label="New folder" title="New folder" disabled={transferState === 'working'} onclick={() => void beginNaming({ action: 'create-folder', parentPath: '' })}><FolderPlus size={16} /></button>
+		<div class="sidebar-panel files-panel flex-1 min-h-0 flex flex-col" bind:this={swipePanel}>
+			<div class="file-toolbar flex items-center justify-between gap-2 min-h-7.75 pt-1 px-1.5 pb-0.75">
+				<div class="result-count [.file-toolbar_&]:p-0 pt-2.75 px-2.5 pb-1.5 text-faint text-ui-10 [font-weight:650] [letter-spacing:0.1em] uppercase" aria-live="polite">{results.length} {results.length === 1 ? 'note' : 'notes'}</div>
+				<div class="file-actions flex items-center gap-0.5" aria-label="File actions">
+					<button class="file-action w-6.75 h-6.75 grid place-items-center border-0 rounded-md bg-transparent text-muted cursor-pointer [&:hover:not(:disabled)]:bg-subtle-strong [&:hover:not(:disabled)]:text-ink [&:disabled]:text-faint [&:disabled]:cursor-not-allowed" aria-label="New file" title="New file" disabled={transferState === 'working'} onclick={() => void beginNaming({ action: 'create-file', parentPath: '' })}><FilePlus2 size={16} /></button>
+					<button class="file-action w-6.75 h-6.75 grid place-items-center border-0 rounded-md bg-transparent text-muted cursor-pointer [&:hover:not(:disabled)]:bg-subtle-strong [&:hover:not(:disabled)]:text-ink [&:disabled]:text-faint [&:disabled]:cursor-not-allowed" aria-label="New folder" title="New folder" disabled={transferState === 'working'} onclick={() => void beginNaming({ action: 'create-folder', parentPath: '' })}><FolderPlus size={16} /></button>
 				</div>
 			</div>
-			<div class="sidebar-sort">
+			<div class="sidebar-sort flex gap-1.5 py-1.5 px-3 [&_select]:min-w-0 [&_select]:flex-1 [&_select]:border [&_select]:border-line [&_select]:rounded-md [&_select]:p-1 [&_select]:bg-surface [&_select]:text-muted [&_select]:text-ui-11">
         <select aria-label="Sort notes by" value={sidebarSort.by} onchange={(event) => onSidebarSort({ ...sidebarSort, by: event.currentTarget.value as SidebarSort['by'] })}>
           <option value="name">Name</option><option value="updatedAt">Modified date</option><option value="createdAt">Created date</option>
         </select>
@@ -992,84 +999,52 @@
           <option value="asc">Ascending</option><option value="desc">Descending</option>
         </select>
       </div>
-      <nav class="note-list" class:drop-target={dropTargetPath === ''} bind:this={noteList} oncontextmenu={openRootContextMenu} ondragover={keepRootDropTarget} ondragleave={(event) => clearRootDropTarget(event)} ondrop={dropOnRoot}>
+      <nav class="note-list [.sidebar_&]:flex-1 [.sidebar_&]:min-h-0 [.sidebar_&]:flex [.sidebar_&]:flex-col [.sidebar_&]:gap-0.5 [.sidebar_&]:[margin-inline:-5px] [.sidebar_&]:pt-0.5 [.sidebar_&]:px-0 [.sidebar_&]:pb-2 [.sidebar_&]:overflow-y-auto [.sidebar_&]:[scrollbar-width:thin] [.sidebar_&.drop-target]:[outline:1px_dashed_var(--focus-border)] [.sidebar_&.drop-target]:[outline-offset:-2px] [.sidebar_&.drop-target]:rounded-lg [.sidebar_&.drop-target]:bg-subtle" class:drop-target={dropTargetPath === ''} bind:this={noteList} oncontextmenu={openRootContextMenu} ondragover={keepRootDropTarget} ondragleave={(event) => clearRootDropTarget(event)} ondrop={dropOnRoot}>
 				{#if naming && (naming.action === 'create-file' || naming.action === 'create-folder')}
-					<div class="file-naming-row" style={`--tree-depth: ${naming.parentPath ? 1 : 0}`}>
+					<div class="file-naming-row [&_input]:min-w-0 [&_input]:w-full [&_input]:h-6 [&_input]:py-0.5 [&_input]:px-1.5 [&_input]:border [&_input]:border-focus-border [&_input]:rounded-sm [&_input]:outline-none [&_input]:bg-surface [&_input]:text-ink [&_input]:text-ui-12 [&_input]:flex-1 flex items-center gap-2.25 min-h-8.5 py-1.25 px-2.5 [padding-left:calc(10px_+_(var(--tree-depth)_*_14px))] text-accent-quiet" style={`--tree-depth: ${naming.parentPath ? 1 : 0}`}>
 						{#if naming.action === 'create-folder'}<Folder size={16} />{:else}<FileText size={16} />{/if}
 						<input bind:this={namingInput} bind:value={draftName} aria-label={naming.action === 'create-folder' ? 'Folder name' : 'File name'} spellcheck="false" disabled={namingBusy} aria-invalid={Boolean(namingError)} title={namingError || undefined} onblur={commitNaming} onkeydown={handleNamingKeydown} />
 					</div>
 				{/if}
 				{#if treeRows.length === 0 && !(naming && (naming.action === 'create-file' || naming.action === 'create-folder'))}
 					{#if !notesLoaded && !storageError}
-						<div class="empty-results"><LoaderCircle class="spin" size={20} /><strong>Opening your vault…</strong><span>Notes are read from this device.</span></div>
+						<div class="empty-results flex flex-col items-center py-7.5 px-3 text-faint text-center [&_svg]:text-faint [&_strong]:mt-2.25 [&_strong]:text-muted [&_strong]:text-ui-12 [&_span]:mt-1 [&_span]:text-ui-10 [&_span]:[line-height:1.4] [&_button]:mt-3 [&_button]:h-7.25 [&_button]:inline-flex [&_button]:items-center [&_button]:gap-1.5 [&_button]:py-0 [&_button]:px-2.5 [&_button]:border [&_button]:border-line [&_button]:rounded-md [&_button]:bg-surface [&_button]:text-ink-soft [&_button]:cursor-pointer [&_button]:text-ui-11 [&_button:hover]:border-line-hover [&_button:hover]:text-ink"><LoaderCircle class="spin [animation:spin_0.9s_linear_infinite]" size={20} /><strong>Opening your vault…</strong><span>Notes are read from this device.</span></div>
 					{:else}
-						<div class="empty-results"><FileText size={20} /><strong>No notes yet</strong><span>Your first note is one keystroke away.</span><button onclick={onCreateNote}><Plus size={13} /> New note</button></div>
+						<div class="empty-results flex flex-col items-center py-7.5 px-3 text-faint text-center [&_svg]:text-faint [&_strong]:mt-2.25 [&_strong]:text-muted [&_strong]:text-ui-12 [&_span]:mt-1 [&_span]:text-ui-10 [&_span]:[line-height:1.4] [&_button]:mt-3 [&_button]:h-7.25 [&_button]:inline-flex [&_button]:items-center [&_button]:gap-1.5 [&_button]:py-0 [&_button]:px-2.5 [&_button]:border [&_button]:border-line [&_button]:rounded-md [&_button]:bg-surface [&_button]:text-ink-soft [&_button]:cursor-pointer [&_button]:text-ui-11 [&_button:hover]:border-line-hover [&_button:hover]:text-ink"><FileText size={20} /><strong>No notes yet</strong><span>Your first note is one keystroke away.</span><button onclick={onCreateNote}><Plus size={13} /> New note</button></div>
 					{/if}
 				{:else}
 					{#each treeRows as row (row.key)}
 						{#if row.kind === 'folder' && row.attachments}
 							{@const Icon = folderIconComponent(row.icon)}
-							<button class="file-tree-row folder-row attachment-folder-row" data-folder-path={row.path} data-folder-icon={row.icon ?? 'paperclip'} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Attachments — right-click or long-press to rename or delete" onclick={() => handleFolderRowClick(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)} ontouchstart={(event) => { const path = row.path; handleRowTouchStart(event, (x, y) => showFolderContextMenu(path, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd}>
-								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Icon size={16} /><span class="file-tree-name">{row.label}</span>{#if row.pinned}<Pin class="folder-pin-indicator" size={13} aria-label="Pinned" />{/if}
+							<button class="file-tree-row folder-row attachment-folder-row [--tree-depth:0] [-webkit-touch-callout:none] [-webkit-user-select:none] select-none [touch-action:manipulation] [&[draggable='true']]:cursor-grab [&[draggable='true']:active]:cursor-grabbing [&.dragging]:opacity-45 [&.drop-target]:bg-selected [&.drop-target]:[box-shadow:inset_0_0_0_1px_var(--focus-border)] [.file&]:[padding-left:calc(10px_+_(var(--tree-depth)_*_14px))] w-full flex items-center gap-1.75 min-h-8.5 py-1.75 px-2.5 [padding-left:calc(10px_+_(var(--tree-depth)_*_14px))] border-0 rounded-md bg-transparent text-ink-soft cursor-pointer text-ui-12 text-left [&:hover:not(:disabled)]:bg-subtle [&:hover:not(:disabled)]:text-ink [&.drop-target:hover:not(:disabled)]:bg-selected [&.drop-target:hover:not(:disabled)]:[box-shadow:inset_0_0_0_1px_var(--focus-border)] [&:disabled]:cursor-not-allowed [&_>_svg]:text-accent-quiet" data-folder-path={row.path} data-folder-icon={row.icon ?? 'paperclip'} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Attachments — right-click or long-press to rename or delete" onclick={() => handleFolderRowClick(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)} ontouchstart={(event) => { const path = row.path; handleRowTouchStart(event, (x, y) => showFolderContextMenu(path, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd}>
+								<span class="file-tree-caret w-3.25 h-4 grid [flex:0_0_13px] place-items-center text-faint [&_>_span]:w-0.75 [&_>_span]:h-0.75 [&_>_span]:rounded-full [&_>_span]:bg-faint">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Icon size={16} /><span class="file-tree-name flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{row.label}</span>{#if row.pinned}<Pin class="folder-pin-indicator [.folder-row_>_&]:flex-none [.folder-row_>_&]:ml-auto [.folder-row_>_&]:text-accent" size={13} aria-label="Pinned" />{/if}
 							</button>
 						{:else if row.kind === 'attachment'}
-							<button class="file file-tree-row attachment-row" data-attachment-path={row.path} style={`--tree-depth: ${row.depth}`} title={`Open ${row.label}`} onclick={() => onOpenAttachment(row.attachment.id)} oncontextmenu={(event) => openAttachmentContextMenu(event, row.attachment)}>
+							<button class="file file-tree-row attachment-row relative w-full flex items-center gap-2.25 py-2.25 px-2.5 border-0 rounded-md bg-transparent text-ink-soft cursor-pointer text-ui-13 text-left [&:hover]:bg-subtle [&.active]:bg-selected [&.active]:text-ink [&.active]:[font-weight:550] [&.active::before]:[content:''] [&.active::before]:absolute [&.active::before]:left-0 [&.active::before]:w-0.5 [&.active::before]:h-4.5 [&.active::before]:rounded-sm [&.active::before]:bg-accent [&_svg]:text-faint [&_span]:min-w-0 [&_span]:block [&_span]:flex-1 [&_span]:overflow-hidden [&_span]:text-ellipsis [&_strong]:block [&_strong]:overflow-hidden [&_strong]:text-ellipsis [&_strong]:whitespace-nowrap [&_strong]:text-ui-12 [&_strong]:[font-weight:560] [&_small]:block [&_small]:overflow-hidden [&_small]:text-ellipsis [&_small]:whitespace-nowrap [&_small]:mt-0.75 [&_small]:text-faint [&_small]:text-ui-10 [&_small]:[font-weight:400] [--tree-depth:0] [-webkit-touch-callout:none] [-webkit-user-select:none] select-none [touch-action:manipulation] [&[draggable='true']]:cursor-grab [&[draggable='true']:active]:cursor-grabbing [&.dragging]:opacity-45 [&.drop-target]:bg-selected [&.drop-target]:[box-shadow:inset_0_0_0_1px_var(--focus-border)] [.file&]:[padding-left:calc(10px_+_(var(--tree-depth)_*_14px))]" data-attachment-path={row.path} style={`--tree-depth: ${row.depth}`} title={`Open ${row.label}`} onclick={() => onOpenAttachment(row.attachment.id)} oncontextmenu={(event) => openAttachmentContextMenu(event, row.attachment)}>
 								{#if row.attachment.type.startsWith('image/')}<Image size={16} />{:else}<Paperclip size={16} />{/if}<span><strong>{row.label}</strong></span>
 							</button>
 						{:else if row.kind === 'folder'}
 							{@const Icon = folderIconComponent(row.icon)}
-							<button class="file-tree-row folder-row" class:drop-target={dropTargetPath === row.path} class:dragging={draggedEntry?.kind === 'folder' && draggedEntry.path === row.path} data-folder-path={row.path} data-folder-icon={row.icon ?? 'folder'} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Drag to move folder — right-click or long-press for options" draggable="true" disabled={transferState === 'working'} onclick={() => handleFolderRowClick(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)} ontouchstart={(event) => { const path = row.path; handleRowTouchStart(event, (x, y) => showFolderContextMenu(path, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd} ondragstart={(event) => startDrag(event, { kind: 'folder', path: row.path })} ondragend={endDrag} ondragover={(event) => keepDropTarget(event, row.path)} ondragleave={(event) => clearDropTarget(event, row.path)} ondrop={(event) => dropOnFolder(event, row.path)}>
-								<span class="file-tree-caret">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Icon size={16} /><span class="file-tree-name">{row.label}</span>{#if row.pinned}<Pin class="folder-pin-indicator" size={13} aria-label="Pinned" />{/if}
+							<button class="file-tree-row folder-row [--tree-depth:0] [-webkit-touch-callout:none] [-webkit-user-select:none] select-none [touch-action:manipulation] [&[draggable='true']]:cursor-grab [&[draggable='true']:active]:cursor-grabbing [&.dragging]:opacity-45 [&.drop-target]:bg-selected [&.drop-target]:[box-shadow:inset_0_0_0_1px_var(--focus-border)] [.file&]:[padding-left:calc(10px_+_(var(--tree-depth)_*_14px))] w-full flex items-center gap-1.75 min-h-8.5 py-1.75 px-2.5 [padding-left:calc(10px_+_(var(--tree-depth)_*_14px))] border-0 rounded-md bg-transparent text-ink-soft cursor-pointer text-ui-12 text-left [&:hover:not(:disabled)]:bg-subtle [&:hover:not(:disabled)]:text-ink [&.drop-target:hover:not(:disabled)]:bg-selected [&.drop-target:hover:not(:disabled)]:[box-shadow:inset_0_0_0_1px_var(--focus-border)] [&:disabled]:cursor-not-allowed [&_>_svg]:text-accent-quiet" class:drop-target={dropTargetPath === row.path} class:dragging={draggedEntry?.kind === 'folder' && draggedEntry.path === row.path} data-folder-path={row.path} data-folder-icon={row.icon ?? 'folder'} style={`--tree-depth: ${row.depth}`} aria-expanded={row.expanded} title="Drag to move folder — right-click or long-press for options" draggable="true" disabled={transferState === 'working'} onclick={() => handleFolderRowClick(row.path)} oncontextmenu={(event) => openFolderContextMenu(event, row.path)} ontouchstart={(event) => { const path = row.path; handleRowTouchStart(event, (x, y) => showFolderContextMenu(path, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd} ondragstart={(event) => startDrag(event, { kind: 'folder', path: row.path })} ondragend={endDrag} ondragover={(event) => keepDropTarget(event, row.path)} ondragleave={(event) => clearDropTarget(event, row.path)} ondrop={(event) => dropOnFolder(event, row.path)}>
+								<span class="file-tree-caret w-3.25 h-4 grid [flex:0_0_13px] place-items-center text-faint [&_>_span]:w-0.75 [&_>_span]:h-0.75 [&_>_span]:rounded-full [&_>_span]:bg-faint">{#if row.hasChildren}{#if row.expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}{:else}<span></span>{/if}</span><Icon size={16} /><span class="file-tree-name flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{row.label}</span>{#if row.pinned}<Pin class="folder-pin-indicator [.folder-row_>_&]:flex-none [.folder-row_>_&]:ml-auto [.folder-row_>_&]:text-accent" size={13} aria-label="Pinned" />{/if}
 							</button>
 						{:else}
-							<button class="file file-tree-row" class:active={row.result.note.id === activeNoteId} class:dragging={draggedEntry?.kind === 'file' && draggedEntry.id === row.result.note.id} data-file-path={row.path} data-file-pinned={row.result.note.pinned ? 'true' : undefined} style={`--tree-depth: ${row.depth}`} aria-current={row.result.note.id === activeNoteId ? 'true' : undefined} title="Drag to move file — right-click or long-press for options" draggable="true" disabled={transferState === 'working'} onkeydown={onMoveNoteFocus} onclick={() => handleFileRowClick(row.result.note.id)} oncontextmenu={(event) => openFileContextMenu(event, row.result)} ontouchstart={(event) => { const result = row.result; handleRowTouchStart(event, (x, y) => showFileContextMenu(result, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd} ondragstart={(event) => startDrag(event, { kind: 'file', id: row.result.note.id, path: row.path })} ondragend={endDrag}>
-								<FileText size={16} /><span>{#if naming?.action === 'rename-file' && naming.id === row.result.note.id}<input class="file-inline-input" bind:this={namingInput} bind:value={draftName} aria-label="File name" spellcheck="false" disabled={namingBusy} aria-invalid={Boolean(namingError)} title={namingError || undefined} onblur={commitNaming} onkeydown={handleNamingKeydown} />{:else}<strong>{row.label}</strong>{/if}</span>{#if row.result.note.pinned}<Pin class="file-pin-indicator" size={13} aria-label="Pinned" />{/if}
+							<button class="file file-tree-row relative w-full flex items-center gap-2.25 py-2.25 px-2.5 border-0 rounded-md bg-transparent text-ink-soft cursor-pointer text-ui-13 text-left [&:hover]:bg-subtle [&.active]:bg-selected [&.active]:text-ink [&.active]:[font-weight:550] [&.active::before]:[content:''] [&.active::before]:absolute [&.active::before]:left-0 [&.active::before]:w-0.5 [&.active::before]:h-4.5 [&.active::before]:rounded-sm [&.active::before]:bg-accent [&_svg]:text-faint [&_span]:min-w-0 [&_span]:block [&_span]:flex-1 [&_span]:overflow-hidden [&_span]:text-ellipsis [&_strong]:block [&_strong]:overflow-hidden [&_strong]:text-ellipsis [&_strong]:whitespace-nowrap [&_strong]:text-ui-12 [&_strong]:[font-weight:560] [&_small]:block [&_small]:overflow-hidden [&_small]:text-ellipsis [&_small]:whitespace-nowrap [&_small]:mt-0.75 [&_small]:text-faint [&_small]:text-ui-10 [&_small]:[font-weight:400] [--tree-depth:0] [-webkit-touch-callout:none] [-webkit-user-select:none] select-none [touch-action:manipulation] [&[draggable='true']]:cursor-grab [&[draggable='true']:active]:cursor-grabbing [&.dragging]:opacity-45 [&.drop-target]:bg-selected [&.drop-target]:[box-shadow:inset_0_0_0_1px_var(--focus-border)] [.file&]:[padding-left:calc(10px_+_(var(--tree-depth)_*_14px))]" class:active={row.result.note.id === activeNoteId} class:dragging={draggedEntry?.kind === 'file' && draggedEntry.id === row.result.note.id} data-file-path={row.path} data-file-pinned={row.result.note.pinned ? 'true' : undefined} style={`--tree-depth: ${row.depth}`} aria-current={row.result.note.id === activeNoteId ? 'true' : undefined} title="Drag to move file — right-click or long-press for options" draggable="true" disabled={transferState === 'working'} onkeydown={onMoveNoteFocus} onclick={() => handleFileRowClick(row.result.note.id)} oncontextmenu={(event) => openFileContextMenu(event, row.result)} ontouchstart={(event) => { const result = row.result; handleRowTouchStart(event, (x, y) => showFileContextMenu(result, x, y)); }} ontouchmove={handleRowTouchMove} ontouchend={handleRowTouchEnd} ontouchcancel={handleRowTouchEnd} ondragstart={(event) => startDrag(event, { kind: 'file', id: row.result.note.id, path: row.path })} ondragend={endDrag}>
+								<FileText size={16} /><span>{#if naming?.action === 'rename-file' && naming.id === row.result.note.id}<input class="file-inline-input min-w-0 w-full h-6 py-0.5 px-1.5 border border-focus-border rounded-sm outline-none bg-surface text-ink text-ui-12" bind:this={namingInput} bind:value={draftName} aria-label="File name" spellcheck="false" disabled={namingBusy} aria-invalid={Boolean(namingError)} title={namingError || undefined} onblur={commitNaming} onkeydown={handleNamingKeydown} />{:else}<strong>{row.label}</strong>{/if}</span>{#if row.result.note.pinned}<Pin class="file-pin-indicator [.file_>_&]:flex-none [.file_>_&]:text-accent" size={13} aria-label="Pinned" />{/if}
 							</button>
 					{/if}
 					{/each}
 				{/if}
 			</nav>
-			{#if contextMenu}
-				<button class="file-context-backdrop" aria-label="Close file menu" onclick={closeContextMenu}></button>
-				<div class="file-context-menu" role="menu" aria-label={contextMenu.kind === 'sidebar' ? 'Sidebar actions' : 'File actions'} style={`top: ${contextMenu.y}px; left: ${contextMenu.x}px`}>
-					{#if contextMenu.kind === 'sidebar'}
-						{@render sidebarPositionItems()}
-					{:else if contextMenu.kind === 'root' || contextMenu.kind === 'folder'}
-						<button role="menuitem" disabled={transferState === 'working'} onclick={contextCreateFile}><FilePlus2 size={15} /><span>New file</span></button>
-						<button role="menuitem" disabled={transferState === 'working'} onclick={contextCreateFolder}><FolderPlus size={15} /><span>New folder</span></button>
-						{#if contextMenu.kind === 'folder'}
-							<div class="file-context-divider"></div>
-							<button role="menuitemcheckbox" aria-checked={folderPinnedForPath(contextMenu.path)} disabled={transferState === 'working'} onclick={contextToggleFolderPinned}><Pin size={15} /><span>{folderPinnedForPath(contextMenu.path) ? 'Unpin folder' : 'Pin folder'}</span></button>
-							<button role="menuitem" disabled={transferState === 'working'} onclick={contextRenameFolder}><Pencil size={15} /><span>Rename</span></button>
-							{#if !isAttachmentPath(contextMenu.path)}
-								{@render folderIconSubmenu()}
-							{/if}
-							<button role="menuitem" onclick={contextCopyPath}><Copy size={15} /><span>Copy relative path</span></button>
-							<button role="menuitem" class="danger" disabled={transferState === 'working'} onclick={contextDeleteFolder}><Trash2 size={15} /><span>Delete</span></button>
-						{:else}
-							<div class="file-context-divider"></div>
-							{@render sidebarPositionItems()}
-						{/if}
-					{:else if contextMenu.kind === 'attachment'}
-						<button role="menuitem" disabled={transferState === 'working'} onclick={contextOpenAttachment}><ExternalLink size={15} /><span>Open in new tab</span></button>
-						<button role="menuitem" onclick={contextCopyPath}><Copy size={15} /><span>Copy relative path</span></button>
-						<div class="file-context-divider"></div>
-						<button role="menuitem" class="danger" disabled={transferState === 'working'} onclick={contextDeleteAttachment}><Trash2 size={15} /><span>Delete</span></button>
-					{:else}
-						<button role="menuitem" disabled={transferState === 'working'} onclick={contextOpenFile}><FileText size={15} /><span>Open</span></button>
-						<button role="menuitemcheckbox" aria-checked={contextMenu.pinned} disabled={transferState === 'working'} onclick={contextToggleNotePinned}><Pin size={15} /><span>{contextMenu.pinned ? 'Unpin file' : 'Pin file'}</span></button>
-						<button role="menuitem" disabled={transferState === 'working'} onclick={contextRenameFile}><Pencil size={15} /><span>Rename</span></button>
-						<button role="menuitem" onclick={contextCopyPath}><Copy size={15} /><span>Copy relative path</span></button>
-						<div class="file-context-divider"></div>
-						{@render formatSubmenu('export', 'Export as', noteFormats)}
-						{@render formatSubmenu('copy', 'Copy as', noteFormats.filter((format) => format.copyable))}
-						<div class="file-context-divider"></div>
-						<button role="menuitem" class="danger" disabled={transferState === 'working'} onclick={contextDeleteFile}><Trash2 size={15} /><span>Delete</span></button>
-					{/if}
-				</div>
-			{/if}
+            {#if contextMenu}
+              {#await Promise.all([import('./file-context-menu.svelte'), import('#lib/lazy-styles.ts').then((styles) => styles.loadMenuStyles())]) then [{ default: FileContextMenu }]}
+                {#key contextMenu}
+                  <FileContextMenu x={contextMenu.x} y={contextMenu.y} label={contextMenu.kind === 'sidebar' ? 'Sidebar actions' : 'File actions'} entries={contextEntries()} onClose={closeContextMenu} />
+                {/key}
+              {/await}
+            {/if}
 			{#if notePageCount > 1}
-				<div class="note-pagination" aria-label="Note list pages">
+				<div class="note-pagination flex items-center justify-between gap-1.5 pt-2.25 px-1 pb-0 [border-top:1px_solid_var(--line-soft)] text-faint text-ui-10 [&_button]:py-1.25 [&_button]:px-1.75 [&_button]:border [&_button]:border-line [&_button]:rounded-md [&_button]:bg-surface [&_button]:text-muted [&_button]:cursor-pointer [&_button]:text-ui-10 [&_button:hover:not(:disabled)]:border-line-hover [&_button:hover:not(:disabled)]:text-ink [&_button:disabled]:opacity-45 [&_button:disabled]:cursor-not-allowed" aria-label="Note list pages">
 					<button disabled={notePage === 0} onclick={() => onChangePage(notePage - 1)}>Previous</button>
 					<span>Page {notePage + 1} of {notePageCount}</span>
 					<button disabled={notePage === notePageCount - 1} onclick={() => onChangePage(notePage + 1)}>Next</button>
@@ -1078,21 +1053,21 @@
 		</div>
 	{/if}
 	{#if vaults.length > 1 && !paletteOpen}
-		<div class="vault-dots" role="tablist" aria-label="Repositories (swipe the sidebar, or use the mouse back and forward buttons, to switch)">
+		<div class="vault-dots flex justify-center gap-0.5 pt-2 px-1 pb-1 [&_button]:grid [&_button]:place-items-center [&_button]:w-4 [&_button]:h-4 [&_button]:p-0 [&_button]:border-0 [&_button]:[background:none] [&_button]:cursor-pointer [&_button::after]:[content:''] [&_button::after]:w-1.5 [&_button::after]:h-1.5 [&_button::after]:rounded-3xl [&_button::after]:bg-line-soft [&_button::after]:[transition:background_150ms,_transform_150ms] [&_button:hover::after]:bg-faint [&_button.active::after]:bg-faint [&_button.active::after]:[transform:scale(1.25)]" role="tablist" aria-label="Repositories (swipe the sidebar, or use the mouse back and forward buttons, to switch)">
 			{#each vaults as vault (vault.id)}
 				<button role="tab" aria-selected={vault.id === activeVaultId} aria-label={vault.name} title={vault.name} class:active={vault.id === activeVaultId} disabled={transferState === 'working'} onclick={() => { if (vault.id !== activeVaultId) onSelectVault(vault.id); }}></button>
 			{/each}
 		</div>
 	{/if}
-	<div class="sidebar-footer">
+	<div class="sidebar-footer flex items-center gap-1.75 mt-1 pt-2 px-1 pb-0 [&_>_:first-child]:min-w-0 [&_>_:first-child]:flex-1 [&_.github-account]:overflow-hidden [&_.github-account_>_span]:flex-1">
 		<button
-			class="doc-status"
+			class="doc-status h-7 flex items-center gap-1.75 border-0 rounded-md bg-transparent text-faint text-ui-11 whitespace-nowrap pt-0 pr-2 pb-0 pl-1 cursor-pointer no-underline [&:hover]:bg-subtle [&:hover]:text-muted [&[data-tone='error']]:text-danger [&.offline]:text-muted [.sidebar-footer_&]:overflow-hidden [@media((max-width:_700px))]:[&_>_span]:hidden! [@media((max-width:_700px))]:w-8.5! [@media((max-width:_700px))]:justify-center! [@media((max-width:_700px))]:p-0!"
 			data-tone={docStatusTone}
 			class:offline={!isOnline}
 			title={githubState === 'connected' && githubUser ? `Synced as @${githubUser.login}` : githubMessage || 'Notes are saved on this device'}
 			aria-label={`${wordCount} words, ${readingMinutes} minute reading time, ${docStatusLabel}. Open local storage settings.`}
 			onclick={onOpenStorageSettings}
-		><span class="doc-status-text">{wordCount} {wordCount === 1 ? 'word' : 'words'} · {readingMinutes} min · {docStatusLabel}</span><i class="doc-status-dot" aria-hidden="true"></i></button>
-		<button class="icon-button" aria-label="Settings" aria-haspopup="dialog" aria-expanded={settingsOpen} aria-controls="settings-dialog" title="Settings" onclick={onOpenSettings}><Settings size={18} /></button>
+		><span class="doc-status-text min-w-0 overflow-hidden text-ellipsis">{wordCount} {wordCount === 1 ? 'word' : 'words'} · {readingMinutes} min · {docStatusLabel}</span><i class="doc-status-dot w-1.25 h-1.25 flex-none rounded-full bg-faint opacity-70 [.doc-status[data-tone='ok']_&]:[background:var(--ok,_#4caf7d)] [.doc-status[data-tone='ok']_&]:opacity-100 [.doc-status[data-tone='busy']_&]:[background:var(--warn,_#d9a13b)] [.doc-status[data-tone='busy']_&]:opacity-100 [.doc-status[data-tone='error']_&]:bg-danger [.doc-status[data-tone='error']_&]:opacity-100" aria-hidden="true"></i></button>
+		<button class="icon-button border-0 bg-transparent cursor-pointer w-8.5 h-8.5 grid place-items-center rounded-md text-muted [transition:background_0.15s_ease,_color_0.15s_ease] [&:hover]:bg-subtle-strong [&:hover]:text-ink [.sidebar-footer_&]:w-7 [.sidebar-footer_&]:h-7" aria-label="Settings" aria-haspopup="dialog" aria-expanded={settingsOpen} aria-controls="settings-dialog" title="Settings" onclick={onOpenSettings}><Settings size={18} /></button>
 	</div>
 </aside>
