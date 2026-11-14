@@ -1,3 +1,4 @@
+import { createBackupKey, unlockBackupKey } from "#lib/backup-crypto.ts";
 import type { ConfirmationOptions, ConfirmationRequest } from "./confirmation.svelte.ts";
 import type {
   BackupState,
@@ -94,6 +95,24 @@ export function createGithubController(host: ControllerHost) {
   let restoreBranch = $state("main");
 
   let restoreDirectory = $state("vault");
+  let restorePassphrase = $state("");
+
+  async function configureEncryption(passphrase: string, enabled = true): Promise<void> {
+    const opened = host.vault,
+      configuration = githubBackup;
+    if (!opened || !configuration || backupState === "backing-up") return;
+    const encryption = enabled
+      ? (configuration.encryption ?? (await createBackupKey(passphrase)).encryption)
+      : undefined;
+    if (enabled && configuration.encryption)
+      await unlockBackupKey(configuration.encryption, passphrase);
+    if (opened !== host.vault || configuration !== githubBackup) return;
+    await opened.saveGithubBackupState({ ...configuration, encryption });
+    githubBackup = await opened.getGithubBackupState();
+    backupMessage = enabled
+      ? "Encrypted backups are enabled and unlocked for this session. Back up now to upload every file encrypted."
+      : "The next backup will upload unencrypted files.";
+  }
 
   async function restoreGitHub(): Promise<void> {
     if (host.disposed || githubState === "loading") return;
@@ -417,6 +436,7 @@ export function createGithubController(host: ControllerHost) {
   async function openRestore(): Promise<void> {
     if (!host.isOnline || !githubUser || restoreState === "restoring") return;
     if (!(await host.settleDraft())) return;
+    restorePassphrase = "";
     restoreOwner = githubBackup?.owner ?? githubUser.login;
     restoreRepository = githubBackup?.repository ?? suggestedRepositoryName(host.activeVault);
     restoreBranch = githubBackup?.branch ?? "main";
@@ -510,10 +530,13 @@ export function createGithubController(host: ControllerHost) {
     restoreState = "restoring";
     restoreMessage = "Downloading and rebuilding your local vault…";
     try {
+      const passphrase = restorePassphrase || undefined;
+      restorePassphrase = "";
       const result = await (
         await host.loadGithubModule()
       ).restoreVaultFromGithub(opened, source.configuration, sha, {
         expectedVersion: source.version,
+        passphrase,
       });
       if (host.disposed || opened !== host.vault) return;
       githubBackup = result.state;
@@ -538,6 +561,13 @@ export function createGithubController(host: ControllerHost) {
     }
   }
   return {
+    configureEncryption,
+    get restorePassphrase() {
+      return restorePassphrase;
+    },
+    set restorePassphrase(value: string) {
+      restorePassphrase = value;
+    },
     restoreGitHub,
     disconnectGitHub,
     connectGitHub,

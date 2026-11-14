@@ -223,6 +223,7 @@
 {#if page.settingsOpen}
 	{#await import('#lib/components/settings-dialog.svelte') then { default: SettingsDialog }}
 		<SettingsDialog
+      onConfigureEncryption={page.configureEncryption}
 			vault={page.vault}
 			vaultName={page.vaultName}
 			suggestedRepositoryName={page.suggestedRepositoryName}
@@ -293,6 +294,7 @@
 			bind:restoreRepository={page.restoreRepository}
 			bind:restoreBranch={page.restoreBranch}
 			bind:restoreDirectory={page.restoreDirectory}
+      bind:restorePassphrase={page.restorePassphrase}
 			onClose={() => (page.restoreModalOpen = false)}
 			onLoadCommits={() => void page.loadRestoreCommits()}
 			onRestore={() => void page.restoreSelectedCommit()}

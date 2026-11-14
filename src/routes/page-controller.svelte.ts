@@ -2650,6 +2650,13 @@ export function createPageController() {
   }
 
   return {
+    configureEncryption: githubController.configureEncryption,
+    get restorePassphrase() {
+      return githubController.restorePassphrase;
+    },
+    set restorePassphrase(value: string) {
+      githubController.restorePassphrase = value;
+    },
     history,
     get printHtml() {
       return transferController.printHtml;

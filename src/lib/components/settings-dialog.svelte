@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BackupEncryptionSettings from "./backup-encryption-settings.svelte";
 	import { untrack } from 'svelte';
 	import {
 		CloudDownload, CloudOff, CloudUpload, Code2, Copy, Database, Download, ExternalLink, FileArchive,
@@ -20,6 +21,7 @@
 	import type { SettingsSection } from './settings-types';
 
 	interface Props {
+    onConfigureEncryption: (passphrase: string, enabled?: boolean) => Promise<void>;
 		vault?: Vault;
 		vaultName: string;
 		suggestedRepositoryName: string;
@@ -72,7 +74,7 @@
 	}
 
 	let {
-		vault, vaultName, suggestedRepositoryName, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
+		onConfigureEncryption, vault, vaultName, suggestedRepositoryName, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
 		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, fonts, fontCategories, attachmentFolder, attachmentsHidden, onAttachmentsHiddenChange, onRenameAttachmentFolder, scrollSync, onToggleScrollSync, shortcuts, primaryModifier,
 		section = $bindable('editor'), onThemeChange, onColorThemeChange, onFontChange, onFontCategoryChange, onResetFonts, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository, onAutoBackupChange,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onPrepareVaultDeletion, onDeleteVault
@@ -480,6 +482,7 @@
 						</div>
 						{#if githubBackup}
 							<h3 class="settings-group-heading">Sync status</h3>
+              <BackupEncryptionSettings enabled={Boolean(githubBackup.encryption)} busy={backupState === "backing-up"} onConfigure={onConfigureEncryption} />
 							<dl class="settings-facts">
 								<div><dt>Repository</dt><dd>{githubBackup.owner}/{githubBackup.repository}</dd></div>
 								<div><dt>GitHub account</dt><dd>@{githubBackup.githubAccountLogin || 'Needs re-selection'}</dd></div>
