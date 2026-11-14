@@ -7,7 +7,6 @@ export * from "./markdown-transfer.js";
 export {
   backupVaultToGithub,
   connectGithub,
-  createPrivateGithubRepository,
   disconnectGithub,
   GithubRequestError,
   githubRequest,
