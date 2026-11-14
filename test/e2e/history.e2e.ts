@@ -10,6 +10,9 @@ test("previews and restores a local version and keeps the replaced text", async 
   await page.keyboard.press("ControlOrMeta+S");
   await expect(page.getByText("Unsaved", { exact: true })).toBeHidden();
   await expect(page.getByText("Saving…", { exact: true })).toBeHidden();
+  await expect(
+    page.locator(".note-list").getByRole("button", { name: "First version", exact: true }),
+  ).toHaveAttribute("aria-current", "true");
   await page.clock.setFixedTime(new Date("2027-01-01T00:06:00Z"));
   await editor.fill("# Second version");
   await page.keyboard.press("ControlOrMeta+S");
