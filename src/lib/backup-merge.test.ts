@@ -71,3 +71,29 @@ describe("three-way backup merge", () => {
     expect(merged.manifest.notes.map((note) => note.id).sort()).toEqual(["a", "c"]);
   });
 });
+
+it("keeps an edited attachment and its owner when the other device deletes the note", async () => {
+  const base = vault({ a: "note" });
+  const attachment = {
+    id: "image",
+    noteId: "a",
+    name: "image.png",
+    path: "attachments/a/image",
+    sourcePath: "attachments/image.png",
+    type: "image/png",
+    size: 3,
+    createdAt: "",
+    updatedAt: "",
+  };
+  base.manifest.attachments.push(attachment);
+  base.files.push({ path: attachment.path, contents: new Blob(["old"]) });
+  const remote = vault({ a: "note" });
+  remote.manifest.attachments.push(attachment);
+  remote.files.push({ path: attachment.path, contents: new Blob(["edited"]) });
+  const merged = await mergeBackupFiles(base, vault({}), remote);
+  expect(merged.manifest.notes.map((note) => note.id)).toEqual(["a"]);
+  expect(merged.manifest.attachments.map((file) => file.id)).toEqual(["image"]);
+  expect(await merged.files.find((file) => file.path === attachment.path)!.contents.text()).toBe(
+    "edited",
+  );
+});

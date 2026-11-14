@@ -133,9 +133,18 @@ export async function mergeBackupFiles(
   await mergeEntities<NoteMetadata>("notes", manifest.notes);
   await mergeEntities<AttachmentMetadata>("attachments", manifest.attachments);
   const noteIds = new Set(manifest.notes.map((note) => note.id));
-  manifest.attachments = manifest.attachments.filter((attachment) =>
-    noteIds.has(attachment.noteId),
-  );
+  for (const attachment of manifest.attachments) {
+    if (noteIds.has(attachment.noteId)) continue;
+    const source = [local, remote, base].find((vault) =>
+      vault.manifest.notes.some((note) => note.id === attachment.noteId && !note.deletedAt),
+    );
+    const note = source?.manifest.notes.find((note) => note.id === attachment.noteId);
+    const contents = source?.files.find((file) => file.path === note?.path)?.contents;
+    if (!note || !contents) throw new Error("An attachment has no recoverable owner note");
+    manifest.notes.push({ ...note });
+    files.push({ path: note.path, contents });
+    noteIds.add(note.id);
+  }
   const folders = new Map(
     [...(remote.manifest.folders ?? []), ...(local.manifest.folders ?? [])].map((folder) => [
       folder.path,
