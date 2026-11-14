@@ -17,6 +17,7 @@ function textOf(node: SourceNode): string {
   return node.value ?? node.children?.map(textOf).join("") ?? "";
 }
 export function noteOutline(markdown: string): NoteHeading[] {
+  if (!/(?:#{1,6}(?:[ \t]|$)|[=-]+[ \t]*(?:\r?\n|$))/m.test(markdown)) return [];
   const headings: NoteHeading[] = [];
   visitProse(parseMarkdownSource(markdown), (node) => {
     if (node.type !== "heading") return;

@@ -35,3 +35,12 @@ describe("note insights", () => {
     ).toEqual(["日本語", "café", "C++", "File name"]);
   });
 });
+
+it("keeps nested headings while returning no outline for long prose-only notes", () => {
+  expect(
+    noteOutline("> ## Quoted\n\n- ### Listed\n\n> Setext\n> ---").map((heading) => heading.text),
+  ).toEqual(["Quoted", "Listed", "Setext"]);
+  expect(
+    noteOutline(Array.from({ length: 1000 }, (_, index) => `Paragraph ${index}.`).join("\n\n")),
+  ).toEqual([]);
+});
