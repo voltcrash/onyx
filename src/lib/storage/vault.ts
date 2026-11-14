@@ -1,3 +1,4 @@
+import { repairNoteFiles } from "./repair.js";
 import { findUnlinkedMentions, type NoteMention } from "../note-insights.ts";
 import {
   createSearchPostings,
@@ -196,17 +197,8 @@ export class Vault {
 
   async #repairNoteFiles(): Promise<void> {
     await this.#withLock(async () => {
-      for (const note of await this.#database.getNotes()) {
-        const markdown = await this.#database.getNoteMarkdown(note.id);
-        if (markdown === undefined) continue;
-        if ((await this.#filesystem.readText(note.path).catch(() => undefined)) === markdown)
-          continue;
-        try {
-          await this.#filesystem.writeText(note.path, markdown);
-        } catch (error) {
-          if (!isQuotaExceededError(error)) throw error;
-          this.#pendingNoteFiles.add(note.id);
-        }
+      for (const id of await repairNoteFiles(this.#database, this.#filesystem)) {
+        this.#pendingNoteFiles.add(id);
       }
     });
   }
@@ -436,17 +428,18 @@ export class Vault {
     return this.#withLock(async () => activeNotes(await this.#database.getNotes()));
   }
 
-  /** Notes outside the trash that link to `noteId`, by title. */
-  async listUnlinkedMentions(
-    noteId: string,
-  ): Promise<Array<NoteMention & { noteId: string; title: string }>> {
+  /** Reads backlinks and mentions from one consistent vault snapshot. */
+  async listNoteConnections(noteId: string): Promise<{
+    backlinks: NoteMetadata[];
+    mentions: Array<NoteMention & { noteId: string; title: string }>;
+  }> {
     return this.#withLock(async () => {
       const [notes, contents] = await Promise.all([
         this.#database.getNotes().then(activeNotes),
         this.#database.getNoteContents(),
       ]);
       const target = notes.find((note) => note.id === noteId);
-      if (!target) return [];
+      if (!target) return { backlinks: [], mentions: [] };
       const names = [
         target.title,
         noteFilePath(target)
@@ -454,7 +447,7 @@ export class Vault {
           .replace(/\.(?:md|markdown)$/i, ""),
       ];
       const byId = new Map(contents.map((note) => [note.noteId, note.markdown]));
-      return notes
+      const mentions = notes
         .filter((note) => note.id !== noteId)
         .flatMap((note) =>
           findUnlinkedMentions(byId.get(note.id) ?? "", names).map((mention) => ({
@@ -463,6 +456,14 @@ export class Vault {
             title: note.title,
           })),
         );
+      const backlinks = notes
+        .filter(
+          (note) =>
+            note.id !== noteId &&
+            linksToNote(byId.get(note.id) ?? "", noteFilePath(note), target, notes),
+        )
+        .sort((left, right) => left.title.localeCompare(right.title));
+      return { backlinks, mentions };
     });
   }
 
@@ -481,25 +482,6 @@ export class Vault {
         source.markdown.slice(0, start) +
         `[[${name}|${mention.text}]]` +
         source.markdown.slice(end);
-    });
-  }
-
-  async listBacklinks(noteId: string): Promise<NoteMetadata[]> {
-    return this.#withLock(async () => {
-      const [notes, contents] = await Promise.all([
-        this.#database.getNotes().then(activeNotes),
-        this.#database.getNoteContents(),
-      ]);
-      const target = notes.find((note) => note.id === noteId);
-      if (!target) return [];
-      const markdownById = new Map(contents.map((content) => [content.noteId, content.markdown]));
-      return notes
-        .filter(
-          (note) =>
-            note.id !== noteId &&
-            linksToNote(markdownById.get(note.id) ?? "", noteFilePath(note), target, notes),
-        )
-        .sort((left, right) => left.title.localeCompare(right.title));
     });
   }
 

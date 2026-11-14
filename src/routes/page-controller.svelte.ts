@@ -1454,8 +1454,8 @@ export function createPageController() {
           ]
         : [],
     );
-    // Rendering before the switch shows the note fully formatted instead of upgrading it.
-    if (sequence === noteLoadSequence) {
+    // Prepare previews when switching notes; with no active note, show the editor immediately.
+    if (activeNoteId && sequence === noteLoadSequence) {
       await preview.render(note.markdown, {
         attachments: nextUrls,
         noteSourcePath: note.sourcePath,
@@ -1668,10 +1668,7 @@ export function createPageController() {
     let mentions: typeof unlinkedMentions = [];
     if (currentVault && noteId) {
       try {
-        [next, mentions] = await Promise.all([
-          currentVault.listBacklinks(noteId),
-          currentVault.listUnlinkedMentions(noteId),
-        ]);
+        ({ backlinks: next, mentions } = await currentVault.listNoteConnections(noteId));
       } catch {
         next = [];
       }
