@@ -876,6 +876,10 @@ export class Vault {
           ? movePath(noteFilePath(note), from, to)
           : noteFilePath(note),
       }));
+      const notePaths = new Map(
+        previousNotes.map((note, index) => [noteFilePath(note), noteFilePath(nextNotes[index]!)]),
+      );
+
       const folderPaths = new Set(tree.folders.map((folder) => folder.path));
       for (const note of tree.notes.filter((note) => !note.deletedAt)) {
         for (let folder = parentPath(noteFilePath(note)); folder; folder = parentPath(folder))
@@ -923,6 +927,7 @@ export class Vault {
           nextPath,
           (path) =>
             movedAttachments.get(path) ??
+            notePaths.get(path) ??
             (isPathWithin(path, pinnedFolder)
               ? path
               : isPathWithin(path, from)

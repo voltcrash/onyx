@@ -351,3 +351,35 @@ describe("Linking unlinked mentions", () => {
     await expect(vault.linkMention("source", "target", 2, 8)).rejects.toThrow("changed");
   });
 });
+
+it("rewrites note links when moving a folder inside the pinned attachment folder", async () => {
+  const metadata = { revision: 1, size: 0, tags: [], createdAt: "", updatedAt: "" };
+  const tree = {
+    notes: [
+      {
+        ...metadata,
+        id: "target",
+        title: "Target",
+        path: "notes/target.md",
+        sourcePath: "attachments/old/Target.md",
+        markdown: "",
+      },
+      {
+        ...metadata,
+        id: "source",
+        title: "Index",
+        path: "notes/source.md",
+        sourcePath: "Index.md",
+        markdown: "[target](attachments/old/Target.md)",
+      },
+    ],
+    folders: [],
+    attachments: [],
+  };
+  const vault = Reflect.construct(Vault, [{}, {}]) as Vault;
+  vi.spyOn(vault, "updateFileTree").mockImplementation(async (update) => {
+    update(tree);
+  });
+  await vault.moveFolder("attachments/old", "new", "attachments", true);
+  expect(tree.notes[1]!.markdown).toBe("[target](new/Target.md)");
+});
