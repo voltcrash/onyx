@@ -189,7 +189,6 @@
 		onPlacePane={page.placePane}
 		onReload={() => location.reload()}
 		onMarkdownChange={page.handleEditorChange}
-		onEditorHistory={page.handleEditorHistory}
 		onEditorPaste={page.handleEditorPaste}
 		onEditorDragOver={page.handleEditorDragOver}
 		onEditorDrop={page.handleEditorDrop}
