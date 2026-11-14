@@ -1,13 +1,24 @@
 @import "tailwindcss";
-@import "tw-animate-css";
+@import "./styles/chrome-theme.css";
 @import "shadcn-svelte/tailwind.css";
 @import "@fontsource-variable/newsreader";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/fira-code";
-@import "./styles/base.css";
+@import "./styles/base.css" layer(base);
 @import "./styles/color-themes.generated.css";
-@import "./styles/app-shell.css";
-@import "./styles/command-palette.css";
 @import "./styles/editor.css";
 @import "./styles/mermaid.css";
-@import "./styles/responsive.css";
+
+@source not "../lib/components/settings-dialog.svelte";
+@source not "../lib/components/restore-dialog.svelte";
+@source not "../lib/components/confirm-dialog.svelte";
+@source not "../lib/components/history-dialog.svelte";
+@source not "../lib/components/template-dialog.svelte";
+@source not "../lib/components/image-preview.svelte";
+@source not "../lib/components/command-palette.svelte";
+@source not "../lib/components/file-context-menu.svelte";
+@source not "../lib/components/vault-menu.svelte";
+@source not "../lib/components/ui";
+
+@source not "../lib/components/backup-encryption-settings.svelte";
+@source not "../lib/components/note-creation-settings.svelte";

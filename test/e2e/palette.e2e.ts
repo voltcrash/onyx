@@ -44,16 +44,16 @@ test("toggles the command palette from the keyboard and restores a collapsed sid
   await expect(editor).toBeEnabled();
 
   await page.getByRole("button", { name: "Hide notes sidebar" }).click();
-  await expect(page.locator(".app")).toHaveClass(/sidebar-collapsed/);
+  await expect(page.locator(".app")).toHaveClass(/(?:^|\s)sidebar-collapsed(?:\s|$)/);
   await editor.focus();
   await page.keyboard.press("ControlOrMeta+K");
 
   await expect(page.locator(".sidebar #command-palette")).toBeVisible();
-  await expect(page.locator(".app")).not.toHaveClass(/sidebar-collapsed/);
+  await expect(page.locator(".app")).not.toHaveClass(/(?:^|\s)sidebar-collapsed(?:\s|$)/);
   await page.keyboard.press("ControlOrMeta+K");
 
   await expect(page.locator("#command-palette")).toHaveCount(0);
-  await expect(page.locator(".app")).toHaveClass(/sidebar-collapsed/);
+  await expect(page.locator(".app")).toHaveClass(/(?:^|\s)sidebar-collapsed(?:\s|$)/);
 });
 
 test("adjusts content width from the command palette", async ({ page }) => {

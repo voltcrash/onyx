@@ -5,7 +5,6 @@
 	import MarkdownWorkspace from '#lib/components/markdown-workspace.svelte';
 	import NotesSidebar from '#lib/components/notes-sidebar.svelte';
 	import StatusNotices from '#lib/components/status-notices.svelte';
-	import ImagePreview from '#lib/components/image-preview.svelte';
 	import { snapSidebarWidth } from '#lib/layout.ts';
 	import { createPageController } from './page-controller.svelte.js';
 
@@ -49,7 +48,7 @@
 
 <Seo {structuredData} />
 
-<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:sidebar-resizing={sidebarResizing} class:palette-open={page.paletteOpen} style={`--sidebar-width: ${page.sidebarWidth}px`} inert={page.creation.open || page.history.open || page.settingsOpen || page.restoreModalOpen || page.imagePreview !== undefined || page.confirmation !== undefined}>
+<div class="app [&.sidebar-resizing]:cursor-col-resize! [&.sidebar-resizing_*]:cursor-col-resize! [&.sidebar-resizing]:select-none [&.sidebar-resizing_*]:select-none [&.sidebar-dragging]:cursor-grabbing! [&.sidebar-dragging_*]:cursor-grabbing! max-[900px]:[&.sidebar-open]:after:content-[''] max-[900px]:[&.sidebar-open]:after:fixed max-[900px]:[&.sidebar-open]:after:inset-0 max-[900px]:[&.sidebar-open]:after:z-15 max-[900px]:[&.sidebar-open]:after:bg-scrim max-[900px]:[&.sidebar-open.palette-open]:after:hidden grid [grid-template-columns:var(--sidebar-width)_minmax(0,_1fr)] relative h-dvh bg-paper [&.sidebar-collapsed]:[grid-template-columns:0_minmax(0,_1fr)] [&.sidebar-right]:[grid-template-columns:minmax(0,_1fr)_var(--sidebar-width)] [&.sidebar-right.sidebar-collapsed]:[grid-template-columns:minmax(0,_1fr)_0] [@media((max-width:_900px))]:[grid-template-columns:minmax(0,_1fr)]! [@media((max-width:_900px))]:[&.sidebar-collapsed]:[grid-template-columns:minmax(0,_1fr)]! [@media((max-width:_900px)_and_(pointer:_coarse))]:h-auto! [@media((max-width:_900px)_and_(pointer:_coarse))]:[min-height:100dvh]! [@media((max-width:_900px)_and_(pointer:_coarse))]:[&.sidebar-collapsed]:h-auto! [@media((max-width:_900px)_and_(pointer:_coarse))]:[&.sidebar-collapsed]:[min-height:100dvh]!" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:sidebar-resizing={sidebarResizing} class:palette-open={page.paletteOpen} style={`--sidebar-width: ${page.sidebarWidth}px`}>
 	<NotesSidebar
     sidebarSort={page.sidebarSort} onSidebarSort={page.setSidebarSort}
 		vaults={page.vaults}
@@ -143,7 +142,7 @@
 		onChangePage={page.changeNotePage}
 		onContentWidthChange={page.setContentWidth}
 	/>
-	<button type="button" class="sidebar-resize" aria-label={`Resize notes sidebar, ${page.sidebarWidth} pixels wide`} title="Drag to resize; snaps to the default width" onpointerdown={startSidebarResize} onpointermove={trackSidebarResize} onpointerup={endSidebarResize} onpointercancel={endSidebarResize} onlostpointercapture={endSidebarResize} onkeydown={nudgeSidebarResize}></button>
+	<button type="button" class="sidebar-resize absolute z-10 top-0 bottom-0 [left:calc(var(--sidebar-width)_-_10px)] w-2.5 p-0 border-0 bg-transparent cursor-col-resize [touch-action:none] [&::after]:[content:''] [&::after]:absolute [&::after]:[inset:0_auto_0_4px] [&::after]:w-0.25 [&::after]:bg-line-hover [&::after]:opacity-0 [&::after]:[transition:opacity_0.15s_ease] [&:hover::after]:opacity-65 [.sidebar-resizing_&::after]:opacity-65 [&:focus-visible::after]:bg-accent-quiet [&:focus-visible::after]:opacity-100 [.sidebar-collapsed_&]:hidden [.sidebar-right_&]:[right:calc(var(--sidebar-width)_-_10px)] [.sidebar-right_&]:left-auto [@media((max-width:_900px))]:hidden!" aria-label={`Resize notes sidebar, ${page.sidebarWidth} pixels wide`} title="Drag to resize; snaps to the default width" onpointerdown={startSidebarResize} onpointermove={trackSidebarResize} onpointerup={endSidebarResize} onpointercancel={endSidebarResize} onlostpointercapture={endSidebarResize} onkeydown={nudgeSidebarResize}></button>
 
 	<MarkdownWorkspace
     outline={page.outline} unlinkedMentions={page.unlinkedMentions}
@@ -198,16 +197,18 @@
 		backlinks={page.backlinks}
 		onOpenBacklink={(id) => void page.openBacklink(id)}
 	/>
-	{#if page.sidebarDropSide}<div class="sidebar-drop-target" data-side={page.sidebarDropSide} aria-hidden="true"></div>{/if}
+	{#if page.sidebarDropSide}<div class="sidebar-drop-target fixed [inset:8px_auto_8px_8px] z-40 [width:var(--sidebar-width)] [border:2px_dashed_var(--accent-quiet)] rounded-lg [background:color-mix(in_srgb,_var(--accent-bg-strong)_55%,_transparent)] pointer-events-none [transition:left_0.18s_ease,_right_0.18s_ease] [&[data-side='right']]:right-2 [&[data-side='right']]:left-auto [@media((max-width:_900px))]:w-64.5!" data-side={page.sidebarDropSide} aria-hidden="true"></div>{/if}
 </div>
 
 {#if page.imagePreview}
+	{#await Promise.all([import('#lib/components/image-preview.svelte'), import('#lib/lazy-styles.ts').then((styles) => styles.loadDialogStyles())]) then [{ default: ImagePreview }]}
 	<ImagePreview
 		name={page.imagePreview.name}
 		src={page.imagePreview.url}
 		onClose={page.closeImagePreview}
 		onDelete={() => void page.deleteAttachment(page.imagePreview?.id ?? '')}
 	/>
+	{/await}
 {/if}
 
 {#if page.printing}
@@ -279,9 +280,9 @@
 	{/await}
 {/if}
 
-<input class="transfer-input" bind:this={page.folderInput} type="file" webkitdirectory multiple onchange={(event) => void page.importFolder(event.currentTarget.files)} />
-<input class="transfer-input" bind:this={page.attachmentInput} type="file" multiple onchange={(event) => void page.attachSelectedFiles(event.currentTarget.files)} />
-<input class="transfer-input" bind:this={page.zipInput} type="file" accept=".zip,application/zip" onchange={(event) => void page.importZip(event.currentTarget.files)} />
+<input class="transfer-input hidden" bind:this={page.folderInput} type="file" webkitdirectory multiple onchange={(event) => void page.importFolder(event.currentTarget.files)} />
+<input class="transfer-input hidden" bind:this={page.attachmentInput} type="file" multiple onchange={(event) => void page.attachSelectedFiles(event.currentTarget.files)} />
+<input class="transfer-input hidden" bind:this={page.zipInput} type="file" accept=".zip,application/zip" onchange={(event) => void page.importZip(event.currentTarget.files)} />
 
 {#if page.restoreModalOpen}
 	{#await import('#lib/components/restore-dialog.svelte') then { default: RestoreDialog }}

@@ -33,7 +33,9 @@
 </script>
 
 <script lang="ts">
-	import { nextEnabledIndex } from '#lib/palette-navigation.ts';
+	import { tick } from 'svelte';
+	import { nextEnabledIndex } from '#lib/palette-navigation.js';
+	import * as Command from '#lib/components/ui/command/index.js';
 	import { LoaderCircle, Search } from '@lucide/svelte';
 
 	interface Props {
@@ -49,8 +51,11 @@
 
 	let { items, controls = [], query, loading = false, error = '', searchInput = $bindable(), onQueryChange, onClose }: Props = $props();
 
-	let activeIndex = $state(0);
-	let list: HTMLElement | undefined = $state();
+
+
+	let selected = $state('');
+	let listRef = $state<HTMLElement | null>(null);
+	let inputRef = $state<HTMLElement | null>(null);
 
 	const entries = $derived<PaletteEntry[]>([...items, ...controls]);
 	const filtered = $derived(
@@ -70,15 +75,11 @@
 			return accumulator;
 		}, [])
 	);
-	// Flattened in render order so arrow navigation and the active index always agree.
+	// The result count excludes inline controls.
 	const matches = $derived(groups.flatMap((group) => group.items).filter(isPaletteItem));
 
 	$effect(() => {
-		const first = matches.findIndex((item) => !item.disabled);
-		activeIndex = first;
-	});
-
-	$effect(() => {
+		searchInput = inputRef instanceof HTMLInputElement ? inputRef : undefined;
 		searchInput?.focus();
 	});
 
@@ -122,22 +123,16 @@
 		return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	}
 
-	function move(delta: number): void {
-		if (matches.length === 0) return;
-		activeIndex = nextEnabledIndex(matches,activeIndex,delta);
-		scrollActiveIntoView();
-	}
-
-	function movePage(direction: number): void {
-		const pageSize = Math.max(1, Math.floor((list?.clientHeight ?? 320) / 40));
-		move(direction * pageSize);
-	}
-
-	function scrollActiveIntoView(): void {
-		requestAnimationFrame(() => {
-			list?.querySelector('.palette-item.active')?.scrollIntoView({ block: 'nearest' });
-		});
-	}
+  async function movePage(event: KeyboardEvent): Promise<void> {
+    if (event.key !== 'PageDown' && event.key !== 'PageUp') return;
+    event.preventDefault();
+    const pageSize = Math.max(1, Math.floor((listRef?.clientHeight ?? 320) / 40));
+    const index = matches.findIndex((item) => item.id === selected);
+    const next = nextEnabledIndex(matches, index, event.key === 'PageDown' ? pageSize : -pageSize);
+    selected = matches[next]?.id ?? '';
+    await tick();
+    document.getElementById(`palette-${selected}`)?.scrollIntoView({ block: 'nearest' });
+  }
 
 	function choose(item: PaletteItem): void {
 		if (item.disabled) return;
@@ -145,63 +140,29 @@
 		item.run();
 	}
 
-	function onKeydown(event: KeyboardEvent): void {
-		if (event.key === 'ArrowDown') {
-			event.preventDefault();
-			move(1);
-		} else if (event.key === 'ArrowUp') {
-			event.preventDefault();
-			move(-1);
-		} else if (event.key === 'Home') {
-			event.preventDefault();
-			activeIndex = -1;
-			move(1);
-		} else if (event.key === 'End') {
-			event.preventDefault();
-			activeIndex = matches.length;
-			move(-1);
-		} else if (event.key === 'PageDown') {
-			event.preventDefault();
-			movePage(1);
-		} else if (event.key === 'PageUp') {
-			event.preventDefault();
-			movePage(-1);
-		} else if (event.key.toLowerCase() === 'n' && event.ctrlKey && !event.metaKey) {
-			event.preventDefault();
-			move(1);
-		} else if (event.key.toLowerCase() === 'p' && event.ctrlKey && !event.metaKey) {
-			event.preventDefault();
-			move(-1);
-		} else if (event.key === 'Enter') {
-			event.preventDefault();
-			const item = matches[activeIndex];
-			if (item) choose(item);
-		}
-	}
 </script>
 
-	<section id="command-palette" class="palette-panel" role="search" aria-label="Command palette" aria-busy={loading}>
-	<div class="palette">
-		<label class="search-box palette-search-box">
+	<section id="command-palette" class="palette-panel flex-1 min-w-0 min-h-0 flex overflow-hidden [margin-inline:-5px] pt-0.25 px-0 pb-0" role="search" aria-label="Command palette" aria-busy={loading}>
+	<Command.Root bind:value={selected} class="palette w-full flex-1 min-h-0 flex flex-col overflow-hidden" shouldFilter={false} loop>
+		<label class="search-box palette-search-box h-8.5 flex items-center gap-1.75 my-0 mx-1 py-0 px-2 border border-line rounded-md bg-surface text-faint [&:focus-within]:border-focus-border [&:focus-within]:[box-shadow:0_0_0_2px_var(--focus-ring)] [&_input]:min-w-0 [&_input]:flex-1 [&_input]:border-0 [&_input]:outline-none [&_input]:bg-transparent [&_input]:text-ink [&_input]:text-ui-12 [&_>_button]:grid [&_>_button]:place-items-center [&_>_button]:p-0 [&_>_button]:border-0 [&_>_button]:bg-transparent [&_>_button]:cursor-pointer [&_>_button:hover_kbd]:text-ink [&_input::placeholder]:text-faint [&_input::-webkit-search-cancel-button]:hidden [&_kbd]:text-faint [&_kbd]:text-ui-10 [&_kbd]:whitespace-nowrap mt-0 mx-0 mb-0.5 [&_kbd]:py-0.75 [&_kbd]:px-1.5 [&_kbd]:border [&_kbd]:border-line [&_kbd]:rounded-sm">
 			<span class="visually-hidden">Search notes and commands</span>
 			<Search size={15} aria-hidden="true" />
-			<input
-				bind:this={searchInput}
+			<Command.Input
+				bind:ref={inputRef}
 				value={query}
 				type="search"
 				role="combobox"
 				aria-expanded="true"
 				aria-controls="palette-list"
 				aria-describedby="palette-result-count"
-				aria-activedescendant={matches[activeIndex] ? `palette-${matches[activeIndex].id}` : undefined}
 				aria-label="Search notes and commands"
 				placeholder="Search notes or commands…"
 				autocomplete="off"
 				spellcheck="false"
 				oninput={(event) => onQueryChange(event.currentTarget.value)}
-				onkeydown={onKeydown}
+        onkeydown={(event) => void movePage(event)}
 			/>
-			<button type="button" class="palette-dismiss" aria-label="Close command palette" title="Close command palette (Esc)" onclick={onClose}><kbd>Esc</kbd></button>
+			<button type="button" class="palette-dismiss flex-none p-0 border-0 rounded-sm bg-transparent [color:inherit] cursor-pointer [&:hover_kbd]:border-line-hover [&:hover_kbd]:text-ink" aria-label="Close command palette" title="Close command palette (Esc)" onclick={onClose}><kbd>Esc</kbd></button>
 		</label>
 		<div id="palette-result-count" class="visually-hidden" role="status" aria-live="polite">
 			{#if loading && query.trim()}
@@ -213,53 +174,48 @@
 			{/if}
 		</div>
 
-		<div class="palette-list" id="palette-list" role="listbox" aria-label="Results" bind:this={list}>
-			{#if error}<div class="palette-empty" role="alert">Search failed: {error}</div>{/if}
+		<Command.List bind:ref={listRef} class="palette-list flex-1 min-h-0 overflow-y-auto pt-1.25 px-0 pb-0 [scrollbar-width:thin]" id="palette-list" aria-label="Results">
+			{#if error}<div class="palette-empty flex flex-col items-center gap-1.5 py-11 px-5 text-faint text-center [&_strong]:text-muted [&_strong]:text-ui-13 [&_span]:text-ui-11 [&_span]:[line-height:1.5]" role="alert">Search failed: {error}</div>{/if}
 			{#each groups as group (group.name)}
-				<div class="palette-group">{group.name}</div>
+				<div class="palette-group pt-2.5 px-1.75 pb-1.25 text-faint text-ui-10 [font-weight:650] [letter-spacing:0.1em] uppercase">{group.name}</div>
 				{#each group.items as item (item.id)}
 					{#if !isPaletteItem(item)}
-						<div class="palette-control" role="group" aria-label={item.label} id={`palette-${item.id}`}>
-							<div class="palette-control-header">
+						<div class="palette-control grid gap-2.25 my-1 mx-0 pt-2.25 px-1.75 pb-2.5 border-0 rounded-md bg-subtle text-muted [&_strong]:block [&_strong]:overflow-hidden [&_strong]:text-ellipsis [&_strong]:whitespace-nowrap [&_strong]:text-ink-soft [&_strong]:text-ui-12 [&_strong]:[font-weight:550] [&_small]:block [&_small]:overflow-hidden [&_small]:text-ellipsis [&_small]:whitespace-nowrap [&_small]:mt-0.5 [&_small]:text-faint [&_small]:text-ui-11 [&_output]:text-faint [&_output]:text-ui-11 [&_output]:[font-variant-numeric:tabular-nums]" role="group" aria-label={item.label} id={`palette-${item.id}`}>
+							<div class="palette-control-header flex items-center gap-2 [&_>_svg]:flex-none [&_>_svg]:text-accent [&_>_span]:min-w-0 [&_>_span]:flex-1">
 								<item.icon size={16} />
 								<span><strong>{item.label}</strong>{#if item.hint}<small>{item.hint}</small>{/if}</span>
 								<output>{item.value}px</output>
 							</div>
-							<input class="palette-control-input" type="range" min={item.min} max={item.max} step={item.step} value={item.value} aria-label={item.label} oninput={(event) => item.onChange(Number(event.currentTarget.value))} />
+							<input class="palette-control-input w-full [accent-color:var(--accent)]" type="range" min={item.min} max={item.max} step={item.step} value={item.value} aria-label={item.label} oninput={(event) => item.onChange(Number(event.currentTarget.value))} />
 						</div>
 					{:else}
-						{@const index = matches.indexOf(item)}
-						<button
-							class="palette-item"
-							class:active={index === activeIndex}
+						<Command.Item
+							class="palette-item w-full flex items-center gap-2 py-2.25 px-2.5 border-0 rounded-md bg-transparent text-ink-soft cursor-pointer text-ui-13 text-left [&[data-disabled]]:cursor-not-allowed [&[data-disabled]]:opacity-45 [&_>_svg]:flex-none [&_>_svg]:text-muted [&[data-selected]]:bg-selected [&[data-selected]]:text-ink [&[data-selected]_>_svg]:text-accent [&_>_span]:min-w-0 [&_>_span]:flex-1 [&_strong]:block [&_strong]:overflow-hidden [&_strong]:text-ellipsis [&_strong]:whitespace-nowrap [&_strong]:text-ui-13 [&_strong]:[font-weight:550] [&_small]:block [&_small]:overflow-hidden [&_small]:text-ellipsis [&_small]:whitespace-nowrap [&_small]:mt-0.5 [&_small]:text-faint [&_small]:text-ui-11 [&_mark]:[color:inherit] [&_mark]:[background:color-mix(in_srgb,_var(--accent)_24%,_transparent)] [&_mark]:rounded-sm [&_mark]:py-0 [&_mark]:px-0.25 [&_kbd]:flex-none [&_kbd]:py-0.75 [&_kbd]:px-1.5 [&_kbd]:border [&_kbd]:border-line [&_kbd]:rounded-sm [&_kbd]:bg-surface [&_kbd]:text-muted [&_kbd]:text-ui-10 [&_kbd]:whitespace-nowrap" value={item.id}
 							id={`palette-${item.id}`}
-							type="button"
 							role="option"
-							aria-selected={index === activeIndex}
 							disabled={item.disabled}
-							onmousemove={() => (activeIndex = index)}
-							onclick={() => choose(item)}
+							onSelect={() => choose(item)}
 						>
 							<item.icon size={16} />
 							<span><strong>{#each highlightedLabel(item.label, query) as part}{#if part.match}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</strong>{#if item.hint}<small>{item.hint}</small>{/if}</span>
 							{#if item.shortcut}<kbd>{item.shortcut}</kbd>{/if}
-						</button>
+						</Command.Item>
 					{/if}
 				{/each}
 			{/each}
 			{#if groups.length === 0 && loading}
-				<div class="palette-empty" role="status">
-					<LoaderCircle class="spin" size={22} />
+				<div class="palette-empty flex flex-col items-center gap-1.5 py-11 px-5 text-faint text-center [&_strong]:text-muted [&_strong]:text-ui-13 [&_span]:text-ui-11 [&_span]:[line-height:1.5]" role="status">
+					<LoaderCircle class="spin [animation:spin_0.9s_linear_infinite]" size={22} />
 					<strong>Searching notes…</strong>
 					<span>Checking every title and every word.</span>
 				</div>
 			{:else if groups.length === 0}
-				<div class="palette-empty">
+				<div class="palette-empty flex flex-col items-center gap-1.5 py-11 px-5 text-faint text-center [&_strong]:text-muted [&_strong]:text-ui-13 [&_span]:text-ui-11 [&_span]:[line-height:1.5]">
 					<Search size={22} />
 					<strong>No matches for “{query}”</strong>
 					<span>Search note titles and Markdown content, or try a command such as “new note”, “dark”, or “export”.</span>
 				</div>
 			{/if}
-		</div>
-	</div>
+		</Command.List>
+	</Command.Root>
 </section>

@@ -1005,3 +1005,29 @@
   background: transparent;
   color: var(--accent-link);
 }
+
+@media (max-width: 900px) {
+  .source-editor .cm-editor .cm-content,
+  .prose {
+    padding-inline: 52px;
+  }
+}
+@media (max-width: 900px) and (pointer: coarse) {
+  .source-editor .cm-editor {
+    flex: none;
+  }
+  .source-editor .cm-scroller {
+    overflow: visible;
+  }
+}
+@media (max-width: 700px) {
+  .source-editor .cm-editor .cm-content {
+    padding: 28px 52px 70px;
+  }
+  .source-editor .cm-scroller {
+    font-size: 14px;
+  }
+  .prose {
+    padding: 36px 52px 80px;
+  }
+}

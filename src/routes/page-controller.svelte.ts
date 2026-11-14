@@ -2408,25 +2408,15 @@ export function createPageController() {
 
   function handleShortcut(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;
-    if (history.open || creation.open) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        history.close();
-        creation.close();
-      }
+    if (
+      history.open ||
+      creation.open ||
+      confirmation.request ||
+      settingsOpen ||
+      githubController.restoreModalOpen ||
+      imagePreview
+    )
       return;
-    }
-    if (confirmation.request || settingsOpen || githubController.restoreModalOpen || imagePreview) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        if (confirmation.request) confirmation.cancel();
-        else if (imagePreview) closeImagePreview();
-        else if (githubController.restoreModalOpen && githubController.restoreState !== "restoring")
-          githubController.restoreModalOpen = false;
-        else if (settingsOpen && !clearingVault) closeSettings();
-      }
-      return;
-    }
     if (
       workspaceOperation &&
       shortcutMatchesEvent(
@@ -2621,6 +2611,7 @@ export function createPageController() {
     }
     if (!paletteOpen && document.activeElement instanceof HTMLElement) {
       paletteOpener = document.activeElement;
+      paletteOpener.blur();
     }
     paletteSidebarState = { collapsed: sidebarCollapsed, open: sidebarOpen };
     sidebarCollapsed = false;

@@ -17,12 +17,12 @@ test("moves the sidebar to the right by holding and dragging its toggle", async 
   await expect(page.locator(".sidebar-drop-target")).toHaveAttribute("data-side", "right");
   await page.mouse.up();
 
-  await expect(app).toHaveClass(/sidebar-right/);
-  await expect(app).not.toHaveClass(/sidebar-collapsed/);
+  await expect(app).toHaveClass(/(?:^|\s)sidebar-right(?:\s|$)/);
+  await expect(app).not.toHaveClass(/(?:^|\s)sidebar-collapsed(?:\s|$)/);
   await expect(page.locator(".sidebar-drop-target")).toHaveCount(0);
 
   await page.reload();
-  await expect(app).toHaveClass(/sidebar-right/);
+  await expect(app).toHaveClass(/(?:^|\s)sidebar-right(?:\s|$)/);
 });
 
 test("resizes the sidebar on either side and remembers its width", async ({ page }) => {
@@ -39,7 +39,7 @@ test("resizes the sidebar on either side and remembers its width", async ({ page
     await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 4);
     await page.mouse.down();
     await page.mouse.move(
-      (await page.locator(".app").getAttribute("class"))?.includes("sidebar-right")
+      (await page.locator(".app").evaluate((app) => app.classList.contains("sidebar-right")))
         ? viewport.width - width
         : width,
       bounds.y + bounds.height / 4,
@@ -108,7 +108,7 @@ test("chooses the sidebar position from its context menu", async ({ page }) => {
 
   await page.locator(".sidebar-footer").click({ button: "right", position: { x: 2, y: 2 } });
   await page.getByRole("menuitemradio", { name: "Sidebar on the right" }).click();
-  await expect(app).toHaveClass(/sidebar-right/);
+  await expect(app).toHaveClass(/(?:^|\s)sidebar-right(?:\s|$)/);
   await expect(page.getByRole("menu")).toHaveCount(0);
 
   const noteList = page.locator(".note-list");
@@ -120,7 +120,7 @@ test("chooses the sidebar position from its context menu", async ({ page }) => {
     "true",
   );
   await page.getByRole("menuitemradio", { name: "Sidebar on the left" }).click();
-  await expect(app).not.toHaveClass(/sidebar-right/);
+  await expect(app).not.toHaveClass(/(?:^|\s)sidebar-right(?:\s|$)/);
 });
 
 test("chooses the sidebar position from the command palette", async ({ page }) => {
@@ -131,15 +131,17 @@ test("chooses the sidebar position from the command palette", async ({ page }) =
 
   await editor.focus();
   await page.keyboard.press("ControlOrMeta+K");
+  await expect(page.getByRole("combobox")).toBeFocused();
   await page.keyboard.type("sidebar position right");
   await page.keyboard.press("Enter");
-  await expect(app).toHaveClass(/sidebar-right/);
+  await expect(app).toHaveClass(/(?:^|\s)sidebar-right(?:\s|$)/);
 
   await editor.focus();
   await page.keyboard.press("ControlOrMeta+K");
+  await expect(page.getByRole("combobox")).toBeFocused();
   await page.keyboard.type("sidebar position left");
   await page.keyboard.press("Enter");
-  await expect(app).not.toHaveClass(/sidebar-right/);
+  await expect(app).not.toHaveClass(/(?:^|\s)sidebar-right(?:\s|$)/);
 });
 
 test("switches repositories by swiping horizontally on the sidebar", async ({ page }) => {
