@@ -336,6 +336,7 @@ async function backupVaultToGithubUnlocked(
       );
       await vault.restoreBackup(merged.files, {
         manifest: merged.manifest,
+        preserveTrash: true,
         restoredAt: new Date().toISOString(),
         expectedVersion,
         pendingPaths: [...new Set([...remote.files, ...merged.files].map((file) => file.path))],

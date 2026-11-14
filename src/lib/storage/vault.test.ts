@@ -387,3 +387,69 @@ it("rewrites note links when moving a folder inside the pinned attachment folder
   await vault.moveFolder("attachments/old", "new", "attachments", true);
   expect(tree.notes[1]!.markdown).toBe("[target](new/Target.md)");
 });
+
+it.each([false, true])(
+  "preserves local trash and bytes during merge (ID collision: %s)",
+  async (collision) => {
+    const trash = {
+      id: "trash",
+      path: "notes/trash.md",
+      title: "Trash",
+      tags: [],
+      revision: 2,
+      size: 4,
+      createdAt: "",
+      updatedAt: "",
+      deletedAt: "yesterday",
+    };
+    const attachment = {
+      id: "image",
+      noteId: "trash",
+      path: "attachments/trash/image",
+      name: "image.png",
+      type: "image/png",
+      size: 3,
+      createdAt: "",
+      updatedAt: "",
+    };
+    const filesystem = await VaultFilesystem.fromDirectory(memoryDirectory());
+    await filesystem.writeText(trash.path, "kept");
+    await filesystem.write(attachment.path, new Blob([new Uint8Array([0, 255, 42])]));
+    const replaceVault = vi.fn();
+    const vault = Reflect.construct(Vault, [
+      {
+        getNotes: async () => [trash],
+        getAttachments: async () => [attachment],
+        getNoteMarkdown: async () => "kept",
+        getVaultVersion: async () => 1,
+        replaceVault,
+      },
+      filesystem,
+      { runExclusive: <T>(task: () => Promise<T>) => task(), publish: vi.fn() },
+    ]) as Vault;
+    await vault.restoreBackup(
+      collision ? [{ path: trash.path, contents: new Blob(["remote"]) }] : [],
+      {
+        manifest: {
+          version: 1,
+          notes: collision ? [{ ...trash, deletedAt: undefined }] : [],
+          attachments: [],
+        },
+        restoredAt: "now",
+        preserveTrash: true,
+      },
+    );
+    const notes = replaceVault.mock.calls[0][0];
+    expect(notes.filter((note: { deletedAt?: string }) => note.deletedAt)).toEqual([trash]);
+    if (collision) {
+      const active = notes.find((note: { deletedAt?: string }) => !note.deletedAt);
+      expect(active.id).not.toBe(trash.id);
+      expect(await filesystem.readText(active.path)).toBe("remote");
+    }
+    expect(replaceVault.mock.calls[0][2]).toEqual([attachment]);
+    expect(await filesystem.readText(trash.path)).toBe("kept");
+    expect([
+      ...new Uint8Array(await (await filesystem.read(attachment.path)).arrayBuffer()),
+    ]).toEqual([0, 255, 42]);
+  },
+);

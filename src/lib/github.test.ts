@@ -591,6 +591,7 @@ describe("backupVaultToGithub conflicts", () => {
       expect.any(Array),
       expect.objectContaining({
         expectedVersion: 7,
+        preserveTrash: true,
         githubBackup: expect.objectContaining({ lastCommitSha: remoteSha }),
         manifest: expect.objectContaining({ version: 1 }),
       }),

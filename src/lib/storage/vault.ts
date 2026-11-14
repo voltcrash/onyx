@@ -1543,6 +1543,7 @@ export class Vault {
     options: {
       manifest?: VaultBackupManifest;
       pendingPaths?: string[];
+      preserveTrash?: boolean;
       restoredAt: string;
       context?: VaultOperationContext;
       expectedVersion?: number;
@@ -1558,11 +1559,49 @@ export class Vault {
       const attachments = options.manifest
         ? validateManifestAttachments(options.manifest.attachments, filesByPath, noteIds)
         : inferAttachments(files, noteIds, options.restoredAt);
+      if (options.preserveTrash) {
+        const trash = trashedNotes(await this.#database.getNotes());
+        const trashIds = new Set(trash.map((note) => note.id));
+        const trashAttachments = (await this.#database.getAttachments()).filter((attachment) =>
+          trashIds.has(attachment.noteId),
+        );
+        for (const note of notes) {
+          if (!trashIds.has(note.id)) continue;
+          const previousId = note.id;
+          const previousPath = note.path;
+          note.id = crypto.randomUUID();
+          note.path = `notes/${note.id}.md`;
+          files.push({ path: note.path, contents: filesByPath.get(previousPath)!.contents });
+          for (const attachment of attachments) {
+            if (attachment.noteId !== previousId) continue;
+            const contents = filesByPath.get(attachment.path)!.contents;
+            attachment.noteId = note.id;
+            attachment.id = crypto.randomUUID();
+            attachment.path = `attachments/${note.id}/${attachment.id}`;
+            files.push({ path: attachment.path, contents });
+          }
+        }
+        for (const note of trash) {
+          const markdown =
+            (await this.#database.getNoteMarkdown(note.id)) ??
+            (await this.#filesystem.readText(note.path));
+          files.push({ path: note.path, contents: new Blob([markdown]) });
+        }
+        for (const attachment of trashAttachments)
+          files.push({
+            path: attachment.path,
+            contents: await this.#filesystem.read(attachment.path),
+          });
+        notes.push(...trash);
+        attachments.push(...trashAttachments);
+      }
       const acceptedPaths = new Set([
         ...notes.map((note) => note.path),
         ...attachments.map((attachment) => attachment.path),
       ]);
-      const restoredFiles = files.filter((file) => acceptedPaths.has(file.path));
+      const restoredFiles = [...new Map(files.map((file) => [file.path, file])).values()].filter(
+        (file) => acceptedPaths.has(file.path),
+      );
       const markdownByPath = new Map(
         await Promise.all(
           restoredFiles
