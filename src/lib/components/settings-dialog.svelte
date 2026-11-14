@@ -28,7 +28,6 @@
     onConfigureEncryption: (passphrase: string, enabled?: boolean) => Promise<void>;
 		vault?: Vault;
 		vaultName: string;
-		suggestedRepositoryName: string;
 		isOnline: boolean;
 		githubUser?: GithubUser;
 		githubState: 'loading' | 'connected' | 'disconnected' | 'error';
@@ -63,7 +62,6 @@
 		onClose: () => void;
 		onConnectGithub: () => void;
 		onDisconnectGithub: () => void;
-		onCreateRepository: (name: string) => void;
 		onSelectRepository: (state: Omit<GithubBackupState, 'updatedAt'>) => Promise<void>;
 		onForgetRepository: () => void;
 		onAutoBackupChange: (enabled: boolean) => void;
@@ -78,9 +76,9 @@
 	}
 
 	let {
-		creationPreferences, onCreationPreferences, onConfigureEncryption, vault, vaultName, suggestedRepositoryName, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
+		creationPreferences, onCreationPreferences, onConfigureEncryption, vault, vaultName, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
 		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, fonts, fontCategories, attachmentFolder, attachmentsHidden, onAttachmentsHiddenChange, onRenameAttachmentFolder, scrollSync, onToggleScrollSync, shortcuts, primaryModifier,
-		section = $bindable('editor'), onThemeChange, onColorThemeChange, onFontChange, onFontCategoryChange, onResetFonts, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository, onAutoBackupChange,
+		section = $bindable('editor'), onThemeChange, onColorThemeChange, onFontChange, onFontCategoryChange, onResetFonts, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onSelectRepository, onForgetRepository, onAutoBackupChange,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onPrepareVaultDeletion, onDeleteVault
 	}: Props = $props();
 
@@ -121,7 +119,6 @@
 	let selectedRepository = $state('');
 	let branch = $state('main');
 	let directory = $state('vault');
-	let newRepositoryName = $state(untrack(() => suggestedRepositoryName));
 	let usage = $state<VaultStorageUsage>();
 	let usageState = $state<'idle' | 'loading' | 'error'>('idle');
 	let usageMessage = $state('');
@@ -538,18 +535,11 @@
 						<div class="settings-actions">
 							<button class="settings-primary" disabled={!isOnline || !selectedRepository || applyingRepository} onclick={applyRepository}>Use this repository</button>
 						</div>
-						<div class="settings-separator"><span>or create a new one</span></div>
-						<div class="settings-field">
-							<label for="settings-new-repository">New private repository</label>
-							<div class="settings-row">
-								<div class="repository-field"><span>{githubUser?.login}/</span><input id="settings-new-repository" bind:value={newRepositoryName} pattern="[A-Za-z0-9._-]+" autocomplete="off" /></div>
-								<button class="settings-primary" disabled={!isOnline || !newRepositoryName.trim()} onclick={() => onCreateRepository(newRepositoryName)}>Create and back up</button>
-							</div>
-						</div>
+                        <p class="settings-hint">Create a private repository on <a href="https://github.com/new" target="_blank" rel="noreferrer">GitHub</a>, then <a href="/api/github/install" target="_blank" rel="noreferrer">install the Onyx GitHub App</a> on it, or update your <a href="https://github.com/settings/installations" target="_blank" rel="noreferrer">GitHub App installations</a> and reload repositories. Onyx only needs contents access; it cannot create repositories.</p>
 					{:else}
 						<div class="settings-account empty">
 							<CloudOff size={22} />
-							<span><strong>Local only</strong><small>{githubMessage || 'Sign in to enable GitHub backup and cross-device sync.'}</small></span>
+							<span><strong>Local only</strong><small>{githubMessage || 'Sign in with the Onyx GitHub App to enable backup. If you used the old sign-in, authorize the App and install it on your existing backup repository. Your saved repository, notes and backup history are kept.'}</small></span>
 							<button class="settings-primary" disabled={!isOnline || githubState === 'loading'} onclick={onConnectGithub}>
 								{#if githubState === 'loading'}<LoaderCircle class="spin" size={14} />{:else}<GithubIcon size={14} />{/if} Sign in with GitHub
 							</button>
