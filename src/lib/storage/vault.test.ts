@@ -71,18 +71,22 @@ describe("Vault backlinks", () => {
           note("trashed", "Old.md", "2026-10-02T00:00:00.000Z"),
         ]),
       getNoteContents: vi.fn().mockResolvedValue([
-        { noteId: "wiki", markdown: "Today [[Tomatoes]]." },
+        { noteId: "wiki", markdown: "Today [[Tomatoes]]. Tomatoes grow here." },
         { noteId: "relative", markdown: "[plants](Tomatoes.md)" },
         { noteId: "unrelated", markdown: "`[[Tomatoes]]`" },
-        { noteId: "trashed", markdown: "[[Tomatoes]]" },
-        { noteId: "target", markdown: "[[Tomatoes]]" },
+        { noteId: "trashed", markdown: "[[Tomatoes]] Tomatoes" },
+        { noteId: "target", markdown: "[[Tomatoes]] Tomatoes" },
       ]),
     };
     const coordination = { runExclusive: <T>(task: () => Promise<T>) => task() };
     const vault = Reflect.construct(Vault, [database, {}, coordination]) as Vault;
 
-    const backlinks = await vault.listBacklinks("target");
+    const { backlinks, mentions } = await vault.listNoteConnections("target");
     expect(backlinks.map(({ id }) => id)).toEqual(["wiki", "relative"]);
+    expect(mentions.map(({ noteId, text }) => [noteId, text])).toEqual([["wiki", "Tomatoes"]]);
+    expect(database.getNotes).toHaveBeenCalledTimes(1);
+    expect(database.getNoteContents).toHaveBeenCalledTimes(1);
+    expect(await vault.listNoteConnections("missing")).toEqual({ backlinks: [], mentions: [] });
   });
 });
 

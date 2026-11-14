@@ -1668,10 +1668,7 @@ export function createPageController() {
     let mentions: typeof unlinkedMentions = [];
     if (currentVault && noteId) {
       try {
-        [next, mentions] = await Promise.all([
-          currentVault.listBacklinks(noteId),
-          currentVault.listUnlinkedMentions(noteId),
-        ]);
+        ({ backlinks: next, mentions } = await currentVault.listNoteConnections(noteId));
       } catch {
         next = [];
       }
