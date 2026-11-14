@@ -4,10 +4,11 @@ import type {
   FolderMetadata,
   GithubBackupState,
   NoteMetadata,
+  NoteSnapshot,
 } from "./types.js";
 import { VaultConflictError } from "./types.js";
 
-const DATABASE_VERSION = 4;
+const DATABASE_VERSION = 5;
 const VAULT_VERSION_KEY = "vaultVersion";
 const NATIVE_DIRECTORY_HANDLE_KEY = "nativeDirectoryHandle";
 const FILE_FOLDERS_KEY = "fileFolders";
@@ -39,6 +40,7 @@ export type StoreName =
   | "backupQueue"
   | "noteContents"
   | "notes"
+  | "noteSnapshots"
   | "searchDocuments"
   | "searchPostings"
   | "settings";
@@ -104,6 +106,11 @@ export class VaultDatabase {
         database.createObjectStore("noteContents", { keyPath: "noteId" });
       }
 
+      if (event.oldVersion < 5) {
+        const snapshots = database.createObjectStore("noteSnapshots", { keyPath: "id" });
+        snapshots.createIndex("noteId", "noteId");
+      }
+
       if (event.oldVersion < 4) {
         const notes = request.transaction?.objectStore("notes");
         if (notes && !notes.indexNames.contains("deletedAt")) {
@@ -130,6 +137,17 @@ export class VaultDatabase {
   close(): void {
     this.#closed = true;
     this.#database.close();
+  }
+
+  async getNoteSnapshots(noteId: string): Promise<NoteSnapshot[]> {
+    const transaction = this.#transaction("noteSnapshots", "readonly");
+    const snapshots = await requestResult<NoteSnapshot[]>(
+      transaction.objectStore("noteSnapshots").index("noteId").getAll(noteId),
+    );
+    await transactionDone(transaction);
+    return snapshots.sort(
+      (a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
+    );
   }
 
   getNote(id: string): Promise<NoteMetadata | undefined> {

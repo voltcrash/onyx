@@ -20,6 +20,13 @@ export interface Note extends NoteMetadata {
   markdown: string;
 }
 
+export interface NoteSnapshot {
+  id: string;
+  noteId: string;
+  markdown: string;
+  createdAt: string;
+}
+
 export interface FolderMetadata {
   id: VaultId;
   path: string;
