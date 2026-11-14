@@ -1,3 +1,4 @@
+import { createFileTreeController } from "./file-tree-controller.svelte.ts";
 import { createPreferencesController } from "./preferences-controller.svelte.ts";
 import { createTransferController } from "./transfer-controller.svelte.ts";
 import { createGithubController } from "./github-controller.svelte.ts";
@@ -72,18 +73,15 @@ import { createPreviewRenderer } from "./preview-renderer.svelte.ts";
 import { createConfirmation } from "./confirmation.svelte.ts";
 import { resolveWikiLink, splitWikiTarget } from "#lib/wikilinks.ts";
 import { paletteCommands, type PaletteActions, type PaletteCommand } from "./palette-commands.ts";
-import type { FolderIcon } from "#lib/folder-icons.ts";
+
 import { createNoteOutput } from "#lib/note-output.ts";
 import {
   basename,
   decodePath,
   fileStem,
   isPathWithin,
-  joinPath,
   normalizeFileName,
-  normalizeFolderName,
   noteFilePath,
-  noteFolderPath,
   parentPath,
 } from "#lib/paths.ts";
 
@@ -116,13 +114,142 @@ const loadLazyStylesModule = () => stylesResource.load();
 
 type SidebarState = { collapsed: boolean; open: boolean };
 
-interface ImagePreviewState {
+export interface ImagePreviewState {
   id: string;
   name: string;
   url: string;
 }
 
 export function createPageController() {
+  const fileTreeController = createFileTreeController({
+    get vault() {
+      return vault;
+    },
+    set vault(value) {
+      vault = value;
+    },
+    get transferController() {
+      return transferController;
+    },
+    get settleDraft() {
+      return settleDraft;
+    },
+    get saveState() {
+      return saveState;
+    },
+    set saveState(value) {
+      saveState = value;
+    },
+    get searchQuery() {
+      return searchQuery;
+    },
+    set searchQuery(value) {
+      searchQuery = value;
+    },
+    get loadNote() {
+      return loadNote;
+    },
+    get refreshFileTree() {
+      return refreshFileTree;
+    },
+    get editor() {
+      return editor;
+    },
+    set editor(value) {
+      editor = value;
+    },
+    get storageError() {
+      return storageError;
+    },
+    set storageError(value) {
+      storageError = value;
+    },
+    get markdown() {
+      return markdown;
+    },
+    set markdown(value) {
+      markdown = value;
+    },
+    get lastSavedMarkdown() {
+      return lastSavedMarkdown;
+    },
+    set lastSavedMarkdown(value) {
+      lastSavedMarkdown = value;
+    },
+    get folders() {
+      return folders;
+    },
+    set folders(value) {
+      folders = value;
+    },
+    get pendingBackupCount() {
+      return pendingBackupCount;
+    },
+    set pendingBackupCount(value) {
+      pendingBackupCount = value;
+    },
+    get attachmentFolder() {
+      return attachmentFolder;
+    },
+    set attachmentFolder(value) {
+      attachmentFolder = value;
+    },
+    get activeNoteId() {
+      return activeNoteId;
+    },
+    set activeNoteId(value) {
+      activeNoteId = value;
+    },
+    get renameAttachmentFolder() {
+      return renameAttachmentFolder;
+    },
+    get resetActiveNote() {
+      return resetActiveNote;
+    },
+    get imagePreview() {
+      return imagePreview;
+    },
+    set imagePreview(value) {
+      imagePreview = value;
+    },
+    get closeImagePreview() {
+      return closeImagePreview;
+    },
+    get localAttachmentUrls() {
+      return localAttachmentUrls;
+    },
+    set localAttachmentUrls(value) {
+      localAttachmentUrls = value;
+    },
+    get preview() {
+      return preview;
+    },
+    get selectNote() {
+      return selectNote;
+    },
+    get confirmation() {
+      return confirmation;
+    },
+    get trashedNotes() {
+      return trashedNotes;
+    },
+    set trashedNotes(value) {
+      trashedNotes = value;
+    },
+    get paletteOpen() {
+      return paletteOpen;
+    },
+    set paletteOpen(value) {
+      paletteOpen = value;
+    },
+    get closePalette() {
+      return closePalette;
+    },
+    get find() {
+      return find;
+    },
+  });
+
   const preferencesController = createPreferencesController();
 
   const transferController = createTransferController({
@@ -416,7 +543,6 @@ export function createPageController() {
   let trashedNotes = $state<NoteMetadata[]>([]);
   let backlinks = $state.raw<NoteMetadata[]>([]);
   let backlinksSequence = 0;
-  let trashOpen = $state(false);
   let paletteOpen = $state(false);
   let paletteNotes = $state<NoteMetadata[]>([]);
   let recentNoteIds = $state<string[]>([]);
@@ -630,10 +756,10 @@ export function createPageController() {
 
   const paletteActions: PaletteActions = {
     shortcutLabel: preferencesController.shortcutLabel,
-    createNote: workspaceCommand(createNote),
+    createNote: workspaceCommand(fileTreeController.createNote),
     saveDraft,
-    toggleTrash,
-    emptyTrash: workspaceCommand(emptyTrash),
+    toggleTrash: fileTreeController.toggleTrash,
+    emptyTrash: workspaceCommand(fileTreeController.emptyTrash),
     attachFile: () => attachmentInput?.click(),
     setAttachmentsHidden,
     openSettings,
@@ -684,7 +810,7 @@ export function createPageController() {
         sourcePaneVisible,
         theme: preferencesController.theme,
         transferState: transferController.transferState,
-        trashOpen,
+        trashOpen: fileTreeController.trashOpen,
         trashedCount: trashedNotes.length,
       },
       paletteActions,
@@ -1011,7 +1137,7 @@ export function createPageController() {
     folders = [];
     vaultAttachments = [];
     trashedNotes = [];
-    trashOpen = false;
+    fileTreeController.trashOpen = false;
     paletteNotes = [];
     activeNoteId = "";
     noteRevision = 0;
@@ -1470,7 +1596,7 @@ export function createPageController() {
       message: `No note is named “${name}” yet. Onyx can create it${parentPath(name) ? ` in ${parentPath(name)}` : ""} and open it.`,
       confirmLabel: "Create note",
     });
-    if (confirmed) await createNote(parentPath(name), fileName);
+    if (confirmed) await fileTreeController.createNote(parentPath(name), fileName);
   }
 
   // Backlinks only supplement the note, so a failed lookup shows none rather than an error.
@@ -1543,359 +1669,6 @@ export function createPageController() {
     paletteNotes = tree.notes;
     await runSearch(searchQuery);
     return tree.notes;
-  }
-
-  async function createNote(parent = "", requestedName = ""): Promise<void> {
-    if (!vault || transferController.transferState === "working") return;
-    if (!(await settleDraft())) throw new Error("Save or recover the current draft first.");
-    saveState = "loading";
-    try {
-      const name = normalizeFileName(requestedName || "Untitled");
-      const path = joinPath(parent, name);
-      const notes = await vault.listNotes();
-      if (
-        notes.some((note) => noteFilePath(note).toLocaleLowerCase() === path.toLocaleLowerCase())
-      ) {
-        throw new Error(`A file named “${name}” already exists here.`);
-      }
-      const note = await vault.saveNote({
-        title: fileStem(name),
-        markdown: "",
-        sourcePath: path,
-      });
-      searchQuery = "";
-      await loadNote(note.id);
-      await refreshFileTree();
-      requestAnimationFrame(() => editor?.focus());
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "A new note could not be created.";
-      saveState = markdown === lastSavedMarkdown ? "saved" : "error";
-      throw error;
-    }
-  }
-
-  async function createFolder(parent = "", requestedName = ""): Promise<void> {
-    if (!vault || transferController.transferState === "working") return;
-    const name = normalizeFolderName(requestedName || "New folder");
-    const path = joinPath(parent, name);
-    folders = await vault.updateFolders((existing, notes) => {
-      if (
-        [
-          ...existing.map((folder) => folder.path),
-          ...notes.map((note) => noteFolderPath(note)),
-        ].some((candidate) => isPathWithin(candidate.toLocaleLowerCase(), path.toLocaleLowerCase()))
-      )
-        throw new Error(`A folder named “${name}” already exists here.`);
-      const now = new Date().toISOString();
-      return [...existing, { id: crypto.randomUUID(), path, createdAt: now, updatedAt: now }];
-    });
-    searchQuery = "";
-    await refreshFileTree();
-    pendingBackupCount = await vault.countPendingBackupOperations();
-    storageError = "";
-  }
-
-  async function renameFile(noteId: string, requestedName: string): Promise<void> {
-    if (!vault || transferController.transferState === "working") return;
-    if (!(await settleDraft())) throw new Error("Save or recover the current draft first.");
-    try {
-      const note = await vault.getNote(noteId);
-      if (!note) return;
-      const name = normalizeFileName(requestedName);
-      const path = joinPath(noteFolderPath(note), name);
-      const notes = await vault.listNotes();
-      if (
-        notes.some(
-          (candidate) =>
-            candidate.id !== noteId &&
-            noteFilePath(candidate).toLocaleLowerCase() === path.toLocaleLowerCase(),
-        )
-      ) {
-        throw new Error(`A file named “${name}” already exists here.`);
-      }
-      await vault.moveNote(note.id, path, attachmentFolder);
-      if (activeNoteId) await loadNote(activeNoteId);
-      storageError = "";
-      await refreshFileTree();
-      pendingBackupCount = await vault.countPendingBackupOperations();
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The file could not be renamed.";
-      throw error;
-    }
-  }
-
-  function isAttachmentFolderPath(path: string): boolean {
-    return path === attachmentFolder || path.startsWith(`${attachmentFolder}/`);
-  }
-
-  async function renameFolder(path: string, requestedName: string): Promise<void> {
-    if (!vault || transferController.transferState === "working") return;
-    if (!(await settleDraft())) throw new Error("Save or recover the current draft first.");
-    if (path === attachmentFolder) {
-      if (!(await renameAttachmentFolder(requestedName)))
-        throw new Error(storageError || "The folder could not be renamed.");
-      return;
-    }
-    try {
-      await relocateFolder(path, joinPath(parentPath(path), normalizeFolderName(requestedName)));
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The folder could not be renamed.";
-      throw error;
-    }
-  }
-
-  async function updateFolderAppearance(
-    path: string,
-    changes: Pick<Partial<FolderMetadata>, "icon" | "pinned">,
-  ): Promise<void> {
-    if (!vault || transferController.transferState === "working") return;
-    folders = await vault.updateFolders((existing) => {
-      const current = existing.find((folder) => folder.path === path);
-      if (!current && !changes.icon && !changes.pinned) return existing;
-      const now = new Date().toISOString();
-      const next: FolderMetadata = {
-        ...(current ?? { id: crypto.randomUUID(), path, createdAt: now }),
-        ...changes,
-        updatedAt: now,
-      };
-      if (!next.icon) delete next.icon;
-      if (!next.pinned) delete next.pinned;
-      return current
-        ? existing.map((folder) => (folder.path === path ? next : folder))
-        : [...existing, next];
-    });
-    pendingBackupCount = await vault.countPendingBackupOperations();
-    storageError = "";
-  }
-
-  async function setFolderIcon(path: string, icon?: FolderIcon): Promise<void> {
-    if (isAttachmentFolderPath(path)) return;
-    await updateFolderAppearance(path, { icon });
-  }
-
-  async function setFolderPinned(path: string, pinned: boolean): Promise<void> {
-    await updateFolderAppearance(path, { pinned });
-  }
-
-  async function setNotePinned(noteId: string, pinned: boolean): Promise<void> {
-    if (!vault || transferController.transferState === "working" || !(await settleDraft())) return;
-    try {
-      const changed = await vault.setNotePinned(noteId, pinned);
-      if (!changed) return;
-      if (activeNoteId) await loadNote(activeNoteId);
-      await refreshFileTree();
-      storageError = "";
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The file pin could not be saved.";
-    }
-  }
-
-  async function moveFile(noteId: string, targetFolder: string): Promise<void> {
-    if (!vault || transferController.transferState === "working" || !(await settleDraft())) return;
-    try {
-      const note = await vault.getNote(noteId);
-      if (!note) return;
-      await vault.moveNote(
-        noteId,
-        joinPath(targetFolder, basename(noteFilePath(note))),
-        attachmentFolder,
-      );
-      if (activeNoteId) await loadNote(activeNoteId);
-      await refreshFileTree();
-      pendingBackupCount = await vault.countPendingBackupOperations();
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The file could not be moved.";
-    }
-  }
-
-  async function relocateFolder(path: string, nextPath: string): Promise<void> {
-    if (!vault || path === nextPath) return;
-    await vault.moveFolder(path, nextPath, attachmentFolder, isAttachmentFolderPath(path));
-    if (activeNoteId) await loadNote(activeNoteId);
-    await refreshFileTree();
-    pendingBackupCount = await vault.countPendingBackupOperations();
-    storageError = "";
-  }
-
-  async function moveFolder(path: string, targetParent: string): Promise<void> {
-    if (!vault || transferController.transferState === "working") return;
-    if (isPathWithin(targetParent, path)) {
-      storageError = "A folder cannot be moved into itself or one of its children.";
-      return;
-    }
-    if (!(await settleDraft())) return;
-    try {
-      await relocateFolder(path, joinPath(targetParent, basename(path)));
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The folder could not be moved.";
-    }
-  }
-
-  async function deleteFile(noteId: string): Promise<void> {
-    if (!vault || transferController.transferState === "working") return;
-    const note = await vault.getNote(noteId);
-    if (!note || note.deletedAt) return;
-    if (!(await settleDraft())) return;
-    try {
-      await vault.trashNote(noteId);
-      const notes = await refreshFileTree();
-      if (activeNoteId === noteId) {
-        if (notes[0]) await loadNote(notes[0].id);
-        else resetActiveNote();
-      }
-      pendingBackupCount = await vault.countPendingBackupOperations();
-      storageError = "";
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The file could not be deleted.";
-    }
-  }
-
-  async function deleteFolder(path: string): Promise<void> {
-    if (!vault || transferController.transferState === "working") return;
-    const notes = await vault.listNotes();
-    const affectedNotes = notes.filter((note) => {
-      const folder = noteFolderPath(note);
-      return folder === path || folder.startsWith(`${path}/`);
-    });
-    const attached = isAttachmentFolderPath(path)
-      ? (await vault.listAttachments()).filter(
-          (attachment) =>
-            attachment.sourcePath &&
-            (attachment.sourcePath === path || attachment.sourcePath.startsWith(`${path}/`)),
-        )
-      : [];
-    if (!(await settleDraft())) return;
-    try {
-      await vault.updateFileTree((tree) => {
-        const now = new Date().toISOString();
-        for (const note of tree.notes)
-          if (!note.deletedAt && isPathWithin(noteFolderPath(note), path)) note.deletedAt = now;
-        if (attached.length)
-          tree.attachments = tree.attachments.filter(
-            (attachment) => !attachment.sourcePath || !isPathWithin(attachment.sourcePath, path),
-          );
-        tree.folders = tree.folders.filter((folder) => !isPathWithin(folder.path, path));
-      });
-      const remaining = await refreshFileTree();
-      if (activeNoteId && affectedNotes.some((note) => note.id === activeNoteId)) {
-        if (remaining[0]) await loadNote(remaining[0].id);
-        else resetActiveNote();
-      } else if (activeNoteId) {
-        await loadNote(activeNoteId);
-      }
-      pendingBackupCount = await vault.countPendingBackupOperations();
-      storageError = "";
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The folder could not be deleted.";
-    }
-  }
-
-  async function deleteAttachment(id: string): Promise<void> {
-    if (!vault || transferController.transferState === "working") return;
-    const currentVault = vault;
-    try {
-      const attachment = await currentVault.deleteAttachment(id);
-      if (!attachment) return;
-      if (imagePreview?.id === attachment.id) closeImagePreview();
-      if (attachment.sourcePath) {
-        const retained = localAttachmentUrls.filter(
-          (candidate) => candidate.sourcePath !== attachment.sourcePath,
-        );
-        if (retained.length !== localAttachmentUrls.length) {
-          for (const candidate of localAttachmentUrls) {
-            if (candidate.sourcePath === attachment.sourcePath) URL.revokeObjectURL(candidate.url);
-          }
-          localAttachmentUrls = retained;
-          preview.invalidate();
-        }
-      }
-      await refreshFileTree();
-      pendingBackupCount = await currentVault.countPendingBackupOperations();
-      storageError = "";
-    } catch (error) {
-      storageError =
-        error instanceof Error ? error.message : "The attachment could not be deleted.";
-    }
-  }
-
-  async function restoreFile(noteId: string): Promise<void> {
-    if (!vault || transferController.transferState === "working") return;
-    if (!(await settleDraft())) return;
-    try {
-      const restored = await vault.restoreNote(noteId);
-      if (!restored) return;
-      await refreshFileTree();
-      trashOpen = false;
-      await selectNote(noteId);
-      pendingBackupCount = await vault.countPendingBackupOperations();
-      storageError = "";
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The file could not be restored.";
-    }
-  }
-
-  async function purgeFile(noteId: string): Promise<void> {
-    if (!vault || transferController.transferState === "working") return;
-    const note = await vault.getNote(noteId);
-    if (!note?.deletedAt) return;
-    const confirmed = await confirmation.ask({
-      eyebrow: "Trash",
-      title: "Delete forever?",
-      message: `“${fileStem(noteFilePath(note))}” and its attachments will be permanently deleted. This cannot be undone.`,
-      confirmLabel: "Delete forever",
-      danger: true,
-    });
-    if (!confirmed) return;
-    if (!(await settleDraft())) return;
-    try {
-      await vault.purgeNote(noteId, note.deletedAt);
-      await refreshFileTree();
-      if (activeNoteId === noteId) {
-        const notes = await vault.listNotes();
-        if (notes[0]) await loadNote(notes[0].id);
-        else resetActiveNote();
-      }
-      pendingBackupCount = await vault.countPendingBackupOperations();
-      storageError = "";
-    } catch (error) {
-      storageError =
-        error instanceof Error ? error.message : "The file could not be permanently deleted.";
-    }
-  }
-
-  async function emptyTrash(): Promise<void> {
-    if (!vault || transferController.transferState === "working" || trashedNotes.length === 0)
-      return;
-    const count = trashedNotes.length;
-    const confirmed = await confirmation.ask({
-      eyebrow: "Trash",
-      title: "Empty trash?",
-      message: `${count} ${count === 1 ? "note" : "notes"} in Trash will be permanently deleted. This cannot be undone.`,
-      confirmLabel: "Empty trash",
-      danger: true,
-    });
-    if (!confirmed) return;
-    if (!(await settleDraft())) return;
-    try {
-      await vault.emptyTrash();
-      await refreshFileTree();
-      pendingBackupCount = await vault.countPendingBackupOperations();
-      storageError = "";
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "Trash could not be emptied.";
-    }
-  }
-
-  function toggleTrash(): void {
-    if (!trashOpen) {
-      if (paletteOpen) closePalette();
-      find.close();
-    }
-    trashOpen = !trashOpen;
-  }
-
-  async function copyFilePath(path: string): Promise<void> {
-    await transferController.copyToClipboard(() => navigator.clipboard.writeText(path));
   }
 
   async function settleDraft(): Promise<boolean> {
@@ -2695,13 +2468,13 @@ export function createPageController() {
     )
       void saveDraft();
     else if (action === "newNote" && transferController.transferState !== "working")
-      void workspaceCommand(createNote)();
+      void workspaceCommand(fileTreeController.createNote)();
     else if (action === "searchNotes" || action === "focusSearch") focusSearch();
     else if (action === "cycleTheme")
       preferencesController.setTheme(nextThemePreference(preferencesController.theme));
     else if (action === "toggleSidebar") toggleSidebar();
     else if (action === "openTrash" && transferController.transferState !== "working")
-      toggleTrash();
+      fileTreeController.toggleTrash();
     else if (action === "bold") insertSyntax("**", "**", "bold text");
     else if (action === "italic") insertSyntax("_", "_", "italic text");
     else if (action === "togglePreview") toggleRenderedPane();
@@ -2787,13 +2560,13 @@ export function createPageController() {
 
   function openFind(): void {
     if (paletteOpen) closePalette();
-    trashOpen = false;
+    fileTreeController.trashOpen = false;
     find.open();
   }
 
   function openPalette(): void {
     if (find.isOpen) find.close();
-    trashOpen = false;
+    fileTreeController.trashOpen = false;
     if (paletteOpen) {
       focusSearch();
       return;
@@ -3222,10 +2995,10 @@ export function createPageController() {
       return trashedNotes;
     },
     get trashOpen() {
-      return trashOpen;
+      return fileTreeController.trashOpen;
     },
     set trashOpen(value: boolean) {
-      if (value !== trashOpen) toggleTrash();
+      if (value !== fileTreeController.trashOpen) fileTreeController.toggleTrash();
     },
     get zipInput() {
       return transferController.zipInput;
@@ -3236,7 +3009,7 @@ export function createPageController() {
     selectVault: workspaceCommand(selectVault, "navigation"),
     createVault: workspaceCommand(createVault),
     renameVault: workspaceCommand(renameVault, "mutation", true),
-    createNote: workspaceCommand(createNote),
+    createNote: workspaceCommand(fileTreeController.createNote),
     queueSearch,
     openFind,
     closeFind: find.close,
@@ -3263,23 +3036,23 @@ export function createPageController() {
       return backlinks;
     },
     openBacklink: workspaceCommand((id: string) => navigateToNote(id), "navigation"),
-    createFile: workspaceCommand(createNote, "mutation", true),
-    createFolder: workspaceCommand(createFolder, "mutation", true),
-    renameFile: workspaceCommand(renameFile, "mutation", true),
-    renameFolder: workspaceCommand(renameFolder, "mutation", true),
-    setFolderIcon: workspaceCommand(setFolderIcon),
-    setFolderPinned: workspaceCommand(setFolderPinned),
-    setNotePinned: workspaceCommand(setNotePinned),
-    moveFile: workspaceCommand(moveFile),
-    moveFolder: workspaceCommand(moveFolder),
-    deleteFile: workspaceCommand(deleteFile),
-    deleteFolder: workspaceCommand(deleteFolder),
-    deleteAttachment: workspaceCommand(deleteAttachment),
-    restoreFile: workspaceCommand(restoreFile),
-    purgeFile: workspaceCommand(purgeFile),
-    emptyTrash: workspaceCommand(emptyTrash),
-    toggleTrash,
-    copyFilePath,
+    createFile: workspaceCommand(fileTreeController.createNote, "mutation", true),
+    createFolder: workspaceCommand(fileTreeController.createFolder, "mutation", true),
+    renameFile: workspaceCommand(fileTreeController.renameFile, "mutation", true),
+    renameFolder: workspaceCommand(fileTreeController.renameFolder, "mutation", true),
+    setFolderIcon: workspaceCommand(fileTreeController.setFolderIcon),
+    setFolderPinned: workspaceCommand(fileTreeController.setFolderPinned),
+    setNotePinned: workspaceCommand(fileTreeController.setNotePinned),
+    moveFile: workspaceCommand(fileTreeController.moveFile),
+    moveFolder: workspaceCommand(fileTreeController.moveFolder),
+    deleteFile: workspaceCommand(fileTreeController.deleteFile),
+    deleteFolder: workspaceCommand(fileTreeController.deleteFolder),
+    deleteAttachment: workspaceCommand(fileTreeController.deleteAttachment),
+    restoreFile: workspaceCommand(fileTreeController.restoreFile),
+    purgeFile: workspaceCommand(fileTreeController.purgeFile),
+    emptyTrash: workspaceCommand(fileTreeController.emptyTrash),
+    toggleTrash: fileTreeController.toggleTrash,
+    copyFilePath: fileTreeController.copyFilePath,
     changeNotePage,
     saveDraft,
     openVault: workspaceCommand(openVault),
