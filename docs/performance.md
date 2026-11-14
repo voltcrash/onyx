@@ -46,3 +46,36 @@ after the changes (fresh browser contexts, time measured from navigation via
 `performance.now()`). This is a controlled dependency-delay experiment, not a
 normal-load benchmark or a latency guarantee. Cold downloads, device speed,
 vault size, and attachment I/O still affect startup.
+
+## Chrome widget loading
+
+Dialogs, the command palette, file context menus, and the vault menu load their
+shadcn/Bits UI code and utility styles on demand. The startup route does not
+import the widget primitives. CSS loading goes through `lazy-styles.ts` rather
+than static imports in lazy Svelte components: SvelteKit otherwise adds those
+component styles to the initial document. The first-paint fallback remains in
+`static/startup.css`, in the base layer so route utilities can replace it.
+
+A production build on 2026-11-14, compared with main `7bb0197`, had this footprint:
+
+| Initial route assets   |    Before |     After |  Change |
+| ---------------------- | --------: | --------: | ------: |
+| JavaScript, raw bytes  | 1,045,695 | 1,062,969 | +17,274 |
+| JavaScript, gzip bytes |   341,991 |   346,005 |  +4,014 |
+| CSS, raw bytes         |    92,762 |   101,176 |  +8,414 |
+| CSS, gzip bytes        |    20,090 |    21,938 |  +1,848 |
+
+These totals follow static imports from the client manifest's layout/page nodes
+(0 and 2), counting shared files once and gzipping each file separately with
+Node's default compression. They exclude bootstrap scripts, workers, fonts, and
+dynamic imports. Colocated utility markup and generated selectors add about
+5.7 KiB compressed to that route graph; the widget library remains lazy. This
+is a payload comparison, not a latency benchmark or a claim of zero byte growth.
+
+The production browser tests verify that the editor opens without widget styles,
+then that opening Settings loads dialog CSS. They also exercise focus trapping
+and restoration, nested menu navigation, page-sized palette navigation, all
+24 color/mode combinations, and CSP enforcement. The existing delayed-preview
+and offline startup tests continue to apply. Desktop and phone screenshots of
+the editor and Settings were compared against the previous chrome; menus and
+confirmation dialogs were also checked in the running production build.
