@@ -191,11 +191,11 @@ test("searches note titles and Markdown content from the command palette", async
   ).toHaveCount(1);
   const filesPanel = page.locator(".files-panel");
   const childOrder = await filesPanel.evaluate((panel) =>
-    ["file-toolbar", "note-list"].map((className) =>
+    ["file-toolbar", "sidebar-sort", "note-list"].map((className) =>
       [...panel.children].findIndex((child) => child.classList.contains(className)),
     ),
   );
-  expect(childOrder).toEqual([0, 1]);
+  expect(childOrder).toEqual([0, 1, 2]);
 
   await page.getByRole("button", { name: "New file" }).click();
   await page.getByRole("textbox", { name: "File name" }).press("Enter");

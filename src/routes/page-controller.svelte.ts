@@ -1,16 +1,15 @@
+import { compareSidebarNotes } from "#lib/sidebar-sort.ts";
+import { createNoteCreationController } from "./note-creation-controller.svelte.ts";
+import { noteOutline, type NoteMention, type NoteHeading } from "#lib/note-insights.ts";
+import { createHistoryController } from "./history-controller.svelte.ts";
+import { createFileTreeController } from "./file-tree-controller.svelte.ts";
+import { createPreferencesController } from "./preferences-controller.svelte.ts";
+import { createTransferController } from "./transfer-controller.svelte.ts";
+import { createGithubController } from "./github-controller.svelte.ts";
 import { createLazyResource } from "#lib/lazy-resource.ts";
 import { FileText } from "@lucide/svelte";
-import type {
-  BackupState,
-  GithubState,
-  PaneEdge,
-  PaneLayout,
-  PaneOrder,
-  RestoreState,
-  SaveState,
-  TransferState,
-} from "#lib/components/app-types.ts";
-import type { NoteFormat } from "#lib/components/note-formats.ts";
+import type { PaneEdge, PaneLayout, PaneOrder, SaveState } from "#lib/components/app-types.ts";
+
 import type { SettingsSection } from "#lib/components/settings-types.ts";
 import {
   attachmentMarkdown,
@@ -36,32 +35,14 @@ import {
   readLocalStorage,
   writeLocalStorage,
 } from "#lib/browser-storage.ts";
-import {
-  applyFontChoices,
-  defaultFontCategories,
-  defaultFontChoices,
-  fontCategory,
-  fontOptionsFor,
-  readFontCategories,
-  readFontChoices,
-  writeFontCategory,
-  type FontCategories,
-  type FontCategory,
-  type FontChoices,
-  type FontRole,
-} from "#lib/fonts.ts";
-import { loadFont } from "#lib/font-loader.ts";
+import { defaultFontChoices, type FontRole } from "#lib/fonts.ts";
+
 import {
   defaultKeyboardShortcuts,
   detectPrimaryModifier,
-  formatShortcut,
   readKeyboardShortcuts,
   shortcutsEqual,
   shortcutMatchesEvent,
-  writeKeyboardShortcuts,
-  type KeyboardShortcut,
-  type KeyboardShortcuts,
-  type PrimaryModifier,
   type ShortcutAction,
 } from "#lib/keyboard-shortcuts.ts";
 import {
@@ -80,15 +61,8 @@ import {
   type VaultDescriptor,
   type VaultSearchResult,
 } from "#lib/storage/index.ts";
-import type { GithubBackupCommit, GithubUser } from "#lib/github.ts";
-import { githubTargetKey } from "#lib/storage/types.ts";
-import type {
-  AttachmentMetadata,
-  FolderMetadata,
-  GithubBackupState,
-  Note,
-  NoteMetadata,
-} from "#lib/storage/types.ts";
+
+import type { AttachmentMetadata, FolderMetadata, Note, NoteMetadata } from "#lib/storage/types.ts";
 import {
   applyColorTheme,
   applyTheme,
@@ -96,9 +70,6 @@ import {
   readColorTheme,
   readThemePreference,
   watchSystemTheme,
-  type ColorTheme,
-  type ResolvedTheme,
-  type ThemePreference,
 } from "#lib/theme.ts";
 import type { FindMatch } from "#lib/find-replace.ts";
 import { createFindReplace } from "./find-replace.svelte.ts";
@@ -106,21 +77,18 @@ import { createPreviewRenderer } from "./preview-renderer.svelte.ts";
 import { createConfirmation } from "./confirmation.svelte.ts";
 import { resolveWikiLink, splitWikiTarget } from "#lib/wikilinks.ts";
 import { paletteCommands, type PaletteActions, type PaletteCommand } from "./palette-commands.ts";
-import type { FolderIcon } from "#lib/folder-icons.ts";
-import { createNoteOutput, downloadBlob, type NoteSource } from "#lib/note-output.ts";
+
+import { createNoteOutput } from "#lib/note-output.ts";
 import {
   basename,
   decodePath,
   fileStem,
   isPathWithin,
-  joinPath,
   normalizeFileName,
-  normalizeFolderName,
   noteFilePath,
-  noteFolderPath,
   parentPath,
 } from "#lib/paths.ts";
-import type { MarkdownTransferFile } from "#lib/markdown-transfer.ts";
+
 import { createInitialMarkdown } from "./welcome-note.ts";
 import { startSidebarDrag, type SidebarSide } from "#lib/sidebar-drag.ts";
 import {
@@ -150,13 +118,375 @@ const loadLazyStylesModule = () => stylesResource.load();
 
 type SidebarState = { collapsed: boolean; open: boolean };
 
-interface ImagePreviewState {
+export interface ImagePreviewState {
   id: string;
   name: string;
   url: string;
 }
 
 export function createPageController() {
+  const fileTreeController = createFileTreeController({
+    get vault() {
+      return vault;
+    },
+    set vault(value) {
+      vault = value;
+    },
+    get transferController() {
+      return transferController;
+    },
+    get settleDraft() {
+      return settleDraft;
+    },
+    get saveState() {
+      return saveState;
+    },
+    set saveState(value) {
+      saveState = value;
+    },
+    get searchQuery() {
+      return searchQuery;
+    },
+    set searchQuery(value) {
+      searchQuery = value;
+    },
+    get loadNote() {
+      return loadNote;
+    },
+    get refreshFileTree() {
+      return refreshFileTree;
+    },
+    get editor() {
+      return editor;
+    },
+    set editor(value) {
+      editor = value;
+    },
+    get storageError() {
+      return storageError;
+    },
+    set storageError(value) {
+      storageError = value;
+    },
+    get markdown() {
+      return markdown;
+    },
+    set markdown(value) {
+      markdown = value;
+    },
+    get lastSavedMarkdown() {
+      return lastSavedMarkdown;
+    },
+    set lastSavedMarkdown(value) {
+      lastSavedMarkdown = value;
+    },
+    get folders() {
+      return folders;
+    },
+    set folders(value) {
+      folders = value;
+    },
+    get pendingBackupCount() {
+      return pendingBackupCount;
+    },
+    set pendingBackupCount(value) {
+      pendingBackupCount = value;
+    },
+    get attachmentFolder() {
+      return attachmentFolder;
+    },
+    set attachmentFolder(value) {
+      attachmentFolder = value;
+    },
+    get activeNoteId() {
+      return activeNoteId;
+    },
+    set activeNoteId(value) {
+      activeNoteId = value;
+    },
+    get renameAttachmentFolder() {
+      return renameAttachmentFolder;
+    },
+    get resetActiveNote() {
+      return resetActiveNote;
+    },
+    get imagePreview() {
+      return imagePreview;
+    },
+    set imagePreview(value) {
+      imagePreview = value;
+    },
+    get closeImagePreview() {
+      return closeImagePreview;
+    },
+    get localAttachmentUrls() {
+      return localAttachmentUrls;
+    },
+    set localAttachmentUrls(value) {
+      localAttachmentUrls = value;
+    },
+    get preview() {
+      return preview;
+    },
+    get selectNote() {
+      return selectNote;
+    },
+    get confirmation() {
+      return confirmation;
+    },
+    get trashedNotes() {
+      return trashedNotes;
+    },
+    set trashedNotes(value) {
+      trashedNotes = value;
+    },
+    get paletteOpen() {
+      return paletteOpen;
+    },
+    set paletteOpen(value) {
+      paletteOpen = value;
+    },
+    get closePalette() {
+      return closePalette;
+    },
+    get find() {
+      return find;
+    },
+  });
+
+  const preferencesController = createPreferencesController();
+
+  const transferController = createTransferController({
+    get vault() {
+      return vault;
+    },
+    set vault(value) {
+      vault = value;
+    },
+    get settleDraft() {
+      return settleDraft;
+    },
+    get searchQuery() {
+      return searchQuery;
+    },
+    set searchQuery(value) {
+      searchQuery = value;
+    },
+    get loadNote() {
+      return loadNote;
+    },
+    get resetActiveNote() {
+      return resetActiveNote;
+    },
+    get refreshFileTree() {
+      return refreshFileTree;
+    },
+    get pendingBackupCount() {
+      return pendingBackupCount;
+    },
+    set pendingBackupCount(value) {
+      pendingBackupCount = value;
+    },
+    get markdown() {
+      return markdown;
+    },
+    set markdown(value) {
+      markdown = value;
+    },
+    get localAttachmentUrls() {
+      return localAttachmentUrls;
+    },
+    set localAttachmentUrls(value) {
+      localAttachmentUrls = value;
+    },
+    get activeNoteSourcePath() {
+      return activeNoteSourcePath;
+    },
+    set activeNoteSourcePath(value) {
+      activeNoteSourcePath = value;
+    },
+    get preview() {
+      return preview;
+    },
+    get activeNoteId() {
+      return activeNoteId;
+    },
+    set activeNoteId(value) {
+      activeNoteId = value;
+    },
+    get noteTitle() {
+      return noteTitle;
+    },
+    get noteOutput() {
+      return noteOutput;
+    },
+    get selectNote() {
+      return selectNote;
+    },
+  });
+
+  const githubController = createGithubController({
+    get disposed() {
+      return disposed;
+    },
+    set disposed(value) {
+      disposed = value;
+    },
+    get authenticationRequest() {
+      return authenticationRequest;
+    },
+    set authenticationRequest(value) {
+      authenticationRequest = value;
+    },
+    get githubRestoreTimer() {
+      return githubRestoreTimer;
+    },
+    set githubRestoreTimer(value) {
+      githubRestoreTimer = value;
+    },
+    get activeVaultId() {
+      return activeVaultId;
+    },
+    set activeVaultId(value) {
+      activeVaultId = value;
+    },
+    get activeNoteId() {
+      return activeNoteId;
+    },
+    set activeNoteId(value) {
+      activeNoteId = value;
+    },
+    get isOnline() {
+      return isOnline;
+    },
+    set isOnline(value) {
+      isOnline = value;
+    },
+    get loadGithubModule() {
+      return loadGithubModule;
+    },
+    get authenticationCleanup() {
+      return authenticationCleanup;
+    },
+    set authenticationCleanup(value) {
+      authenticationCleanup = value;
+    },
+    get vault() {
+      return vault;
+    },
+    set vault(value) {
+      vault = value;
+    },
+    get settleDraft() {
+      return settleDraft;
+    },
+    get openSettings() {
+      return openSettings;
+    },
+    get settingsSection() {
+      return settingsSection;
+    },
+    set settingsSection(value) {
+      settingsSection = value;
+    },
+    get settingsOpen() {
+      return settingsOpen;
+    },
+    set settingsOpen(value) {
+      settingsOpen = value;
+    },
+    get pendingBackupCount() {
+      return pendingBackupCount;
+    },
+    set pendingBackupCount(value) {
+      pendingBackupCount = value;
+    },
+    get AUTO_BACKUP_DELAY_MS() {
+      return AUTO_BACKUP_DELAY_MS;
+    },
+    get workspaceOperation() {
+      return workspaceOperation;
+    },
+    set workspaceOperation(value) {
+      workspaceOperation = value;
+    },
+    get confirmation() {
+      return confirmation;
+    },
+    get markdown() {
+      return markdown;
+    },
+    set markdown(value) {
+      markdown = value;
+    },
+    get lastSavedMarkdown() {
+      return lastSavedMarkdown;
+    },
+    set lastSavedMarkdown(value) {
+      lastSavedMarkdown = value;
+    },
+    get saveDraft() {
+      return saveDraft;
+    },
+    get activeVault() {
+      return activeVault;
+    },
+    get loadDialogStyles() {
+      return loadDialogStyles;
+    },
+    get saveState() {
+      return saveState;
+    },
+    set saveState(value) {
+      saveState = value;
+    },
+    get saveTimer() {
+      return saveTimer;
+    },
+    set saveTimer(value) {
+      saveTimer = value;
+    },
+    get searchTimer() {
+      return searchTimer;
+    },
+    set searchTimer(value) {
+      searchTimer = value;
+    },
+    get searchSequence() {
+      return searchSequence;
+    },
+    set searchSequence(value) {
+      searchSequence = value;
+    },
+    get folders() {
+      return folders;
+    },
+    set folders(value) {
+      folders = value;
+    },
+    get searchQuery() {
+      return searchQuery;
+    },
+    set searchQuery(value) {
+      searchQuery = value;
+    },
+    get loadNote() {
+      return loadNote;
+    },
+    get resetActiveNote() {
+      return resetActiveNote;
+    },
+    get vaultAttachments() {
+      return vaultAttachments;
+    },
+    set vaultAttachments(value) {
+      vaultAttachments = value;
+    },
+    get runSearch() {
+      return runSearch;
+    },
+  });
+
   const initialMarkdown = createInitialMarkdown("meta");
 
   let vault = $state<Vault>();
@@ -199,8 +529,6 @@ export function createPageController() {
   let previewFrame: number | undefined = $state();
   let previewSettleTimer: number | undefined = $state();
   let pendingPreviewMarkdown = initialMarkdown;
-  let printing = $state(false);
-  let printHtml = $state("");
   let searchSequence = 0;
   let settledSearchSequence = 0;
   let editor: MarkdownEditor | undefined = $state();
@@ -209,48 +537,18 @@ export function createPageController() {
   let storageError = $state("");
   let storageNotice = $state("");
   let isOnline = $state(true);
-  let githubUser = $state<GithubUser>();
-  let githubState = $state<GithubState>("disconnected");
-  let githubMessage = $state("");
-  let githubBackup = $state<GithubBackupState>();
-  let backupState = $state<BackupState>("idle");
-  let backupSequence = 0;
-  let backupMessage = $state("");
-  let backupCommitUrl = $state("");
   let settingsOpen = $state(false);
   let settingsSection = $state<SettingsSection>("editor");
   let pendingBackupCount = $state(0);
-  let autoBackupTimer: number | undefined;
-  // Set when an automatic backup fails, so it does not retry until the user backs up by hand.
-  let autoBackupPaused = $state(false);
-  let restoreModalOpen = $state(false);
-  let restoreSequence = 0;
-  let restoreSource: { configuration: GithubBackupState; version: number } | undefined;
-  let restoreState = $state<RestoreState>("idle");
-  let restoreMessage = $state("");
-  let restoreCommits = $state<GithubBackupCommit[]>([]);
-  let selectedRestoreSha = $state("");
-  let restoreOwner = $state("");
-  let restoreRepository = $state("onyx-vault");
-  let restoreBranch = $state("main");
-  let restoreDirectory = $state("vault");
-  let transferState = $state<TransferState>("idle");
-  let transferMessage = $state("");
-  let folderInput: HTMLInputElement | undefined = $state();
-  let zipInput: HTMLInputElement | undefined = $state();
   let attachmentInput: HTMLInputElement | undefined = $state();
   let attachmentFolder = $state(DEFAULT_ATTACHMENT_FOLDER);
   let attachmentsHidden = $state(false);
   let vaultAttachments = $state<AttachmentMetadata[]>([]);
   let trashedNotes = $state<NoteMetadata[]>([]);
   let backlinks = $state.raw<NoteMetadata[]>([]);
+  let unlinkedMentions = $state.raw<Array<NoteMention & { noteId: string; title: string }>>([]);
+  const outline = $derived(noteOutline(markdown));
   let backlinksSequence = 0;
-  let trashOpen = $state(false);
-  let theme = $state<ThemePreference>("system");
-  let resolvedTheme = $state<ResolvedTheme>("light");
-  let colorTheme = $state<ColorTheme>("ember");
-  let fonts = $state<FontChoices>({ ...defaultFontChoices });
-  let fontCategories = $state<FontCategories>({ ...defaultFontCategories });
   let paletteOpen = $state(false);
   let paletteNotes = $state<NoteMetadata[]>([]);
   let recentNoteIds = $state<string[]>([]);
@@ -258,8 +556,6 @@ export function createPageController() {
   let sidebarSide = $state<SidebarSide>("left");
   let sidebarWidth = $state(DEFAULT_SIDEBAR_WIDTH);
   let sidebarDropSide = $state<SidebarSide | undefined>();
-  let shortcuts = $state<KeyboardShortcuts>(structuredClone(defaultKeyboardShortcuts));
-  let primaryModifier = $state<PrimaryModifier>("meta");
   const editorHistory = new EditorHistory();
   let noteList: HTMLElement | undefined = $state();
   let activeNoteSourcePath: string | undefined = $state();
@@ -283,7 +579,6 @@ export function createPageController() {
   let remoteSyncRequested = false;
   const remoteChanges: VaultChangeEvent[] = [];
   let noteLoadSequence = 0;
-  let fontRevision = 0;
   let clearingVault = false;
   let disposed = false;
   let vaultGeneration = 0;
@@ -358,7 +653,7 @@ export function createPageController() {
   );
   const noteTitle = $derived(titleFromMarkdown(markdown));
   const markdownLineCount = $derived(countLines(markdown));
-  const findCanEdit = $derived(!editorBlocked && transferState !== "working");
+  const findCanEdit = $derived(!editorBlocked && transferController.transferState !== "working");
   const find = createFindReplace({
     markdown: () => markdown,
     canEdit: () => findCanEdit,
@@ -385,8 +680,8 @@ export function createPageController() {
   });
   const notePageCount = $derived(Math.max(1, Math.ceil(results.length / NOTE_PAGE_SIZE)));
   const orderedResults = $derived(
-    results.toSorted(
-      (left, right) => Number(right.note.pinned === true) - Number(left.note.pinned === true),
+    results.toSorted((left, right) =>
+      compareSidebarNotes(left.note, right.note, preferencesController.sidebarSort),
     ),
   );
   const visibleResults = $derived(
@@ -403,12 +698,12 @@ export function createPageController() {
   );
   const fontsAreDefault = $derived(
     (Object.keys(defaultFontChoices) as FontRole[]).every(
-      (role) => fonts[role] === defaultFontChoices[role],
+      (role) => preferencesController.fonts[role] === defaultFontChoices[role],
     ),
   );
   const shortcutsAreDefault = $derived(
     (Object.keys(defaultKeyboardShortcuts) as ShortcutAction[]).every((action) =>
-      shortcutsEqual(shortcuts[action], defaultKeyboardShortcuts[action]),
+      shortcutsEqual(preferencesController.shortcuts[action], defaultKeyboardShortcuts[action]),
     ),
   );
   function paletteNoteItem(
@@ -466,11 +761,11 @@ export function createPageController() {
   });
 
   const paletteActions: PaletteActions = {
-    shortcutLabel,
-    createNote: workspaceCommand(createNote),
+    shortcutLabel: preferencesController.shortcutLabel,
+    createNote: workspaceCommand(fileTreeController.createNote),
     saveDraft,
-    toggleTrash,
-    emptyTrash: workspaceCommand(emptyTrash),
+    toggleTrash: fileTreeController.toggleTrash,
+    emptyTrash: workspaceCommand(fileTreeController.emptyTrash),
     attachFile: () => attachmentInput?.click(),
     setAttachmentsHidden,
     openSettings,
@@ -485,21 +780,47 @@ export function createPageController() {
     toggleScrollSync,
     toggleSidebar,
     setSidebarSide,
-    setTheme,
-    beginBackup,
-    openRestore: workspaceCommand(openRestore),
-    importFolder: () => folderInput?.click(),
-    importZip: () => zipInput?.click(),
-    exportFolder: workspaceCommand(exportFolder),
-    exportZip: workspaceCommand(exportZip),
-    resetFonts,
-    resetShortcuts,
+    setTheme: preferencesController.setTheme,
+    beginBackup: workspaceCommand(githubController.beginBackup),
+    openRestore: workspaceCommand(githubController.openRestore),
+    importFolder: () => transferController.folderInput?.click(),
+    importZip: () => transferController.zipInput?.click(),
+    exportFolder: workspaceCommand(transferController.exportFolder),
+    exportZip: workspaceCommand(transferController.exportZip),
+    resetFonts: preferencesController.resetFonts,
+    resetShortcuts: preferencesController.resetShortcuts,
     ensurePersistentStorage,
-    copyNoteAs,
-    exportNoteAs: workspaceCommand(exportNoteAs),
+    copyNoteAs: transferController.copyNoteAs,
+    exportNoteAs: workspaceCommand(transferController.exportNoteAs),
   };
 
   const paletteItems = $derived<PaletteCommand[]>([
+    {
+      id: "note-history",
+      group: "Notes",
+      label: "Show note history",
+      keywords: "versions snapshots restore",
+      icon: FileText,
+      disabled: !activeNoteId,
+      run: () => void history.show(),
+    },
+    {
+      id: "note-from-template",
+      group: "Notes",
+      label: "New note from template",
+      icon: FileText,
+      keywords: "template create variables",
+      run: () => void workspaceCommand(creation.showTemplates)(),
+    },
+    {
+      id: "daily-note",
+      group: "Notes",
+      label: "Open today's daily note",
+      icon: FileText,
+      shortcut: preferencesController.shortcutLabel("dailyNote"),
+      keywords: "today journal diary",
+      run: () => void workspaceCommand(creation.openDailyNote)(),
+    },
     ...paletteNoteItems,
     ...paletteCommands(
       {
@@ -508,7 +829,7 @@ export function createPageController() {
         attachmentsHidden,
         effectivePaneLayout,
         fontsAreDefault,
-        githubState,
+        githubState: githubController.githubState,
         hasContent,
         isOnline,
         renderedPaneVisible,
@@ -519,41 +840,47 @@ export function createPageController() {
         sidebarSide,
         singlePaneMode,
         sourcePaneVisible,
-        theme,
-        transferState,
-        trashOpen,
+        theme: preferencesController.theme,
+        transferState: transferController.transferState,
+        trashOpen: fileTreeController.trashOpen,
         trashedCount: trashedNotes.length,
       },
       paletteActions,
     ),
   ]);
 
+  const creation = createNoteCreationController({
+    vault: () => vault,
+    vaultId: () => activeVaultId || "default",
+    settle: settleDraft,
+    prepare: loadDialogStyles,
+    open: (id) => navigateToNote(id),
+    refresh: async () => {
+      await refreshFileTree();
+      pendingBackupCount = await vault!.countPendingBackupOperations();
+    },
+    showError: (message) => {
+      storageError = message;
+    },
+  });
+
+  const history = createHistoryController({
+    vault: () => vault,
+    noteId: () => activeNoteId,
+    settle: settleDraft,
+    prepare: loadDialogStyles,
+    reload: async () => {
+      await loadNote(activeNoteId);
+      await refreshFileTree();
+      pendingBackupCount = await vault!.countPendingBackupOperations();
+    },
+  });
+
   const noteOutput = createNoteOutput(() => preview.loadMarkdownModule());
   const confirmation = createConfirmation(() => loadDialogStyles());
 
   function loadDialogStyles(): Promise<void> {
     return dialogStyles.load();
-  }
-
-  function applyStoredFontChoices(): void {
-    const storedFonts = readFontChoices();
-    fontRevision += 1;
-    const revision = fontRevision;
-    fonts = storedFonts;
-    fontCategories = readFontCategories(storedFonts);
-    const customRoles = (Object.keys(storedFonts) as FontRole[]).filter(
-      (role) => storedFonts[role] !== defaultFontChoices[role],
-    );
-    applyFontChoices(storedFonts);
-    if (customRoles.length === 0) return;
-    void Promise.all(customRoles.map((role) => loadFont(storedFonts[role]))).then(
-      () => {
-        if (fontRevision === revision) applyFontChoices(storedFonts);
-      },
-      () => {
-        if (fontRevision === revision) applyFontChoices(storedFonts);
-      },
-    );
   }
 
   function revealStartupShell(): void {
@@ -597,9 +924,9 @@ export function createPageController() {
 
   onMount(() => {
     revealStartupShell();
-    primaryModifier = detectPrimaryModifier();
-    if (primaryModifier === "control" && markdown === initialMarkdown) {
-      markdown = createInitialMarkdown(primaryModifier);
+    preferencesController.primaryModifier = detectPrimaryModifier();
+    if (preferencesController.primaryModifier === "control" && markdown === initialMarkdown) {
+      markdown = createInitialMarkdown(preferencesController.primaryModifier);
       updatePreviewImmediately(markdown);
       lastSavedMarkdown = markdown;
     }
@@ -621,17 +948,19 @@ export function createPageController() {
     if (Number.isFinite(storedSplit)) splitRatio = clampSplitRatio(storedSplit);
     const storedContentWidth = Number(readLocalStorage("onyx:content-width"));
     if (Number.isFinite(storedContentWidth)) contentWidth = clampContentWidth(storedContentWidth);
-    shortcuts = readKeyboardShortcuts();
-    theme = readThemePreference();
-    resolvedTheme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
-    if (document.documentElement.dataset.themePreference !== theme) {
-      resolvedTheme = applyTheme(theme);
+    preferencesController.shortcuts = readKeyboardShortcuts();
+    preferencesController.theme = readThemePreference();
+    preferencesController.resolvedTheme =
+      document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+    if (document.documentElement.dataset.themePreference !== preferencesController.theme) {
+      preferencesController.resolvedTheme = applyTheme(preferencesController.theme);
     }
-    colorTheme = readColorTheme();
-    if (document.documentElement.dataset.colorTheme !== colorTheme) {
-      applyColorTheme(colorTheme);
+    preferencesController.colorTheme = readColorTheme();
+    if (document.documentElement.dataset.colorTheme !== preferencesController.colorTheme) {
+      applyColorTheme(preferencesController.colorTheme);
     }
-    applyStoredFontChoices();
+    preferencesController.loadSidebarSort();
+    preferencesController.applyStoredFontChoices();
     const stopPreferenceWarnings = subscribePreferenceWriteFailures(() => {
       appendStorageNotice(
         "Browser preferences could not be saved. Changes apply to this tab until it closes.",
@@ -639,20 +968,22 @@ export function createPageController() {
     });
     const onPreferenceChange = (event: StorageEvent) => {
       if (event.key === null || event.key === "onyx-theme") {
-        theme = readThemePreference();
-        resolvedTheme = applyTheme(theme);
+        preferencesController.theme = readThemePreference();
+        preferencesController.resolvedTheme = applyTheme(preferencesController.theme);
       }
       if (event.key === null || event.key === "onyx-color-theme") {
-        colorTheme = readColorTheme();
-        applyColorTheme(colorTheme);
+        preferencesController.colorTheme = readColorTheme();
+        applyColorTheme(preferencesController.colorTheme);
       }
-      if (event.key === null || event.key.startsWith("onyx:font-")) applyStoredFontChoices();
+      if (event.key === null || event.key.startsWith("onyx:font-"))
+        preferencesController.applyStoredFontChoices();
       if (event.key === null || event.key === "onyx:keyboard-shortcuts")
-        shortcuts = readKeyboardShortcuts();
+        preferencesController.shortcuts = readKeyboardShortcuts();
     };
     window.addEventListener("storage", onPreferenceChange);
     const stopThemeWatch = watchSystemTheme(() => {
-      if (theme === "system") resolvedTheme = applyTheme(theme);
+      if (preferencesController.theme === "system")
+        preferencesController.resolvedTheme = applyTheme(preferencesController.theme);
     });
     void loadVaultRegistry()
       .then(async (registry) => {
@@ -681,7 +1012,7 @@ export function createPageController() {
       })
       .finally(scheduleServiceWorkerRegistration);
     if (isOnline) scheduleGithubRestore();
-    else githubState = "disconnected";
+    else githubController.githubState = "disconnected";
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       if (markdown === lastSavedMarkdown) return;
       event.preventDefault();
@@ -693,7 +1024,7 @@ export function createPageController() {
     };
     const onOffline = () => {
       isOnline = false;
-      if (restoreState !== "restoring") restoreModalOpen = false;
+      if (githubController.restoreState !== "restoring") githubController.restoreModalOpen = false;
       if (githubRestoreTimer !== undefined) {
         window.clearTimeout(githubRestoreTimer);
         githubRestoreTimer = undefined;
@@ -757,7 +1088,7 @@ export function createPageController() {
       if (previewSettleTimer !== undefined) window.clearTimeout(previewSettleTimer);
       if (serviceWorkerTimer) window.clearTimeout(serviceWorkerTimer);
       if (githubRestoreTimer) window.clearTimeout(githubRestoreTimer);
-      window.clearTimeout(autoBackupTimer);
+      window.clearTimeout(githubController.autoBackupTimer);
       unsubscribeVault?.();
       preview.dispose();
       releaseLocalAttachmentUrls();
@@ -784,110 +1115,17 @@ export function createPageController() {
   }
 
   function scheduleGithubRestore(): void {
-    if (disposed || githubState === "loading" || githubRestoreTimer !== undefined) return;
+    if (disposed || githubController.githubState === "loading" || githubRestoreTimer !== undefined)
+      return;
     const hasGithubCallback = new URLSearchParams(location.search).has("github");
     if (hasGithubCallback) {
-      void restoreGitHub();
+      void githubController.restoreGitHub();
       return;
     }
     githubRestoreTimer = window.setTimeout(() => {
       githubRestoreTimer = undefined;
-      void restoreGitHub();
+      void githubController.restoreGitHub();
     }, DEFERRED_STARTUP_DELAY_MS);
-  }
-
-  async function restoreGitHub(): Promise<void> {
-    if (disposed || githubState === "loading") return;
-    const request = ++authenticationRequest;
-    if (githubRestoreTimer !== undefined) {
-      window.clearTimeout(githubRestoreTimer);
-      githubRestoreTimer = undefined;
-    }
-    const result = new URLSearchParams(location.search).get("github");
-    if (result) {
-      try {
-        await goto(`${location.pathname}${location.hash}`, {
-          shallow: true,
-          replace: true,
-          reset: false,
-          state: { onyxVaultId: activeVaultId, onyxNoteId: page.state.onyxNoteId ?? activeNoteId },
-        });
-      } catch {
-        // History is best-effort; the callback can still be handled.
-      }
-    }
-    if (result && result !== "connected") {
-      githubMessage =
-        result === "configuration"
-          ? "GitHub authentication has not been configured for this deployment."
-          : result === "denied"
-            ? "GitHub authorization was cancelled."
-            : result === "invalid"
-              ? "The GitHub authorization response could not be verified. Please try again."
-              : "GitHub authentication failed. Please try again.";
-    }
-    if (!isOnline) {
-      githubState = githubUser ? "connected" : "disconnected";
-      return;
-    }
-    githubState = "loading";
-    try {
-      const github = await loadGithubModule();
-      if (disposed || request !== authenticationRequest) return;
-      authenticationCleanup ??= github.subscribeGithubAuthentication((user) => {
-        if (!disposed) {
-          githubUser = user;
-          githubState = user ? "connected" : "disconnected";
-        }
-      });
-      const user = await github.restoreGithubSession();
-      if (disposed || request !== authenticationRequest) return;
-      githubUser = user;
-      githubState = githubUser ? "connected" : githubMessage ? "error" : "disconnected";
-    } catch (error) {
-      if (disposed || request !== authenticationRequest) return;
-      githubState = "error";
-      githubMessage = error instanceof Error ? error.message : "GitHub authentication failed.";
-    }
-  }
-
-  async function disconnectGitHub(): Promise<void> {
-    if (!isOnline) return;
-    authenticationRequest += 1;
-    githubUser = undefined;
-    githubState = "disconnected";
-    try {
-      await (await loadGithubModule()).disconnectGithub();
-      githubUser = undefined;
-      githubState = "disconnected";
-      githubMessage = "";
-    } catch (error) {
-      githubState = "error";
-      githubMessage = error instanceof Error ? error.message : "GitHub could not be disconnected.";
-    }
-  }
-
-  async function connectGitHub(): Promise<void> {
-    if (!isOnline || githubState === "loading") return;
-    githubState = "loading";
-    githubMessage = "";
-    try {
-      await (await loadGithubModule()).connectGithub();
-    } catch (error) {
-      githubState = "error";
-      githubMessage =
-        error instanceof Error ? error.message : "GitHub sign-in could not be started.";
-    }
-  }
-
-  async function beginBackup(): Promise<void> {
-    if (!isOnline || !vault || backupState === "backing-up") return;
-    if (!(await settleDraft())) return;
-    if (!githubBackup) {
-      void openSettings("github").catch(() => undefined);
-      return;
-    }
-    await runBackup(githubBackup);
   }
 
   async function openSettings(target: SettingsSection = "editor"): Promise<void> {
@@ -916,54 +1154,13 @@ export function createPageController() {
         paletteOpen ||
         find.isOpen ||
         settingsOpen ||
-        restoreModalOpen ||
+        githubController.restoreModalOpen ||
         imagePreview ||
         confirmation.request
       )
         return;
       if (opener.isConnected) opener.focus();
     });
-  }
-
-  async function selectBackupRepository(
-    state: Omit<GithubBackupState, "updatedAt">,
-  ): Promise<void> {
-    if (!vault) return;
-    try {
-      await (
-        await loadGithubModule()
-      ).validateGithubBackupRepository({
-        ...state,
-        updatedAt: new Date().toISOString(),
-      });
-      const current = await vault.getGithubBackupState();
-      const target = { ...state, updatedAt: new Date().toISOString() };
-      await vault.saveGithubBackupState(
-        current && githubTargetKey(current) === githubTargetKey(target)
-          ? { ...current, ...state }
-          : state,
-      );
-      githubBackup = await vault.getGithubBackupState();
-      backupState = "idle";
-      backupCommitUrl = "";
-      backupMessage = `Backups now target ${state.owner}/${state.repository}.`;
-      settingsSection = "github";
-    } catch (error) {
-      showBackupError(error);
-    }
-  }
-
-  async function forgetBackupRepository(): Promise<void> {
-    if (!vault) return;
-    try {
-      await vault.clearGithubBackupState();
-      githubBackup = undefined;
-      backupCommitUrl = "";
-      backupState = "idle";
-      backupMessage = "Onyx is no longer backing up to a repository.";
-    } catch (error) {
-      showBackupError(error);
-    }
   }
 
   async function clearVault(expectedVersion?: number): Promise<void> {
@@ -1000,7 +1197,7 @@ export function createPageController() {
     folders = [];
     vaultAttachments = [];
     trashedNotes = [];
-    trashOpen = false;
+    fileTreeController.trashOpen = false;
     paletteNotes = [];
     activeNoteId = "";
     noteRevision = 0;
@@ -1015,295 +1212,23 @@ export function createPageController() {
     editorHistory.reset();
   }
 
-  async function createBackupRepository(name: string): Promise<void> {
-    if (!isOnline || !vault || !name.trim() || !(await settleDraft())) return;
-    backupState = "backing-up";
-    backupMessage = "Creating your private repository…";
-    settingsOpen = false;
-    try {
-      const configuration = await (await loadGithubModule()).createPrivateGithubRepository(name);
-      await vault.saveGithubBackupState(configuration);
-      githubBackup = configuration;
-      backupState = "idle";
-      await runBackup(configuration);
-    } catch (error) {
-      showBackupError(error);
-    }
-  }
-
-  async function runBackup(
-    configuration: GithubBackupState,
-    options: { replaceNewerBackup?: boolean; automatic?: boolean } = {},
-  ): Promise<void> {
-    if (disposed || !isOnline || !vault || backupState === "backing-up") return;
-    const opened = vault;
-    const sequence = ++backupSequence;
-    const { automatic = false, ...backupOptions } = options;
-    backupState = "backing-up";
-    if (!automatic) {
-      autoBackupPaused = false;
-      backupMessage = "Preparing one GitHub commit…";
-      backupCommitUrl = "";
-    }
-    let github: Awaited<ReturnType<typeof loadGithubModule>> | undefined;
-    try {
-      github = await loadGithubModule();
-      const result = await github.backupVaultToGithub(opened, configuration, backupOptions);
-      const pending = await opened.countPendingBackupOperations();
-      if (disposed || opened !== vault || sequence !== backupSequence) return;
-      githubBackup = result.state;
-      pendingBackupCount = pending;
-      if (automatic) {
-        backupState = "idle";
-        return;
-      }
-      backupState = "success";
-      backupCommitUrl = result.commitUrl ?? "";
-      backupMessage = result.commitUrl
-        ? `Backed up ${result.fileCount} ${result.fileCount === 1 ? "file" : "files"} in one commit.`
-        : "Your GitHub backup is already up to date.";
-    } catch (error) {
-      if (disposed || opened !== vault || sequence !== backupSequence) return;
-      if (automatic) {
-        autoBackupPaused = true;
-        backupState = "error";
-        backupCommitUrl = "";
-        backupMessage =
-          github && error instanceof github.GithubBackupConflictError
-            ? "Automatic backup paused because GitHub has a newer backup. Restore it from Settings → Backup & sync, or back up now to replace it."
-            : `Automatic backup paused: ${error instanceof Error ? error.message : "the GitHub backup failed."} Back up now to try again.`;
-        return;
-      }
-      if (github && error instanceof github.GithubBackupConflictError) {
-        await resolveBackupConflict(configuration);
-        return;
-      }
-      showBackupError(error);
-    }
-  }
-
   $effect(() => {
     const due =
-      githubBackup?.autoBackup === true &&
+      githubController.githubBackup?.autoBackup === true &&
       pendingBackupCount > 0 &&
       isOnline &&
-      githubState === "connected" &&
-      !autoBackupPaused &&
-      backupState !== "backing-up" &&
+      githubController.githubState === "connected" &&
+      !githubController.autoBackupPaused &&
+      githubController.backupState !== "backing-up" &&
       workspaceOperation === undefined &&
       vaultPhase === "ready" &&
       saveState === "saved" &&
-      !restoreModalOpen &&
+      !githubController.restoreModalOpen &&
       !confirmation.request;
     // Each new pending change restarts the wait, so backups run once editing settles.
     void pendingBackupCount;
-    untrack(() => scheduleAutoBackup(due));
+    untrack(() => githubController.scheduleAutoBackup(due));
   });
-
-  function scheduleAutoBackup(due: boolean): void {
-    window.clearTimeout(autoBackupTimer);
-    autoBackupTimer = due
-      ? window.setTimeout(() => void runAutoBackup(), AUTO_BACKUP_DELAY_MS)
-      : undefined;
-  }
-
-  async function runAutoBackup(): Promise<void> {
-    autoBackupTimer = undefined;
-    const configuration = githubBackup;
-    if (
-      disposed ||
-      !configuration?.autoBackup ||
-      !vault ||
-      !isOnline ||
-      githubState !== "connected" ||
-      autoBackupPaused ||
-      workspaceOperation ||
-      restoreModalOpen ||
-      confirmation.request ||
-      backupState === "backing-up"
-    )
-      return;
-    if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
-    await runBackup(configuration, { automatic: true });
-  }
-
-  async function setAutoBackup(enabled: boolean): Promise<void> {
-    if (!vault || !githubBackup) return;
-    try {
-      githubBackup = await vault.setAutoBackup(enabled);
-      if (enabled) autoBackupPaused = false;
-    } catch (error) {
-      showBackupError(error);
-    }
-  }
-
-  async function resolveBackupConflict(configuration: GithubBackupState): Promise<void> {
-    const opened = vault;
-    backupState = "idle";
-    backupMessage = "";
-    const replace = await confirmation.ask({
-      eyebrow: "Backup & sync",
-      title: "GitHub has a newer backup",
-      message: `Another device backed up to ${configuration.owner}/${configuration.repository} after this device last backed up or restored. Restore that backup to bring its notes here, which replaces the notes on this device. Or back up anyway to make this device's notes the latest backup; the other backup stays in the repository history.`,
-      confirmLabel: "Back up anyway",
-      danger: true,
-    });
-    if (
-      disposed ||
-      opened !== vault ||
-      !githubBackup ||
-      githubTargetKey(githubBackup) !== githubTargetKey(configuration)
-    )
-      return;
-    if (replace) {
-      await runBackup(configuration, { replaceNewerBackup: true });
-      return;
-    }
-    backupState = "error";
-    backupMessage =
-      "Backup paused because GitHub has a newer backup. Restore it from Settings → Backup & sync, or back up again to replace it.";
-  }
-
-  function showBackupError(error: unknown): void {
-    backupState = "error";
-    backupMessage = isGithubStatus(error, 422)
-      ? "GitHub could not create that repository or update its branch. Check the name and try again."
-      : error instanceof Error
-        ? error.message
-        : "The GitHub backup failed.";
-  }
-
-  function isGithubStatus(error: unknown, status: number): boolean {
-    return (
-      error instanceof Error &&
-      "status" in error &&
-      (error as Error & { status?: unknown }).status === status
-    );
-  }
-
-  async function openRestore(): Promise<void> {
-    if (!isOnline || !githubUser || restoreState === "restoring") return;
-    if (!(await settleDraft())) return;
-    restoreOwner = githubBackup?.owner ?? githubUser.login;
-    restoreRepository = githubBackup?.repository ?? suggestedRepositoryName(activeVault);
-    restoreBranch = githubBackup?.branch ?? "main";
-    restoreDirectory = githubBackup?.directory ?? "vault";
-    restoreCommits = [];
-    selectedRestoreSha = "";
-    restoreMessage = "";
-    await loadDialogStyles();
-    restoreModalOpen = true;
-    await loadRestoreCommits();
-  }
-
-  function restoreConfiguration(): GithubBackupState {
-    if (!githubUser) throw new Error("Sign in with GitHub before restoring a backup");
-    return {
-      githubAccountId: githubUser.id,
-      githubAccountLogin: githubUser.login,
-      owner: restoreOwner.trim(),
-      repository: restoreRepository.trim(),
-      branch: restoreBranch.trim(),
-      directory: restoreDirectory.trim().replace(/^\/+|\/+$/g, ""),
-      updatedAt: new Date().toISOString(),
-    };
-  }
-
-  function invalidateRestoreSource(): void {
-    restoreSequence += 1;
-    restoreSource = undefined;
-    selectedRestoreSha = "";
-    restoreCommits = [];
-    restoreState = "idle";
-  }
-
-  async function loadRestoreCommits(): Promise<void> {
-    if (
-      !isOnline ||
-      !vault ||
-      restoreState === "restoring" ||
-      !restoreOwner.trim() ||
-      !restoreRepository.trim() ||
-      !restoreBranch.trim()
-    )
-      return;
-    const opened = vault;
-    const sequence = ++restoreSequence;
-    restoreState = "loading";
-    restoreMessage = "";
-    selectedRestoreSha = "";
-    restoreSource = undefined;
-    try {
-      const configuration = restoreConfiguration();
-      const commits = await (await loadGithubModule()).listGithubBackupCommits(configuration);
-      const version = await opened.getVersion();
-      if (disposed || sequence !== restoreSequence || opened !== vault) return;
-      restoreSource = { configuration, version };
-      restoreCommits = commits;
-      selectedRestoreSha = commits[0]?.sha ?? "";
-      restoreMessage = commits.length
-        ? ""
-        : "No backup commits were found in this repository and directory.";
-      restoreState = "idle";
-    } catch (error) {
-      if (disposed || sequence !== restoreSequence || opened !== vault) return;
-      restoreCommits = [];
-      restoreState = "error";
-      restoreMessage =
-        error instanceof Error ? error.message : "GitHub backups could not be loaded.";
-    }
-  }
-
-  async function restoreSelectedCommit(): Promise<void> {
-    if (
-      !isOnline ||
-      !vault ||
-      !restoreSource ||
-      !selectedRestoreSha ||
-      restoreState === "restoring"
-    )
-      return;
-    const opened = vault;
-    const source = restoreSource;
-    const sha = selectedRestoreSha;
-    if (!(await settleDraft())) return;
-    const previousSaveState = saveState;
-    if (saveTimer) window.clearTimeout(saveTimer);
-    if (searchTimer) window.clearTimeout(searchTimer);
-    saveTimer = undefined;
-    searchTimer = undefined;
-    searchSequence += 1;
-    saveState = "loading";
-    restoreState = "restoring";
-    restoreMessage = "Downloading and rebuilding your local vault…";
-    try {
-      const result = await (
-        await loadGithubModule()
-      ).restoreVaultFromGithub(opened, source.configuration, sha, {
-        expectedVersion: source.version,
-      });
-      if (disposed || opened !== vault) return;
-      githubBackup = result.state;
-      pendingBackupCount = await vault.countPendingBackupOperations();
-      const notes = await vault.listNotes();
-      folders = await vault.listFolders();
-      searchQuery = "";
-      if (notes[0]) await loadNote(notes[0].id);
-      else resetActiveNote();
-      vaultAttachments = await vault.listAttachments();
-      await runSearch("");
-      restoreModalOpen = false;
-      restoreState = "idle";
-      backupState = "success";
-      backupMessage = `Restored ${result.noteCount} ${result.noteCount === 1 ? "note" : "notes"} and ${result.attachmentCount} ${result.attachmentCount === 1 ? "attachment" : "attachments"} from GitHub.`;
-      backupCommitUrl = restoreCommits.find((commit) => commit.sha === sha)?.url ?? "";
-    } catch (error) {
-      saveState = previousSaveState;
-      restoreState = "error";
-      restoreMessage =
-        error instanceof Error ? error.message : "The GitHub backup could not be restored.";
-    }
-  }
 
   function formatNoteDate(value: string): string {
     if (!value) return "";
@@ -1345,7 +1270,8 @@ export function createPageController() {
       if (createFirstNote) {
         const legacyDraft =
           activeVault && isDefaultVault(activeVault) ? await readLegacyDraft() : "";
-        const contents = legacyDraft || createInitialMarkdown(primaryModifier);
+        const contents =
+          legacyDraft || createInitialMarkdown(preferencesController.primaryModifier);
         await vault.saveNote({
           title: titleFromMarkdown(contents),
           markdown: contents,
@@ -1358,7 +1284,7 @@ export function createPageController() {
       trashedNotes = tree.trashedNotes;
       await runSearch("");
       if (searchQuery.trim()) await runSearch(searchQuery);
-      [githubBackup, pendingBackupCount] = await Promise.all([
+      [githubController.githubBackup, pendingBackupCount] = await Promise.all([
         vault.getGithubBackupState(),
         vault.countPendingBackupOperations(),
       ]);
@@ -1377,7 +1303,7 @@ export function createPageController() {
   }
 
   async function selectVault(id: string): Promise<void> {
-    if (id === activeVaultId || transferState === "working") return;
+    if (id === activeVaultId || transferController.transferState === "working") return;
     if (!vaults.some((candidate) => candidate.id === id) || !(await settleDraft())) return;
     try {
       const registry = await writeVaultRegistry({ activeId: id, vaults });
@@ -1390,7 +1316,7 @@ export function createPageController() {
   }
 
   async function createVault(name = "Notes"): Promise<void> {
-    if (transferState === "working" || !(await settleDraft())) return;
+    if (transferController.transferState === "working" || !(await settleDraft())) return;
     try {
       const descriptor = createVaultDescriptor(name, vaults);
       const registry = await writeVaultRegistry({
@@ -1444,15 +1370,15 @@ export function createPageController() {
     vault = undefined;
     await previousVault?.close();
     resetEditorAfterVaultClear();
-    githubBackup = undefined;
-    autoBackupPaused = false;
+    githubController.githubBackup = undefined;
+    githubController.autoBackupPaused = false;
     recentNoteIds = [];
     paletteOpen = false;
     find.close();
     pendingBackupCount = 0;
-    backupState = "idle";
-    backupMessage = "";
-    backupCommitUrl = "";
+    githubController.backupState = "idle";
+    githubController.backupMessage = "";
+    githubController.backupCommitUrl = "";
     sidebarOpen = false;
     await openVault();
   }
@@ -1616,7 +1542,7 @@ export function createPageController() {
         opened.countPendingBackupOperations(),
       ]);
       if (opened === vault && !disposed) {
-        [githubBackup, pendingBackupCount] = backup;
+        [githubController.githubBackup, pendingBackupCount] = backup;
         observedVaultVersion = await opened.getVersion();
       }
     }
@@ -1652,7 +1578,7 @@ export function createPageController() {
   }
 
   async function selectNote(id: string): Promise<void> {
-    if (id === activeNoteId || transferState === "working") return;
+    if (id === activeNoteId || transferController.transferState === "working") return;
     if (!(await settleDraft())) return;
     await loadNote(id);
     if (activeNoteId !== id) return;
@@ -1730,7 +1656,7 @@ export function createPageController() {
       message: `No note is named “${name}” yet. Onyx can create it${parentPath(name) ? ` in ${parentPath(name)}` : ""} and open it.`,
       confirmLabel: "Create note",
     });
-    if (confirmed) await createNote(parentPath(name), fileName);
+    if (confirmed) await fileTreeController.createNote(parentPath(name), fileName);
   }
 
   // Backlinks only supplement the note, so a failed lookup shows none rather than an error.
@@ -1739,14 +1665,21 @@ export function createPageController() {
     const noteId = activeNoteId;
     const sequence = ++backlinksSequence;
     let next: NoteMetadata[] = [];
+    let mentions: typeof unlinkedMentions = [];
     if (currentVault && noteId) {
       try {
-        next = await currentVault.listBacklinks(noteId);
+        [next, mentions] = await Promise.all([
+          currentVault.listBacklinks(noteId),
+          currentVault.listUnlinkedMentions(noteId),
+        ]);
       } catch {
         next = [];
       }
     }
-    if (sequence === backlinksSequence) backlinks = next;
+    if (sequence === backlinksSequence) {
+      backlinks = next;
+      unlinkedMentions = mentions;
+    }
   }
 
   $effect(() => {
@@ -1754,6 +1687,28 @@ export function createPageController() {
     void paletteNotes;
     untrack(() => void refreshBacklinks());
   });
+
+  async function linkUnlinkedMention(mention: (typeof unlinkedMentions)[number]): Promise<void> {
+    if (!vault || !(await settleDraft())) return;
+    try {
+      await vault.linkMention(mention.noteId, activeNoteId, mention.start, mention.end);
+      await refreshFileTree();
+      await refreshBacklinks();
+      pendingBackupCount = await vault.countPendingBackupOperations();
+    } catch (cause) {
+      storageError = cause instanceof Error ? cause.message : "The mention could not be linked.";
+    }
+  }
+
+  async function navigateOutline(heading: NoteHeading, index: number): Promise<void> {
+    editor?.revealRange(heading.start, heading.end);
+    await tick();
+    const element = document.querySelectorAll<HTMLElement>(
+      ".rendered-pane article :is(h1,h2,h3,h4,h5,h6)",
+    )[index];
+    if (element?.id) await scrollToNoteFragment(element.id);
+    else element?.scrollIntoView();
+  }
 
   function openTag(tag: string): void {
     openPalette();
@@ -1803,528 +1758,6 @@ export function createPageController() {
     paletteNotes = tree.notes;
     await runSearch(searchQuery);
     return tree.notes;
-  }
-
-  async function createNote(parent = "", requestedName = ""): Promise<void> {
-    if (!vault || transferState === "working") return;
-    if (!(await settleDraft())) throw new Error("Save or recover the current draft first.");
-    saveState = "loading";
-    try {
-      const name = normalizeFileName(requestedName || "Untitled");
-      const path = joinPath(parent, name);
-      const notes = await vault.listNotes();
-      if (
-        notes.some((note) => noteFilePath(note).toLocaleLowerCase() === path.toLocaleLowerCase())
-      ) {
-        throw new Error(`A file named “${name}” already exists here.`);
-      }
-      const note = await vault.saveNote({
-        title: fileStem(name),
-        markdown: "",
-        sourcePath: path,
-      });
-      searchQuery = "";
-      await loadNote(note.id);
-      await refreshFileTree();
-      requestAnimationFrame(() => editor?.focus());
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "A new note could not be created.";
-      saveState = markdown === lastSavedMarkdown ? "saved" : "error";
-      throw error;
-    }
-  }
-
-  async function createFolder(parent = "", requestedName = ""): Promise<void> {
-    if (!vault || transferState === "working") return;
-    const name = normalizeFolderName(requestedName || "New folder");
-    const path = joinPath(parent, name);
-    folders = await vault.updateFolders((existing, notes) => {
-      if (
-        [
-          ...existing.map((folder) => folder.path),
-          ...notes.map((note) => noteFolderPath(note)),
-        ].some((candidate) => isPathWithin(candidate.toLocaleLowerCase(), path.toLocaleLowerCase()))
-      )
-        throw new Error(`A folder named “${name}” already exists here.`);
-      const now = new Date().toISOString();
-      return [...existing, { id: crypto.randomUUID(), path, createdAt: now, updatedAt: now }];
-    });
-    searchQuery = "";
-    await refreshFileTree();
-    pendingBackupCount = await vault.countPendingBackupOperations();
-    storageError = "";
-  }
-
-  async function renameFile(noteId: string, requestedName: string): Promise<void> {
-    if (!vault || transferState === "working") return;
-    if (!(await settleDraft())) throw new Error("Save or recover the current draft first.");
-    try {
-      const note = await vault.getNote(noteId);
-      if (!note) return;
-      const name = normalizeFileName(requestedName);
-      const path = joinPath(noteFolderPath(note), name);
-      const notes = await vault.listNotes();
-      if (
-        notes.some(
-          (candidate) =>
-            candidate.id !== noteId &&
-            noteFilePath(candidate).toLocaleLowerCase() === path.toLocaleLowerCase(),
-        )
-      ) {
-        throw new Error(`A file named “${name}” already exists here.`);
-      }
-      await vault.moveNote(note.id, path, attachmentFolder);
-      if (activeNoteId === noteId) await loadNote(note.id);
-      storageError = "";
-      await refreshFileTree();
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The file could not be renamed.";
-      throw error;
-    }
-  }
-
-  function isAttachmentFolderPath(path: string): boolean {
-    return path === attachmentFolder || path.startsWith(`${attachmentFolder}/`);
-  }
-
-  async function renameFolder(path: string, requestedName: string): Promise<void> {
-    if (!vault || transferState === "working") return;
-    if (!(await settleDraft())) throw new Error("Save or recover the current draft first.");
-    if (path === attachmentFolder) {
-      if (!(await renameAttachmentFolder(requestedName)))
-        throw new Error(storageError || "The folder could not be renamed.");
-      return;
-    }
-    try {
-      await relocateFolder(path, joinPath(parentPath(path), normalizeFolderName(requestedName)));
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The folder could not be renamed.";
-      throw error;
-    }
-  }
-
-  async function updateFolderAppearance(
-    path: string,
-    changes: Pick<Partial<FolderMetadata>, "icon" | "pinned">,
-  ): Promise<void> {
-    if (!vault || transferState === "working") return;
-    folders = await vault.updateFolders((existing) => {
-      const current = existing.find((folder) => folder.path === path);
-      if (!current && !changes.icon && !changes.pinned) return existing;
-      const now = new Date().toISOString();
-      const next: FolderMetadata = {
-        ...(current ?? { id: crypto.randomUUID(), path, createdAt: now }),
-        ...changes,
-        updatedAt: now,
-      };
-      if (!next.icon) delete next.icon;
-      if (!next.pinned) delete next.pinned;
-      return current
-        ? existing.map((folder) => (folder.path === path ? next : folder))
-        : [...existing, next];
-    });
-    pendingBackupCount = await vault.countPendingBackupOperations();
-    storageError = "";
-  }
-
-  async function setFolderIcon(path: string, icon?: FolderIcon): Promise<void> {
-    if (isAttachmentFolderPath(path)) return;
-    await updateFolderAppearance(path, { icon });
-  }
-
-  async function setFolderPinned(path: string, pinned: boolean): Promise<void> {
-    await updateFolderAppearance(path, { pinned });
-  }
-
-  async function setNotePinned(noteId: string, pinned: boolean): Promise<void> {
-    if (!vault || transferState === "working" || !(await settleDraft())) return;
-    try {
-      const changed = await vault.setNotePinned(noteId, pinned);
-      if (!changed) return;
-      if (activeNoteId === noteId) await loadNote(noteId);
-      await refreshFileTree();
-      storageError = "";
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The file pin could not be saved.";
-    }
-  }
-
-  async function moveFile(noteId: string, targetFolder: string): Promise<void> {
-    if (!vault || transferState === "working" || !(await settleDraft())) return;
-    try {
-      const note = await vault.getNote(noteId);
-      if (!note) return;
-      await vault.moveNote(
-        noteId,
-        joinPath(targetFolder, basename(noteFilePath(note))),
-        attachmentFolder,
-      );
-      if (activeNoteId === noteId) await loadNote(noteId);
-      await refreshFileTree();
-      pendingBackupCount = await vault.countPendingBackupOperations();
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The file could not be moved.";
-    }
-  }
-
-  async function relocateFolder(path: string, nextPath: string): Promise<void> {
-    if (!vault || path === nextPath) return;
-    await vault.moveFolder(path, nextPath, attachmentFolder, isAttachmentFolderPath(path));
-    if (activeNoteId) await loadNote(activeNoteId);
-    await refreshFileTree();
-    pendingBackupCount = await vault.countPendingBackupOperations();
-    storageError = "";
-  }
-
-  async function moveFolder(path: string, targetParent: string): Promise<void> {
-    if (!vault || transferState === "working") return;
-    if (isPathWithin(targetParent, path)) {
-      storageError = "A folder cannot be moved into itself or one of its children.";
-      return;
-    }
-    if (!(await settleDraft())) return;
-    try {
-      await relocateFolder(path, joinPath(targetParent, basename(path)));
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The folder could not be moved.";
-    }
-  }
-
-  async function deleteFile(noteId: string): Promise<void> {
-    if (!vault || transferState === "working") return;
-    const note = await vault.getNote(noteId);
-    if (!note || note.deletedAt) return;
-    if (!(await settleDraft())) return;
-    try {
-      await vault.trashNote(noteId);
-      const notes = await refreshFileTree();
-      if (activeNoteId === noteId) {
-        if (notes[0]) await loadNote(notes[0].id);
-        else resetActiveNote();
-      }
-      pendingBackupCount = await vault.countPendingBackupOperations();
-      storageError = "";
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The file could not be deleted.";
-    }
-  }
-
-  async function deleteFolder(path: string): Promise<void> {
-    if (!vault || transferState === "working") return;
-    const notes = await vault.listNotes();
-    const affectedNotes = notes.filter((note) => {
-      const folder = noteFolderPath(note);
-      return folder === path || folder.startsWith(`${path}/`);
-    });
-    const attached = isAttachmentFolderPath(path)
-      ? (await vault.listAttachments()).filter(
-          (attachment) =>
-            attachment.sourcePath &&
-            (attachment.sourcePath === path || attachment.sourcePath.startsWith(`${path}/`)),
-        )
-      : [];
-    if (!(await settleDraft())) return;
-    try {
-      await vault.updateFileTree((tree) => {
-        const now = new Date().toISOString();
-        for (const note of tree.notes)
-          if (!note.deletedAt && isPathWithin(noteFolderPath(note), path)) note.deletedAt = now;
-        if (attached.length)
-          tree.attachments = tree.attachments.filter(
-            (attachment) => !attachment.sourcePath || !isPathWithin(attachment.sourcePath, path),
-          );
-        tree.folders = tree.folders.filter((folder) => !isPathWithin(folder.path, path));
-      });
-      const remaining = await refreshFileTree();
-      if (activeNoteId && affectedNotes.some((note) => note.id === activeNoteId)) {
-        if (remaining[0]) await loadNote(remaining[0].id);
-        else resetActiveNote();
-      } else if (activeNoteId) {
-        await loadNote(activeNoteId);
-      }
-      pendingBackupCount = await vault.countPendingBackupOperations();
-      storageError = "";
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The folder could not be deleted.";
-    }
-  }
-
-  async function deleteAttachment(id: string): Promise<void> {
-    if (!vault || transferState === "working") return;
-    const currentVault = vault;
-    try {
-      const attachment = await currentVault.deleteAttachment(id);
-      if (!attachment) return;
-      if (imagePreview?.id === attachment.id) closeImagePreview();
-      if (attachment.sourcePath) {
-        const retained = localAttachmentUrls.filter(
-          (candidate) => candidate.sourcePath !== attachment.sourcePath,
-        );
-        if (retained.length !== localAttachmentUrls.length) {
-          for (const candidate of localAttachmentUrls) {
-            if (candidate.sourcePath === attachment.sourcePath) URL.revokeObjectURL(candidate.url);
-          }
-          localAttachmentUrls = retained;
-          preview.invalidate();
-        }
-      }
-      await refreshFileTree();
-      pendingBackupCount = await currentVault.countPendingBackupOperations();
-      storageError = "";
-    } catch (error) {
-      storageError =
-        error instanceof Error ? error.message : "The attachment could not be deleted.";
-    }
-  }
-
-  async function restoreFile(noteId: string): Promise<void> {
-    if (!vault || transferState === "working") return;
-    if (!(await settleDraft())) return;
-    try {
-      const restored = await vault.restoreNote(noteId);
-      if (!restored) return;
-      await refreshFileTree();
-      trashOpen = false;
-      await selectNote(noteId);
-      pendingBackupCount = await vault.countPendingBackupOperations();
-      storageError = "";
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "The file could not be restored.";
-    }
-  }
-
-  async function purgeFile(noteId: string): Promise<void> {
-    if (!vault || transferState === "working") return;
-    const note = await vault.getNote(noteId);
-    if (!note?.deletedAt) return;
-    const confirmed = await confirmation.ask({
-      eyebrow: "Trash",
-      title: "Delete forever?",
-      message: `“${fileStem(noteFilePath(note))}” and its attachments will be permanently deleted. This cannot be undone.`,
-      confirmLabel: "Delete forever",
-      danger: true,
-    });
-    if (!confirmed) return;
-    if (!(await settleDraft())) return;
-    try {
-      await vault.purgeNote(noteId, note.deletedAt);
-      await refreshFileTree();
-      if (activeNoteId === noteId) {
-        const notes = await vault.listNotes();
-        if (notes[0]) await loadNote(notes[0].id);
-        else resetActiveNote();
-      }
-      pendingBackupCount = await vault.countPendingBackupOperations();
-      storageError = "";
-    } catch (error) {
-      storageError =
-        error instanceof Error ? error.message : "The file could not be permanently deleted.";
-    }
-  }
-
-  async function emptyTrash(): Promise<void> {
-    if (!vault || transferState === "working" || trashedNotes.length === 0) return;
-    const count = trashedNotes.length;
-    const confirmed = await confirmation.ask({
-      eyebrow: "Trash",
-      title: "Empty trash?",
-      message: `${count} ${count === 1 ? "note" : "notes"} in Trash will be permanently deleted. This cannot be undone.`,
-      confirmLabel: "Empty trash",
-      danger: true,
-    });
-    if (!confirmed) return;
-    if (!(await settleDraft())) return;
-    try {
-      await vault.emptyTrash();
-      await refreshFileTree();
-      pendingBackupCount = await vault.countPendingBackupOperations();
-      storageError = "";
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : "Trash could not be emptied.";
-    }
-  }
-
-  function toggleTrash(): void {
-    if (!trashOpen) {
-      if (paletteOpen) closePalette();
-      find.close();
-    }
-    trashOpen = !trashOpen;
-  }
-
-  async function copyFilePath(path: string): Promise<void> {
-    await copyToClipboard(() => navigator.clipboard.writeText(path));
-  }
-
-  async function importFolder(files: FileList | null): Promise<void> {
-    if (!files?.length) return;
-    try {
-      const { readMarkdownFolder } = await import("#lib/markdown-transfer.ts");
-      await runImport(readMarkdownFolder(files));
-    } catch (error) {
-      showTransferError(error, "The folder could not be imported.");
-    } finally {
-      if (folderInput) folderInput.value = "";
-    }
-  }
-
-  async function importZip(files: FileList | null): Promise<void> {
-    const file = files?.[0];
-    if (!file) return;
-    transferState = "working";
-    transferMessage = "";
-    try {
-      const { readMarkdownZip } = await import("#lib/markdown-transfer.ts");
-      const entries = await readMarkdownZip(file);
-      transferState = "idle";
-      await runImport(entries);
-    } catch (error) {
-      showTransferError(error, "The ZIP archive could not be imported.");
-    } finally {
-      if (zipInput) zipInput.value = "";
-    }
-  }
-
-  async function runImport(files: MarkdownTransferFile[]): Promise<void> {
-    if (!vault || transferState === "working") return;
-    transferState = "working";
-    transferMessage = "";
-    if (!(await settleDraft())) {
-      transferState = "idle";
-      return;
-    }
-    try {
-      const { importMarkdownFiles } = await import("#lib/markdown-transfer.ts");
-      await importMarkdownFiles(vault, files);
-      searchQuery = "";
-      const notes = await vault.listNotes();
-      if (notes[0]) await loadNote(notes[0].id);
-      else resetActiveNote();
-      await refreshFileTree();
-      pendingBackupCount = await vault.countPendingBackupOperations();
-      transferState = "idle";
-    } catch (error) {
-      showTransferError(error, "The notes could not be imported.");
-    }
-  }
-
-  // Browsers save PDFs through their own print dialog, which the print stylesheet feeds.
-  async function savePdf(): Promise<void> {
-    const source = markdown;
-    const attachments = localAttachmentUrls;
-    const path = activeNoteSourcePath;
-    await import("./styles/print.css");
-    const renderer = await preview.loadMarkdownModule();
-    printHtml = renderer.renderMarkdown(source, (destination) =>
-      resolveLocalAttachmentUrl(destination, path, attachments),
-    );
-    printing = true;
-    try {
-      await tick();
-      window.print();
-    } finally {
-      printing = false;
-      printHtml = "";
-    }
-  }
-
-  async function noteSource(id: string): Promise<NoteSource | undefined> {
-    if (id === activeNoteId) return { markdown, title: noteTitle };
-    const note = await vault?.getNote(id);
-    return note && { markdown: note.markdown, title: titleFromMarkdown(note.markdown) };
-  }
-
-  async function copyToClipboard(write: () => Promise<void>): Promise<void> {
-    if (transferState === "working") return;
-    try {
-      await write();
-    } catch (error) {
-      transferMessage =
-        error instanceof Error ? error.message : "The clipboard could not be written.";
-    }
-  }
-
-  async function copyNoteAs(id: string, format: Exclude<NoteFormat, "pdf">): Promise<void> {
-    await copyToClipboard(async () => {
-      const source = await noteSource(id);
-      if (source) await noteOutput.copy(source, format);
-    });
-  }
-
-  // Printing works from the rendered page, so another note is opened first.
-  async function exportNoteAs(id: string, format: NoteFormat): Promise<void> {
-    try {
-      if (format === "pdf") {
-        if (id !== activeNoteId) await selectNote(id);
-        if (id === activeNoteId) await savePdf();
-        return;
-      }
-      const source = await noteSource(id);
-      if (source) await noteOutput.download(source, format);
-    } catch (error) {
-      showTransferError(error, "The note could not be exported.");
-    }
-  }
-
-  async function exportZip(): Promise<void> {
-    if (!vault || transferState === "working") return;
-    transferState = "working";
-    transferMessage = "";
-    if (!(await settleDraft())) {
-      transferState = "idle";
-      return;
-    }
-    try {
-      const { createMarkdownExport, createMarkdownZip } = await import("#lib/markdown-transfer.ts");
-      const files = await createMarkdownExport(vault);
-      const archive = await createMarkdownZip(files);
-      downloadBlob(archive, `onyx-markdown-${new Date().toISOString().slice(0, 10)}.zip`);
-      transferState = "idle";
-    } catch (error) {
-      showTransferError(error, "The ZIP archive could not be created.");
-    }
-  }
-
-  async function exportFolder(): Promise<void> {
-    if (!vault || transferState === "working") return;
-    const picker = (
-      window as Window & {
-        showDirectoryPicker?: (options?: {
-          mode: "readwrite";
-        }) => Promise<FileSystemDirectoryHandle>;
-      }
-    ).showDirectoryPicker;
-    if (!picker) {
-      showTransferError(
-        undefined,
-        "This browser cannot export to a folder. Export a ZIP archive instead.",
-      );
-      return;
-    }
-    try {
-      const directory = await picker.call(window, { mode: "readwrite" });
-      transferState = "working";
-      transferMessage = "";
-      if (!(await settleDraft())) {
-        transferState = "idle";
-        return;
-      }
-      const { createMarkdownExport, writeMarkdownFolder } =
-        await import("#lib/markdown-transfer.ts");
-      const files = await createMarkdownExport(vault);
-      await writeMarkdownFolder(directory, files);
-      transferState = "idle";
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      showTransferError(error, "The notes could not be exported to that folder.");
-    } finally {
-      if (transferState === "working") transferState = "idle";
-    }
-  }
-
-  function showTransferError(error: unknown, fallback: string): void {
-    transferState = "error";
-    transferMessage = error instanceof Error && error.message ? error.message : fallback;
   }
 
   async function settleDraft(): Promise<boolean> {
@@ -2662,7 +2095,7 @@ export function createPageController() {
     const clipboard = navigator.clipboard;
     if (!clipboard || typeof clipboard.writeText !== "function") return false;
     void Promise.resolve(clipboard.writeText(text)).catch((error: unknown) => {
-      showTransferError(error, "The clipboard could not be written.");
+      transferController.showTransferError(error, "The clipboard could not be written.");
     });
     return true;
   }
@@ -2739,7 +2172,13 @@ export function createPageController() {
   }
 
   async function attachFiles(files: File[], selection?: EditorSelection): Promise<void> {
-    if (!vault || !activeNoteId || files.length === 0 || transferState === "working") return;
+    if (
+      !vault ||
+      !activeNoteId ||
+      files.length === 0 ||
+      transferController.transferState === "working"
+    )
+      return;
     const currentVault = vault;
     const noteId = activeNoteId;
     const target = selection ??
@@ -2824,6 +2263,7 @@ export function createPageController() {
   }
 
   function readAttachmentPreferences(): void {
+    creation.loadPreferences();
     attachmentFolder =
       normalizeAttachmentFolder(
         readLocalStorage(attachmentPreferenceKey("attachment-folder")) ?? "",
@@ -2846,7 +2286,7 @@ export function createPageController() {
     const previous = attachmentFolder;
     if (next === previous) return true;
     if (!vault) return false;
-    if (transferState === "working" || !(await settleDraft())) return false;
+    if (transferController.transferState === "working" || !(await settleDraft())) return false;
     const currentVault = vault;
     try {
       if (folders.some((folder) => isPathWithin(folder.path, next)))
@@ -2916,66 +2356,6 @@ export function createPageController() {
     return type.startsWith("image/")
       ? new Blob([file], { type })
       : new Blob([file], { type: "application/octet-stream" });
-  }
-
-  function setFont(role: FontRole, id: string): void {
-    fontRevision += 1;
-    const revision = fontRevision;
-    const nextFonts = { ...fonts, [role]: id };
-    fonts = nextFonts;
-    const nextCategories = { ...fontCategories, [role]: fontCategory(role, id) };
-    fontCategories = nextCategories;
-    writeFontCategory(role, nextCategories[role]!);
-    applyFontChoices(nextFonts);
-    if (id === defaultFontChoices[role]) {
-      return;
-    }
-    void loadFont(id).then(
-      () => {
-        if (fontRevision === revision) applyFontChoices(nextFonts);
-      },
-      () => {
-        if (fontRevision === revision) applyFontChoices(nextFonts);
-      },
-    );
-  }
-
-  function resetFonts(): void {
-    fontRevision += 1;
-    fonts = { ...defaultFontChoices };
-    fontCategories = { ...defaultFontCategories };
-    for (const role of Object.keys(fontCategories) as FontRole[]) {
-      writeFontCategory(role, fontCategories[role]!);
-    }
-    applyFontChoices(fonts);
-  }
-
-  function setFontCategory(role: FontRole, category: FontCategory): void {
-    if (fontCategories[role] === category) return;
-    fontRevision += 1;
-    fontCategories = { ...fontCategories, [role]: category };
-    writeFontCategory(role, category);
-    const candidates = fontOptionsFor(role, category);
-    const current = fonts[role]!;
-    const nextId = candidates.some((option) => option.id === current)
-      ? current
-      : (candidates[0]?.id ?? current);
-    if (nextId !== current) setFont(role, nextId);
-  }
-
-  function shortcutLabel(action: ShortcutAction): string | undefined {
-    const shortcut = shortcuts[action];
-    return shortcut ? formatShortcut(shortcut, primaryModifier) : undefined;
-  }
-
-  function setShortcut(action: ShortcutAction, shortcut: KeyboardShortcut | null): void {
-    shortcuts = { ...shortcuts, [action]: shortcut };
-    writeKeyboardShortcuts(shortcuts);
-  }
-
-  function resetShortcuts(): void {
-    shortcuts = structuredClone(defaultKeyboardShortcuts);
-    writeKeyboardShortcuts(shortcuts);
   }
 
   function queueSearch(value: string): void {
@@ -3079,17 +2459,33 @@ export function createPageController() {
 
   function handleShortcut(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;
-    if (confirmation.request || settingsOpen || restoreModalOpen || imagePreview) {
+    if (history.open || creation.open) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        history.close();
+        creation.close();
+      }
+      return;
+    }
+    if (confirmation.request || settingsOpen || githubController.restoreModalOpen || imagePreview) {
       if (event.key === "Escape") {
         event.preventDefault();
         if (confirmation.request) confirmation.cancel();
         else if (imagePreview) closeImagePreview();
-        else if (restoreModalOpen && restoreState !== "restoring") restoreModalOpen = false;
+        else if (githubController.restoreModalOpen && githubController.restoreState !== "restoring")
+          githubController.restoreModalOpen = false;
         else if (settingsOpen && !clearingVault) closeSettings();
       }
       return;
     }
-    if (workspaceOperation && shortcutMatchesEvent(shortcuts.newNote, event, primaryModifier)) {
+    if (
+      workspaceOperation &&
+      shortcutMatchesEvent(
+        preferencesController.shortcuts.newNote,
+        event,
+        preferencesController.primaryModifier,
+      )
+    ) {
       event.preventDefault();
       return;
     }
@@ -3098,7 +2494,7 @@ export function createPageController() {
       !event.altKey &&
       (event.key === "F3" ||
         (event.key.toLowerCase() === "g" &&
-          (primaryModifier === "meta" ? event.metaKey : event.ctrlKey)))
+          (preferencesController.primaryModifier === "meta" ? event.metaKey : event.ctrlKey)))
     ) {
       event.preventDefault();
       if (event.shiftKey) find.previous();
@@ -3110,8 +2506,13 @@ export function createPageController() {
       if (runEditorIndent(event.target, event.shiftKey)) event.preventDefault();
       return;
     }
-    const action = (Object.keys(shortcuts) as ShortcutAction[]).find((candidate) =>
-      shortcutMatchesEvent(shortcuts[candidate], event, primaryModifier),
+    const action = (Object.keys(preferencesController.shortcuts) as ShortcutAction[]).find(
+      (candidate) =>
+        shortcutMatchesEvent(
+          preferencesController.shortcuts[candidate],
+          event,
+          preferencesController.primaryModifier,
+        ),
     );
 
     // Paste carries files in its ClipboardEvent, which the keydown cannot see.
@@ -3140,7 +2541,7 @@ export function createPageController() {
     }
 
     if (!action) return;
-    const shortcut = shortcuts[action];
+    const shortcut = preferencesController.shortcuts[action];
     if (
       isTypingTarget(event.target) &&
       action !== "closePanel" &&
@@ -3158,21 +2559,29 @@ export function createPageController() {
     else if (action === "findInNote") {
       if (find.isOpen) find.close();
       else openFind();
-    } else if (action === "saveNote" && transferState !== "working" && !workspaceOperation)
+    } else if (
+      action === "saveNote" &&
+      transferController.transferState !== "working" &&
+      !workspaceOperation
+    )
       void saveDraft();
-    else if (action === "newNote" && transferState !== "working")
-      void workspaceCommand(createNote)();
+    else if (action === "dailyNote") void workspaceCommand(creation.openDailyNote)();
+    else if (action === "newNote" && transferController.transferState !== "working")
+      void workspaceCommand(fileTreeController.createNote)();
     else if (action === "searchNotes" || action === "focusSearch") focusSearch();
-    else if (action === "cycleTheme") setTheme(nextThemePreference(theme));
+    else if (action === "cycleTheme")
+      preferencesController.setTheme(nextThemePreference(preferencesController.theme));
     else if (action === "toggleSidebar") toggleSidebar();
-    else if (action === "openTrash" && transferState !== "working") toggleTrash();
+    else if (action === "openTrash" && transferController.transferState !== "working")
+      fileTreeController.toggleTrash();
     else if (action === "bold") insertSyntax("**", "**", "bold text");
     else if (action === "italic") insertSyntax("_", "_", "italic text");
     else if (action === "togglePreview") toggleRenderedPane();
     else if (action === "openShortcuts") void openSettings("shortcuts").catch(() => undefined);
     else if (action === "closePanel") {
       if (imagePreview) closeImagePreview();
-      else if (restoreModalOpen && restoreState !== "restoring") restoreModalOpen = false;
+      else if (githubController.restoreModalOpen && githubController.restoreState !== "restoring")
+        githubController.restoreModalOpen = false;
       else if (settingsOpen) closeSettings();
       else if (paletteOpen) closePalette();
       else if (find.isOpen) find.close();
@@ -3186,7 +2595,8 @@ export function createPageController() {
   }
 
   function editorShortcutAlias(event: KeyboardEvent): ShortcutAction | undefined {
-    const primaryPressed = primaryModifier === "meta" ? event.metaKey : event.ctrlKey;
+    const primaryPressed =
+      preferencesController.primaryModifier === "meta" ? event.metaKey : event.ctrlKey;
     if (!primaryPressed || event.altKey) return;
     const key = event.key.toLowerCase();
     if (key === "x" && !event.shiftKey) return "cutSelection";
@@ -3242,16 +2652,6 @@ export function createPageController() {
     writeLocalStorage("onyx:sidebar-width", String(sidebarWidth));
   }
 
-  function setTheme(preference: ThemePreference): void {
-    theme = preference;
-    resolvedTheme = applyTheme(preference);
-  }
-
-  function setColorTheme(nextTheme: ColorTheme): void {
-    colorTheme = nextTheme;
-    applyColorTheme(nextTheme);
-  }
-
   function togglePalette(): void {
     if (paletteOpen) closePalette();
     else openPalette();
@@ -3259,13 +2659,13 @@ export function createPageController() {
 
   function openFind(): void {
     if (paletteOpen) closePalette();
-    trashOpen = false;
+    fileTreeController.trashOpen = false;
     find.open();
   }
 
   function openPalette(): void {
     if (find.isOpen) find.close();
-    trashOpen = false;
+    fileTreeController.trashOpen = false;
     if (paletteOpen) {
       focusSearch();
       return;
@@ -3327,8 +2727,29 @@ export function createPageController() {
   }
 
   return {
+    get sidebarSort() {
+      return preferencesController.sidebarSort;
+    },
+    setSidebarSort: preferencesController.setSidebarSort,
+    creation,
+    get outline() {
+      return outline;
+    },
+    get unlinkedMentions() {
+      return unlinkedMentions;
+    },
+    navigateOutline,
+    linkUnlinkedMention: workspaceCommand(linkUnlinkedMention),
+    configureEncryption: githubController.configureEncryption,
+    get restorePassphrase() {
+      return githubController.restorePassphrase;
+    },
+    set restorePassphrase(value: string) {
+      githubController.restorePassphrase = value;
+    },
+    history,
     get printHtml() {
-      return printHtml;
+      return transferController.printHtml;
     },
     get saveConflict() {
       return saveFailure === "conflict";
@@ -3410,7 +2831,7 @@ export function createPageController() {
       return saveState;
     },
     get transferState() {
-      return transferState;
+      return transferController.transferState;
     },
     get storageError() {
       return storageError;
@@ -3422,28 +2843,28 @@ export function createPageController() {
       return isOnline;
     },
     get githubState() {
-      return githubState;
+      return githubController.githubState;
     },
     get githubUser() {
-      return githubUser;
+      return githubController.githubUser;
     },
     get githubMessage() {
-      return githubMessage;
+      return githubController.githubMessage;
     },
     get githubBackup() {
-      return githubBackup;
+      return githubController.githubBackup;
     },
     get backupState() {
-      return backupState;
+      return githubController.backupState;
     },
     get backupMessage() {
-      return backupMessage;
+      return githubController.backupMessage;
     },
     set backupMessage(value: string) {
-      backupMessage = value;
+      githubController.backupMessage = value;
     },
     get backupCommitUrl() {
-      return backupCommitUrl;
+      return githubController.backupCommitUrl;
     },
     get settingsOpen() {
       return settingsOpen;
@@ -3462,81 +2883,91 @@ export function createPageController() {
       return pendingBackupCount;
     },
     get restoreModalOpen() {
-      return restoreModalOpen;
+      return githubController.restoreModalOpen;
     },
     set restoreModalOpen(value: boolean) {
-      if (restoreState === "restoring") return;
-      restoreModalOpen = value;
-      if (!value) invalidateRestoreSource();
+      if (githubController.restoreState === "restoring") return;
+      githubController.restoreModalOpen = value;
+      if (!value) githubController.invalidateRestoreSource();
     },
     get restoreState() {
-      return restoreState;
+      return githubController.restoreState;
     },
     get restoreMessage() {
-      return restoreMessage;
+      return githubController.restoreMessage;
     },
     get restoreCommits() {
-      return restoreCommits;
+      return githubController.restoreCommits;
     },
     get selectedRestoreSha() {
-      return selectedRestoreSha;
+      return githubController.selectedRestoreSha;
     },
     set selectedRestoreSha(value: string) {
-      if (restoreState === "restoring") return;
-      selectedRestoreSha = value;
+      if (githubController.restoreState === "restoring") return;
+      githubController.selectedRestoreSha = value;
     },
     get restoreOwner() {
-      return restoreOwner;
+      return githubController.restoreOwner;
     },
     set restoreOwner(value: string) {
-      if (restoreState === "restoring" || value === restoreOwner) return;
-      restoreOwner = value;
-      invalidateRestoreSource();
+      if (githubController.restoreState === "restoring" || value === githubController.restoreOwner)
+        return;
+      githubController.restoreOwner = value;
+      githubController.invalidateRestoreSource();
     },
     get restoreRepository() {
-      return restoreRepository;
+      return githubController.restoreRepository;
     },
     set restoreRepository(value: string) {
-      if (restoreState === "restoring" || value === restoreRepository) return;
-      restoreRepository = value;
-      invalidateRestoreSource();
+      if (
+        githubController.restoreState === "restoring" ||
+        value === githubController.restoreRepository
+      )
+        return;
+      githubController.restoreRepository = value;
+      githubController.invalidateRestoreSource();
     },
     get restoreBranch() {
-      return restoreBranch;
+      return githubController.restoreBranch;
     },
     set restoreBranch(value: string) {
-      if (restoreState === "restoring" || value === restoreBranch) return;
-      restoreBranch = value;
-      invalidateRestoreSource();
+      if (githubController.restoreState === "restoring" || value === githubController.restoreBranch)
+        return;
+      githubController.restoreBranch = value;
+      githubController.invalidateRestoreSource();
     },
     get restoreDirectory() {
-      return restoreDirectory;
+      return githubController.restoreDirectory;
     },
     set restoreDirectory(value: string) {
-      if (restoreState === "restoring" || value === restoreDirectory) return;
-      restoreDirectory = value;
-      invalidateRestoreSource();
+      if (
+        githubController.restoreState === "restoring" ||
+        value === githubController.restoreDirectory
+      )
+        return;
+      githubController.restoreDirectory = value;
+      githubController.invalidateRestoreSource();
     },
     get theme() {
-      return theme;
+      return preferencesController.theme;
     },
     get resolvedTheme() {
-      return resolvedTheme;
+      return preferencesController.resolvedTheme;
     },
     get colorTheme() {
-      return colorTheme;
+      return preferencesController.colorTheme;
     },
     get fonts() {
-      return fonts;
+      return preferencesController.fonts;
     },
     get fontCategories() {
-      return fontCategories;
+      return preferencesController.fontCategories;
     },
     get shortcuts() {
-      return shortcuts;
+      return preferencesController.shortcuts;
     },
     get primaryModifier() {
-      return primaryModifier;
+      return preferencesController.primaryModifier;
     },
     get sourcePaneVisible() {
       return sourcePaneVisible;
@@ -3590,7 +3021,7 @@ export function createPageController() {
       return renderedBlockLines;
     },
     get printing() {
-      return printing;
+      return transferController.printing;
     },
     get paletteItems() {
       return paletteItems;
@@ -3657,10 +3088,10 @@ export function createPageController() {
       noteList = value;
     },
     get folderInput() {
-      return folderInput;
+      return transferController.folderInput;
     },
     set folderInput(value: HTMLInputElement | undefined) {
-      folderInput = value;
+      transferController.folderInput = value;
     },
     get attachmentInput() {
       return attachmentInput;
@@ -3684,21 +3115,21 @@ export function createPageController() {
       return trashedNotes;
     },
     get trashOpen() {
-      return trashOpen;
+      return fileTreeController.trashOpen;
     },
     set trashOpen(value: boolean) {
-      if (value !== trashOpen) toggleTrash();
+      if (value !== fileTreeController.trashOpen) fileTreeController.toggleTrash();
     },
     get zipInput() {
-      return zipInput;
+      return transferController.zipInput;
     },
     set zipInput(value: HTMLInputElement | undefined) {
-      zipInput = value;
+      transferController.zipInput = value;
     },
     selectVault: workspaceCommand(selectVault, "navigation"),
     createVault: workspaceCommand(createVault),
     renameVault: workspaceCommand(renameVault, "mutation", true),
-    createNote: workspaceCommand(createNote),
+    createNote: workspaceCommand(fileTreeController.createNote),
     queueSearch,
     openFind,
     closeFind: find.close,
@@ -3714,8 +3145,8 @@ export function createPageController() {
     closePalette,
     openSettings,
     closeSettings,
-    connectGitHub,
-    disconnectGitHub,
+    connectGitHub: githubController.connectGitHub,
+    disconnectGitHub: githubController.disconnectGitHub,
     moveNoteFocus,
     selectNote: workspaceCommand(selectNote, "navigation"),
     openNoteLink: workspaceCommand(openNoteLink, "navigation"),
@@ -3725,23 +3156,23 @@ export function createPageController() {
       return backlinks;
     },
     openBacklink: workspaceCommand((id: string) => navigateToNote(id), "navigation"),
-    createFile: workspaceCommand(createNote, "mutation", true),
-    createFolder: workspaceCommand(createFolder, "mutation", true),
-    renameFile: workspaceCommand(renameFile, "mutation", true),
-    renameFolder: workspaceCommand(renameFolder, "mutation", true),
-    setFolderIcon: workspaceCommand(setFolderIcon),
-    setFolderPinned: workspaceCommand(setFolderPinned),
-    setNotePinned: workspaceCommand(setNotePinned),
-    moveFile: workspaceCommand(moveFile),
-    moveFolder: workspaceCommand(moveFolder),
-    deleteFile: workspaceCommand(deleteFile),
-    deleteFolder: workspaceCommand(deleteFolder),
-    deleteAttachment: workspaceCommand(deleteAttachment),
-    restoreFile: workspaceCommand(restoreFile),
-    purgeFile: workspaceCommand(purgeFile),
-    emptyTrash: workspaceCommand(emptyTrash),
-    toggleTrash,
-    copyFilePath,
+    createFile: workspaceCommand(fileTreeController.createNote, "mutation", true),
+    createFolder: workspaceCommand(fileTreeController.createFolder, "mutation", true),
+    renameFile: workspaceCommand(fileTreeController.renameFile, "mutation", true),
+    renameFolder: workspaceCommand(fileTreeController.renameFolder, "mutation", true),
+    setFolderIcon: workspaceCommand(fileTreeController.setFolderIcon),
+    setFolderPinned: workspaceCommand(fileTreeController.setFolderPinned),
+    setNotePinned: workspaceCommand(fileTreeController.setNotePinned),
+    moveFile: workspaceCommand(fileTreeController.moveFile),
+    moveFolder: workspaceCommand(fileTreeController.moveFolder),
+    deleteFile: workspaceCommand(fileTreeController.deleteFile),
+    deleteFolder: workspaceCommand(fileTreeController.deleteFolder),
+    deleteAttachment: workspaceCommand(fileTreeController.deleteAttachment),
+    restoreFile: workspaceCommand(fileTreeController.restoreFile),
+    purgeFile: workspaceCommand(fileTreeController.purgeFile),
+    emptyTrash: workspaceCommand(fileTreeController.emptyTrash),
+    toggleTrash: fileTreeController.toggleTrash,
+    copyFilePath: fileTreeController.copyFilePath,
     changeNotePage,
     saveDraft,
     openVault: workspaceCommand(openVault),
@@ -3768,8 +3199,8 @@ export function createPageController() {
     swapPanes,
     togglePaneLayout,
     placePane,
-    copyNoteAs,
-    exportNoteAs: workspaceCommand(exportNoteAs),
+    copyNoteAs: transferController.copyNoteAs,
+    exportNoteAs: workspaceCommand(transferController.exportNoteAs),
     toggleScrollSync,
     handleEditorChange,
     handleEditorHistory,
@@ -3789,30 +3220,34 @@ export function createPageController() {
     openAttachmentInNewTab,
     closeImagePreview,
     updateMarkdown,
-    setTheme,
-    setColorTheme,
-    setFont,
-    setFontCategory,
-    resetFonts,
-    setShortcut,
-    resetShortcuts,
-    createBackupRepository: workspaceCommand(createBackupRepository),
-    selectBackupRepository: workspaceCommand(selectBackupRepository),
-    forgetBackupRepository: workspaceCommand(forgetBackupRepository),
-    setAutoBackup,
-    beginBackup,
-    openRestore: workspaceCommand(openRestore),
-    importFolder: workspaceCommand(importFolder),
-    importZip: workspaceCommand(importZip),
-    exportFolder: workspaceCommand(exportFolder),
-    exportZip: workspaceCommand(exportZip),
+    setTheme: preferencesController.setTheme,
+    setColorTheme: preferencesController.setColorTheme,
+    setFont: preferencesController.setFont,
+    setFontCategory: preferencesController.setFontCategory,
+    resetFonts: preferencesController.resetFonts,
+    setShortcut: preferencesController.setShortcut,
+    resetShortcuts: preferencesController.resetShortcuts,
+    createBackupRepository: workspaceCommand(githubController.createBackupRepository),
+    selectBackupRepository: workspaceCommand(githubController.selectBackupRepository),
+    forgetBackupRepository: workspaceCommand(githubController.forgetBackupRepository),
+    setAutoBackup: githubController.setAutoBackup,
+    beginBackup: workspaceCommand(githubController.beginBackup),
+    openRestore: workspaceCommand(githubController.openRestore),
+    importFolder: workspaceCommand(transferController.importFolder),
+    importZip: workspaceCommand(transferController.importZip),
+    exportFolder: workspaceCommand(transferController.exportFolder),
+    exportZip: workspaceCommand(transferController.exportZip),
     prepareVaultDeletion,
     clearVault: workspaceCommand(clearVault, "mutation", true),
-    loadRestoreCommits,
-    restoreSelectedCommit: workspaceCommand(restoreSelectedCommit),
+    loadRestoreCommits: githubController.loadRestoreCommits,
+    get mergeUnlock() {
+      return githubController.mergeUnlock;
+    },
+    submitMergeUnlock: githubController.submitMergeUnlock,
+    restoreSelectedCommit: workspaceCommand(githubController.restoreSelectedCommit),
     formatCommitDate,
     dismissBackupMessage() {
-      backupMessage = "";
+      githubController.backupMessage = "";
     },
     get confirmation() {
       return confirmation.request;
@@ -3820,10 +3255,10 @@ export function createPageController() {
     confirmAction: confirmation.confirm,
     cancelAction: confirmation.cancel,
     get transferMessage() {
-      return transferMessage;
+      return transferController.transferMessage;
     },
     dismissTransferMessage() {
-      transferMessage = "";
+      transferController.transferMessage = "";
     },
   };
 }

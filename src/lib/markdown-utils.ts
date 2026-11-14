@@ -227,26 +227,38 @@ export function rewriteLocalLinks(
 ): string {
   const previousDirectory = parentPath(previousNotePath ?? "");
   const nextDirectory = parentPath(nextNotePath ?? "");
+  function rewrite(match: string, opening: string, rawDestination: string): string {
+    const bracketed = rawDestination.startsWith("<");
+    const destination = bracketed ? rawDestination.slice(1, -1) : rawDestination;
+    if (/^(?:[a-z][a-z\d+.-]*:|#|[\\/])/i.test(destination)) return match;
+    const suffixIndex = destination.search(/[?#]/);
+    const path = suffixIndex === -1 ? destination : destination.slice(0, suffixIndex);
+    const suffix = suffixIndex === -1 ? "" : destination.slice(suffixIndex);
+    const resolved = resolveRelativePath(previousDirectory, decodePath(path));
+    const target = resolved ? mapPath(resolved) : undefined;
+    if (!target) return match;
+    const relative = relativePath(nextDirectory, target);
+    return bracketed
+      ? `${opening}<${relative}${suffix}>`
+      : `${opening}${encodePath(relative)}${suffix}`;
+  }
+  const definitions: Array<{ start: number; end: number }> = [];
+  function visit(node: SourceNode): void {
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (node.type === "definition" && start !== undefined && end !== undefined)
+      definitions.push({ start, end });
+    for (const child of node.children ?? []) visit(child);
+  }
+  visit(parseMarkdownSource(markdown));
+  for (const { start, end } of definitions.reverse()) {
+    const definition = markdown
+      .slice(start, end)
+      .replace(/^(\[(?:\\.|[^\]\\])+\]:\s*)(<[^>\n]*>|[^\s]+)/, rewrite);
+    markdown = markdown.slice(0, start) + definition + markdown.slice(end);
+  }
   return mapMarkdownProse(markdown, (prose) =>
-    prose.replace(
-      /(\]\()(<[^>\n]*>|[^)\s]+)/g,
-      (match, opening: string, rawDestination: string) => {
-        const bracketed = rawDestination.startsWith("<");
-        const destination = bracketed ? rawDestination.slice(1, -1) : rawDestination;
-        if (/^(?:[a-z][a-z\d+.-]*:|#|[\\/])/i.test(destination)) return match;
-        const suffixIndex = destination.search(/[?#]/);
-        const path = suffixIndex === -1 ? destination : destination.slice(0, suffixIndex);
-        const suffix = suffixIndex === -1 ? "" : destination.slice(suffixIndex);
-        const decoded = decodePath(path);
-        const resolved = resolveRelativePath(previousDirectory, decoded);
-        const target = resolved ? mapPath(resolved) : undefined;
-        if (!target) return match;
-        const relative = relativePath(nextDirectory, target);
-        return bracketed
-          ? `${opening}<${relative}${suffix}>`
-          : `${opening}${encodePath(relative)}${suffix}`;
-      },
-    ),
+    prose.replace(/(\]\()(<[^>\n]*>|[^)\s]+)/g, rewrite),
   );
 }
 

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { compareSidebarNotes } from "#lib/sidebar-sort.ts";
+  import type { SidebarSort } from "#lib/browser-storage.ts";
 	import { onDestroy, tick, untrack } from 'svelte';
 	import { Archive, BriefcaseBusiness, CalendarDays, Camera, ChevronDown, ChevronRight, Code2, Copy, Download, ExternalLink, FilePlus2, FileText, Folder, FolderPlus, HardDrive, Heart, House, Image, Lightbulb, LoaderCircle, Lock, LockOpen, LogOut, Music2, Palette, Paperclip, PanelLeft, PanelRight, Pencil, Pin, Plane, Plus, Rocket, Search, Settings, Sparkles, Star, Tag, Trash2, Type, Undo2, X, type LucideIcon } from '@lucide/svelte';
 	import { formatShortcut, type KeyboardShortcuts, type PrimaryModifier } from '#lib/keyboard-shortcuts.ts';
@@ -14,6 +16,8 @@
 	import { noteFormats, type NoteFormat } from './note-formats';
 
 	interface Props {
+    sidebarSort: SidebarSort;
+    onSidebarSort: (value: SidebarSort) => void;
 		vaults: VaultDescriptor[];
 		activeVaultId: string;
 		activeNoteId: string;
@@ -107,7 +111,7 @@
 		onContentWidthChange: (value: number) => void;
 	}
 
-	let {
+	let { sidebarSort, onSidebarSort,
 		vaults, activeVaultId, activeNoteId, results, visibleResults, folders, attachments, attachmentFolder, attachmentsHidden, onOpenAttachment, onOpenAttachmentInNewTab, onDeleteAttachment, searchQuery, findOpen, findQuery, findReplacement, findMatchCase, findWholeWord, findMatchCount, activeFindMatch, findCanEdit, notePage, notePageCount, saveState, notesLoaded, paletteOpen, searchPending, searchError, paletteItems, settingsOpen,
 		isOnline, githubState, githubUser, githubMessage, transferState, storageError, shortcuts, primaryModifier, wordCount, readingMinutes, contentWidth,
 		searchInput = $bindable(), findInput = $bindable(), findReplaceInput = $bindable(), noteList = $bindable(), onToggleSidebar, onSidebarDragStart, sidebarSide, onSidebarSideChange, onSelectVault, onCreateVault, onRenameVault, onCreateNote, onCreateFile, onCreateFolder, onRenameFile, onRenameFolder, onSetFolderIcon, onSetFolderPinned, onMoveFile, onMoveFolder, onDeleteFile, onDeleteFolder, trashedNotes, trashOpen, onToggleTrash, onRestoreFile, onPurgeFile, onEmptyTrash, onCopyFilePath, onCopyFileAs, onExportFileAs, onSearch,
@@ -292,8 +296,7 @@
 				if (expanded) visit(path, depth + 1);
 			}
 			const childNotes = (notesByFolder.get(parent) ?? []).toSorted((left, right) =>
-				Number(right.note.pinned === true) - Number(left.note.pinned === true) ||
-				noteLabel(left).localeCompare(noteLabel(right), undefined, { sensitivity: 'base' }),
+				compareSidebarNotes(left.note, right.note, sidebarSort),
 			);
 			for (const result of childNotes) {
 				rows.push({ kind: 'file', key: `file:${result.note.id}`, path: notePath(result), label: noteLabel(result), depth, result });
@@ -981,7 +984,15 @@
 					<button class="file-action" aria-label="New folder" title="New folder" disabled={transferState === 'working'} onclick={() => void beginNaming({ action: 'create-folder', parentPath: '' })}><FolderPlus size={16} /></button>
 				</div>
 			</div>
-			<nav class="note-list" class:drop-target={dropTargetPath === ''} bind:this={noteList} oncontextmenu={openRootContextMenu} ondragover={keepRootDropTarget} ondragleave={(event) => clearRootDropTarget(event)} ondrop={dropOnRoot}>
+			<div class="sidebar-sort">
+        <select aria-label="Sort notes by" value={sidebarSort.by} onchange={(event) => onSidebarSort({ ...sidebarSort, by: event.currentTarget.value as SidebarSort['by'] })}>
+          <option value="name">Name</option><option value="updatedAt">Modified date</option><option value="createdAt">Created date</option>
+        </select>
+        <select aria-label="Sort direction" value={sidebarSort.direction} onchange={(event) => onSidebarSort({ ...sidebarSort, direction: event.currentTarget.value as SidebarSort['direction'] })}>
+          <option value="asc">Ascending</option><option value="desc">Descending</option>
+        </select>
+      </div>
+      <nav class="note-list" class:drop-target={dropTargetPath === ''} bind:this={noteList} oncontextmenu={openRootContextMenu} ondragover={keepRootDropTarget} ondragleave={(event) => clearRootDropTarget(event)} ondrop={dropOnRoot}>
 				{#if naming && (naming.action === 'create-file' || naming.action === 'create-folder')}
 					<div class="file-naming-row" style={`--tree-depth: ${naming.parentPath ? 1 : 0}`}>
 						{#if naming.action === 'create-folder'}<Folder size={16} />{:else}<FileText size={16} />{/if}

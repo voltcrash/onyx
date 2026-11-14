@@ -64,6 +64,19 @@ test("waits for an in-flight save before deleting the vault", async ({ page }) =
   await page.getByRole("button", { name: "Close settings" }).click();
 
   await expectMarkdown(editor, "");
+  const historyCount = await page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve) => {
+      const request = indexedDB.open("onyx-vault");
+      request.onsuccess = () => resolve(request.result);
+    });
+    const count = await new Promise<number>((resolve) => {
+      const request = database.transaction("noteSnapshots").objectStore("noteSnapshots").count();
+      request.onsuccess = () => resolve(request.result);
+    });
+    database.close();
+    return count;
+  });
+  expect(historyCount).toBe(0);
   await page.reload();
   await expectMarkdown(editor, /# Welcome to Onyx/);
 });

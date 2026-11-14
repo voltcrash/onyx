@@ -983,3 +983,25 @@
 .backlinks button:hover {
   border-color: var(--line-hover);
 }
+
+.note-outline {
+  width: min(100%, var(--content-width));
+  margin: 24px auto 0;
+  padding: 0 clamp(30px, 6vw, 78px);
+  color: var(--faint);
+  font-size: 12px;
+}
+.note-outline summary,
+.note-outline button {
+  cursor: pointer;
+}
+.note-outline ol {
+  padding-left: 16px;
+  list-style: none;
+}
+.note-outline button {
+  border: 0;
+  padding: 4px 0;
+  background: transparent;
+  color: var(--accent-link);
+}

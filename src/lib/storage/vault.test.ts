@@ -263,3 +263,229 @@ describe("Native directory configuration changes", () => {
     }
   });
 });
+
+describe("Inbound links during moves", () => {
+  const note = (id: string, sourcePath: string, markdown: string) => ({
+    id,
+    sourcePath,
+    markdown,
+    title: id,
+    path: `notes/${id}.md`,
+    tags: [],
+    revision: 1,
+    size: markdown.length,
+    createdAt: "",
+    updatedAt: "",
+  });
+
+  it("rewrites inbound Markdown and wiki links in the same file-tree update", async () => {
+    const tree = {
+      notes: [
+        note("target", "Old.md", "[other](Other.md)"),
+        note(
+          "source",
+          "Index.md",
+          '[[Old#Heading|label]] [text](Old.md#heading) `[[Old]]`\n\n[Target][ref]\n\n[ref]: <Old.md#heading> "Title"',
+        ),
+      ],
+      folders: [],
+      attachments: [],
+    };
+    const vault = Reflect.construct(Vault, [{}, {}]) as Vault;
+    const update = vi.spyOn(vault, "updateFileTree").mockImplementation(async (apply) => {
+      apply(tree);
+    });
+    await vault.moveNote("target", "folder/New.md", "attachments");
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(tree.notes[1]!.markdown).toBe(
+      '[[New#Heading|label]] [text](folder/New.md#heading) `[[Old]]`\n\n[Target][ref]\n\n[ref]: <folder/New.md#heading> "Title"',
+    );
+    expect(tree.notes[0]!.markdown).toBe("[other](../Other.md)");
+  });
+
+  it("updates folder-qualified wiki links from outside a moved folder", async () => {
+    const tree = {
+      notes: [
+        note("target", "old/Target.md", ""),
+        note("source", "Index.md", "[[old/Target|label]] [text](old/Target.md)"),
+      ],
+      folders: [],
+      attachments: [],
+    };
+    const vault = Reflect.construct(Vault, [{}, {}]) as Vault;
+    vi.spyOn(vault, "updateFileTree").mockImplementation(async (apply) => {
+      apply(tree);
+    });
+    await vault.moveFolder("old", "new", "attachments");
+    expect(tree.notes[1]!.markdown).toBe("[[Target|label]] [text](new/Target.md)");
+  });
+});
+
+describe("Linking unlinked mentions", () => {
+  it("checks current prose offsets and writes a path-qualified wiki target", async () => {
+    const metadata = { revision: 1, size: 0, tags: [], createdAt: "", updatedAt: "" };
+    const tree = {
+      notes: [
+        {
+          ...metadata,
+          id: "target",
+          title: "Garden",
+          sourcePath: "plants/Garden.md",
+          path: "notes/target.md",
+          markdown: "",
+        },
+        {
+          ...metadata,
+          id: "source",
+          title: "Journal",
+          sourcePath: "Journal.md",
+          path: "notes/source.md",
+          markdown: "A Garden today.",
+        },
+      ],
+      folders: [],
+      attachments: [],
+    };
+    const vault = Reflect.construct(Vault, [{}, {}]) as Vault;
+    vi.spyOn(vault, "updateFileTree").mockImplementation(async (update) => {
+      update(tree);
+    });
+    await vault.linkMention("source", "target", 2, 8);
+    expect(tree.notes[1]!.markdown).toBe("A [[plants/Garden|Garden]] today.");
+    await expect(vault.linkMention("source", "target", 2, 8)).rejects.toThrow("changed");
+  });
+});
+
+it("rewrites note links when moving a folder inside the pinned attachment folder", async () => {
+  const metadata = { revision: 1, size: 0, tags: [], createdAt: "", updatedAt: "" };
+  const tree = {
+    notes: [
+      {
+        ...metadata,
+        id: "target",
+        title: "Target",
+        path: "notes/target.md",
+        sourcePath: "attachments/old/Target.md",
+        markdown: "",
+      },
+      {
+        ...metadata,
+        id: "source",
+        title: "Index",
+        path: "notes/source.md",
+        sourcePath: "Index.md",
+        markdown: "[target](attachments/old/Target.md)",
+      },
+    ],
+    folders: [],
+    attachments: [],
+  };
+  const vault = Reflect.construct(Vault, [{}, {}]) as Vault;
+  vi.spyOn(vault, "updateFileTree").mockImplementation(async (update) => {
+    update(tree);
+  });
+  await vault.moveFolder("attachments/old", "new", "attachments", true);
+  expect(tree.notes[1]!.markdown).toBe("[target](new/Target.md)");
+});
+
+it.each([false, true])(
+  "preserves local trash and bytes during merge (ID collision: %s)",
+  async (collision) => {
+    const trash = {
+      id: "trash",
+      path: "notes/trash.md",
+      title: "Trash",
+      tags: [],
+      revision: 2,
+      size: 4,
+      createdAt: "",
+      updatedAt: "",
+      deletedAt: "yesterday",
+    };
+    const attachment = {
+      id: "image",
+      noteId: "trash",
+      path: "attachments/trash/image",
+      name: "image.png",
+      type: "image/png",
+      size: 3,
+      createdAt: "",
+      updatedAt: "",
+    };
+    const filesystem = await VaultFilesystem.fromDirectory(memoryDirectory());
+    await filesystem.writeText(trash.path, "kept");
+    await filesystem.write(attachment.path, new Blob([new Uint8Array([0, 255, 42])]));
+    const replaceVault = vi.fn();
+    const vault = Reflect.construct(Vault, [
+      {
+        getNotes: async () => [trash],
+        getAttachments: async () => [attachment],
+        getNoteMarkdown: async () => "kept",
+        getVaultVersion: async () => 1,
+        replaceVault,
+      },
+      filesystem,
+      { runExclusive: <T>(task: () => Promise<T>) => task(), publish: vi.fn() },
+    ]) as Vault;
+    await vault.restoreBackup(
+      collision ? [{ path: trash.path, contents: new Blob(["remote"]) }] : [],
+      {
+        manifest: {
+          version: 1,
+          notes: collision ? [{ ...trash, deletedAt: undefined }] : [],
+          attachments: [],
+        },
+        restoredAt: "now",
+        preserveTrash: true,
+      },
+    );
+    const notes = replaceVault.mock.calls[0][0];
+    expect(notes.filter((note: { deletedAt?: string }) => note.deletedAt)).toEqual([trash]);
+    if (collision) {
+      const active = notes.find((note: { deletedAt?: string }) => !note.deletedAt);
+      expect(active.id).not.toBe(trash.id);
+      expect(await filesystem.readText(active.path)).toBe("remote");
+    }
+    expect(replaceVault.mock.calls[0][2]).toEqual([attachment]);
+    expect(await filesystem.readText(trash.path)).toBe("kept");
+    expect([
+      ...new Uint8Array(await (await filesystem.read(attachment.path)).arrayBuffer()),
+    ]).toEqual([0, 255, 42]);
+  },
+);
+
+it("preserves the current encryption setting when completing an older backup", async () => {
+  const encryption = {
+    version: 1,
+    kdf: "PBKDF2-SHA256",
+    iterations: 600_000,
+    salt: "salt",
+    keyCheck: "check",
+  } as const;
+  const captured = {
+    owner: "onyx",
+    repository: "vault",
+    branch: "main",
+    directory: "vault",
+    githubAccountId: 1,
+    githubAccountLogin: "onyx",
+    updatedAt: "before",
+  };
+  const completeGithubBackup = vi.fn();
+  const vault = Reflect.construct(Vault, [
+    {
+      getGithubBackupState: async () => ({ ...captured, encryption, autoBackup: true }),
+      completeGithubBackup,
+    },
+    {},
+    { runExclusive: <T>(task: () => Promise<T>) => task(), publish: vi.fn() },
+  ]) as Vault;
+  const completed = await vault.completeGithubBackup({ ...captured, lastCommitSha: "new" }, [
+    "operation",
+  ]);
+  expect(completed.encryption).toEqual(encryption);
+  expect(completeGithubBackup).toHaveBeenCalledWith(
+    expect.objectContaining({ encryption, autoBackup: true, lastCommitSha: "new" }),
+    ["operation"],
+  );
+});

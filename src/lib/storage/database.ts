@@ -4,10 +4,11 @@ import type {
   FolderMetadata,
   GithubBackupState,
   NoteMetadata,
+  NoteSnapshot,
 } from "./types.js";
 import { VaultConflictError } from "./types.js";
 
-const DATABASE_VERSION = 4;
+const DATABASE_VERSION = 5;
 const VAULT_VERSION_KEY = "vaultVersion";
 const NATIVE_DIRECTORY_HANDLE_KEY = "nativeDirectoryHandle";
 const FILE_FOLDERS_KEY = "fileFolders";
@@ -39,6 +40,7 @@ export type StoreName =
   | "backupQueue"
   | "noteContents"
   | "notes"
+  | "noteSnapshots"
   | "searchDocuments"
   | "searchPostings"
   | "settings";
@@ -104,6 +106,11 @@ export class VaultDatabase {
         database.createObjectStore("noteContents", { keyPath: "noteId" });
       }
 
+      if (event.oldVersion < 5) {
+        const snapshots = database.createObjectStore("noteSnapshots", { keyPath: "id" });
+        snapshots.createIndex("noteId", "noteId");
+      }
+
       if (event.oldVersion < 4) {
         const notes = request.transaction?.objectStore("notes");
         if (notes && !notes.indexNames.contains("deletedAt")) {
@@ -130,6 +137,17 @@ export class VaultDatabase {
   close(): void {
     this.#closed = true;
     this.#database.close();
+  }
+
+  async getNoteSnapshots(noteId: string): Promise<NoteSnapshot[]> {
+    const transaction = this.#transaction("noteSnapshots", "readonly");
+    const snapshots = await requestResult<NoteSnapshot[]>(
+      transaction.objectStore("noteSnapshots").index("noteId").getAll(noteId),
+    );
+    await transactionDone(transaction);
+    return snapshots.sort(
+      (a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
+    );
   }
 
   getNote(id: string): Promise<NoteMetadata | undefined> {
@@ -178,7 +196,15 @@ export class VaultDatabase {
     operation: BackupOperation,
   ): Promise<void> {
     const transaction = this.#transaction(
-      ["notes", "noteContents", "searchDocuments", "searchPostings", "backupQueue", "settings"],
+      [
+        "notes",
+        "noteContents",
+        "noteSnapshots",
+        "searchDocuments",
+        "searchPostings",
+        "backupQueue",
+        "settings",
+      ],
       "readwrite",
     );
     const complete = transactionDone(transaction);
@@ -194,6 +220,7 @@ export class VaultDatabase {
         throw new VaultConflictError(note.id, expectedRevision, actualRevision);
       }
 
+      await recordSnapshot(transaction, note.id, markdown, note.updatedAt);
       transaction.objectStore("notes").put(note);
       transaction.objectStore("noteContents").put({ noteId: note.id, markdown });
       transaction.objectStore("searchDocuments").put(searchDocument);
@@ -483,6 +510,7 @@ export class VaultDatabase {
       [
         "notes",
         "noteContents",
+        "noteSnapshots",
         "attachments",
         "searchDocuments",
         "searchPostings",
@@ -493,6 +521,11 @@ export class VaultDatabase {
     );
     const complete = transactionDone(transaction);
     try {
+      const snapshots = transaction.objectStore("noteSnapshots");
+      for (const key of await requestResult<IDBValidKey[]>(
+        snapshots.index("noteId").getAllKeys(noteId),
+      ))
+        snapshots.delete(key);
       transaction.objectStore("notes").delete(noteId);
       transaction.objectStore("noteContents").delete(noteId);
       transaction.objectStore("searchDocuments").delete(noteId);
@@ -642,6 +675,7 @@ export class VaultDatabase {
     expectedVersion?: number,
     replacement?: {
       folders: FolderMetadata[];
+      clearHistory?: boolean;
       generation?: string;
       githubBackup?: GithubBackupState;
     },
@@ -650,6 +684,7 @@ export class VaultDatabase {
       [
         "notes",
         "noteContents",
+        "noteSnapshots",
         "attachments",
         "searchDocuments",
         "searchPostings",
@@ -670,6 +705,21 @@ export class VaultDatabase {
         throw new VaultConflictError("vault", expectedVersion, actualVersion);
       }
 
+      const oldContents = await requestResult<Array<{ noteId: string; markdown: string }>>(
+        transaction.objectStore("noteContents").getAll(),
+      );
+      const nextContents = new Map(noteContents.map((note) => [note.noteId, note.markdown]));
+      if (replacement?.clearHistory) transaction.objectStore("noteSnapshots").clear();
+      for (const note of replacement?.clearHistory ? [] : oldContents) {
+        if (nextContents.get(note.noteId) !== note.markdown)
+          await recordSnapshot(
+            transaction,
+            note.noteId,
+            note.markdown,
+            new Date().toISOString(),
+            true,
+          );
+      }
       const stores = {
         notes: transaction.objectStore("notes"),
         noteContents: transaction.objectStore("noteContents"),
@@ -857,4 +907,33 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
     transaction.onerror = () =>
       reject(transaction.error ?? new Error("IndexedDB transaction failed"));
   });
+}
+
+export function shouldRecordSnapshot(
+  snapshots: NoteSnapshot[],
+  markdown: string,
+  now: string,
+  force = false,
+): boolean {
+  const latest = snapshots.toSorted((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  return (
+    !latest ||
+    (latest.markdown !== markdown &&
+      (force || Date.parse(now) - Date.parse(latest.createdAt) >= 5 * 60_000))
+  );
+}
+
+async function recordSnapshot(
+  transaction: IDBTransaction,
+  noteId: string,
+  markdown: string,
+  createdAt: string,
+  force = false,
+): Promise<void> {
+  const store = transaction.objectStore("noteSnapshots");
+  const snapshots = await requestResult<NoteSnapshot[]>(store.index("noteId").getAll(noteId));
+  if (!shouldRecordSnapshot(snapshots, markdown, createdAt, force)) return;
+  store.put({ id: crypto.randomUUID(), noteId, markdown, createdAt } satisfies NoteSnapshot);
+  const oldest = snapshots.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(49);
+  for (const snapshot of oldest) store.delete(snapshot.id);
 }

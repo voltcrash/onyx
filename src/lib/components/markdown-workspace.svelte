@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { NoteHeading, NoteMention } from "#lib/note-insights.ts";
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, HardDrive, PanelLeft, PencilLine, X } from '@lucide/svelte';
 	import type { FindMatch } from '#lib/find-replace.ts';
@@ -12,6 +13,10 @@
 	import type { PaneEdge, PaneLayout, PaneOrder, SaveState, TransferState } from './app-types';
 
 	interface Props {
+    outline: NoteHeading[];
+    unlinkedMentions: Array<NoteMention & { noteId: string; title: string }>;
+    onOutline: (heading: NoteHeading, index: number) => void;
+    onLinkMention: (mention: NoteMention & { noteId: string; title: string }) => void;
 		storageNotice: string;
 		storageError: string;
 		sourcePaneVisible: boolean;
@@ -63,7 +68,7 @@
 		onTag?: (tag: string) => void;
 	}
 
-	let {
+	let { outline, unlinkedMentions, onOutline, onLinkMention,
 		storageNotice, storageError, sourcePaneVisible, renderedPaneVisible, paneLayout, paneOrder, renderedBlockLines, renderedBlocks, displayedRenderedBlocks, scrollSync, markdown, markdownLineCount, findOpen, findQuery, findMatches, activeFindMatch,
 		saveConflict, onSaveConflictCopy, editorBlocked, saveState, transferState, hasContent, shortcuts, primaryModifier,
 		editor = $bindable(), onRetryStorage, onDismissStorageNotice, onToggleSidebar, onSidebarDragStart,
@@ -544,7 +549,10 @@
 		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 		<div bind:this={renderedPaneElement} class="rendered-pane" class:dragged={drag?.moving && drag.pane === 'rendered'} style={drag?.moving && drag.pane === 'rendered' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined} data-sveltekit-preload-data="false" data-sveltekit-preload-code="false" onmousedown={handleRenderedMouseDown} onclick={handleRenderedClick} onscrollcapture={(event) => handlePaneScroll(event, 'rendered')} onwheelcapture={() => handlePaneInteraction('rendered')} onpointerdowncapture={() => handlePaneInteraction('rendered')} ontouchstartcapture={() => handlePaneInteraction('rendered')} onkeydowncapture={() => handlePaneInteraction('rendered')} onloadcapture={() => queueScrollSync(scrollDriver)}>
 			{#if hasContent}
-				<article class="prose" {@attach mountPreview}>
+				{#if outline.length}
+          <details class="note-outline"><summary>Outline</summary><nav aria-label="Outline"><ol>{#each outline as heading, index}<li style:margin-left={`${(heading.depth - 1) * 0.5}rem`}><button onclick={() => onOutline(heading, index)}>{heading.text}</button></li>{/each}</ol></nav></details>
+        {/if}
+        <article class="prose" {@attach mountPreview}>
 					{#each keyedRenderedBlocks as block (block.key)}
 						{@html block.html}
 					{/each}
@@ -559,8 +567,15 @@
 						</ul>
 					</nav>
 				{/if}
-			{:else}
-				<div class="preview-empty"><PencilLine size={26} /><strong>Nothing here yet</strong><span>Start writing in the source pane.</span></div>
+			{#if unlinkedMentions.length}
+          <nav class="backlinks" aria-label="Unlinked mentions"><h2>Unlinked mentions</h2><ul>
+            {#each unlinkedMentions as mention (`${mention.noteId}:${mention.start}`)}
+              <li><strong>{mention.title}</strong> <span>{mention.excerpt}</span> <button aria-label={`Link mention in ${mention.title}`} onclick={() => onLinkMention(mention)}>Link</button></li>
+            {/each}
+          </ul></nav>
+        {/if}
+      {:else}
+        <div class="preview-empty"><PencilLine size={26} /><strong>Nothing here yet</strong><span>Start writing in the source pane.</span></div>
 			{/if}
 		</div>
 		{#if dropSlot}

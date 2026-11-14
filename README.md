@@ -28,7 +28,7 @@ adds private backup and cross-device restore.
   file, and the PDF view prints through the browser's print dialog, where it can be saved as a PDF.
 - Choose a light, dark, or system theme. System follows the operating system preference, updates
   when that preference changes, and the selected mode is saved in this browser.
-- Choose from twelve color themes. Monochrome is the default: Ember, Monochrome, Ocean, Forest,
+- Choose from twelve color themes. Ember is the default: Ember, Monochrome, Ocean, Forest,
   Graphite, Marigold, Espresso, Ink, Lavender, Burgundy, Rose, and Solarized are available.
 - Import Markdown folders or ZIP archives, including locally referenced attachments.
 - Export the complete vault to a folder when the browser supports the File System Access API, or
@@ -51,6 +51,7 @@ use a slide-over note list. Preferences are saved per browser when local storage
 | `⌘ K`           | Open command palette and search notes |
 | `⌘ ⇧ F` or `/`  | Open command palette and search notes |
 | `⌘ ⏎`           | Create a note                         |
+| `⌘ ⇧ D`         | Open today’s daily note               |
 | `⌘ S`           | Save the active note                  |
 | `⌘ X` / `⌘ C`   | Cut or copy the current selection     |
 | `⌘ V`           | Paste into the active editor          |
@@ -125,7 +126,66 @@ Create a GitHub OAuth App, configure its callback URL as
 [`.env.example`](.env.example). `BETTER_AUTH_SECRET` must contain at least 32 random characters.
 Onyx requests the `repo` scope so it can create private repositories and write backup commits.
 
+## Sidebar sorting
+
+Use the sidebar's sort controls to order notes by name, modified date, or created date,
+ascending or descending. Pinned notes stay first in each folder. The choice is retained
+in this browser and safely falls back to name order when storage is unavailable.
+
+## Templates and daily notes
+
+Put reusable notes in **Templates**, then choose **New note from template** in the
+palette. Pick a template and a destination path; `{{title}}`, `{{date}}`, and `{{time}}`
+expand to the new file's name and local date/time. Relative links keep their destinations.
+
+**Open today's daily note** (⌘ ⇧ D, or Ctrl ⇧ D) opens or creates
+`Daily/YYYY-MM-DD.md` without replacing an existing note. Configure the templates folder,
+daily folder, and optional daily template in **Settings → Editor**. These preferences
+are stored per vault in this browser. The daily shortcut is customizable in Settings.
+
+## Outline and unlinked mentions
+
+Expand **Outline** above the rendered note to navigate its headings in both panes.
+Below the note, **Unlinked mentions** lists whole-title or file-name occurrences in other
+notes, excluding existing links, code, and frontmatter. **Link** wraps that occurrence in
+a path-qualified wiki link and updates backlinks, search, and the backup queue.
+
+## Encrypted backups
+
+Opt in under **Settings → Backup & sync** by setting and confirming a passphrase.
+The next backup uploads every note and attachment encrypted in one commit. AES-256-GCM
+uses a fresh 96-bit IV per file and authenticates its path. PBKDF2-SHA256 derives a
+non-extractable key with a random 128-bit salt and 600,000 iterations. Only KDF parameters,
+salt, and an encrypted key check are stored in the manifest. The passphrase never leaves
+the device or enters persistent storage; keys last only for the session.
+
+After reloading, unlock backups in Settings or enter the passphrase when restoring.
+A wrong passphrase leaves local notes untouched. Existing unencrypted backups still
+restore normally. File names and note metadata remain visible, local notes are not
+encrypted, and older Git commits retain their original contents.
+
+## Backup conflict merging
+
+When another device has backed up first, choose **Merge (recommended)** to combine
+changes against the last backed-up or restored commit. Concurrent edits keep the local
+note and add the remote version as a dated conflict sibling. Edits survive deletions;
+unchanged files accept deletions. The union is committed on the remote head without a
+force push. Restore and overwrite remain available.
+
+## Local note history
+
+Use **Show note history** in the command palette to preview and restore earlier text.
+Snapshots stay in this browser's IndexedDB and are never uploaded. Saves capture at most
+one snapshot per note every five minutes, retaining the newest fifty. Link rewrites and
+restores preserve the previous text immediately; permanent deletion removes its history.
+
 ## Architecture
+
+Focused reactive controllers handle GitHub backup and restore in
+`src/routes/github-controller.svelte.ts`; the page controller coordinates the workspace. Import, export, and printing live in
+`transfer-controller.svelte.ts`. Themes, fonts, and shortcuts live in
+`preferences-controller.svelte.ts`. File and folder mutations, pins, and trash live in
+`file-tree-controller.svelte.ts`.
 
 - `src/routes/page-controller.svelte.ts` owns application state and coordinates persistence,
   transfer, and GitHub workflows; `src/routes/+page.svelte` composes the interface.

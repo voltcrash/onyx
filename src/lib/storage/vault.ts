@@ -1,3 +1,4 @@
+import { findUnlinkedMentions, type NoteMention } from "../note-insights.ts";
 import {
   createSearchPostings,
   VaultDatabase,
@@ -11,7 +12,7 @@ import {
   rewriteLocalLinks,
 } from "../markdown-utils.js";
 import { isPathWithin, movePath, noteFilePath, parentPath } from "../paths.js";
-import { linksToNote } from "../wikilinks.js";
+import { linksToNote, rewriteMovedWikiLinks } from "../wikilinks.js";
 import { extractTags, normalizeTag, parseSearchQuery } from "../tags.js";
 import { VaultCoordination } from "./coordination.js";
 import { MirroredVaultFilesystem, VaultFilesystem } from "./filesystem.js";
@@ -24,6 +25,7 @@ import type {
   ImportNoteInput,
   Note,
   NoteMetadata,
+  NoteSnapshot,
   SaveNoteInput,
   VaultOptions,
   VaultBackupSnapshot,
@@ -319,6 +321,23 @@ export class Vault {
     }
   }
 
+  listNoteSnapshots(noteId: string): Promise<NoteSnapshot[]> {
+    return this.#database.getNoteSnapshots(noteId);
+  }
+
+  async restoreNoteSnapshot(noteId: string, snapshotId: string): Promise<void> {
+    const snapshot = (await this.listNoteSnapshots(noteId)).find(
+      (snapshot) => snapshot.id === snapshotId,
+    );
+    if (!snapshot) throw new Error("That snapshot no longer exists");
+    await this.updateFileTree((tree) => {
+      const note = tree.notes.find((note) => note.id === noteId && !note.deletedAt);
+      if (!note) throw new Error("The note no longer exists");
+      note.markdown = snapshot.markdown;
+      note.title = titleFromMarkdown(snapshot.markdown);
+    });
+  }
+
   async saveNote(input: SaveNoteInput): Promise<Note> {
     const id = input.id ?? crypto.randomUUID();
     return this.#withLock(async () => {
@@ -418,6 +437,53 @@ export class Vault {
   }
 
   /** Notes outside the trash that link to `noteId`, by title. */
+  async listUnlinkedMentions(
+    noteId: string,
+  ): Promise<Array<NoteMention & { noteId: string; title: string }>> {
+    return this.#withLock(async () => {
+      const [notes, contents] = await Promise.all([
+        this.#database.getNotes().then(activeNotes),
+        this.#database.getNoteContents(),
+      ]);
+      const target = notes.find((note) => note.id === noteId);
+      if (!target) return [];
+      const names = [
+        target.title,
+        noteFilePath(target)
+          .replace(/^.*\//, "")
+          .replace(/\.(?:md|markdown)$/i, ""),
+      ];
+      const byId = new Map(contents.map((note) => [note.noteId, note.markdown]));
+      return notes
+        .filter((note) => note.id !== noteId)
+        .flatMap((note) =>
+          findUnlinkedMentions(byId.get(note.id) ?? "", names).map((mention) => ({
+            ...mention,
+            noteId: note.id,
+            title: note.title,
+          })),
+        );
+    });
+  }
+
+  async linkMention(sourceId: string, targetId: string, start: number, end: number): Promise<void> {
+    await this.updateFileTree((tree) => {
+      const source = tree.notes.find((note) => note.id === sourceId && !note.deletedAt);
+      const target = tree.notes.find((note) => note.id === targetId && !note.deletedAt);
+      if (!source || !target) throw new Error("The note no longer exists");
+      const name = noteFilePath(target).replace(/\.(?:md|markdown)$/i, "");
+      const mention = findUnlinkedMentions(source.markdown, [
+        target.title,
+        name.replace(/^.*\//, ""),
+      ]).find((mention) => mention.start === start && mention.end === end);
+      if (!mention) throw new Error("That mention changed. Refresh the note before linking it.");
+      source.markdown =
+        source.markdown.slice(0, start) +
+        `[[${name}|${mention.text}]]` +
+        source.markdown.slice(end);
+    });
+  }
+
   async listBacklinks(noteId: string): Promise<NoteMetadata[]> {
     return this.#withLock(async () => {
       const [notes, contents] = await Promise.all([
@@ -752,6 +818,9 @@ export class Vault {
     await this.updateFileTree((tree) => {
       const note = tree.notes.find((candidate) => candidate.id === noteId && !candidate.deletedAt);
       if (!note) throw new Error("The note no longer exists");
+      const previousNotes = tree.notes
+        .filter((note) => !note.deletedAt)
+        .map((note) => ({ ...note }));
       const previousPath = noteFilePath(note);
       const paths = new Map<string, string>();
       for (const attachment of tree.attachments) {
@@ -764,13 +833,25 @@ export class Vault {
         )
           paths.set(path, movePath(path, parentPath(previousPath), parentPath(nextPath)));
       }
-      note.markdown = rewriteLocalLinks(
-        note.markdown,
-        previousPath,
-        nextPath,
-        (path) => paths.get(path) ?? path,
-      );
       note.sourcePath = nextPath;
+      paths.set(previousPath, nextPath);
+      for (const linkingNote of tree.notes) {
+        if (linkingNote.deletedAt) continue;
+        const oldPath = linkingNote.id === noteId ? previousPath : noteFilePath(linkingNote);
+        const newPath = noteFilePath(linkingNote);
+        linkingNote.markdown = rewriteLocalLinks(
+          rewriteMovedWikiLinks(
+            linkingNote.markdown,
+            previousNotes,
+            tree.notes.filter((note) => !note.deletedAt),
+            oldPath,
+            newPath,
+          ),
+          oldPath,
+          newPath,
+          (path) => paths.get(path) ?? path,
+        );
+      }
       for (const attachment of tree.attachments) {
         if (attachment.sourcePath && paths.has(attachment.sourcePath))
           attachment.sourcePath = paths.get(attachment.sourcePath);
@@ -786,6 +867,19 @@ export class Vault {
   ): Promise<void> {
     if (!from || isPathWithin(to, from)) throw new Error("A folder cannot be moved into itself");
     await this.updateFileTree((tree) => {
+      const previousNotes = tree.notes
+        .filter((note) => !note.deletedAt)
+        .map((note) => ({ ...note }));
+      const nextNotes = previousNotes.map((note) => ({
+        ...note,
+        sourcePath: isPathWithin(noteFilePath(note), from)
+          ? movePath(noteFilePath(note), from, to)
+          : noteFilePath(note),
+      }));
+      const notePaths = new Map(
+        previousNotes.map((note, index) => [noteFilePath(note), noteFilePath(nextNotes[index]!)]),
+      );
+
       const folderPaths = new Set(tree.folders.map((folder) => folder.path));
       for (const note of tree.notes.filter((note) => !note.deletedAt)) {
         for (let folder = parentPath(noteFilePath(note)); folder; folder = parentPath(folder))
@@ -828,11 +922,12 @@ export class Vault {
           ? movePath(previousPath, from, to)
           : previousPath;
         note.markdown = rewriteLocalLinks(
-          note.markdown,
+          rewriteMovedWikiLinks(note.markdown, previousNotes, nextNotes, previousPath, nextPath),
           previousPath,
           nextPath,
           (path) =>
             movedAttachments.get(path) ??
+            notePaths.get(path) ??
             (isPathWithin(path, pinnedFolder)
               ? path
               : isPathWithin(path, from)
@@ -1290,7 +1385,12 @@ export class Vault {
       const current = await this.#database.getGithubBackupState();
       if (!current || githubTargetKey(current) !== githubTargetKey(state))
         throw new Error("The backup target changed. Start a new backup.");
-      const next = { ...state, autoBackup: current.autoBackup, pendingCommitSha: undefined };
+      const next = {
+        ...state,
+        autoBackup: current.autoBackup,
+        encryption: current.encryption,
+        pendingCommitSha: undefined,
+      };
       await this.#database.completeGithubBackup(next, operationIds);
       this.#publish({ kind: "backup" });
       return next;
@@ -1367,6 +1467,7 @@ export class Vault {
       await this.#filesystem.replace([], (generation) =>
         this.#database.replaceVault([], [], [], [], [], [...pending, ...operations], version, {
           folders: [],
+          clearHistory: true,
           generation,
         }),
       );
@@ -1447,6 +1548,7 @@ export class Vault {
     options: {
       manifest?: VaultBackupManifest;
       pendingPaths?: string[];
+      preserveTrash?: boolean;
       restoredAt: string;
       context?: VaultOperationContext;
       expectedVersion?: number;
@@ -1462,11 +1564,49 @@ export class Vault {
       const attachments = options.manifest
         ? validateManifestAttachments(options.manifest.attachments, filesByPath, noteIds)
         : inferAttachments(files, noteIds, options.restoredAt);
+      if (options.preserveTrash) {
+        const trash = trashedNotes(await this.#database.getNotes());
+        const trashIds = new Set(trash.map((note) => note.id));
+        const trashAttachments = (await this.#database.getAttachments()).filter((attachment) =>
+          trashIds.has(attachment.noteId),
+        );
+        for (const note of notes) {
+          if (!trashIds.has(note.id)) continue;
+          const previousId = note.id;
+          const previousPath = note.path;
+          note.id = crypto.randomUUID();
+          note.path = `notes/${note.id}.md`;
+          files.push({ path: note.path, contents: filesByPath.get(previousPath)!.contents });
+          for (const attachment of attachments) {
+            if (attachment.noteId !== previousId) continue;
+            const contents = filesByPath.get(attachment.path)!.contents;
+            attachment.noteId = note.id;
+            attachment.id = crypto.randomUUID();
+            attachment.path = `attachments/${note.id}/${attachment.id}`;
+            files.push({ path: attachment.path, contents });
+          }
+        }
+        for (const note of trash) {
+          const markdown =
+            (await this.#database.getNoteMarkdown(note.id)) ??
+            (await this.#filesystem.readText(note.path));
+          files.push({ path: note.path, contents: new Blob([markdown]) });
+        }
+        for (const attachment of trashAttachments)
+          files.push({
+            path: attachment.path,
+            contents: await this.#filesystem.read(attachment.path),
+          });
+        notes.push(...trash);
+        attachments.push(...trashAttachments);
+      }
       const acceptedPaths = new Set([
         ...notes.map((note) => note.path),
         ...attachments.map((attachment) => attachment.path),
       ]);
-      const restoredFiles = files.filter((file) => acceptedPaths.has(file.path));
+      const restoredFiles = [...new Map(files.map((file) => [file.path, file])).values()].filter(
+        (file) => acceptedPaths.has(file.path),
+      );
       const markdownByPath = new Map(
         await Promise.all(
           restoredFiles

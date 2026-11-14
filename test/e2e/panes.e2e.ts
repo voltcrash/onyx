@@ -170,7 +170,10 @@ async function markerOffsets(page: Page, from: ScrollSide | null, marker: string
             scroller.scrollTop
           );
         }
-        const walker = document.createTreeWalker(scroller, NodeFilter.SHOW_TEXT);
+        const walker = document.createTreeWalker(
+          scroller.querySelector("article.prose") ?? scroller,
+          NodeFilter.SHOW_TEXT,
+        );
         while (walker.nextNode()) {
           const text = walker.currentNode as Text;
           const index = text.data.indexOf(marker);

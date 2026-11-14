@@ -49,8 +49,9 @@
 
 <Seo {structuredData} />
 
-<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:sidebar-resizing={sidebarResizing} class:palette-open={page.paletteOpen} style={`--sidebar-width: ${page.sidebarWidth}px`} inert={page.settingsOpen || page.restoreModalOpen || page.imagePreview !== undefined || page.confirmation !== undefined}>
+<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:sidebar-resizing={sidebarResizing} class:palette-open={page.paletteOpen} style={`--sidebar-width: ${page.sidebarWidth}px`} inert={page.creation.open || page.history.open || page.settingsOpen || page.restoreModalOpen || page.imagePreview !== undefined || page.confirmation !== undefined}>
 	<NotesSidebar
+    sidebarSort={page.sidebarSort} onSidebarSort={page.setSidebarSort}
 		vaults={page.vaults}
 		activeVaultId={page.activeVaultId}
 		activeNoteId={page.activeNoteId}
@@ -145,6 +146,9 @@
 	<button type="button" class="sidebar-resize" aria-label={`Resize notes sidebar, ${page.sidebarWidth} pixels wide`} title="Drag to resize; snaps to the default width" onpointerdown={startSidebarResize} onpointermove={trackSidebarResize} onpointerup={endSidebarResize} onpointercancel={endSidebarResize} onlostpointercapture={endSidebarResize} onkeydown={nudgeSidebarResize}></button>
 
 	<MarkdownWorkspace
+    outline={page.outline} unlinkedMentions={page.unlinkedMentions}
+    onOutline={(heading, index) => void page.navigateOutline(heading, index)}
+    onLinkMention={(mention) => void page.linkUnlinkedMention(mention)}
 		storageNotice={page.storageNotice}
 		storageError={page.storageError}
 		sourcePaneVisible={page.sourcePaneVisible}
@@ -223,6 +227,8 @@
 {#if page.settingsOpen}
 	{#await import('#lib/components/settings-dialog.svelte') then { default: SettingsDialog }}
 		<SettingsDialog
+      creationPreferences={page.creation.preferences} onCreationPreferences={page.creation.setPreferences}
+      onConfigureEncryption={page.configureEncryption}
 			vault={page.vault}
 			vaultName={page.vaultName}
 			suggestedRepositoryName={page.suggestedRepositoryName}
@@ -284,6 +290,8 @@
 	{#await import('#lib/components/restore-dialog.svelte') then { default: RestoreDialog }}
 		<RestoreDialog
 			isOnline={page.isOnline}
+      mergeUnlock={page.mergeUnlock}
+      onUnlock={() => void page.submitMergeUnlock()}
 			restoreState={page.restoreState}
 			restoreMessage={page.restoreMessage}
 			restoreCommits={page.restoreCommits}
@@ -293,6 +301,7 @@
 			bind:restoreRepository={page.restoreRepository}
 			bind:restoreBranch={page.restoreBranch}
 			bind:restoreDirectory={page.restoreDirectory}
+      bind:restorePassphrase={page.restorePassphrase}
 			onClose={() => (page.restoreModalOpen = false)}
 			onLoadCommits={() => void page.loadRestoreCommits()}
 			onRestore={() => void page.restoreSelectedCommit()}
@@ -311,9 +320,24 @@
 				message={page.confirmation.message}
 				confirmLabel={page.confirmation.confirmLabel}
 				danger={page.confirmation.danger}
+        alternatives={page.confirmation.alternatives}
 				onConfirm={page.confirmAction}
 				onCancel={page.cancelAction}
 			/>
 		{/key}
 	{/await}
+{/if}
+
+
+{#if page.history.open}
+  {#await import('#lib/components/history-dialog.svelte') then { default: HistoryDialog }}
+    <HistoryDialog history={page.history} />
+  {/await}
+{/if}
+
+
+{#if page.creation.open}
+  {#await import('#lib/components/template-dialog.svelte') then { default: TemplateDialog }}
+    <TemplateDialog creation={page.creation} />
+  {/await}
 {/if}
