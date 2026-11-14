@@ -1,4 +1,6 @@
 <script lang="ts">
+  import NoteCreationSettings from "./note-creation-settings.svelte";
+  import type { NoteCreationPreferences } from "#lib/note-creation.ts";
   import BackupEncryptionSettings from "./backup-encryption-settings.svelte";
 	import { untrack } from 'svelte';
 	import {
@@ -21,6 +23,8 @@
 	import type { SettingsSection } from './settings-types';
 
 	interface Props {
+    creationPreferences: NoteCreationPreferences;
+    onCreationPreferences: (value: NoteCreationPreferences) => void;
     onConfigureEncryption: (passphrase: string, enabled?: boolean) => Promise<void>;
 		vault?: Vault;
 		vaultName: string;
@@ -74,7 +78,7 @@
 	}
 
 	let {
-		onConfigureEncryption, vault, vaultName, suggestedRepositoryName, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
+		creationPreferences, onCreationPreferences, onConfigureEncryption, vault, vaultName, suggestedRepositoryName, isOnline, githubUser, githubState, githubMessage, githubBackup, pendingBackupCount,
 		backupState, backupMessage, backupCommitUrl, transferState, theme, resolvedTheme, colorTheme, fonts, fontCategories, attachmentFolder, attachmentsHidden, onAttachmentsHiddenChange, onRenameAttachmentFolder, scrollSync, onToggleScrollSync, shortcuts, primaryModifier,
 		section = $bindable('editor'), onThemeChange, onColorThemeChange, onFontChange, onFontCategoryChange, onResetFonts, onShortcutChange, onResetShortcuts, onClose, onConnectGithub, onDisconnectGithub, onCreateRepository, onSelectRepository, onForgetRepository, onAutoBackupChange,
 		onBackup, onRestore, onImportFolder, onImportZip, onExportFolder, onExportZip, onPrepareVaultDeletion, onDeleteVault
@@ -414,7 +418,8 @@
 						<input type="checkbox" checked={scrollSync} onchange={onToggleScrollSync} />
 						<span><strong>Sync scrolling between panes</strong><small>Scrolling the page or the output keeps the other pane at the same part of the note.</small></span>
 					</label>
-				{:else if section === 'themes'}
+				<NoteCreationSettings preferences={creationPreferences} onSave={onCreationPreferences} />
+        {:else if section === 'themes'}
 					<h3>Themes</h3>
 					<p class="settings-hint">Choose how Onyx looks in this browser.</p>
 					<div class="theme-mode-options" role="radiogroup" aria-label="Color mode">

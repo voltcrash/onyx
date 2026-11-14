@@ -49,7 +49,7 @@
 
 <Seo {structuredData} />
 
-<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:sidebar-resizing={sidebarResizing} class:palette-open={page.paletteOpen} style={`--sidebar-width: ${page.sidebarWidth}px`} inert={page.history.open || page.settingsOpen || page.restoreModalOpen || page.imagePreview !== undefined || page.confirmation !== undefined}>
+<div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:sidebar-resizing={sidebarResizing} class:palette-open={page.paletteOpen} style={`--sidebar-width: ${page.sidebarWidth}px`} inert={page.creation.open || page.history.open || page.settingsOpen || page.restoreModalOpen || page.imagePreview !== undefined || page.confirmation !== undefined}>
 	<NotesSidebar
 		vaults={page.vaults}
 		activeVaultId={page.activeVaultId}
@@ -226,6 +226,7 @@
 {#if page.settingsOpen}
 	{#await import('#lib/components/settings-dialog.svelte') then { default: SettingsDialog }}
 		<SettingsDialog
+      creationPreferences={page.creation.preferences} onCreationPreferences={page.creation.setPreferences}
       onConfigureEncryption={page.configureEncryption}
 			vault={page.vault}
 			vaultName={page.vaultName}
@@ -328,5 +329,12 @@
 {#if page.history.open}
   {#await import('#lib/components/history-dialog.svelte') then { default: HistoryDialog }}
     <HistoryDialog history={page.history} />
+  {/await}
+{/if}
+
+
+{#if page.creation.open}
+  {#await import('#lib/components/template-dialog.svelte') then { default: TemplateDialog }}
+    <TemplateDialog creation={page.creation} />
   {/await}
 {/if}

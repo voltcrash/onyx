@@ -1,3 +1,4 @@
+import { createNoteCreationController } from "./note-creation-controller.svelte.ts";
 import { noteOutline, type NoteMention, type NoteHeading } from "#lib/note-insights.ts";
 import { createHistoryController } from "./history-controller.svelte.ts";
 import { createFileTreeController } from "./file-tree-controller.svelte.ts";
@@ -802,6 +803,23 @@ export function createPageController() {
       disabled: !activeNoteId,
       run: () => void history.show(),
     },
+    {
+      id: "note-from-template",
+      group: "Notes",
+      label: "New note from template",
+      icon: FileText,
+      keywords: "template create variables",
+      run: () => void workspaceCommand(creation.showTemplates)(),
+    },
+    {
+      id: "daily-note",
+      group: "Notes",
+      label: "Open today's daily note",
+      icon: FileText,
+      shortcut: preferencesController.shortcutLabel("dailyNote"),
+      keywords: "today journal diary",
+      run: () => void workspaceCommand(creation.openDailyNote)(),
+    },
     ...paletteNoteItems,
     ...paletteCommands(
       {
@@ -829,6 +847,21 @@ export function createPageController() {
       paletteActions,
     ),
   ]);
+
+  const creation = createNoteCreationController({
+    vault: () => vault,
+    vaultId: () => activeVaultId || "default",
+    settle: settleDraft,
+    prepare: loadDialogStyles,
+    open: (id) => navigateToNote(id),
+    refresh: async () => {
+      await refreshFileTree();
+      pendingBackupCount = await vault!.countPendingBackupOperations();
+    },
+    showError: (message) => {
+      storageError = message;
+    },
+  });
 
   const history = createHistoryController({
     vault: () => vault,
@@ -2228,6 +2261,7 @@ export function createPageController() {
   }
 
   function readAttachmentPreferences(): void {
+    creation.loadPreferences();
     attachmentFolder =
       normalizeAttachmentFolder(
         readLocalStorage(attachmentPreferenceKey("attachment-folder")) ?? "",
@@ -2423,6 +2457,14 @@ export function createPageController() {
 
   function handleShortcut(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;
+    if (history.open || creation.open) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        history.close();
+        creation.close();
+      }
+      return;
+    }
     if (confirmation.request || settingsOpen || githubController.restoreModalOpen || imagePreview) {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -2521,6 +2563,7 @@ export function createPageController() {
       !workspaceOperation
     )
       void saveDraft();
+    else if (action === "dailyNote") void workspaceCommand(creation.openDailyNote)();
     else if (action === "newNote" && transferController.transferState !== "working")
       void workspaceCommand(fileTreeController.createNote)();
     else if (action === "searchNotes" || action === "focusSearch") focusSearch();
@@ -2682,6 +2725,7 @@ export function createPageController() {
   }
 
   return {
+    creation,
     get outline() {
       return outline;
     },
