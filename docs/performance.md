@@ -60,16 +60,16 @@ A production build on 2026-11-14, compared with main `7bb0197`, had this footpri
 
 | Initial route assets   |    Before |     After |  Change |
 | ---------------------- | --------: | --------: | ------: |
-| JavaScript, raw bytes  | 1,045,695 | 1,062,969 | +17,274 |
-| JavaScript, gzip bytes |   341,991 |   346,005 |  +4,014 |
-| CSS, raw bytes         |    92,762 |   101,176 |  +8,414 |
-| CSS, gzip bytes        |    20,090 |    21,938 |  +1,848 |
+| JavaScript, raw bytes  | 1,045,695 | 1,063,006 | +17,311 |
+| JavaScript, gzip bytes |   341,991 |   346,046 |  +4,055 |
+| CSS, raw bytes         |    92,762 |   101,217 |  +8,455 |
+| CSS, gzip bytes        |    20,090 |    21,946 |  +1,856 |
 
 These totals follow static imports from the client manifest's layout/page nodes
 (0 and 2), counting shared files once and gzipping each file separately with
 Node's default compression. They exclude bootstrap scripts, workers, fonts, and
 dynamic imports. Colocated utility markup and generated selectors add about
-5.7 KiB compressed to that route graph; the widget library remains lazy. This
+5.8 KiB compressed to that route graph; the widget library remains lazy. This
 is a payload comparison, not a latency benchmark or a claim of zero byte growth.
 
 The production browser tests verify that the editor opens without widget styles,
