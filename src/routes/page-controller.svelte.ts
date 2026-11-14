@@ -1454,8 +1454,8 @@ export function createPageController() {
           ]
         : [],
     );
-    // Rendering before the switch shows the note fully formatted instead of upgrading it.
-    if (sequence === noteLoadSequence) {
+    // Prepare previews when switching notes; first opening must not wait for the parser.
+    if (activeNoteId && sequence === noteLoadSequence) {
       await preview.render(note.markdown, {
         attachments: nextUrls,
         noteSourcePath: note.sourcePath,
