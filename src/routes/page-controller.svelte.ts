@@ -1,3 +1,4 @@
+import { compareSidebarNotes } from "#lib/sidebar-sort.ts";
 import { createNoteCreationController } from "./note-creation-controller.svelte.ts";
 import { noteOutline, type NoteMention, type NoteHeading } from "#lib/note-insights.ts";
 import { createHistoryController } from "./history-controller.svelte.ts";
@@ -679,8 +680,8 @@ export function createPageController() {
   });
   const notePageCount = $derived(Math.max(1, Math.ceil(results.length / NOTE_PAGE_SIZE)));
   const orderedResults = $derived(
-    results.toSorted(
-      (left, right) => Number(right.note.pinned === true) - Number(left.note.pinned === true),
+    results.toSorted((left, right) =>
+      compareSidebarNotes(left.note, right.note, preferencesController.sidebarSort),
     ),
   );
   const visibleResults = $derived(
@@ -958,6 +959,7 @@ export function createPageController() {
     if (document.documentElement.dataset.colorTheme !== preferencesController.colorTheme) {
       applyColorTheme(preferencesController.colorTheme);
     }
+    preferencesController.loadSidebarSort();
     preferencesController.applyStoredFontChoices();
     const stopPreferenceWarnings = subscribePreferenceWriteFailures(() => {
       appendStorageNotice(
@@ -2725,6 +2727,10 @@ export function createPageController() {
   }
 
   return {
+    get sidebarSort() {
+      return preferencesController.sidebarSort;
+    },
+    setSidebarSort: preferencesController.setSidebarSort,
     creation,
     get outline() {
       return outline;

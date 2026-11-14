@@ -51,6 +51,7 @@
 
 <div class="app" class:sidebar-open={page.sidebarOpen} class:sidebar-collapsed={page.sidebarCollapsed} class:sidebar-right={page.sidebarSide === 'right'} class:sidebar-dragging={page.sidebarDropSide !== undefined} class:sidebar-resizing={sidebarResizing} class:palette-open={page.paletteOpen} style={`--sidebar-width: ${page.sidebarWidth}px`} inert={page.creation.open || page.history.open || page.settingsOpen || page.restoreModalOpen || page.imagePreview !== undefined || page.confirmation !== undefined}>
 	<NotesSidebar
+    sidebarSort={page.sidebarSort} onSidebarSort={page.setSidebarSort}
 		vaults={page.vaults}
 		activeVaultId={page.activeVaultId}
 		activeNoteId={page.activeNoteId}

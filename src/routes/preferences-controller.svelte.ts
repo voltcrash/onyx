@@ -1,3 +1,4 @@
+import { readSidebarSort, writeSidebarSort, type SidebarSort } from "#lib/browser-storage.ts";
 import {
   applyFontChoices,
   defaultFontCategories,
@@ -31,6 +32,7 @@ import {
 } from "#lib/theme.ts";
 
 export function createPreferencesController() {
+  let sidebarSort = $state<SidebarSort>({ by: "name", direction: "asc" });
   let theme = $state<ThemePreference>("system");
 
   let resolvedTheme = $state<ResolvedTheme>("light");
@@ -138,6 +140,16 @@ export function createPreferencesController() {
     applyColorTheme(nextTheme);
   }
   return {
+    get sidebarSort() {
+      return sidebarSort;
+    },
+    loadSidebarSort() {
+      sidebarSort = readSidebarSort();
+    },
+    setSidebarSort(value: SidebarSort) {
+      sidebarSort = value;
+      writeSidebarSort(value);
+    },
     setFont,
     resetFonts,
     setFontCategory,
