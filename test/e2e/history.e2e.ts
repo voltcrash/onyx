@@ -20,6 +20,9 @@ test("previews and restores a local version and keeps the replaced text", async 
   await page.getByPlaceholder("Search notes or commands…").fill("Show note history");
   await page.getByRole("option", { name: /Show note history/ }).click();
   const dialog = page.getByRole("dialog", { name: "Note history" });
+  await expect(dialog).toBeVisible();
+  await page.locator(".modal-backdrop").click({ position: { x: 4, y: 4 } });
+  await expect(dialog).toBeVisible();
   const versions = dialog.getByRole("navigation", { name: "Snapshots" }).getByRole("button");
   await expect(versions).toHaveCount(3);
   await versions.nth(1).click();
