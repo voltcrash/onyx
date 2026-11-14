@@ -1,4 +1,11 @@
-import { insertNewline, standardKeymap } from "@codemirror/commands";
+import {
+  history,
+  isolateHistory,
+  undo,
+  redo,
+  insertNewline,
+  standardKeymap,
+} from "@codemirror/commands";
 import {
   markdown as markdownLanguage,
   markdownLanguage as gfmLanguage,
@@ -11,23 +18,25 @@ import {
   EditorState,
   StateEffect,
   StateField,
+  Transaction,
   type ChangeSpec,
 } from "@codemirror/state";
 import { Decoration, EditorView, keymap, placeholder, type DecorationSet } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
-import type { EditorSelection } from "./editor-history.js";
 import type { FindMatch } from "./find-replace.js";
 import { continueListOnEnter, wrapSelectionWith } from "./markdown-utils.js";
 import type { ScrollAnchor } from "./scroll-sync.js";
+
+export interface EditorSelection {
+  start: number;
+  end: number;
+}
 
 export interface MarkdownEditorOptions {
   doc: string;
   label: string;
   placeholder: string;
-  /** A user edit, with the selection it started from so undo can restore it. */
-  onChange: (value: string, before: EditorSelection) => void;
-  /** Undo and redo requested through the browser, such as from the Edit menu. */
-  onHistory: (direction: "undo" | "redo") => void;
+  onChange: (value: string) => void;
   onSelectionChange: () => void;
   onLayout: () => void;
   onPaste: (event: ClipboardEvent) => void;
@@ -107,12 +116,9 @@ export function textChange(before: string, after: string): ChangeSpec | undefine
 export class MarkdownEditor {
   readonly view: EditorView;
   readonly #editable = new Compartment();
+  readonly #history = new Compartment();
 
   constructor(parent: HTMLElement, options: MarkdownEditorOptions) {
-    const selectionOf = (state: EditorState): EditorSelection => ({
-      start: state.selection.main.from,
-      end: state.selection.main.to,
-    });
     const replaceWith = (view: EditorView, value: string, start: number, end = start) => {
       const changes = textChange(view.state.doc.toString(), value);
       view.dispatch({
@@ -129,6 +135,7 @@ export class MarkdownEditor {
       state: EditorState.create({
         doc: options.doc,
         extensions: [
+          this.#history.of(history()),
           this.#editable.of([EditorView.editable.of(true), EditorState.readOnly.of(false)]),
           markdownLanguage({ base: gfmLanguage, addKeymap: false, pasteURLAsLink: false }),
           syntaxHighlighting(markdownHighlighting),
@@ -185,7 +192,8 @@ export class MarkdownEditor {
               }
               event.preventDefault();
               if (this.view.state.readOnly) return true;
-              options.onHistory(event.inputType === "historyUndo" ? "undo" : "redo");
+              if (event.inputType === "historyUndo") this.undo();
+              else this.redo();
               return true;
             },
           }),
@@ -196,7 +204,7 @@ export class MarkdownEditor {
             if (update.transactions.some((transaction) => transaction.annotation(programmatic))) {
               return;
             }
-            options.onChange(update.state.doc.toString(), selectionOf(update.startState));
+            options.onChange(update.state.doc.toString());
           }),
         ],
       }),
@@ -212,7 +220,35 @@ export class MarkdownEditor {
   /** Replaces the text without reporting it as an edit, keeping the selection where it can. */
   set value(next: string) {
     const changes = textChange(this.value, next);
-    if (changes) this.view.dispatch({ changes, annotations: programmatic.of(true) });
+    if (!changes) return;
+    this.resetHistory();
+    this.view.dispatch({
+      changes,
+      annotations: [programmatic.of(true), Transaction.addToHistory.of(false)],
+    });
+  }
+
+  resetHistory(): void {
+    this.view.dispatch({ effects: this.#history.reconfigure([]) });
+    this.view.dispatch({ effects: this.#history.reconfigure(history()) });
+  }
+
+  edit(value: string, selection?: EditorSelection): void {
+    this.view.dispatch({
+      changes: textChange(this.value, value),
+      selection: selection ? Selection.single(selection.start, selection.end) : undefined,
+      annotations: isolateHistory.of("full"),
+      userEvent: "input",
+      scrollIntoView: true,
+    });
+  }
+
+  undo(): boolean {
+    return !this.disabled && undo(this.view);
+  }
+
+  redo(): boolean {
+    return !this.disabled && redo(this.view);
   }
 
   get selectionStart(): number {

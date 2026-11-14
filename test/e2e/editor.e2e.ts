@@ -403,3 +403,48 @@ test("pastes a link over selected text", async ({ page, context }) => {
   await editor.press("ControlOrMeta+v");
   await expectMarkdown(editor, "[the guide](https://example.com/guide)");
 });
+
+test("groups typing and restores the selection for editor commands", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill("word");
+  await editor.evaluate((element) => Reflect.get(element, "markdownEditor").resetHistory());
+  await editor.press("End");
+  await page.keyboard.type(" typed");
+  await editor.press("ControlOrMeta+z");
+  await expectMarkdown(editor, "word");
+  await editor.press("ControlOrMeta+Shift+z");
+  await expectMarkdown(editor, "word typed");
+  await editor.press("ControlOrMeta+a");
+  await editor.press("ControlOrMeta+b");
+  await editor.press("ControlOrMeta+z");
+  await expectMarkdown(editor, "word typed");
+  await expect
+    .poll(() => page.evaluate(() => window.getSelection()?.toString()))
+    .toBe("word typed");
+  await editor.press("(");
+  await expectMarkdown(editor, "(word typed)");
+  await editor.press("ControlOrMeta+z");
+  await expectMarkdown(editor, "word typed");
+  await editor.press("ControlOrMeta+Shift+z");
+  await expectMarkdown(editor, "(word typed)");
+});
+
+test("does not undo external text replacements", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill("Local edit");
+  await editor.evaluate((element) => {
+    const instance = Reflect.get(element, "markdownEditor");
+    instance.value = "External update";
+    instance.undo();
+    if (instance.value !== "External update") throw new Error("External update was undone");
+    instance.edit("External update plus edit");
+    instance.undo();
+    if (instance.value !== "External update") throw new Error("Local undo crossed external update");
+    instance.undo();
+    if (instance.value !== "External update") throw new Error("Old history survived");
+  });
+});
