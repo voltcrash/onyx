@@ -1,0 +1,9 @@
+@import "tailwindcss/utilities" layer(utilities) source(none);
+@reference "tailwindcss";
+@reference "./chrome-theme.css";
+@source "../../lib/components/command-palette.svelte";
+@source "../../lib/components/file-context-menu.svelte";
+@source "../../lib/components/vault-menu.svelte";
+@source "../../lib/components/ui/command";
+@source "../../lib/components/ui/context-menu";
+@source "../../lib/components/ui/dropdown-menu";
