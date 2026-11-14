@@ -60,3 +60,32 @@ label:focus-visible,
 .print-document {
   display: none;
 }
+
+kbd {
+  font-family: inherit;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes rise-corner {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+}
+@media (max-width: 900px) and (pointer: coarse) {
+  body {
+    overflow: visible;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
