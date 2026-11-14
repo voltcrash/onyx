@@ -675,6 +675,7 @@ export class VaultDatabase {
     expectedVersion?: number,
     replacement?: {
       folders: FolderMetadata[];
+      clearHistory?: boolean;
       generation?: string;
       githubBackup?: GithubBackupState;
     },
@@ -708,7 +709,8 @@ export class VaultDatabase {
         transaction.objectStore("noteContents").getAll(),
       );
       const nextContents = new Map(noteContents.map((note) => [note.noteId, note.markdown]));
-      for (const note of oldContents) {
+      if (replacement?.clearHistory) transaction.objectStore("noteSnapshots").clear();
+      for (const note of replacement?.clearHistory ? [] : oldContents) {
         if (nextContents.get(note.noteId) !== note.markdown)
           await recordSnapshot(
             transaction,

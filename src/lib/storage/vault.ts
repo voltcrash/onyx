@@ -1457,6 +1457,7 @@ export class Vault {
       await this.#filesystem.replace([], (generation) =>
         this.#database.replaceVault([], [], [], [], [], [...pending, ...operations], version, {
           folders: [],
+          clearHistory: true,
           generation,
         }),
       );
