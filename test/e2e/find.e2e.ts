@@ -8,14 +8,14 @@ test("toggles sidebar find and replace with the platform shortcut", async ({ pag
   await editor.fill("# Find target\n\nNeedle once.\n\nNeedle twice.\n\nNEEDLE three times.");
 
   await page.getByRole("button", { name: "Hide notes sidebar" }).click();
-  await expect(page.locator(".app")).toHaveClass(/sidebar-collapsed/);
+  await expect(page.locator(".app")).toHaveClass(/(?:^|\s)sidebar-collapsed(?:\s|$)/);
   await editor.focus();
   await page.keyboard.press("ControlOrMeta+f");
   const findPanel = page.getByRole("search", { name: "Find and replace" });
   const findInput = page.getByRole("searchbox", { name: "Find in note" });
   await expect(findPanel).toBeVisible();
   await expect(findInput).toBeFocused();
-  await expect(page.locator(".app")).not.toHaveClass(/sidebar-collapsed/);
+  await expect(page.locator(".app")).not.toHaveClass(/(?:^|\s)sidebar-collapsed(?:\s|$)/);
 
   await findInput.fill("needle");
   await expect(page.locator(".find-count")).toHaveText("1 of 3");
@@ -36,7 +36,7 @@ test("toggles sidebar find and replace with the platform shortcut", async ({ pag
 
   await page.keyboard.press("ControlOrMeta+f");
   await expect(findPanel).toBeHidden();
-  await expect(page.locator(".app")).toHaveClass(/sidebar-collapsed/);
+  await expect(page.locator(".app")).toHaveClass(/(?:^|\s)sidebar-collapsed(?:\s|$)/);
   await expect(editor).toBeFocused();
 });
 
