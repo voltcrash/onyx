@@ -2611,6 +2611,7 @@ export function createPageController() {
     }
     if (!paletteOpen && document.activeElement instanceof HTMLElement) {
       paletteOpener = document.activeElement;
+      paletteOpener.blur();
     }
     paletteSidebarState = { collapsed: sidebarCollapsed, open: sidebarOpen };
     sidebarCollapsed = false;
