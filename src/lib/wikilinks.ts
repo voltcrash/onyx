@@ -1,4 +1,5 @@
 import {
+  mapMarkdownProse,
   opaqueSourceRanges,
   literalAt,
   parseMarkdownSource,
@@ -141,4 +142,31 @@ export function linksToNote<T extends LinkableNote>(
       found = true;
   });
   return found;
+}
+
+/** Preserves resolved wiki targets when notes move, qualifying ambiguous names with folders. */
+export function rewriteMovedWikiLinks<T extends LinkableNote>(
+  markdown: string,
+  previousNotes: T[],
+  nextNotes: T[],
+  previousPath: string,
+  nextPath: string,
+): string {
+  return mapMarkdownProse(markdown, (prose) =>
+    prose.replace(WIKI_LINK, (match: string, embed: string, target: string) => {
+      if (embed) return match;
+      const { name } = splitWikiTarget(target);
+      const previous = resolveWikiLink(previousNotes, name, previousPath);
+      const next = nextNotes.find((note) => note.id === previous?.id);
+      if (!previous || !next || noteFilePath(previous) === noteFilePath(next)) return match;
+      const path = noteFilePath(next);
+      const stem = fileStem(path);
+      const replacement =
+        resolveWikiLink(nextNotes, stem, nextPath)?.id === next.id ? stem : withoutExtension(path);
+      return match.replace(
+        target,
+        replacement + target.slice(target.indexOf("#") < 0 ? target.length : target.indexOf("#")),
+      );
+    }),
+  );
 }

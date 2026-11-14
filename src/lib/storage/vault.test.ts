@@ -263,3 +263,56 @@ describe("Native directory configuration changes", () => {
     }
   });
 });
+
+describe("Inbound links during moves", () => {
+  const note = (id: string, sourcePath: string, markdown: string) => ({
+    id,
+    sourcePath,
+    markdown,
+    title: id,
+    path: `notes/${id}.md`,
+    tags: [],
+    revision: 1,
+    size: markdown.length,
+    createdAt: "",
+    updatedAt: "",
+  });
+
+  it("rewrites inbound Markdown and wiki links in the same file-tree update", async () => {
+    const tree = {
+      notes: [
+        note("target", "Old.md", "[other](Other.md)"),
+        note("source", "Index.md", "[[Old#Heading|label]] [text](Old.md#heading) `[[Old]]`"),
+      ],
+      folders: [],
+      attachments: [],
+    };
+    const vault = Reflect.construct(Vault, [{}, {}]) as Vault;
+    const update = vi.spyOn(vault, "updateFileTree").mockImplementation(async (apply) => {
+      apply(tree);
+    });
+    await vault.moveNote("target", "folder/New.md", "attachments");
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(tree.notes[1]!.markdown).toBe(
+      "[[New#Heading|label]] [text](folder/New.md#heading) `[[Old]]`",
+    );
+    expect(tree.notes[0]!.markdown).toBe("[other](../Other.md)");
+  });
+
+  it("updates folder-qualified wiki links from outside a moved folder", async () => {
+    const tree = {
+      notes: [
+        note("target", "old/Target.md", ""),
+        note("source", "Index.md", "[[old/Target|label]] [text](old/Target.md)"),
+      ],
+      folders: [],
+      attachments: [],
+    };
+    const vault = Reflect.construct(Vault, [{}, {}]) as Vault;
+    vi.spyOn(vault, "updateFileTree").mockImplementation(async (apply) => {
+      apply(tree);
+    });
+    await vault.moveFolder("old", "new", "attachments");
+    expect(tree.notes[1]!.markdown).toBe("[[Target|label]] [text](new/Target.md)");
+  });
+});

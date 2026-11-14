@@ -1874,7 +1874,7 @@ export function createPageController() {
         throw new Error(`A file named “${name}” already exists here.`);
       }
       await vault.moveNote(note.id, path, attachmentFolder);
-      if (activeNoteId === noteId) await loadNote(note.id);
+      if (activeNoteId) await loadNote(activeNoteId);
       storageError = "";
       await refreshFileTree();
     } catch (error) {
@@ -1941,7 +1941,7 @@ export function createPageController() {
     try {
       const changed = await vault.setNotePinned(noteId, pinned);
       if (!changed) return;
-      if (activeNoteId === noteId) await loadNote(noteId);
+      if (activeNoteId) await loadNote(activeNoteId);
       await refreshFileTree();
       storageError = "";
     } catch (error) {
@@ -1959,7 +1959,7 @@ export function createPageController() {
         joinPath(targetFolder, basename(noteFilePath(note))),
         attachmentFolder,
       );
-      if (activeNoteId === noteId) await loadNote(noteId);
+      if (activeNoteId) await loadNote(activeNoteId);
       await refreshFileTree();
       pendingBackupCount = await vault.countPendingBackupOperations();
     } catch (error) {

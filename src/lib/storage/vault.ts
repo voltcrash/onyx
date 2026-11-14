@@ -11,7 +11,7 @@ import {
   rewriteLocalLinks,
 } from "../markdown-utils.js";
 import { isPathWithin, movePath, noteFilePath, parentPath } from "../paths.js";
-import { linksToNote } from "../wikilinks.js";
+import { linksToNote, rewriteMovedWikiLinks } from "../wikilinks.js";
 import { extractTags, normalizeTag, parseSearchQuery } from "../tags.js";
 import { VaultCoordination } from "./coordination.js";
 import { MirroredVaultFilesystem, VaultFilesystem } from "./filesystem.js";
@@ -752,6 +752,9 @@ export class Vault {
     await this.updateFileTree((tree) => {
       const note = tree.notes.find((candidate) => candidate.id === noteId && !candidate.deletedAt);
       if (!note) throw new Error("The note no longer exists");
+      const previousNotes = tree.notes
+        .filter((note) => !note.deletedAt)
+        .map((note) => ({ ...note }));
       const previousPath = noteFilePath(note);
       const paths = new Map<string, string>();
       for (const attachment of tree.attachments) {
@@ -764,13 +767,25 @@ export class Vault {
         )
           paths.set(path, movePath(path, parentPath(previousPath), parentPath(nextPath)));
       }
-      note.markdown = rewriteLocalLinks(
-        note.markdown,
-        previousPath,
-        nextPath,
-        (path) => paths.get(path) ?? path,
-      );
       note.sourcePath = nextPath;
+      paths.set(previousPath, nextPath);
+      for (const linkingNote of tree.notes) {
+        if (linkingNote.deletedAt) continue;
+        const oldPath = linkingNote.id === noteId ? previousPath : noteFilePath(linkingNote);
+        const newPath = noteFilePath(linkingNote);
+        linkingNote.markdown = rewriteLocalLinks(
+          rewriteMovedWikiLinks(
+            linkingNote.markdown,
+            previousNotes,
+            tree.notes.filter((note) => !note.deletedAt),
+            oldPath,
+            newPath,
+          ),
+          oldPath,
+          newPath,
+          (path) => paths.get(path) ?? path,
+        );
+      }
       for (const attachment of tree.attachments) {
         if (attachment.sourcePath && paths.has(attachment.sourcePath))
           attachment.sourcePath = paths.get(attachment.sourcePath);
@@ -786,6 +801,15 @@ export class Vault {
   ): Promise<void> {
     if (!from || isPathWithin(to, from)) throw new Error("A folder cannot be moved into itself");
     await this.updateFileTree((tree) => {
+      const previousNotes = tree.notes
+        .filter((note) => !note.deletedAt)
+        .map((note) => ({ ...note }));
+      const nextNotes = previousNotes.map((note) => ({
+        ...note,
+        sourcePath: isPathWithin(noteFilePath(note), from)
+          ? movePath(noteFilePath(note), from, to)
+          : noteFilePath(note),
+      }));
       const folderPaths = new Set(tree.folders.map((folder) => folder.path));
       for (const note of tree.notes.filter((note) => !note.deletedAt)) {
         for (let folder = parentPath(noteFilePath(note)); folder; folder = parentPath(folder))
@@ -828,7 +852,7 @@ export class Vault {
           ? movePath(previousPath, from, to)
           : previousPath;
         note.markdown = rewriteLocalLinks(
-          note.markdown,
+          rewriteMovedWikiLinks(note.markdown, previousNotes, nextNotes, previousPath, nextPath),
           previousPath,
           nextPath,
           (path) =>

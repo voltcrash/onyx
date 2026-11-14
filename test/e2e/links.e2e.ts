@@ -82,3 +82,30 @@ test("lists the notes that link to the open note", async ({ page }) => {
   await page.goBack();
   await expectMarkdown(editor, /# Garden/);
 });
+
+test("keeps inbound links working after a rename and move", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await createNote(page, "Garden.md", "# Garden\n\n## Tomatoes\n\nWater daily.");
+  await createNote(page, "Journal.md", "[[Garden#Tomatoes|plants]] [garden](Garden.md)");
+  const garden = page.locator(".note-list").getByRole("button", { name: "Garden", exact: true });
+  await garden.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
+  const name = page.getByRole("textbox", { name: "File name" });
+  await name.fill("Plants.md");
+  await name.press("Enter");
+  await expectMarkdown(editor, "[[Plants#Tomatoes|plants]] [garden](Plants.md)");
+  await page.getByRole("button", { name: "New folder", exact: true }).click();
+  const folder = page.getByRole("textbox", { name: "Folder name" });
+  await folder.fill("Archive");
+  await folder.press("Enter");
+  const plants = page.locator(".note-list").getByRole("button", { name: "Plants", exact: true });
+  await plants.dragTo(page.getByRole("button", { name: "Archive", exact: true }));
+  await expectMarkdown(editor, "[[Plants#Tomatoes|plants]] [garden](Archive/Plants.md)");
+  await page
+    .locator(".rendered-pane article")
+    .getByRole("link", { name: "plants", exact: true })
+    .click();
+  await expectMarkdown(editor, /# Garden/);
+});

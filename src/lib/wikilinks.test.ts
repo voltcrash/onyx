@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   linksToNote,
+  rewriteMovedWikiLinks,
   resolveWikiLink,
   splitWikiTarget,
   stripCode,
@@ -106,4 +107,27 @@ it("resolves used full, collapsed and shortcut references with parsed definition
 
 it("does not index wiki links inside math", () => {
   expect(linksToNote("$x [[Ideas]]$", "Plan.md", notes[2]!, notes)).toBe(false);
+});
+
+describe("rewriteMovedWikiLinks", () => {
+  it("rewrites only resolved targets, preserving fragments, aliases, and code", () => {
+    const before = [
+      { id: "a", title: "Old", sourcePath: "a/Old.md" },
+      { id: "b", title: "Old", sourcePath: "b/Old.md" },
+      { id: "c", title: "New", sourcePath: "b/New.md" },
+    ];
+    const after = before.map((note) =>
+      note.id === "a" ? { ...note, sourcePath: "a/New.md" } : note,
+    );
+    const markdown = "[[Old]] [[Old#Heading|label]] `[[Old]]`\n\n```md\n[[Old]]\n```";
+    expect(rewriteMovedWikiLinks(markdown, before, after, "a/Index.md", "a/Index.md")).toBe(
+      markdown.replace("[[Old]] [[Old#Heading|label]]", "[[New]] [[New#Heading|label]]"),
+    );
+    expect(rewriteMovedWikiLinks("[[Old|label]]", before, after, "b/Index.md", "b/Index.md")).toBe(
+      "[[Old|label]]",
+    );
+    expect(
+      rewriteMovedWikiLinks("[[a/Old#Heading|label]]", before, after, "b/Index.md", "b/Index.md"),
+    ).toBe("[[a/New#Heading|label]]");
+  });
 });
