@@ -1,3 +1,4 @@
+import { findUnlinkedMentions, type NoteMention } from "../note-insights.ts";
 import {
   createSearchPostings,
   VaultDatabase,
@@ -435,6 +436,53 @@ export class Vault {
   }
 
   /** Notes outside the trash that link to `noteId`, by title. */
+  async listUnlinkedMentions(
+    noteId: string,
+  ): Promise<Array<NoteMention & { noteId: string; title: string }>> {
+    return this.#withLock(async () => {
+      const [notes, contents] = await Promise.all([
+        this.#database.getNotes().then(activeNotes),
+        this.#database.getNoteContents(),
+      ]);
+      const target = notes.find((note) => note.id === noteId);
+      if (!target) return [];
+      const names = [
+        target.title,
+        noteFilePath(target)
+          .replace(/^.*\//, "")
+          .replace(/\.(?:md|markdown)$/i, ""),
+      ];
+      const byId = new Map(contents.map((note) => [note.noteId, note.markdown]));
+      return notes
+        .filter((note) => note.id !== noteId)
+        .flatMap((note) =>
+          findUnlinkedMentions(byId.get(note.id) ?? "", names).map((mention) => ({
+            ...mention,
+            noteId: note.id,
+            title: note.title,
+          })),
+        );
+    });
+  }
+
+  async linkMention(sourceId: string, targetId: string, start: number, end: number): Promise<void> {
+    await this.updateFileTree((tree) => {
+      const source = tree.notes.find((note) => note.id === sourceId && !note.deletedAt);
+      const target = tree.notes.find((note) => note.id === targetId && !note.deletedAt);
+      if (!source || !target) throw new Error("The note no longer exists");
+      const name = noteFilePath(target).replace(/\.(?:md|markdown)$/i, "");
+      const mention = findUnlinkedMentions(source.markdown, [
+        target.title,
+        name.replace(/^.*\//, ""),
+      ]).find((mention) => mention.start === start && mention.end === end);
+      if (!mention) throw new Error("That mention changed. Refresh the note before linking it.");
+      source.markdown =
+        source.markdown.slice(0, start) +
+        `[[${name}|${mention.text}]]` +
+        source.markdown.slice(end);
+    });
+  }
+
   async listBacklinks(noteId: string): Promise<NoteMetadata[]> {
     return this.#withLock(async () => {
       const [notes, contents] = await Promise.all([

@@ -316,3 +316,38 @@ describe("Inbound links during moves", () => {
     expect(tree.notes[1]!.markdown).toBe("[[Target|label]] [text](new/Target.md)");
   });
 });
+
+describe("Linking unlinked mentions", () => {
+  it("checks current prose offsets and writes a path-qualified wiki target", async () => {
+    const metadata = { revision: 1, size: 0, tags: [], createdAt: "", updatedAt: "" };
+    const tree = {
+      notes: [
+        {
+          ...metadata,
+          id: "target",
+          title: "Garden",
+          sourcePath: "plants/Garden.md",
+          path: "notes/target.md",
+          markdown: "",
+        },
+        {
+          ...metadata,
+          id: "source",
+          title: "Journal",
+          sourcePath: "Journal.md",
+          path: "notes/source.md",
+          markdown: "A Garden today.",
+        },
+      ],
+      folders: [],
+      attachments: [],
+    };
+    const vault = Reflect.construct(Vault, [{}, {}]) as Vault;
+    vi.spyOn(vault, "updateFileTree").mockImplementation(async (update) => {
+      update(tree);
+    });
+    await vault.linkMention("source", "target", 2, 8);
+    expect(tree.notes[1]!.markdown).toBe("A [[plants/Garden|Garden]] today.");
+    await expect(vault.linkMention("source", "target", 2, 8)).rejects.toThrow("changed");
+  });
+});
