@@ -132,3 +132,32 @@ it("reconciles the committed merge before an upload fails", async () => {
   expect(host.lastSavedMarkdown).toBe("merged");
   expect(host.runSearch).toHaveBeenCalledOnce();
 });
+
+it("waits for the backup lock and reads current encryption settings inside it", async () => {
+  const { encryption } = await createBackupKey("secret");
+  const { host, controller } = fixture(async () => ({ state: configuration }));
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const current = { ...configuration, encryption, autoBackup: true };
+  const read = vi.fn().mockResolvedValue(current);
+  const save = vi.fn();
+  const exclusive = vi.fn(async (task: () => Promise<void>) => {
+    await gate;
+    await task();
+  });
+  Object.assign(host.vault!, {
+    runBackupExclusive: exclusive,
+    getGithubBackupState: read,
+    saveGithubBackupState: save,
+  });
+  const configure = controller.configureEncryption("secret");
+  await vi.waitFor(() => expect(exclusive).toHaveBeenCalledOnce());
+  expect(read).not.toHaveBeenCalled();
+  expect(save).not.toHaveBeenCalled();
+  release();
+  await configure;
+  expect(save).toHaveBeenCalledWith(current);
+  expect(controller.githubBackup?.encryption).toEqual(encryption);
+});

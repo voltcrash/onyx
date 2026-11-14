@@ -137,17 +137,22 @@ export function createGithubController(host: ControllerHost) {
     const opened = host.vault,
       configuration = githubBackup;
     if (!opened || !configuration || backupState === "backing-up") return;
-    const encryption = enabled
-      ? (configuration.encryption ?? (await createBackupKey(passphrase)).encryption)
-      : undefined;
-    if (enabled && configuration.encryption)
-      await unlockBackupKey(configuration.encryption, passphrase);
-    if (opened !== host.vault || configuration !== githubBackup) return;
-    await opened.saveGithubBackupState({ ...configuration, encryption });
-    githubBackup = await opened.getGithubBackupState();
-    backupMessage = enabled
-      ? "Encrypted backups are enabled and unlocked for this session. Back up now to upload every file encrypted."
-      : "The next backup will upload unencrypted files.";
+    await opened.runBackupExclusive(async () => {
+      if (opened !== host.vault || configuration !== githubBackup) return;
+      const current = await opened.getGithubBackupState();
+      if (!current || githubTargetKey(current) !== githubTargetKey(configuration))
+        throw new Error("The backup target changed. Configure encryption again.");
+      const encryption = enabled
+        ? (current.encryption ?? (await createBackupKey(passphrase)).encryption)
+        : undefined;
+      if (enabled && current.encryption) await unlockBackupKey(current.encryption, passphrase);
+      if (opened !== host.vault || configuration !== githubBackup) return;
+      await opened.saveGithubBackupState({ ...current, encryption });
+      githubBackup = await opened.getGithubBackupState();
+      backupMessage = enabled
+        ? "Encrypted backups are enabled and unlocked for this session. Back up now to upload every file encrypted."
+        : "The next backup will upload unencrypted files.";
+    });
   }
 
   async function restoreGitHub(): Promise<void> {

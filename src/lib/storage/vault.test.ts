@@ -453,3 +453,39 @@ it.each([false, true])(
     ]).toEqual([0, 255, 42]);
   },
 );
+
+it("preserves the current encryption setting when completing an older backup", async () => {
+  const encryption = {
+    version: 1,
+    kdf: "PBKDF2-SHA256",
+    iterations: 600_000,
+    salt: "salt",
+    keyCheck: "check",
+  } as const;
+  const captured = {
+    owner: "onyx",
+    repository: "vault",
+    branch: "main",
+    directory: "vault",
+    githubAccountId: 1,
+    githubAccountLogin: "onyx",
+    updatedAt: "before",
+  };
+  const completeGithubBackup = vi.fn();
+  const vault = Reflect.construct(Vault, [
+    {
+      getGithubBackupState: async () => ({ ...captured, encryption, autoBackup: true }),
+      completeGithubBackup,
+    },
+    {},
+    { runExclusive: <T>(task: () => Promise<T>) => task(), publish: vi.fn() },
+  ]) as Vault;
+  const completed = await vault.completeGithubBackup({ ...captured, lastCommitSha: "new" }, [
+    "operation",
+  ]);
+  expect(completed.encryption).toEqual(encryption);
+  expect(completeGithubBackup).toHaveBeenCalledWith(
+    expect.objectContaining({ encryption, autoBackup: true, lastCommitSha: "new" }),
+    ["operation"],
+  );
+});

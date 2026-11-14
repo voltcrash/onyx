@@ -1385,7 +1385,12 @@ export class Vault {
       const current = await this.#database.getGithubBackupState();
       if (!current || githubTargetKey(current) !== githubTargetKey(state))
         throw new Error("The backup target changed. Start a new backup.");
-      const next = { ...state, autoBackup: current.autoBackup, pendingCommitSha: undefined };
+      const next = {
+        ...state,
+        autoBackup: current.autoBackup,
+        encryption: current.encryption,
+        pendingCommitSha: undefined,
+      };
       await this.#database.completeGithubBackup(next, operationIds);
       this.#publish({ kind: "backup" });
       return next;
