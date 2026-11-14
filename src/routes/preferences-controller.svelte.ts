@@ -146,7 +146,7 @@ export function createPreferencesController() {
     loadSidebarSort() {
       sidebarSort = readSidebarSort();
     },
-    setSidebarSort(value: SidebarSort) {
+    setSidebarSort(this: void, value: SidebarSort) {
       sidebarSort = value;
       writeSidebarSort(value);
     },
