@@ -1,12 +1,10 @@
+import { createGithubController } from "./github-controller.svelte.ts";
 import { createLazyResource } from "#lib/lazy-resource.ts";
 import { FileText } from "@lucide/svelte";
 import type {
-  BackupState,
-  GithubState,
   PaneEdge,
   PaneLayout,
   PaneOrder,
-  RestoreState,
   SaveState,
   TransferState,
 } from "#lib/components/app-types.ts";
@@ -80,15 +78,8 @@ import {
   type VaultDescriptor,
   type VaultSearchResult,
 } from "#lib/storage/index.ts";
-import type { GithubBackupCommit, GithubUser } from "#lib/github.ts";
-import { githubTargetKey } from "#lib/storage/types.ts";
-import type {
-  AttachmentMetadata,
-  FolderMetadata,
-  GithubBackupState,
-  Note,
-  NoteMetadata,
-} from "#lib/storage/types.ts";
+
+import type { AttachmentMetadata, FolderMetadata, Note, NoteMetadata } from "#lib/storage/types.ts";
 import {
   applyColorTheme,
   applyTheme,
@@ -157,6 +148,168 @@ interface ImagePreviewState {
 }
 
 export function createPageController() {
+  const githubController = createGithubController({
+    get disposed() {
+      return disposed;
+    },
+    set disposed(value) {
+      disposed = value;
+    },
+    get authenticationRequest() {
+      return authenticationRequest;
+    },
+    set authenticationRequest(value) {
+      authenticationRequest = value;
+    },
+    get githubRestoreTimer() {
+      return githubRestoreTimer;
+    },
+    set githubRestoreTimer(value) {
+      githubRestoreTimer = value;
+    },
+    get activeVaultId() {
+      return activeVaultId;
+    },
+    set activeVaultId(value) {
+      activeVaultId = value;
+    },
+    get activeNoteId() {
+      return activeNoteId;
+    },
+    set activeNoteId(value) {
+      activeNoteId = value;
+    },
+    get isOnline() {
+      return isOnline;
+    },
+    set isOnline(value) {
+      isOnline = value;
+    },
+    get loadGithubModule() {
+      return loadGithubModule;
+    },
+    get authenticationCleanup() {
+      return authenticationCleanup;
+    },
+    set authenticationCleanup(value) {
+      authenticationCleanup = value;
+    },
+    get vault() {
+      return vault;
+    },
+    set vault(value) {
+      vault = value;
+    },
+    get settleDraft() {
+      return settleDraft;
+    },
+    get openSettings() {
+      return openSettings;
+    },
+    get settingsSection() {
+      return settingsSection;
+    },
+    set settingsSection(value) {
+      settingsSection = value;
+    },
+    get settingsOpen() {
+      return settingsOpen;
+    },
+    set settingsOpen(value) {
+      settingsOpen = value;
+    },
+    get pendingBackupCount() {
+      return pendingBackupCount;
+    },
+    set pendingBackupCount(value) {
+      pendingBackupCount = value;
+    },
+    get AUTO_BACKUP_DELAY_MS() {
+      return AUTO_BACKUP_DELAY_MS;
+    },
+    get workspaceOperation() {
+      return workspaceOperation;
+    },
+    set workspaceOperation(value) {
+      workspaceOperation = value;
+    },
+    get confirmation() {
+      return confirmation;
+    },
+    get markdown() {
+      return markdown;
+    },
+    set markdown(value) {
+      markdown = value;
+    },
+    get lastSavedMarkdown() {
+      return lastSavedMarkdown;
+    },
+    set lastSavedMarkdown(value) {
+      lastSavedMarkdown = value;
+    },
+    get saveDraft() {
+      return saveDraft;
+    },
+    get activeVault() {
+      return activeVault;
+    },
+    get loadDialogStyles() {
+      return loadDialogStyles;
+    },
+    get saveState() {
+      return saveState;
+    },
+    set saveState(value) {
+      saveState = value;
+    },
+    get saveTimer() {
+      return saveTimer;
+    },
+    set saveTimer(value) {
+      saveTimer = value;
+    },
+    get searchTimer() {
+      return searchTimer;
+    },
+    set searchTimer(value) {
+      searchTimer = value;
+    },
+    get searchSequence() {
+      return searchSequence;
+    },
+    set searchSequence(value) {
+      searchSequence = value;
+    },
+    get folders() {
+      return folders;
+    },
+    set folders(value) {
+      folders = value;
+    },
+    get searchQuery() {
+      return searchQuery;
+    },
+    set searchQuery(value) {
+      searchQuery = value;
+    },
+    get loadNote() {
+      return loadNote;
+    },
+    get resetActiveNote() {
+      return resetActiveNote;
+    },
+    get vaultAttachments() {
+      return vaultAttachments;
+    },
+    set vaultAttachments(value) {
+      vaultAttachments = value;
+    },
+    get runSearch() {
+      return runSearch;
+    },
+  });
+
   const initialMarkdown = createInitialMarkdown("meta");
 
   let vault = $state<Vault>();
@@ -209,31 +362,9 @@ export function createPageController() {
   let storageError = $state("");
   let storageNotice = $state("");
   let isOnline = $state(true);
-  let githubUser = $state<GithubUser>();
-  let githubState = $state<GithubState>("disconnected");
-  let githubMessage = $state("");
-  let githubBackup = $state<GithubBackupState>();
-  let backupState = $state<BackupState>("idle");
-  let backupSequence = 0;
-  let backupMessage = $state("");
-  let backupCommitUrl = $state("");
   let settingsOpen = $state(false);
   let settingsSection = $state<SettingsSection>("editor");
   let pendingBackupCount = $state(0);
-  let autoBackupTimer: number | undefined;
-  // Set when an automatic backup fails, so it does not retry until the user backs up by hand.
-  let autoBackupPaused = $state(false);
-  let restoreModalOpen = $state(false);
-  let restoreSequence = 0;
-  let restoreSource: { configuration: GithubBackupState; version: number } | undefined;
-  let restoreState = $state<RestoreState>("idle");
-  let restoreMessage = $state("");
-  let restoreCommits = $state<GithubBackupCommit[]>([]);
-  let selectedRestoreSha = $state("");
-  let restoreOwner = $state("");
-  let restoreRepository = $state("onyx-vault");
-  let restoreBranch = $state("main");
-  let restoreDirectory = $state("vault");
   let transferState = $state<TransferState>("idle");
   let transferMessage = $state("");
   let folderInput: HTMLInputElement | undefined = $state();
@@ -486,8 +617,8 @@ export function createPageController() {
     toggleSidebar,
     setSidebarSide,
     setTheme,
-    beginBackup,
-    openRestore: workspaceCommand(openRestore),
+    beginBackup: githubController.beginBackup,
+    openRestore: workspaceCommand(githubController.openRestore),
     importFolder: () => folderInput?.click(),
     importZip: () => zipInput?.click(),
     exportFolder: workspaceCommand(exportFolder),
@@ -508,7 +639,7 @@ export function createPageController() {
         attachmentsHidden,
         effectivePaneLayout,
         fontsAreDefault,
-        githubState,
+        githubState: githubController.githubState,
         hasContent,
         isOnline,
         renderedPaneVisible,
@@ -681,7 +812,7 @@ export function createPageController() {
       })
       .finally(scheduleServiceWorkerRegistration);
     if (isOnline) scheduleGithubRestore();
-    else githubState = "disconnected";
+    else githubController.githubState = "disconnected";
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       if (markdown === lastSavedMarkdown) return;
       event.preventDefault();
@@ -693,7 +824,7 @@ export function createPageController() {
     };
     const onOffline = () => {
       isOnline = false;
-      if (restoreState !== "restoring") restoreModalOpen = false;
+      if (githubController.restoreState !== "restoring") githubController.restoreModalOpen = false;
       if (githubRestoreTimer !== undefined) {
         window.clearTimeout(githubRestoreTimer);
         githubRestoreTimer = undefined;
@@ -757,7 +888,7 @@ export function createPageController() {
       if (previewSettleTimer !== undefined) window.clearTimeout(previewSettleTimer);
       if (serviceWorkerTimer) window.clearTimeout(serviceWorkerTimer);
       if (githubRestoreTimer) window.clearTimeout(githubRestoreTimer);
-      window.clearTimeout(autoBackupTimer);
+      window.clearTimeout(githubController.autoBackupTimer);
       unsubscribeVault?.();
       preview.dispose();
       releaseLocalAttachmentUrls();
@@ -784,110 +915,17 @@ export function createPageController() {
   }
 
   function scheduleGithubRestore(): void {
-    if (disposed || githubState === "loading" || githubRestoreTimer !== undefined) return;
+    if (disposed || githubController.githubState === "loading" || githubRestoreTimer !== undefined)
+      return;
     const hasGithubCallback = new URLSearchParams(location.search).has("github");
     if (hasGithubCallback) {
-      void restoreGitHub();
+      void githubController.restoreGitHub();
       return;
     }
     githubRestoreTimer = window.setTimeout(() => {
       githubRestoreTimer = undefined;
-      void restoreGitHub();
+      void githubController.restoreGitHub();
     }, DEFERRED_STARTUP_DELAY_MS);
-  }
-
-  async function restoreGitHub(): Promise<void> {
-    if (disposed || githubState === "loading") return;
-    const request = ++authenticationRequest;
-    if (githubRestoreTimer !== undefined) {
-      window.clearTimeout(githubRestoreTimer);
-      githubRestoreTimer = undefined;
-    }
-    const result = new URLSearchParams(location.search).get("github");
-    if (result) {
-      try {
-        await goto(`${location.pathname}${location.hash}`, {
-          shallow: true,
-          replace: true,
-          reset: false,
-          state: { onyxVaultId: activeVaultId, onyxNoteId: page.state.onyxNoteId ?? activeNoteId },
-        });
-      } catch {
-        // History is best-effort; the callback can still be handled.
-      }
-    }
-    if (result && result !== "connected") {
-      githubMessage =
-        result === "configuration"
-          ? "GitHub authentication has not been configured for this deployment."
-          : result === "denied"
-            ? "GitHub authorization was cancelled."
-            : result === "invalid"
-              ? "The GitHub authorization response could not be verified. Please try again."
-              : "GitHub authentication failed. Please try again.";
-    }
-    if (!isOnline) {
-      githubState = githubUser ? "connected" : "disconnected";
-      return;
-    }
-    githubState = "loading";
-    try {
-      const github = await loadGithubModule();
-      if (disposed || request !== authenticationRequest) return;
-      authenticationCleanup ??= github.subscribeGithubAuthentication((user) => {
-        if (!disposed) {
-          githubUser = user;
-          githubState = user ? "connected" : "disconnected";
-        }
-      });
-      const user = await github.restoreGithubSession();
-      if (disposed || request !== authenticationRequest) return;
-      githubUser = user;
-      githubState = githubUser ? "connected" : githubMessage ? "error" : "disconnected";
-    } catch (error) {
-      if (disposed || request !== authenticationRequest) return;
-      githubState = "error";
-      githubMessage = error instanceof Error ? error.message : "GitHub authentication failed.";
-    }
-  }
-
-  async function disconnectGitHub(): Promise<void> {
-    if (!isOnline) return;
-    authenticationRequest += 1;
-    githubUser = undefined;
-    githubState = "disconnected";
-    try {
-      await (await loadGithubModule()).disconnectGithub();
-      githubUser = undefined;
-      githubState = "disconnected";
-      githubMessage = "";
-    } catch (error) {
-      githubState = "error";
-      githubMessage = error instanceof Error ? error.message : "GitHub could not be disconnected.";
-    }
-  }
-
-  async function connectGitHub(): Promise<void> {
-    if (!isOnline || githubState === "loading") return;
-    githubState = "loading";
-    githubMessage = "";
-    try {
-      await (await loadGithubModule()).connectGithub();
-    } catch (error) {
-      githubState = "error";
-      githubMessage =
-        error instanceof Error ? error.message : "GitHub sign-in could not be started.";
-    }
-  }
-
-  async function beginBackup(): Promise<void> {
-    if (!isOnline || !vault || backupState === "backing-up") return;
-    if (!(await settleDraft())) return;
-    if (!githubBackup) {
-      void openSettings("github").catch(() => undefined);
-      return;
-    }
-    await runBackup(githubBackup);
   }
 
   async function openSettings(target: SettingsSection = "editor"): Promise<void> {
@@ -916,54 +954,13 @@ export function createPageController() {
         paletteOpen ||
         find.isOpen ||
         settingsOpen ||
-        restoreModalOpen ||
+        githubController.restoreModalOpen ||
         imagePreview ||
         confirmation.request
       )
         return;
       if (opener.isConnected) opener.focus();
     });
-  }
-
-  async function selectBackupRepository(
-    state: Omit<GithubBackupState, "updatedAt">,
-  ): Promise<void> {
-    if (!vault) return;
-    try {
-      await (
-        await loadGithubModule()
-      ).validateGithubBackupRepository({
-        ...state,
-        updatedAt: new Date().toISOString(),
-      });
-      const current = await vault.getGithubBackupState();
-      const target = { ...state, updatedAt: new Date().toISOString() };
-      await vault.saveGithubBackupState(
-        current && githubTargetKey(current) === githubTargetKey(target)
-          ? { ...current, ...state }
-          : state,
-      );
-      githubBackup = await vault.getGithubBackupState();
-      backupState = "idle";
-      backupCommitUrl = "";
-      backupMessage = `Backups now target ${state.owner}/${state.repository}.`;
-      settingsSection = "github";
-    } catch (error) {
-      showBackupError(error);
-    }
-  }
-
-  async function forgetBackupRepository(): Promise<void> {
-    if (!vault) return;
-    try {
-      await vault.clearGithubBackupState();
-      githubBackup = undefined;
-      backupCommitUrl = "";
-      backupState = "idle";
-      backupMessage = "Onyx is no longer backing up to a repository.";
-    } catch (error) {
-      showBackupError(error);
-    }
   }
 
   async function clearVault(expectedVersion?: number): Promise<void> {
@@ -1015,295 +1012,23 @@ export function createPageController() {
     editorHistory.reset();
   }
 
-  async function createBackupRepository(name: string): Promise<void> {
-    if (!isOnline || !vault || !name.trim() || !(await settleDraft())) return;
-    backupState = "backing-up";
-    backupMessage = "Creating your private repository…";
-    settingsOpen = false;
-    try {
-      const configuration = await (await loadGithubModule()).createPrivateGithubRepository(name);
-      await vault.saveGithubBackupState(configuration);
-      githubBackup = configuration;
-      backupState = "idle";
-      await runBackup(configuration);
-    } catch (error) {
-      showBackupError(error);
-    }
-  }
-
-  async function runBackup(
-    configuration: GithubBackupState,
-    options: { replaceNewerBackup?: boolean; automatic?: boolean } = {},
-  ): Promise<void> {
-    if (disposed || !isOnline || !vault || backupState === "backing-up") return;
-    const opened = vault;
-    const sequence = ++backupSequence;
-    const { automatic = false, ...backupOptions } = options;
-    backupState = "backing-up";
-    if (!automatic) {
-      autoBackupPaused = false;
-      backupMessage = "Preparing one GitHub commit…";
-      backupCommitUrl = "";
-    }
-    let github: Awaited<ReturnType<typeof loadGithubModule>> | undefined;
-    try {
-      github = await loadGithubModule();
-      const result = await github.backupVaultToGithub(opened, configuration, backupOptions);
-      const pending = await opened.countPendingBackupOperations();
-      if (disposed || opened !== vault || sequence !== backupSequence) return;
-      githubBackup = result.state;
-      pendingBackupCount = pending;
-      if (automatic) {
-        backupState = "idle";
-        return;
-      }
-      backupState = "success";
-      backupCommitUrl = result.commitUrl ?? "";
-      backupMessage = result.commitUrl
-        ? `Backed up ${result.fileCount} ${result.fileCount === 1 ? "file" : "files"} in one commit.`
-        : "Your GitHub backup is already up to date.";
-    } catch (error) {
-      if (disposed || opened !== vault || sequence !== backupSequence) return;
-      if (automatic) {
-        autoBackupPaused = true;
-        backupState = "error";
-        backupCommitUrl = "";
-        backupMessage =
-          github && error instanceof github.GithubBackupConflictError
-            ? "Automatic backup paused because GitHub has a newer backup. Restore it from Settings → Backup & sync, or back up now to replace it."
-            : `Automatic backup paused: ${error instanceof Error ? error.message : "the GitHub backup failed."} Back up now to try again.`;
-        return;
-      }
-      if (github && error instanceof github.GithubBackupConflictError) {
-        await resolveBackupConflict(configuration);
-        return;
-      }
-      showBackupError(error);
-    }
-  }
-
   $effect(() => {
     const due =
-      githubBackup?.autoBackup === true &&
+      githubController.githubBackup?.autoBackup === true &&
       pendingBackupCount > 0 &&
       isOnline &&
-      githubState === "connected" &&
-      !autoBackupPaused &&
-      backupState !== "backing-up" &&
+      githubController.githubState === "connected" &&
+      !githubController.autoBackupPaused &&
+      githubController.backupState !== "backing-up" &&
       workspaceOperation === undefined &&
       vaultPhase === "ready" &&
       saveState === "saved" &&
-      !restoreModalOpen &&
+      !githubController.restoreModalOpen &&
       !confirmation.request;
     // Each new pending change restarts the wait, so backups run once editing settles.
     void pendingBackupCount;
-    untrack(() => scheduleAutoBackup(due));
+    untrack(() => githubController.scheduleAutoBackup(due));
   });
-
-  function scheduleAutoBackup(due: boolean): void {
-    window.clearTimeout(autoBackupTimer);
-    autoBackupTimer = due
-      ? window.setTimeout(() => void runAutoBackup(), AUTO_BACKUP_DELAY_MS)
-      : undefined;
-  }
-
-  async function runAutoBackup(): Promise<void> {
-    autoBackupTimer = undefined;
-    const configuration = githubBackup;
-    if (
-      disposed ||
-      !configuration?.autoBackup ||
-      !vault ||
-      !isOnline ||
-      githubState !== "connected" ||
-      autoBackupPaused ||
-      workspaceOperation ||
-      restoreModalOpen ||
-      confirmation.request ||
-      backupState === "backing-up"
-    )
-      return;
-    if (markdown !== lastSavedMarkdown && !(await saveDraft())) return;
-    await runBackup(configuration, { automatic: true });
-  }
-
-  async function setAutoBackup(enabled: boolean): Promise<void> {
-    if (!vault || !githubBackup) return;
-    try {
-      githubBackup = await vault.setAutoBackup(enabled);
-      if (enabled) autoBackupPaused = false;
-    } catch (error) {
-      showBackupError(error);
-    }
-  }
-
-  async function resolveBackupConflict(configuration: GithubBackupState): Promise<void> {
-    const opened = vault;
-    backupState = "idle";
-    backupMessage = "";
-    const replace = await confirmation.ask({
-      eyebrow: "Backup & sync",
-      title: "GitHub has a newer backup",
-      message: `Another device backed up to ${configuration.owner}/${configuration.repository} after this device last backed up or restored. Restore that backup to bring its notes here, which replaces the notes on this device. Or back up anyway to make this device's notes the latest backup; the other backup stays in the repository history.`,
-      confirmLabel: "Back up anyway",
-      danger: true,
-    });
-    if (
-      disposed ||
-      opened !== vault ||
-      !githubBackup ||
-      githubTargetKey(githubBackup) !== githubTargetKey(configuration)
-    )
-      return;
-    if (replace) {
-      await runBackup(configuration, { replaceNewerBackup: true });
-      return;
-    }
-    backupState = "error";
-    backupMessage =
-      "Backup paused because GitHub has a newer backup. Restore it from Settings → Backup & sync, or back up again to replace it.";
-  }
-
-  function showBackupError(error: unknown): void {
-    backupState = "error";
-    backupMessage = isGithubStatus(error, 422)
-      ? "GitHub could not create that repository or update its branch. Check the name and try again."
-      : error instanceof Error
-        ? error.message
-        : "The GitHub backup failed.";
-  }
-
-  function isGithubStatus(error: unknown, status: number): boolean {
-    return (
-      error instanceof Error &&
-      "status" in error &&
-      (error as Error & { status?: unknown }).status === status
-    );
-  }
-
-  async function openRestore(): Promise<void> {
-    if (!isOnline || !githubUser || restoreState === "restoring") return;
-    if (!(await settleDraft())) return;
-    restoreOwner = githubBackup?.owner ?? githubUser.login;
-    restoreRepository = githubBackup?.repository ?? suggestedRepositoryName(activeVault);
-    restoreBranch = githubBackup?.branch ?? "main";
-    restoreDirectory = githubBackup?.directory ?? "vault";
-    restoreCommits = [];
-    selectedRestoreSha = "";
-    restoreMessage = "";
-    await loadDialogStyles();
-    restoreModalOpen = true;
-    await loadRestoreCommits();
-  }
-
-  function restoreConfiguration(): GithubBackupState {
-    if (!githubUser) throw new Error("Sign in with GitHub before restoring a backup");
-    return {
-      githubAccountId: githubUser.id,
-      githubAccountLogin: githubUser.login,
-      owner: restoreOwner.trim(),
-      repository: restoreRepository.trim(),
-      branch: restoreBranch.trim(),
-      directory: restoreDirectory.trim().replace(/^\/+|\/+$/g, ""),
-      updatedAt: new Date().toISOString(),
-    };
-  }
-
-  function invalidateRestoreSource(): void {
-    restoreSequence += 1;
-    restoreSource = undefined;
-    selectedRestoreSha = "";
-    restoreCommits = [];
-    restoreState = "idle";
-  }
-
-  async function loadRestoreCommits(): Promise<void> {
-    if (
-      !isOnline ||
-      !vault ||
-      restoreState === "restoring" ||
-      !restoreOwner.trim() ||
-      !restoreRepository.trim() ||
-      !restoreBranch.trim()
-    )
-      return;
-    const opened = vault;
-    const sequence = ++restoreSequence;
-    restoreState = "loading";
-    restoreMessage = "";
-    selectedRestoreSha = "";
-    restoreSource = undefined;
-    try {
-      const configuration = restoreConfiguration();
-      const commits = await (await loadGithubModule()).listGithubBackupCommits(configuration);
-      const version = await opened.getVersion();
-      if (disposed || sequence !== restoreSequence || opened !== vault) return;
-      restoreSource = { configuration, version };
-      restoreCommits = commits;
-      selectedRestoreSha = commits[0]?.sha ?? "";
-      restoreMessage = commits.length
-        ? ""
-        : "No backup commits were found in this repository and directory.";
-      restoreState = "idle";
-    } catch (error) {
-      if (disposed || sequence !== restoreSequence || opened !== vault) return;
-      restoreCommits = [];
-      restoreState = "error";
-      restoreMessage =
-        error instanceof Error ? error.message : "GitHub backups could not be loaded.";
-    }
-  }
-
-  async function restoreSelectedCommit(): Promise<void> {
-    if (
-      !isOnline ||
-      !vault ||
-      !restoreSource ||
-      !selectedRestoreSha ||
-      restoreState === "restoring"
-    )
-      return;
-    const opened = vault;
-    const source = restoreSource;
-    const sha = selectedRestoreSha;
-    if (!(await settleDraft())) return;
-    const previousSaveState = saveState;
-    if (saveTimer) window.clearTimeout(saveTimer);
-    if (searchTimer) window.clearTimeout(searchTimer);
-    saveTimer = undefined;
-    searchTimer = undefined;
-    searchSequence += 1;
-    saveState = "loading";
-    restoreState = "restoring";
-    restoreMessage = "Downloading and rebuilding your local vault…";
-    try {
-      const result = await (
-        await loadGithubModule()
-      ).restoreVaultFromGithub(opened, source.configuration, sha, {
-        expectedVersion: source.version,
-      });
-      if (disposed || opened !== vault) return;
-      githubBackup = result.state;
-      pendingBackupCount = await vault.countPendingBackupOperations();
-      const notes = await vault.listNotes();
-      folders = await vault.listFolders();
-      searchQuery = "";
-      if (notes[0]) await loadNote(notes[0].id);
-      else resetActiveNote();
-      vaultAttachments = await vault.listAttachments();
-      await runSearch("");
-      restoreModalOpen = false;
-      restoreState = "idle";
-      backupState = "success";
-      backupMessage = `Restored ${result.noteCount} ${result.noteCount === 1 ? "note" : "notes"} and ${result.attachmentCount} ${result.attachmentCount === 1 ? "attachment" : "attachments"} from GitHub.`;
-      backupCommitUrl = restoreCommits.find((commit) => commit.sha === sha)?.url ?? "";
-    } catch (error) {
-      saveState = previousSaveState;
-      restoreState = "error";
-      restoreMessage =
-        error instanceof Error ? error.message : "The GitHub backup could not be restored.";
-    }
-  }
 
   function formatNoteDate(value: string): string {
     if (!value) return "";
@@ -1358,7 +1083,7 @@ export function createPageController() {
       trashedNotes = tree.trashedNotes;
       await runSearch("");
       if (searchQuery.trim()) await runSearch(searchQuery);
-      [githubBackup, pendingBackupCount] = await Promise.all([
+      [githubController.githubBackup, pendingBackupCount] = await Promise.all([
         vault.getGithubBackupState(),
         vault.countPendingBackupOperations(),
       ]);
@@ -1444,15 +1169,15 @@ export function createPageController() {
     vault = undefined;
     await previousVault?.close();
     resetEditorAfterVaultClear();
-    githubBackup = undefined;
-    autoBackupPaused = false;
+    githubController.githubBackup = undefined;
+    githubController.autoBackupPaused = false;
     recentNoteIds = [];
     paletteOpen = false;
     find.close();
     pendingBackupCount = 0;
-    backupState = "idle";
-    backupMessage = "";
-    backupCommitUrl = "";
+    githubController.backupState = "idle";
+    githubController.backupMessage = "";
+    githubController.backupCommitUrl = "";
     sidebarOpen = false;
     await openVault();
   }
@@ -1616,7 +1341,7 @@ export function createPageController() {
         opened.countPendingBackupOperations(),
       ]);
       if (opened === vault && !disposed) {
-        [githubBackup, pendingBackupCount] = backup;
+        [githubController.githubBackup, pendingBackupCount] = backup;
         observedVaultVersion = await opened.getVersion();
       }
     }
@@ -3080,12 +2805,13 @@ export function createPageController() {
 
   function handleShortcut(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;
-    if (confirmation.request || settingsOpen || restoreModalOpen || imagePreview) {
+    if (confirmation.request || settingsOpen || githubController.restoreModalOpen || imagePreview) {
       if (event.key === "Escape") {
         event.preventDefault();
         if (confirmation.request) confirmation.cancel();
         else if (imagePreview) closeImagePreview();
-        else if (restoreModalOpen && restoreState !== "restoring") restoreModalOpen = false;
+        else if (githubController.restoreModalOpen && githubController.restoreState !== "restoring")
+          githubController.restoreModalOpen = false;
         else if (settingsOpen && !clearingVault) closeSettings();
       }
       return;
@@ -3173,7 +2899,8 @@ export function createPageController() {
     else if (action === "openShortcuts") void openSettings("shortcuts").catch(() => undefined);
     else if (action === "closePanel") {
       if (imagePreview) closeImagePreview();
-      else if (restoreModalOpen && restoreState !== "restoring") restoreModalOpen = false;
+      else if (githubController.restoreModalOpen && githubController.restoreState !== "restoring")
+        githubController.restoreModalOpen = false;
       else if (settingsOpen) closeSettings();
       else if (paletteOpen) closePalette();
       else if (find.isOpen) find.close();
@@ -3423,28 +3150,28 @@ export function createPageController() {
       return isOnline;
     },
     get githubState() {
-      return githubState;
+      return githubController.githubState;
     },
     get githubUser() {
-      return githubUser;
+      return githubController.githubUser;
     },
     get githubMessage() {
-      return githubMessage;
+      return githubController.githubMessage;
     },
     get githubBackup() {
-      return githubBackup;
+      return githubController.githubBackup;
     },
     get backupState() {
-      return backupState;
+      return githubController.backupState;
     },
     get backupMessage() {
-      return backupMessage;
+      return githubController.backupMessage;
     },
     set backupMessage(value: string) {
-      backupMessage = value;
+      githubController.backupMessage = value;
     },
     get backupCommitUrl() {
-      return backupCommitUrl;
+      return githubController.backupCommitUrl;
     },
     get settingsOpen() {
       return settingsOpen;
@@ -3463,60 +3190,70 @@ export function createPageController() {
       return pendingBackupCount;
     },
     get restoreModalOpen() {
-      return restoreModalOpen;
+      return githubController.restoreModalOpen;
     },
     set restoreModalOpen(value: boolean) {
-      if (restoreState === "restoring") return;
-      restoreModalOpen = value;
-      if (!value) invalidateRestoreSource();
+      if (githubController.restoreState === "restoring") return;
+      githubController.restoreModalOpen = value;
+      if (!value) githubController.invalidateRestoreSource();
     },
     get restoreState() {
-      return restoreState;
+      return githubController.restoreState;
     },
     get restoreMessage() {
-      return restoreMessage;
+      return githubController.restoreMessage;
     },
     get restoreCommits() {
-      return restoreCommits;
+      return githubController.restoreCommits;
     },
     get selectedRestoreSha() {
-      return selectedRestoreSha;
+      return githubController.selectedRestoreSha;
     },
     set selectedRestoreSha(value: string) {
-      if (restoreState === "restoring") return;
-      selectedRestoreSha = value;
+      if (githubController.restoreState === "restoring") return;
+      githubController.selectedRestoreSha = value;
     },
     get restoreOwner() {
-      return restoreOwner;
+      return githubController.restoreOwner;
     },
     set restoreOwner(value: string) {
-      if (restoreState === "restoring" || value === restoreOwner) return;
-      restoreOwner = value;
-      invalidateRestoreSource();
+      if (githubController.restoreState === "restoring" || value === githubController.restoreOwner)
+        return;
+      githubController.restoreOwner = value;
+      githubController.invalidateRestoreSource();
     },
     get restoreRepository() {
-      return restoreRepository;
+      return githubController.restoreRepository;
     },
     set restoreRepository(value: string) {
-      if (restoreState === "restoring" || value === restoreRepository) return;
-      restoreRepository = value;
-      invalidateRestoreSource();
+      if (
+        githubController.restoreState === "restoring" ||
+        value === githubController.restoreRepository
+      )
+        return;
+      githubController.restoreRepository = value;
+      githubController.invalidateRestoreSource();
     },
     get restoreBranch() {
-      return restoreBranch;
+      return githubController.restoreBranch;
     },
     set restoreBranch(value: string) {
-      if (restoreState === "restoring" || value === restoreBranch) return;
-      restoreBranch = value;
-      invalidateRestoreSource();
+      if (githubController.restoreState === "restoring" || value === githubController.restoreBranch)
+        return;
+      githubController.restoreBranch = value;
+      githubController.invalidateRestoreSource();
     },
     get restoreDirectory() {
-      return restoreDirectory;
+      return githubController.restoreDirectory;
     },
     set restoreDirectory(value: string) {
-      if (restoreState === "restoring" || value === restoreDirectory) return;
-      restoreDirectory = value;
-      invalidateRestoreSource();
+      if (
+        githubController.restoreState === "restoring" ||
+        value === githubController.restoreDirectory
+      )
+        return;
+      githubController.restoreDirectory = value;
+      githubController.invalidateRestoreSource();
     },
     get theme() {
       return theme;
@@ -3715,8 +3452,8 @@ export function createPageController() {
     closePalette,
     openSettings,
     closeSettings,
-    connectGitHub,
-    disconnectGitHub,
+    connectGitHub: githubController.connectGitHub,
+    disconnectGitHub: githubController.disconnectGitHub,
     moveNoteFocus,
     selectNote: workspaceCommand(selectNote, "navigation"),
     openNoteLink: workspaceCommand(openNoteLink, "navigation"),
@@ -3797,23 +3534,23 @@ export function createPageController() {
     resetFonts,
     setShortcut,
     resetShortcuts,
-    createBackupRepository: workspaceCommand(createBackupRepository),
-    selectBackupRepository: workspaceCommand(selectBackupRepository),
-    forgetBackupRepository: workspaceCommand(forgetBackupRepository),
-    setAutoBackup,
-    beginBackup,
-    openRestore: workspaceCommand(openRestore),
+    createBackupRepository: workspaceCommand(githubController.createBackupRepository),
+    selectBackupRepository: workspaceCommand(githubController.selectBackupRepository),
+    forgetBackupRepository: workspaceCommand(githubController.forgetBackupRepository),
+    setAutoBackup: githubController.setAutoBackup,
+    beginBackup: githubController.beginBackup,
+    openRestore: workspaceCommand(githubController.openRestore),
     importFolder: workspaceCommand(importFolder),
     importZip: workspaceCommand(importZip),
     exportFolder: workspaceCommand(exportFolder),
     exportZip: workspaceCommand(exportZip),
     prepareVaultDeletion,
     clearVault: workspaceCommand(clearVault, "mutation", true),
-    loadRestoreCommits,
-    restoreSelectedCommit: workspaceCommand(restoreSelectedCommit),
+    loadRestoreCommits: githubController.loadRestoreCommits,
+    restoreSelectedCommit: workspaceCommand(githubController.restoreSelectedCommit),
     formatCommitDate,
     dismissBackupMessage() {
-      backupMessage = "";
+      githubController.backupMessage = "";
     },
     get confirmation() {
       return confirmation.request;
