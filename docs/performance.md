@@ -1,13 +1,14 @@
 # Startup performance
 
-Onyx prioritizes opening the local editor. First opening uses the lightweight
-preview while the full Markdown worker loads; switching between notes still
+Onyx prioritizes opening the local editor. Opening with no active note uses the
+lightweight preview while the full Markdown worker loads; switching between notes still
 prepares the full preview before displaying the next note.
 
 Returning sessions use the service worker's versioned app shell for `/` without
 a query string. This avoids waiting for a document request. Callback URLs and
-other routes stay network-first. A missing or inaccessible cache falls back to
-the network. Service worker registration still checks for updates, and a new
+other routes stay network-first. Navigations also use the network when a service
+worker update is installing or waiting, so reloading can pick up a new deployment.
+A missing or inaccessible cache falls back to the network. Service worker registration still checks for updates, and a new
 worker activates after tabs using the previous worker close.
 
 Vault recovery still checks every saved note before opening. It loads note

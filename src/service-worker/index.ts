@@ -42,7 +42,10 @@ self.addEventListener("fetch", (event) => {
         () => fetch(request),
         async () => (await caches.open(CACHE)).match(APP_SHELL),
         // The versioned shell has no user data. Callbacks and other routes still use the network.
-        url.pathname === APP_SHELL && !url.search,
+        url.pathname === APP_SHELL &&
+          !url.search &&
+          !self.registration.waiting &&
+          !self.registration.installing,
       ),
     );
     return;

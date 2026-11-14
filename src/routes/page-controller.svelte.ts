@@ -1454,7 +1454,7 @@ export function createPageController() {
           ]
         : [],
     );
-    // Prepare previews when switching notes; first opening must not wait for the parser.
+    // Prepare previews when switching notes; with no active note, show the editor immediately.
     if (activeNoteId && sequence === noteLoadSequence) {
       await preview.render(note.markdown, {
         attachments: nextUrls,
