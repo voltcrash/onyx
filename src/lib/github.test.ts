@@ -436,7 +436,10 @@ describe("githubRequest", () => {
     await restoreGithubSession();
 
     const acknowledgeBackupOperations = vi.fn();
+    const restoreBackup = vi.fn();
     const vault = {
+      getVersion: vi.fn().mockResolvedValue(7),
+      restoreBackup,
       acknowledgeBackupOperations,
       createBackupManifest: vi.fn().mockResolvedValue({ version: 1, notes: [], attachments: [] }),
       createBackupSnapshot: vi.fn().mockResolvedValue({
@@ -472,7 +475,11 @@ describe("backupVaultToGithub conflicts", () => {
     updatedAt: "2026-10-01T00:00:00.000Z",
   };
 
-  async function backUp(lastCommitSha: string | undefined, replaceNewerBackup = false) {
+  async function backUp(
+    lastCommitSha: string | undefined,
+    replaceNewerBackup = false,
+    mergeNewerBackup = false,
+  ) {
     auth.accessToken = "token";
     class TestFileReader {
       onerror: (() => void) | null = null;
@@ -519,6 +526,13 @@ describe("backupVaultToGithub conflicts", () => {
             tree: [{ path: "vault/.onyx.json", sha: "manifest", type: "blob" }],
           });
         }
+        if (path.endsWith("/git/blobs/manifest"))
+          return Response.json({
+            encoding: "base64",
+            content: btoa(JSON.stringify({ version: 1, notes: [], attachments: [] })),
+          });
+        if (path.endsWith(`/git/commits/${"b".repeat(40)}`))
+          return Response.json({ sha: "b".repeat(40), tree: { sha: "base" } });
         if (path.endsWith("/git/blobs")) return Response.json({ sha: crypto.randomUUID() });
         if (path.endsWith("/git/trees")) return Response.json({ sha: "tree", tree: [] });
         if (path.endsWith("/git/commits")) {
@@ -530,7 +544,10 @@ describe("backupVaultToGithub conflicts", () => {
     );
     await restoreGithubSession();
     const acknowledgeBackupOperations = vi.fn();
+    const restoreBackup = vi.fn();
     const vault = {
+      getVersion: vi.fn().mockResolvedValue(7),
+      restoreBackup,
       acknowledgeBackupOperations,
       createBackupManifest: vi.fn().mockResolvedValue({ version: 1, notes: [], attachments: [] }),
       createBackupSnapshot: vi.fn().mockResolvedValue({
@@ -539,8 +556,12 @@ describe("backupVaultToGithub conflicts", () => {
       }),
       saveGithubBackupState: vi.fn(),
     } as unknown as Vault;
-    const result = backupVaultToGithub(vault, { ...state, lastCommitSha }, { replaceNewerBackup });
-    return { result, writes, acknowledgeBackupOperations };
+    const result = backupVaultToGithub(
+      vault,
+      { ...state, lastCommitSha },
+      { replaceNewerBackup, mergeNewerBackup },
+    );
+    return { result, writes, acknowledgeBackupOperations, restoreBackup };
   }
 
   it("refuses to build on an Onyx backup this device has not seen", async () => {
@@ -561,6 +582,20 @@ describe("backupVaultToGithub conflicts", () => {
     const { result, acknowledgeBackupOperations } = await backUp(remoteSha);
     await expect(result).resolves.toMatchObject({ state: { lastCommitSha: "c".repeat(40) } });
     expect(acknowledgeBackupOperations).toHaveBeenCalledWith(["operation"]);
+  });
+
+  it("merges with the base and remote manifest before a non-force backup", async () => {
+    const { result, writes, restoreBackup } = await backUp("b".repeat(40), false, true);
+    await expect(result).resolves.toMatchObject({ state: { lastCommitSha: "c".repeat(40) } });
+    expect(restoreBackup).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        expectedVersion: 7,
+        githubBackup: expect.objectContaining({ lastCommitSha: remoteSha }),
+        manifest: expect.objectContaining({ version: 1 }),
+      }),
+    );
+    expect(writes).toContain("PATCH /repos/onyx/vault/git/refs/heads/main");
   });
 
   it("replaces the newer backup when asked to", async () => {
