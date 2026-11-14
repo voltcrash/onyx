@@ -5,7 +5,7 @@
   let { creation }: { creation: ReturnType<typeof createNoteCreationController> } = $props();
 </script>
 <Dialog.Root open onOpenChange={(open) => { if (!open && !creation.busy) creation.close(); }}>
-  <Dialog.Content class="template-dialog-surface [width:min(100%,_410px)] overflow-hidden border border-line-strong rounded-xl bg-paper [box-shadow:var(--shadow-lg)]" aria-label="New note from template" onEscapeKeydown={(event) => { if (creation.busy) event.preventDefault(); }} onInteractOutside={(event) => { if (creation.busy) event.preventDefault(); }}>
+  <Dialog.Content interactOutsideBehavior="ignore" class="template-dialog-surface [width:min(100%,_410px)] overflow-hidden border border-line-strong rounded-xl bg-paper [box-shadow:var(--shadow-lg)]" aria-label="New note from template" onEscapeKeydown={(event) => { if (creation.busy) event.preventDefault(); }}>
     <h2 id="template-title">New note from template</h2>
     <form onsubmit={(event) => { event.preventDefault(); void creation.createFromTemplate(); }}>
       <label for="note-template">Template</label><select id="note-template" bind:value={creation.selectedId} disabled={creation.busy}>{#each creation.templates as note}<option value={note.id}>{noteFilePath(note)}</option>{/each}</select>
