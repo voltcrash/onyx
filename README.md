@@ -129,7 +129,8 @@ Onyx requests the `repo` scope so it can create private repositories and write b
 
 Focused reactive controllers handle GitHub backup and restore in
 `src/routes/github-controller.svelte.ts`; the page controller coordinates the workspace. Import, export, and printing live in
-`transfer-controller.svelte.ts`.
+`transfer-controller.svelte.ts`. Themes, fonts, and shortcuts live in
+`preferences-controller.svelte.ts`.
 
 - `src/routes/page-controller.svelte.ts` owns application state and coordinates persistence,
   transfer, and GitHub workflows; `src/routes/+page.svelte` composes the interface.

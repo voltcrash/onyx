@@ -1,3 +1,4 @@
+import { createPreferencesController } from "./preferences-controller.svelte.ts";
 import { createTransferController } from "./transfer-controller.svelte.ts";
 import { createGithubController } from "./github-controller.svelte.ts";
 import { createLazyResource } from "#lib/lazy-resource.ts";
@@ -29,32 +30,14 @@ import {
   readLocalStorage,
   writeLocalStorage,
 } from "#lib/browser-storage.ts";
-import {
-  applyFontChoices,
-  defaultFontCategories,
-  defaultFontChoices,
-  fontCategory,
-  fontOptionsFor,
-  readFontCategories,
-  readFontChoices,
-  writeFontCategory,
-  type FontCategories,
-  type FontCategory,
-  type FontChoices,
-  type FontRole,
-} from "#lib/fonts.ts";
-import { loadFont } from "#lib/font-loader.ts";
+import { defaultFontChoices, type FontRole } from "#lib/fonts.ts";
+
 import {
   defaultKeyboardShortcuts,
   detectPrimaryModifier,
-  formatShortcut,
   readKeyboardShortcuts,
   shortcutsEqual,
   shortcutMatchesEvent,
-  writeKeyboardShortcuts,
-  type KeyboardShortcut,
-  type KeyboardShortcuts,
-  type PrimaryModifier,
   type ShortcutAction,
 } from "#lib/keyboard-shortcuts.ts";
 import {
@@ -82,9 +65,6 @@ import {
   readColorTheme,
   readThemePreference,
   watchSystemTheme,
-  type ColorTheme,
-  type ResolvedTheme,
-  type ThemePreference,
 } from "#lib/theme.ts";
 import type { FindMatch } from "#lib/find-replace.ts";
 import { createFindReplace } from "./find-replace.svelte.ts";
@@ -143,6 +123,8 @@ interface ImagePreviewState {
 }
 
 export function createPageController() {
+  const preferencesController = createPreferencesController();
+
   const transferController = createTransferController({
     get vault() {
       return vault;
@@ -435,11 +417,6 @@ export function createPageController() {
   let backlinks = $state.raw<NoteMetadata[]>([]);
   let backlinksSequence = 0;
   let trashOpen = $state(false);
-  let theme = $state<ThemePreference>("system");
-  let resolvedTheme = $state<ResolvedTheme>("light");
-  let colorTheme = $state<ColorTheme>("ember");
-  let fonts = $state<FontChoices>({ ...defaultFontChoices });
-  let fontCategories = $state<FontCategories>({ ...defaultFontCategories });
   let paletteOpen = $state(false);
   let paletteNotes = $state<NoteMetadata[]>([]);
   let recentNoteIds = $state<string[]>([]);
@@ -447,8 +424,6 @@ export function createPageController() {
   let sidebarSide = $state<SidebarSide>("left");
   let sidebarWidth = $state(DEFAULT_SIDEBAR_WIDTH);
   let sidebarDropSide = $state<SidebarSide | undefined>();
-  let shortcuts = $state<KeyboardShortcuts>(structuredClone(defaultKeyboardShortcuts));
-  let primaryModifier = $state<PrimaryModifier>("meta");
   const editorHistory = new EditorHistory();
   let noteList: HTMLElement | undefined = $state();
   let activeNoteSourcePath: string | undefined = $state();
@@ -472,7 +447,6 @@ export function createPageController() {
   let remoteSyncRequested = false;
   const remoteChanges: VaultChangeEvent[] = [];
   let noteLoadSequence = 0;
-  let fontRevision = 0;
   let clearingVault = false;
   let disposed = false;
   let vaultGeneration = 0;
@@ -592,12 +566,12 @@ export function createPageController() {
   );
   const fontsAreDefault = $derived(
     (Object.keys(defaultFontChoices) as FontRole[]).every(
-      (role) => fonts[role] === defaultFontChoices[role],
+      (role) => preferencesController.fonts[role] === defaultFontChoices[role],
     ),
   );
   const shortcutsAreDefault = $derived(
     (Object.keys(defaultKeyboardShortcuts) as ShortcutAction[]).every((action) =>
-      shortcutsEqual(shortcuts[action], defaultKeyboardShortcuts[action]),
+      shortcutsEqual(preferencesController.shortcuts[action], defaultKeyboardShortcuts[action]),
     ),
   );
   function paletteNoteItem(
@@ -655,7 +629,7 @@ export function createPageController() {
   });
 
   const paletteActions: PaletteActions = {
-    shortcutLabel,
+    shortcutLabel: preferencesController.shortcutLabel,
     createNote: workspaceCommand(createNote),
     saveDraft,
     toggleTrash,
@@ -674,15 +648,15 @@ export function createPageController() {
     toggleScrollSync,
     toggleSidebar,
     setSidebarSide,
-    setTheme,
+    setTheme: preferencesController.setTheme,
     beginBackup: githubController.beginBackup,
     openRestore: workspaceCommand(githubController.openRestore),
     importFolder: () => transferController.folderInput?.click(),
     importZip: () => transferController.zipInput?.click(),
     exportFolder: workspaceCommand(transferController.exportFolder),
     exportZip: workspaceCommand(transferController.exportZip),
-    resetFonts,
-    resetShortcuts,
+    resetFonts: preferencesController.resetFonts,
+    resetShortcuts: preferencesController.resetShortcuts,
     ensurePersistentStorage,
     copyNoteAs: transferController.copyNoteAs,
     exportNoteAs: workspaceCommand(transferController.exportNoteAs),
@@ -708,7 +682,7 @@ export function createPageController() {
         sidebarSide,
         singlePaneMode,
         sourcePaneVisible,
-        theme,
+        theme: preferencesController.theme,
         transferState: transferController.transferState,
         trashOpen,
         trashedCount: trashedNotes.length,
@@ -722,27 +696,6 @@ export function createPageController() {
 
   function loadDialogStyles(): Promise<void> {
     return dialogStyles.load();
-  }
-
-  function applyStoredFontChoices(): void {
-    const storedFonts = readFontChoices();
-    fontRevision += 1;
-    const revision = fontRevision;
-    fonts = storedFonts;
-    fontCategories = readFontCategories(storedFonts);
-    const customRoles = (Object.keys(storedFonts) as FontRole[]).filter(
-      (role) => storedFonts[role] !== defaultFontChoices[role],
-    );
-    applyFontChoices(storedFonts);
-    if (customRoles.length === 0) return;
-    void Promise.all(customRoles.map((role) => loadFont(storedFonts[role]))).then(
-      () => {
-        if (fontRevision === revision) applyFontChoices(storedFonts);
-      },
-      () => {
-        if (fontRevision === revision) applyFontChoices(storedFonts);
-      },
-    );
   }
 
   function revealStartupShell(): void {
@@ -786,9 +739,9 @@ export function createPageController() {
 
   onMount(() => {
     revealStartupShell();
-    primaryModifier = detectPrimaryModifier();
-    if (primaryModifier === "control" && markdown === initialMarkdown) {
-      markdown = createInitialMarkdown(primaryModifier);
+    preferencesController.primaryModifier = detectPrimaryModifier();
+    if (preferencesController.primaryModifier === "control" && markdown === initialMarkdown) {
+      markdown = createInitialMarkdown(preferencesController.primaryModifier);
       updatePreviewImmediately(markdown);
       lastSavedMarkdown = markdown;
     }
@@ -810,17 +763,18 @@ export function createPageController() {
     if (Number.isFinite(storedSplit)) splitRatio = clampSplitRatio(storedSplit);
     const storedContentWidth = Number(readLocalStorage("onyx:content-width"));
     if (Number.isFinite(storedContentWidth)) contentWidth = clampContentWidth(storedContentWidth);
-    shortcuts = readKeyboardShortcuts();
-    theme = readThemePreference();
-    resolvedTheme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
-    if (document.documentElement.dataset.themePreference !== theme) {
-      resolvedTheme = applyTheme(theme);
+    preferencesController.shortcuts = readKeyboardShortcuts();
+    preferencesController.theme = readThemePreference();
+    preferencesController.resolvedTheme =
+      document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+    if (document.documentElement.dataset.themePreference !== preferencesController.theme) {
+      preferencesController.resolvedTheme = applyTheme(preferencesController.theme);
     }
-    colorTheme = readColorTheme();
-    if (document.documentElement.dataset.colorTheme !== colorTheme) {
-      applyColorTheme(colorTheme);
+    preferencesController.colorTheme = readColorTheme();
+    if (document.documentElement.dataset.colorTheme !== preferencesController.colorTheme) {
+      applyColorTheme(preferencesController.colorTheme);
     }
-    applyStoredFontChoices();
+    preferencesController.applyStoredFontChoices();
     const stopPreferenceWarnings = subscribePreferenceWriteFailures(() => {
       appendStorageNotice(
         "Browser preferences could not be saved. Changes apply to this tab until it closes.",
@@ -828,20 +782,22 @@ export function createPageController() {
     });
     const onPreferenceChange = (event: StorageEvent) => {
       if (event.key === null || event.key === "onyx-theme") {
-        theme = readThemePreference();
-        resolvedTheme = applyTheme(theme);
+        preferencesController.theme = readThemePreference();
+        preferencesController.resolvedTheme = applyTheme(preferencesController.theme);
       }
       if (event.key === null || event.key === "onyx-color-theme") {
-        colorTheme = readColorTheme();
-        applyColorTheme(colorTheme);
+        preferencesController.colorTheme = readColorTheme();
+        applyColorTheme(preferencesController.colorTheme);
       }
-      if (event.key === null || event.key.startsWith("onyx:font-")) applyStoredFontChoices();
+      if (event.key === null || event.key.startsWith("onyx:font-"))
+        preferencesController.applyStoredFontChoices();
       if (event.key === null || event.key === "onyx:keyboard-shortcuts")
-        shortcuts = readKeyboardShortcuts();
+        preferencesController.shortcuts = readKeyboardShortcuts();
     };
     window.addEventListener("storage", onPreferenceChange);
     const stopThemeWatch = watchSystemTheme(() => {
-      if (theme === "system") resolvedTheme = applyTheme(theme);
+      if (preferencesController.theme === "system")
+        preferencesController.resolvedTheme = applyTheme(preferencesController.theme);
     });
     void loadVaultRegistry()
       .then(async (registry) => {
@@ -1128,7 +1084,8 @@ export function createPageController() {
       if (createFirstNote) {
         const legacyDraft =
           activeVault && isDefaultVault(activeVault) ? await readLegacyDraft() : "";
-        const contents = legacyDraft || createInitialMarkdown(primaryModifier);
+        const contents =
+          legacyDraft || createInitialMarkdown(preferencesController.primaryModifier);
         await vault.saveNote({
           title: titleFromMarkdown(contents),
           markdown: contents,
@@ -2538,66 +2495,6 @@ export function createPageController() {
       : new Blob([file], { type: "application/octet-stream" });
   }
 
-  function setFont(role: FontRole, id: string): void {
-    fontRevision += 1;
-    const revision = fontRevision;
-    const nextFonts = { ...fonts, [role]: id };
-    fonts = nextFonts;
-    const nextCategories = { ...fontCategories, [role]: fontCategory(role, id) };
-    fontCategories = nextCategories;
-    writeFontCategory(role, nextCategories[role]!);
-    applyFontChoices(nextFonts);
-    if (id === defaultFontChoices[role]) {
-      return;
-    }
-    void loadFont(id).then(
-      () => {
-        if (fontRevision === revision) applyFontChoices(nextFonts);
-      },
-      () => {
-        if (fontRevision === revision) applyFontChoices(nextFonts);
-      },
-    );
-  }
-
-  function resetFonts(): void {
-    fontRevision += 1;
-    fonts = { ...defaultFontChoices };
-    fontCategories = { ...defaultFontCategories };
-    for (const role of Object.keys(fontCategories) as FontRole[]) {
-      writeFontCategory(role, fontCategories[role]!);
-    }
-    applyFontChoices(fonts);
-  }
-
-  function setFontCategory(role: FontRole, category: FontCategory): void {
-    if (fontCategories[role] === category) return;
-    fontRevision += 1;
-    fontCategories = { ...fontCategories, [role]: category };
-    writeFontCategory(role, category);
-    const candidates = fontOptionsFor(role, category);
-    const current = fonts[role]!;
-    const nextId = candidates.some((option) => option.id === current)
-      ? current
-      : (candidates[0]?.id ?? current);
-    if (nextId !== current) setFont(role, nextId);
-  }
-
-  function shortcutLabel(action: ShortcutAction): string | undefined {
-    const shortcut = shortcuts[action];
-    return shortcut ? formatShortcut(shortcut, primaryModifier) : undefined;
-  }
-
-  function setShortcut(action: ShortcutAction, shortcut: KeyboardShortcut | null): void {
-    shortcuts = { ...shortcuts, [action]: shortcut };
-    writeKeyboardShortcuts(shortcuts);
-  }
-
-  function resetShortcuts(): void {
-    shortcuts = structuredClone(defaultKeyboardShortcuts);
-    writeKeyboardShortcuts(shortcuts);
-  }
-
   function queueSearch(value: string): void {
     searchQuery = value;
     searchSequence += 1;
@@ -2710,7 +2607,14 @@ export function createPageController() {
       }
       return;
     }
-    if (workspaceOperation && shortcutMatchesEvent(shortcuts.newNote, event, primaryModifier)) {
+    if (
+      workspaceOperation &&
+      shortcutMatchesEvent(
+        preferencesController.shortcuts.newNote,
+        event,
+        preferencesController.primaryModifier,
+      )
+    ) {
       event.preventDefault();
       return;
     }
@@ -2719,7 +2623,7 @@ export function createPageController() {
       !event.altKey &&
       (event.key === "F3" ||
         (event.key.toLowerCase() === "g" &&
-          (primaryModifier === "meta" ? event.metaKey : event.ctrlKey)))
+          (preferencesController.primaryModifier === "meta" ? event.metaKey : event.ctrlKey)))
     ) {
       event.preventDefault();
       if (event.shiftKey) find.previous();
@@ -2731,8 +2635,13 @@ export function createPageController() {
       if (runEditorIndent(event.target, event.shiftKey)) event.preventDefault();
       return;
     }
-    const action = (Object.keys(shortcuts) as ShortcutAction[]).find((candidate) =>
-      shortcutMatchesEvent(shortcuts[candidate], event, primaryModifier),
+    const action = (Object.keys(preferencesController.shortcuts) as ShortcutAction[]).find(
+      (candidate) =>
+        shortcutMatchesEvent(
+          preferencesController.shortcuts[candidate],
+          event,
+          preferencesController.primaryModifier,
+        ),
     );
 
     // Paste carries files in its ClipboardEvent, which the keydown cannot see.
@@ -2761,7 +2670,7 @@ export function createPageController() {
     }
 
     if (!action) return;
-    const shortcut = shortcuts[action];
+    const shortcut = preferencesController.shortcuts[action];
     if (
       isTypingTarget(event.target) &&
       action !== "closePanel" &&
@@ -2788,7 +2697,8 @@ export function createPageController() {
     else if (action === "newNote" && transferController.transferState !== "working")
       void workspaceCommand(createNote)();
     else if (action === "searchNotes" || action === "focusSearch") focusSearch();
-    else if (action === "cycleTheme") setTheme(nextThemePreference(theme));
+    else if (action === "cycleTheme")
+      preferencesController.setTheme(nextThemePreference(preferencesController.theme));
     else if (action === "toggleSidebar") toggleSidebar();
     else if (action === "openTrash" && transferController.transferState !== "working")
       toggleTrash();
@@ -2813,7 +2723,8 @@ export function createPageController() {
   }
 
   function editorShortcutAlias(event: KeyboardEvent): ShortcutAction | undefined {
-    const primaryPressed = primaryModifier === "meta" ? event.metaKey : event.ctrlKey;
+    const primaryPressed =
+      preferencesController.primaryModifier === "meta" ? event.metaKey : event.ctrlKey;
     if (!primaryPressed || event.altKey) return;
     const key = event.key.toLowerCase();
     if (key === "x" && !event.shiftKey) return "cutSelection";
@@ -2867,16 +2778,6 @@ export function createPageController() {
 
   function saveSidebarWidth(): void {
     writeLocalStorage("onyx:sidebar-width", String(sidebarWidth));
-  }
-
-  function setTheme(preference: ThemePreference): void {
-    theme = preference;
-    resolvedTheme = applyTheme(preference);
-  }
-
-  function setColorTheme(nextTheme: ColorTheme): void {
-    colorTheme = nextTheme;
-    applyColorTheme(nextTheme);
   }
 
   function togglePalette(): void {
@@ -3155,25 +3056,25 @@ export function createPageController() {
       githubController.invalidateRestoreSource();
     },
     get theme() {
-      return theme;
+      return preferencesController.theme;
     },
     get resolvedTheme() {
-      return resolvedTheme;
+      return preferencesController.resolvedTheme;
     },
     get colorTheme() {
-      return colorTheme;
+      return preferencesController.colorTheme;
     },
     get fonts() {
-      return fonts;
+      return preferencesController.fonts;
     },
     get fontCategories() {
-      return fontCategories;
+      return preferencesController.fontCategories;
     },
     get shortcuts() {
-      return shortcuts;
+      return preferencesController.shortcuts;
     },
     get primaryModifier() {
-      return primaryModifier;
+      return preferencesController.primaryModifier;
     },
     get sourcePaneVisible() {
       return sourcePaneVisible;
@@ -3426,13 +3327,13 @@ export function createPageController() {
     openAttachmentInNewTab,
     closeImagePreview,
     updateMarkdown,
-    setTheme,
-    setColorTheme,
-    setFont,
-    setFontCategory,
-    resetFonts,
-    setShortcut,
-    resetShortcuts,
+    setTheme: preferencesController.setTheme,
+    setColorTheme: preferencesController.setColorTheme,
+    setFont: preferencesController.setFont,
+    setFontCategory: preferencesController.setFontCategory,
+    resetFonts: preferencesController.resetFonts,
+    setShortcut: preferencesController.setShortcut,
+    resetShortcuts: preferencesController.resetShortcuts,
     createBackupRepository: workspaceCommand(githubController.createBackupRepository),
     selectBackupRepository: workspaceCommand(githubController.selectBackupRepository),
     forgetBackupRepository: workspaceCommand(githubController.forgetBackupRepository),
