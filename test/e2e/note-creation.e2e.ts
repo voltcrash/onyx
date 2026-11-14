@@ -47,6 +47,8 @@ test("creates from a template and opens a configurable daily note without replac
   await page.getByRole("option", { name: /Open today's daily note/ }).click();
   await expectMarkdown(editor, "# Kept daily entry");
   await page.reload();
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await page.keyboard.press("ControlOrMeta+Shift+d");
   await expectMarkdown(
     page.getByRole("textbox", { name: "Markdown editor" }),
     "# Kept daily entry",
