@@ -51,6 +51,7 @@ use a slide-over note list. Preferences are saved per browser when local storage
 | `⌘ K`           | Open command palette and search notes |
 | `⌘ ⇧ F` or `/`  | Open command palette and search notes |
 | `⌘ ⏎`           | Create a note                         |
+| `⌘ ⇧ D`         | Open today’s daily note               |
 | `⌘ S`           | Save the active note                  |
 | `⌘ X` / `⌘ C`   | Cut or copy the current selection     |
 | `⌘ V`           | Paste into the active editor          |
@@ -124,6 +125,17 @@ Create a GitHub OAuth App, configure its callback URL as
 `https://your-onyx-domain.example/api/auth/callback/github`, and set the variables listed in
 [`.env.example`](.env.example). `BETTER_AUTH_SECRET` must contain at least 32 random characters.
 Onyx requests the `repo` scope so it can create private repositories and write backup commits.
+
+## Templates and daily notes
+
+Put reusable notes in **Templates**, then choose **New note from template** in the
+palette. Pick a template and a destination path; `{{title}}`, `{{date}}`, and `{{time}}`
+expand to the new file's name and local date/time. Relative links keep their destinations.
+
+**Open today's daily note** (⌘ ⇧ D, or Ctrl ⇧ D) opens or creates
+`Daily/YYYY-MM-DD.md` without replacing an existing note. Configure the templates folder,
+daily folder, and optional daily template in **Settings → Editor**. These preferences
+are stored per vault in this browser. The daily shortcut is customizable in Settings.
 
 ## Outline and unlinked mentions
 
