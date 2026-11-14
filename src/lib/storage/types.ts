@@ -1,3 +1,4 @@
+import type { BackupEncryption } from "../backup-crypto.ts";
 import type { FolderIcon } from "../folder-icons.js";
 
 export type VaultId = string;
@@ -77,6 +78,7 @@ export interface AttachmentMetadata {
 }
 
 export interface GithubBackupState {
+  encryption?: BackupEncryption;
   githubAccountId: number;
   githubAccountLogin: string;
   owner: string;
@@ -137,6 +139,7 @@ export interface VaultOperationOptions {
 }
 
 export interface VaultBackupManifest {
+  encryption?: BackupEncryption;
   version: 1;
   folders?: FolderMetadata[];
   notes: NoteMetadata[];

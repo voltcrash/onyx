@@ -1,3 +1,9 @@
+import {
+  encryptBackupFile,
+  decryptBackupFile,
+  unlockBackupKey,
+  forgetBackupKeys,
+} from "./backup-crypto.ts";
 import { mergeBackupFiles, type MergeVault } from "./backup-merge.ts";
 import type {
   GithubBackupState,
@@ -270,6 +276,10 @@ async function backupVaultToGithubUnlocked(
   await validateGithubBackupRepository(backupState);
   const snapshot = captured?.snapshot ?? (await vault.createBackupSnapshot());
   const backupManifest = captured?.manifest ?? (await vault.createBackupManifest());
+  backupManifest.encryption = backupState.encryption;
+  const encryptionKey = backupState.encryption
+    ? await unlockBackupKey(backupState.encryption)
+    : undefined;
   const repositoryPath = repositoryApiPath(backupState);
   const branchPath = backupState.branch.split("/").map(encodeURIComponent).join("/");
   let parentSha: string | undefined;
@@ -347,7 +357,10 @@ async function backupVaultToGithubUnlocked(
           ? { path, mode: "100644" as const, type: "blob" as const, sha: null }
           : undefined;
       }
-      const bytes = await change.contents.arrayBuffer();
+      const contents = encryptionKey
+        ? await encryptBackupFile(change.contents, encryptionKey, change.path)
+        : change.contents;
+      const bytes = await contents.arrayBuffer();
       const header = new TextEncoder().encode(`blob ${bytes.byteLength}\0`);
       const input = new Uint8Array(header.length + bytes.byteLength);
       input.set(header);
@@ -356,7 +369,7 @@ async function backupVaultToGithubUnlocked(
         .map((byte) => byte.toString(16).padStart(2, "0"))
         .join("");
       if (remoteBlobs.get(path) === sha) return undefined;
-      const blob = await createGithubBlob(repositoryPath, change.contents);
+      const blob = await createGithubBlob(repositoryPath, contents);
       return { path, mode: "100644" as const, type: "blob" as const, sha: blob.sha };
     })
   ).filter((entry) => entry !== undefined);
@@ -456,11 +469,17 @@ export async function restoreVaultFromGithub(
   vault: Vault,
   backupState: GithubBackupState,
   commitSha: string,
-  options: { expectedVersion?: number } = {},
+  options: { expectedVersion?: number; passphrase?: string } = {},
 ): Promise<GithubRestoreResult> {
   const expectedVersion = options.expectedVersion ?? (await vault.getVersion());
   const restore = () =>
-    restoreVaultFromGithubUnlocked(vault, { ...backupState }, commitSha, expectedVersion);
+    restoreVaultFromGithubUnlocked(
+      vault,
+      { ...backupState },
+      commitSha,
+      expectedVersion,
+      options.passphrase,
+    );
   return vault.runBackupExclusive(restore);
 }
 
@@ -469,6 +488,7 @@ async function restoreVaultFromGithubUnlocked(
   backupState: GithubBackupState,
   commitSha: string,
   expectedVersion: number,
+  passphrase?: string,
 ): Promise<GithubRestoreResult> {
   if (!/^[0-9a-f]{40}$/i.test(commitSha)) throw new Error("Select a valid GitHub backup commit");
   await validateGithubBackupRepository(backupState);
@@ -492,18 +512,21 @@ async function restoreVaultFromGithubUnlocked(
       : await getGithubTree(repositoryPath, currentCommit.tree.sha);
   const selectedBlobs = vaultBlobs(selectedTree, backupState.directory);
   const currentBlobs = vaultBlobs(currentTree, backupState.directory);
+  const manifestSha = selectedBlobs.get(".onyx.json");
+  const manifest = manifestSha
+    ? await parseBackupManifest(await downloadGithubBlob(repositoryPath, manifestSha))
+    : undefined;
+  const encryptionKey = manifest?.encryption
+    ? await unlockBackupKey(manifest.encryption, passphrase)
+    : undefined;
   const files = await mapWithConcurrency(
     [...selectedBlobs.entries()].filter(([path]) => isVaultFile(path)),
     GITHUB_FILE_CONCURRENCY,
     async ([path, sha]): Promise<VaultRestoreFile> => ({
       path,
-      contents: await downloadGithubBlob(repositoryPath, sha),
+      contents: await readBackupFile(repositoryPath, path, sha, encryptionKey),
     }),
   );
-  const manifestSha = selectedBlobs.get(".onyx.json");
-  const manifest = manifestSha
-    ? await parseBackupManifest(await downloadGithubBlob(repositoryPath, manifestSha))
-    : undefined;
   if (!manifest && !files.some((file) => file.path.startsWith("notes/")))
     throw new Error("The selected commit does not contain an Onyx vault in that directory");
   const changedPaths = new Set<string>();
@@ -517,6 +540,7 @@ async function restoreVaultFromGithubUnlocked(
     selectedCommit.committer?.date ?? selectedCommit.author?.date ?? new Date().toISOString();
   const state: GithubBackupState = {
     ...backupState,
+    encryption: manifest?.encryption,
     lastCommitSha: selectedCommit.sha,
     pendingCommitSha: undefined,
     updatedAt: new Date().toISOString(),
@@ -652,6 +676,7 @@ async function refreshGithubAccessToken(rejectedToken: string): Promise<boolean>
 }
 
 function clearGithubAuthentication(): void {
+  forgetBackupKeys();
   authenticationGeneration += 1;
   accessToken = undefined;
   authenticatedUser = undefined;
@@ -1009,10 +1034,26 @@ async function readGithubBackup(
   const manifestSha = blobs.get(".onyx.json");
   if (!manifestSha) throw new Error("The backup has no Onyx manifest to merge");
   const manifest = await parseBackupManifest(await downloadGithubBlob(repositoryPath, manifestSha));
+  const encryptionKey = manifest.encryption
+    ? await unlockBackupKey(manifest.encryption)
+    : undefined;
   const files = await mapWithConcurrency(
     [...blobs].filter(([path]) => isVaultFile(path)),
     GITHUB_FILE_CONCURRENCY,
-    async ([path, sha]) => ({ path, contents: await downloadGithubBlob(repositoryPath, sha) }),
+    async ([path, sha]) => ({
+      path,
+      contents: await readBackupFile(repositoryPath, path, sha, encryptionKey),
+    }),
   );
   return { manifest, files };
+}
+
+async function readBackupFile(
+  repositoryPath: `/repos/${string}`,
+  path: string,
+  sha: string,
+  key?: CryptoKey,
+): Promise<Blob> {
+  const contents = await downloadGithubBlob(repositoryPath, sha);
+  return key ? decryptBackupFile(contents, key, path) : contents;
 }
