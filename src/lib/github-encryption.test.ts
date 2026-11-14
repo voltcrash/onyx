@@ -167,3 +167,15 @@ it.each(["wrong", undefined])(
     expect(restoreBackup).not.toHaveBeenCalled();
   },
 );
+
+it("notifies the workspace immediately after local merge and before uploading", async () => {
+  const { vault, state, restoreBackup, requests } = await encryptedFixture();
+  const onLocalMerge = vi.fn(async () => {
+    expect(restoreBackup).toHaveBeenCalledOnce();
+    expect(requests.some((path) => path.endsWith("/git/blobs"))).toBe(false);
+  });
+  await expect(
+    backupVaultToGithub(vault, state, { mergeNewerBackup: true, onLocalMerge }),
+  ).rejects.toThrow("upload stopped");
+  expect(onLocalMerge).toHaveBeenCalledOnce();
+});

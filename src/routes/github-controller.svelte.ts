@@ -326,8 +326,8 @@ export function createGithubController(host: ControllerHost) {
       const result = await github.backupVaultToGithub(opened, configuration, {
         ...backupOptions,
         requestPassphrase: requestMergePassphrase,
+        onLocalMerge: () => refreshMergedWorkspace(opened),
       });
-      if (options.mergeNewerBackup) await refreshMergedWorkspace(opened);
       const pending = await opened.countPendingBackupOperations();
       if (host.disposed || opened !== host.vault || sequence !== backupSequence) return;
       githubBackup = result.state;
@@ -363,6 +363,8 @@ export function createGithubController(host: ControllerHost) {
 
   async function refreshMergedWorkspace(opened: Vault): Promise<void> {
     if (host.disposed || opened !== host.vault) return;
+    githubBackup = await opened.getGithubBackupState();
+    host.pendingBackupCount = await opened.countPendingBackupOperations();
     const notes = await opened.listNotes();
     host.folders = await opened.listFolders();
     host.vaultAttachments = await opened.listAttachments();

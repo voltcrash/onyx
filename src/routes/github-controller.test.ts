@@ -31,7 +31,10 @@ function fixture(backup: (options: GithubBackupOptions) => Promise<unknown>) {
         options: GithubBackupOptions,
       ) => backup(options),
     }),
-    vault: { countPendingBackupOperations: async () => 0 },
+    vault: {
+      countPendingBackupOperations: async () => 0,
+      getGithubBackupState: async () => configuration,
+    },
   } as unknown as Parameters<typeof createGithubController>[0];
   const controller = createGithubController(host);
   controller.githubBackup = configuration;
@@ -82,7 +85,10 @@ it.each([
 ])(
   "refreshes the merged workspace with $active active and $notes remaining",
   async ({ active, notes, selected }) => {
-    const { host, controller } = fixture(async () => ({ state: configuration }));
+    const { host, controller } = fixture(async (options) => {
+      await options.onLocalMerge?.();
+      return { state: configuration };
+    });
     host.activeNoteId = active;
     Object.assign(host.vault!, {
       listNotes: async () => notes.map((id) => ({ id })),
@@ -100,3 +106,29 @@ it.each([
     expect(host.vaultAttachments).toEqual([{ id: "attachment" }]);
   },
 );
+
+it("reconciles the committed merge before an upload fails", async () => {
+  let committed = false;
+  const { host, controller } = fixture(async (options) => {
+    committed = true;
+    await options.onLocalMerge?.();
+    expect(host.loadNote).toHaveBeenCalledWith("active");
+    throw new Error("Upload failed");
+  });
+  Object.assign(host.vault!, {
+    listNotes: async () => (committed ? [{ id: "active" }] : []),
+    listFolders: async () => [],
+    listAttachments: async () => [],
+  });
+  host.loadNote = vi.fn(async () => {
+    host.markdown = "merged";
+    host.lastSavedMarkdown = "merged";
+  });
+  host.resetActiveNote = vi.fn();
+  host.runSearch = vi.fn();
+  await controller.runBackup(configuration, { mergeNewerBackup: true });
+  expect(controller.backupMessage).toBe("Upload failed");
+  expect(host.markdown).toBe("merged");
+  expect(host.lastSavedMarkdown).toBe("merged");
+  expect(host.runSearch).toHaveBeenCalledOnce();
+});

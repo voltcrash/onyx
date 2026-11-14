@@ -143,6 +143,7 @@ export interface GithubBackupOptions {
   /** Back up even when the branch moved past this device's last backup or restore. */
   replaceNewerBackup?: boolean;
   mergeNewerBackup?: boolean;
+  onLocalMerge?: () => Promise<void>;
   requestPassphrase?: (encryption: BackupEncryption) => Promise<string | undefined>;
 }
 
@@ -357,6 +358,7 @@ async function backupVaultToGithubUnlocked(
         pendingPaths: [...new Set([...remote.files, ...merged.files].map((file) => file.path))],
         githubBackup: { ...backupState, lastCommitSha: parentSha },
       });
+      await options.onLocalMerge?.();
       return backupVaultToGithubUnlocked(
         vault,
         { ...backupState, lastCommitSha: parentSha },
