@@ -15,7 +15,7 @@
   }
 </script>
 
-<section aria-label="Backup encryption">
+<section class="[&_label]:block [&_label]:mb-3.25 [&_label]:text-ink-soft [&_label]:text-ui-12 [&_label]:font-semibold [&_input]:block [&_input]:w-full [&_input]:h-9 [&_input]:mt-1.5 [&_input]:py-0 [&_input]:px-2.25 [&_input]:border [&_input]:border-line [&_input]:rounded-md [&_input]:bg-surface [&_input]:text-ink [&_input]:text-ui-13 [&_input]:font-normal" aria-label="Backup encryption">
   <h3>End-to-end encrypted backups</h3>
   <p class="settings-hint flex items-center gap-1.5 flex-wrap mt-0 mx-0 mb-3.5 text-muted text-ui-12 [line-height:1.55] [&_a]:inline-flex [&_a]:items-center [&_a]:gap-1 [&_a]:text-accent [&_kbd]:py-0.5 [&_kbd]:px-1.25 [&_kbd]:border [&_kbd]:border-line [&_kbd]:rounded-sm [&_kbd]:bg-surface [&_kbd]:text-muted [&_kbd]:text-ui-11">Encrypt note and attachment contents before upload. Keep your passphrase: it cannot be recovered. File names and note metadata remain visible in the manifest. Existing commits keep their original encryption.</p>
   <label>Encryption passphrase<input type="password" autocomplete="new-password" bind:value={passphrase} disabled={busy || working} /></label>
@@ -24,5 +24,5 @@
     <button disabled={busy || working || !passphrase.trim()} onclick={() => void configure(true)}>{enabled ? 'Unlock encrypted backups' : 'Enable encrypted backups'}</button>
     {#if enabled}<button disabled={busy || working} onclick={() => void configure(false)}>Use unencrypted backups</button>{/if}
   </div>
-  {#if message}<p role="status">{message}</p>{/if}
+  {#if message}<p class="mt-2 mb-0 text-muted text-ui-12" role="status">{message}</p>{/if}
 </section>
