@@ -125,6 +125,13 @@ Create a GitHub OAuth App, configure its callback URL as
 [`.env.example`](.env.example). `BETTER_AUTH_SECRET` must contain at least 32 random characters.
 Onyx requests the `repo` scope so it can create private repositories and write backup commits.
 
+## Outline and unlinked mentions
+
+Expand **Outline** above the rendered note to navigate its headings in both panes.
+Below the note, **Unlinked mentions** lists whole-title or file-name occurrences in other
+notes, excluding existing links, code, and frontmatter. **Link** wraps that occurrence in
+a path-qualified wiki link and updates backlinks, search, and the backup queue.
+
 ## Encrypted backups
 
 Opt in under **Settings → Backup & sync** by setting and confirming a passphrase.
