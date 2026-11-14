@@ -5,7 +5,7 @@
   let { creation }: { creation: ReturnType<typeof createNoteCreationController> } = $props();
 </script>
 <div class="modal-backdrop" role="presentation">
-  <div class="shortcut-modal" role="dialog" aria-modal="true" aria-labelledby="template-title" tabindex="-1" use:manageModalFocus onkeydown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); creation.close(); } }}>
+  <div class="shortcut-modal" role="dialog" aria-modal="true" aria-label="New note from template" tabindex="-1" use:manageModalFocus onkeydown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); creation.close(); } }}>
     <h2 id="template-title">New note from template</h2>
     <form onsubmit={(event) => { event.preventDefault(); void creation.createFromTemplate(); }}>
       <label>Template<select bind:value={creation.selectedId} disabled={creation.busy}>{#each creation.templates as note}<option value={note.id}>{noteFilePath(note)}</option>{/each}</select></label>
