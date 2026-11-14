@@ -138,6 +138,9 @@ test("navigates nested context menus and the vault switcher from the keyboard", 
   await vault.focus();
   await vault.press("ArrowDown");
   await expect(menu).toBeVisible();
+  await expect
+    .poll(() => menu.evaluate((element) => element.contains(document.activeElement)))
+    .toBe(true);
   await page.keyboard.press("End");
   await expect(menu.getByRole("menuitem", { name: "New repository" })).toBeFocused();
   await page.keyboard.press("Escape");
