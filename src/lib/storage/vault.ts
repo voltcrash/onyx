@@ -24,6 +24,7 @@ import type {
   ImportNoteInput,
   Note,
   NoteMetadata,
+  NoteSnapshot,
   SaveNoteInput,
   VaultOptions,
   VaultBackupSnapshot,
@@ -317,6 +318,22 @@ export class Vault {
       this.#nativeHandle = undefined;
       this.#nativeDirectoryPermission = "error";
     }
+  }
+
+  listNoteSnapshots(noteId: string): Promise<NoteSnapshot[]> {
+    return this.#database.getNoteSnapshots(noteId);
+  }
+
+  async restoreNoteSnapshot(noteId: string, snapshotId: string): Promise<void> {
+    const snapshot = (await this.listNoteSnapshots(noteId)).find(
+      (snapshot) => snapshot.id === snapshotId,
+    );
+    if (!snapshot) throw new Error("That snapshot no longer exists");
+    await this.updateFileTree((tree) => {
+      const note = tree.notes.find((note) => note.id === noteId && !note.deletedAt);
+      if (!note) throw new Error("The note no longer exists");
+      note.markdown = snapshot.markdown;
+    });
   }
 
   async saveNote(input: SaveNoteInput): Promise<Note> {
