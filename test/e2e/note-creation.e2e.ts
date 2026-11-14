@@ -26,6 +26,8 @@ test("creates from a template and opens a configurable daily note without replac
     .getByLabel("Template", { exact: true })
     .selectOption({ label: "Templates/Meeting.md" });
   await dialog.getByLabel("New note path").fill("Projects/Review.md");
+  await page.locator(".modal-backdrop").click({ position: { x: 4, y: 4 } });
+  await expect(dialog.getByLabel("New note path")).toHaveValue("Projects/Review.md");
   await dialog.getByRole("button", { name: "Create from template" }).click();
   await expect(dialog).toBeHidden();
   await expectMarkdown(editor, "# Review\n\n2026-11-14 at 09:05\n\n## Agenda");
