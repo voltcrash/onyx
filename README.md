@@ -125,6 +125,13 @@ Create a GitHub OAuth App, configure its callback URL as
 [`.env.example`](.env.example). `BETTER_AUTH_SECRET` must contain at least 32 random characters.
 Onyx requests the `repo` scope so it can create private repositories and write backup commits.
 
+## Local note history
+
+Use **Show note history** in the command palette to preview and restore earlier text.
+Snapshots stay in this browser's IndexedDB and are never uploaded. Saves capture at most
+one snapshot per note every five minutes, retaining the newest fifty. Link rewrites and
+restores preserve the previous text immediately; permanent deletion removes its history.
+
 ## Architecture
 
 Focused reactive controllers handle GitHub backup and restore in
