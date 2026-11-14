@@ -282,7 +282,11 @@ describe("Inbound links during moves", () => {
     const tree = {
       notes: [
         note("target", "Old.md", "[other](Other.md)"),
-        note("source", "Index.md", "[[Old#Heading|label]] [text](Old.md#heading) `[[Old]]`"),
+        note(
+          "source",
+          "Index.md",
+          '[[Old#Heading|label]] [text](Old.md#heading) `[[Old]]`\n\n[Target][ref]\n\n[ref]: <Old.md#heading> "Title"',
+        ),
       ],
       folders: [],
       attachments: [],
@@ -294,7 +298,7 @@ describe("Inbound links during moves", () => {
     await vault.moveNote("target", "folder/New.md", "attachments");
     expect(update).toHaveBeenCalledTimes(1);
     expect(tree.notes[1]!.markdown).toBe(
-      "[[New#Heading|label]] [text](folder/New.md#heading) `[[Old]]`",
+      '[[New#Heading|label]] [text](folder/New.md#heading) `[[Old]]`\n\n[Target][ref]\n\n[ref]: <folder/New.md#heading> "Title"',
     );
     expect(tree.notes[0]!.markdown).toBe("[other](../Other.md)");
   });
