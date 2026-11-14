@@ -1877,6 +1877,7 @@ export function createPageController() {
       if (activeNoteId) await loadNote(activeNoteId);
       storageError = "";
       await refreshFileTree();
+      pendingBackupCount = await vault.countPendingBackupOperations();
     } catch (error) {
       storageError = error instanceof Error ? error.message : "The file could not be renamed.";
       throw error;
