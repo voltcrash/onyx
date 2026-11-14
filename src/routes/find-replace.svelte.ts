@@ -1,4 +1,4 @@
-import type { EditorSelection } from "#lib/editor-history.ts";
+import type { EditorSelection } from "#lib/markdown-editor.ts";
 import { findTextMatches } from "#lib/find-replace.ts";
 import type { MarkdownEditor } from "#lib/markdown-editor.ts";
 import { tick } from "svelte";
@@ -8,8 +8,6 @@ export interface FindReplaceHost {
   canEdit(): boolean;
   editor(): MarkdownEditor | undefined;
   editorSelection(): EditorSelection | undefined;
-  rememberEditorState(selection: EditorSelection): void;
-  updateMarkdown(value: string): void;
   /** Shows the source pane when a single-pane layout is showing the rendered one. */
   revealSource(): void;
   /** Opens the sidebar for the find panel and returns a callback that puts it back. */
@@ -113,30 +111,32 @@ export function createFindReplace(host: FindReplaceHost) {
 
   function replace(): void {
     const match = matches[activeMatch];
-    if (!match || !host.canEdit()) return;
-    host.rememberEditorState({ start: match.start, end: match.end });
+    const editor = host.editor();
+    if (!match || !host.canEdit() || !editor) return;
+    editor.setSelectionRange(match.start, match.end);
     const markdown = host.markdown();
     const nextValue = markdown.slice(0, match.start) + replacement + markdown.slice(match.end);
     const nextMatches = findTextMatches(nextValue, query, { matchCase, wholeWord });
     const nextIndex = nextMatches.findIndex(
       (candidate) => candidate.start >= match.start + replacement.length,
     );
-    host.updateMarkdown(nextValue);
+    editor.edit(nextValue);
     matchIndex = nextMatches.length === 0 ? -1 : nextIndex >= 0 ? nextIndex : 0;
     queueNavigation();
   }
 
   function replaceAll(): void {
-    if (matches.length === 0 || !host.canEdit()) return;
+    const editor = host.editor();
+    if (matches.length === 0 || !host.canEdit() || !editor) return;
     const current = matches;
-    host.rememberEditorState({ start: current[0]!.start, end: current.at(-1)!.end });
+    editor.setSelectionRange(current[0]!.start, current.at(-1)!.end);
     let nextValue = host.markdown();
     for (let index = current.length - 1; index >= 0; index -= 1) {
       const match = current[index]!;
       nextValue = `${nextValue.slice(0, match.start)}${replacement}${nextValue.slice(match.end)}`;
     }
     const nextMatches = findTextMatches(nextValue, query, { matchCase, wholeWord });
-    host.updateMarkdown(nextValue);
+    editor.edit(nextValue);
     matchIndex = nextMatches.length > 0 ? 0 : -1;
     queueNavigation();
   }
