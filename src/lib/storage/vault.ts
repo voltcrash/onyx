@@ -1,3 +1,4 @@
+import { repairNoteFiles } from "./repair.js";
 import { findUnlinkedMentions, type NoteMention } from "../note-insights.ts";
 import {
   createSearchPostings,
@@ -196,17 +197,8 @@ export class Vault {
 
   async #repairNoteFiles(): Promise<void> {
     await this.#withLock(async () => {
-      for (const note of await this.#database.getNotes()) {
-        const markdown = await this.#database.getNoteMarkdown(note.id);
-        if (markdown === undefined) continue;
-        if ((await this.#filesystem.readText(note.path).catch(() => undefined)) === markdown)
-          continue;
-        try {
-          await this.#filesystem.writeText(note.path, markdown);
-        } catch (error) {
-          if (!isQuotaExceededError(error)) throw error;
-          this.#pendingNoteFiles.add(note.id);
-        }
+      for (const id of await repairNoteFiles(this.#database, this.#filesystem)) {
+        this.#pendingNoteFiles.add(id);
       }
     });
   }
