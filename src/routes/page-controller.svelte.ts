@@ -1,14 +1,9 @@
+import { createTransferController } from "./transfer-controller.svelte.ts";
 import { createGithubController } from "./github-controller.svelte.ts";
 import { createLazyResource } from "#lib/lazy-resource.ts";
 import { FileText } from "@lucide/svelte";
-import type {
-  PaneEdge,
-  PaneLayout,
-  PaneOrder,
-  SaveState,
-  TransferState,
-} from "#lib/components/app-types.ts";
-import type { NoteFormat } from "#lib/components/note-formats.ts";
+import type { PaneEdge, PaneLayout, PaneOrder, SaveState } from "#lib/components/app-types.ts";
+
 import type { SettingsSection } from "#lib/components/settings-types.ts";
 import {
   attachmentMarkdown,
@@ -98,7 +93,7 @@ import { createConfirmation } from "./confirmation.svelte.ts";
 import { resolveWikiLink, splitWikiTarget } from "#lib/wikilinks.ts";
 import { paletteCommands, type PaletteActions, type PaletteCommand } from "./palette-commands.ts";
 import type { FolderIcon } from "#lib/folder-icons.ts";
-import { createNoteOutput, downloadBlob, type NoteSource } from "#lib/note-output.ts";
+import { createNoteOutput } from "#lib/note-output.ts";
 import {
   basename,
   decodePath,
@@ -111,7 +106,7 @@ import {
   noteFolderPath,
   parentPath,
 } from "#lib/paths.ts";
-import type { MarkdownTransferFile } from "#lib/markdown-transfer.ts";
+
 import { createInitialMarkdown } from "./welcome-note.ts";
 import { startSidebarDrag, type SidebarSide } from "#lib/sidebar-drag.ts";
 import {
@@ -148,6 +143,75 @@ interface ImagePreviewState {
 }
 
 export function createPageController() {
+  const transferController = createTransferController({
+    get vault() {
+      return vault;
+    },
+    set vault(value) {
+      vault = value;
+    },
+    get settleDraft() {
+      return settleDraft;
+    },
+    get searchQuery() {
+      return searchQuery;
+    },
+    set searchQuery(value) {
+      searchQuery = value;
+    },
+    get loadNote() {
+      return loadNote;
+    },
+    get resetActiveNote() {
+      return resetActiveNote;
+    },
+    get refreshFileTree() {
+      return refreshFileTree;
+    },
+    get pendingBackupCount() {
+      return pendingBackupCount;
+    },
+    set pendingBackupCount(value) {
+      pendingBackupCount = value;
+    },
+    get markdown() {
+      return markdown;
+    },
+    set markdown(value) {
+      markdown = value;
+    },
+    get localAttachmentUrls() {
+      return localAttachmentUrls;
+    },
+    set localAttachmentUrls(value) {
+      localAttachmentUrls = value;
+    },
+    get activeNoteSourcePath() {
+      return activeNoteSourcePath;
+    },
+    set activeNoteSourcePath(value) {
+      activeNoteSourcePath = value;
+    },
+    get preview() {
+      return preview;
+    },
+    get activeNoteId() {
+      return activeNoteId;
+    },
+    set activeNoteId(value) {
+      activeNoteId = value;
+    },
+    get noteTitle() {
+      return noteTitle;
+    },
+    get noteOutput() {
+      return noteOutput;
+    },
+    get selectNote() {
+      return selectNote;
+    },
+  });
+
   const githubController = createGithubController({
     get disposed() {
       return disposed;
@@ -352,8 +416,6 @@ export function createPageController() {
   let previewFrame: number | undefined = $state();
   let previewSettleTimer: number | undefined = $state();
   let pendingPreviewMarkdown = initialMarkdown;
-  let printing = $state(false);
-  let printHtml = $state("");
   let searchSequence = 0;
   let settledSearchSequence = 0;
   let editor: MarkdownEditor | undefined = $state();
@@ -365,10 +427,6 @@ export function createPageController() {
   let settingsOpen = $state(false);
   let settingsSection = $state<SettingsSection>("editor");
   let pendingBackupCount = $state(0);
-  let transferState = $state<TransferState>("idle");
-  let transferMessage = $state("");
-  let folderInput: HTMLInputElement | undefined = $state();
-  let zipInput: HTMLInputElement | undefined = $state();
   let attachmentInput: HTMLInputElement | undefined = $state();
   let attachmentFolder = $state(DEFAULT_ATTACHMENT_FOLDER);
   let attachmentsHidden = $state(false);
@@ -489,7 +547,7 @@ export function createPageController() {
   );
   const noteTitle = $derived(titleFromMarkdown(markdown));
   const markdownLineCount = $derived(countLines(markdown));
-  const findCanEdit = $derived(!editorBlocked && transferState !== "working");
+  const findCanEdit = $derived(!editorBlocked && transferController.transferState !== "working");
   const find = createFindReplace({
     markdown: () => markdown,
     canEdit: () => findCanEdit,
@@ -619,15 +677,15 @@ export function createPageController() {
     setTheme,
     beginBackup: githubController.beginBackup,
     openRestore: workspaceCommand(githubController.openRestore),
-    importFolder: () => folderInput?.click(),
-    importZip: () => zipInput?.click(),
-    exportFolder: workspaceCommand(exportFolder),
-    exportZip: workspaceCommand(exportZip),
+    importFolder: () => transferController.folderInput?.click(),
+    importZip: () => transferController.zipInput?.click(),
+    exportFolder: workspaceCommand(transferController.exportFolder),
+    exportZip: workspaceCommand(transferController.exportZip),
     resetFonts,
     resetShortcuts,
     ensurePersistentStorage,
-    copyNoteAs,
-    exportNoteAs: workspaceCommand(exportNoteAs),
+    copyNoteAs: transferController.copyNoteAs,
+    exportNoteAs: workspaceCommand(transferController.exportNoteAs),
   };
 
   const paletteItems = $derived<PaletteCommand[]>([
@@ -651,7 +709,7 @@ export function createPageController() {
         singlePaneMode,
         sourcePaneVisible,
         theme,
-        transferState,
+        transferState: transferController.transferState,
         trashOpen,
         trashedCount: trashedNotes.length,
       },
@@ -1102,7 +1160,7 @@ export function createPageController() {
   }
 
   async function selectVault(id: string): Promise<void> {
-    if (id === activeVaultId || transferState === "working") return;
+    if (id === activeVaultId || transferController.transferState === "working") return;
     if (!vaults.some((candidate) => candidate.id === id) || !(await settleDraft())) return;
     try {
       const registry = await writeVaultRegistry({ activeId: id, vaults });
@@ -1115,7 +1173,7 @@ export function createPageController() {
   }
 
   async function createVault(name = "Notes"): Promise<void> {
-    if (transferState === "working" || !(await settleDraft())) return;
+    if (transferController.transferState === "working" || !(await settleDraft())) return;
     try {
       const descriptor = createVaultDescriptor(name, vaults);
       const registry = await writeVaultRegistry({
@@ -1377,7 +1435,7 @@ export function createPageController() {
   }
 
   async function selectNote(id: string): Promise<void> {
-    if (id === activeNoteId || transferState === "working") return;
+    if (id === activeNoteId || transferController.transferState === "working") return;
     if (!(await settleDraft())) return;
     await loadNote(id);
     if (activeNoteId !== id) return;
@@ -1531,7 +1589,7 @@ export function createPageController() {
   }
 
   async function createNote(parent = "", requestedName = ""): Promise<void> {
-    if (!vault || transferState === "working") return;
+    if (!vault || transferController.transferState === "working") return;
     if (!(await settleDraft())) throw new Error("Save or recover the current draft first.");
     saveState = "loading";
     try {
@@ -1560,7 +1618,7 @@ export function createPageController() {
   }
 
   async function createFolder(parent = "", requestedName = ""): Promise<void> {
-    if (!vault || transferState === "working") return;
+    if (!vault || transferController.transferState === "working") return;
     const name = normalizeFolderName(requestedName || "New folder");
     const path = joinPath(parent, name);
     folders = await vault.updateFolders((existing, notes) => {
@@ -1581,7 +1639,7 @@ export function createPageController() {
   }
 
   async function renameFile(noteId: string, requestedName: string): Promise<void> {
-    if (!vault || transferState === "working") return;
+    if (!vault || transferController.transferState === "working") return;
     if (!(await settleDraft())) throw new Error("Save or recover the current draft first.");
     try {
       const note = await vault.getNote(noteId);
@@ -1614,7 +1672,7 @@ export function createPageController() {
   }
 
   async function renameFolder(path: string, requestedName: string): Promise<void> {
-    if (!vault || transferState === "working") return;
+    if (!vault || transferController.transferState === "working") return;
     if (!(await settleDraft())) throw new Error("Save or recover the current draft first.");
     if (path === attachmentFolder) {
       if (!(await renameAttachmentFolder(requestedName)))
@@ -1633,7 +1691,7 @@ export function createPageController() {
     path: string,
     changes: Pick<Partial<FolderMetadata>, "icon" | "pinned">,
   ): Promise<void> {
-    if (!vault || transferState === "working") return;
+    if (!vault || transferController.transferState === "working") return;
     folders = await vault.updateFolders((existing) => {
       const current = existing.find((folder) => folder.path === path);
       if (!current && !changes.icon && !changes.pinned) return existing;
@@ -1663,7 +1721,7 @@ export function createPageController() {
   }
 
   async function setNotePinned(noteId: string, pinned: boolean): Promise<void> {
-    if (!vault || transferState === "working" || !(await settleDraft())) return;
+    if (!vault || transferController.transferState === "working" || !(await settleDraft())) return;
     try {
       const changed = await vault.setNotePinned(noteId, pinned);
       if (!changed) return;
@@ -1676,7 +1734,7 @@ export function createPageController() {
   }
 
   async function moveFile(noteId: string, targetFolder: string): Promise<void> {
-    if (!vault || transferState === "working" || !(await settleDraft())) return;
+    if (!vault || transferController.transferState === "working" || !(await settleDraft())) return;
     try {
       const note = await vault.getNote(noteId);
       if (!note) return;
@@ -1703,7 +1761,7 @@ export function createPageController() {
   }
 
   async function moveFolder(path: string, targetParent: string): Promise<void> {
-    if (!vault || transferState === "working") return;
+    if (!vault || transferController.transferState === "working") return;
     if (isPathWithin(targetParent, path)) {
       storageError = "A folder cannot be moved into itself or one of its children.";
       return;
@@ -1717,7 +1775,7 @@ export function createPageController() {
   }
 
   async function deleteFile(noteId: string): Promise<void> {
-    if (!vault || transferState === "working") return;
+    if (!vault || transferController.transferState === "working") return;
     const note = await vault.getNote(noteId);
     if (!note || note.deletedAt) return;
     if (!(await settleDraft())) return;
@@ -1736,7 +1794,7 @@ export function createPageController() {
   }
 
   async function deleteFolder(path: string): Promise<void> {
-    if (!vault || transferState === "working") return;
+    if (!vault || transferController.transferState === "working") return;
     const notes = await vault.listNotes();
     const affectedNotes = notes.filter((note) => {
       const folder = noteFolderPath(note);
@@ -1776,7 +1834,7 @@ export function createPageController() {
   }
 
   async function deleteAttachment(id: string): Promise<void> {
-    if (!vault || transferState === "working") return;
+    if (!vault || transferController.transferState === "working") return;
     const currentVault = vault;
     try {
       const attachment = await currentVault.deleteAttachment(id);
@@ -1804,7 +1862,7 @@ export function createPageController() {
   }
 
   async function restoreFile(noteId: string): Promise<void> {
-    if (!vault || transferState === "working") return;
+    if (!vault || transferController.transferState === "working") return;
     if (!(await settleDraft())) return;
     try {
       const restored = await vault.restoreNote(noteId);
@@ -1820,7 +1878,7 @@ export function createPageController() {
   }
 
   async function purgeFile(noteId: string): Promise<void> {
-    if (!vault || transferState === "working") return;
+    if (!vault || transferController.transferState === "working") return;
     const note = await vault.getNote(noteId);
     if (!note?.deletedAt) return;
     const confirmed = await confirmation.ask({
@@ -1849,7 +1907,8 @@ export function createPageController() {
   }
 
   async function emptyTrash(): Promise<void> {
-    if (!vault || transferState === "working" || trashedNotes.length === 0) return;
+    if (!vault || transferController.transferState === "working" || trashedNotes.length === 0)
+      return;
     const count = trashedNotes.length;
     const confirmed = await confirmation.ask({
       eyebrow: "Trash",
@@ -1879,178 +1938,7 @@ export function createPageController() {
   }
 
   async function copyFilePath(path: string): Promise<void> {
-    await copyToClipboard(() => navigator.clipboard.writeText(path));
-  }
-
-  async function importFolder(files: FileList | null): Promise<void> {
-    if (!files?.length) return;
-    try {
-      const { readMarkdownFolder } = await import("#lib/markdown-transfer.ts");
-      await runImport(readMarkdownFolder(files));
-    } catch (error) {
-      showTransferError(error, "The folder could not be imported.");
-    } finally {
-      if (folderInput) folderInput.value = "";
-    }
-  }
-
-  async function importZip(files: FileList | null): Promise<void> {
-    const file = files?.[0];
-    if (!file) return;
-    transferState = "working";
-    transferMessage = "";
-    try {
-      const { readMarkdownZip } = await import("#lib/markdown-transfer.ts");
-      const entries = await readMarkdownZip(file);
-      transferState = "idle";
-      await runImport(entries);
-    } catch (error) {
-      showTransferError(error, "The ZIP archive could not be imported.");
-    } finally {
-      if (zipInput) zipInput.value = "";
-    }
-  }
-
-  async function runImport(files: MarkdownTransferFile[]): Promise<void> {
-    if (!vault || transferState === "working") return;
-    transferState = "working";
-    transferMessage = "";
-    if (!(await settleDraft())) {
-      transferState = "idle";
-      return;
-    }
-    try {
-      const { importMarkdownFiles } = await import("#lib/markdown-transfer.ts");
-      await importMarkdownFiles(vault, files);
-      searchQuery = "";
-      const notes = await vault.listNotes();
-      if (notes[0]) await loadNote(notes[0].id);
-      else resetActiveNote();
-      await refreshFileTree();
-      pendingBackupCount = await vault.countPendingBackupOperations();
-      transferState = "idle";
-    } catch (error) {
-      showTransferError(error, "The notes could not be imported.");
-    }
-  }
-
-  // Browsers save PDFs through their own print dialog, which the print stylesheet feeds.
-  async function savePdf(): Promise<void> {
-    const source = markdown;
-    const attachments = localAttachmentUrls;
-    const path = activeNoteSourcePath;
-    await import("./styles/print.css");
-    const renderer = await preview.loadMarkdownModule();
-    printHtml = renderer.renderMarkdown(source, (destination) =>
-      resolveLocalAttachmentUrl(destination, path, attachments),
-    );
-    printing = true;
-    try {
-      await tick();
-      window.print();
-    } finally {
-      printing = false;
-      printHtml = "";
-    }
-  }
-
-  async function noteSource(id: string): Promise<NoteSource | undefined> {
-    if (id === activeNoteId) return { markdown, title: noteTitle };
-    const note = await vault?.getNote(id);
-    return note && { markdown: note.markdown, title: titleFromMarkdown(note.markdown) };
-  }
-
-  async function copyToClipboard(write: () => Promise<void>): Promise<void> {
-    if (transferState === "working") return;
-    try {
-      await write();
-    } catch (error) {
-      transferMessage =
-        error instanceof Error ? error.message : "The clipboard could not be written.";
-    }
-  }
-
-  async function copyNoteAs(id: string, format: Exclude<NoteFormat, "pdf">): Promise<void> {
-    await copyToClipboard(async () => {
-      const source = await noteSource(id);
-      if (source) await noteOutput.copy(source, format);
-    });
-  }
-
-  // Printing works from the rendered page, so another note is opened first.
-  async function exportNoteAs(id: string, format: NoteFormat): Promise<void> {
-    try {
-      if (format === "pdf") {
-        if (id !== activeNoteId) await selectNote(id);
-        if (id === activeNoteId) await savePdf();
-        return;
-      }
-      const source = await noteSource(id);
-      if (source) await noteOutput.download(source, format);
-    } catch (error) {
-      showTransferError(error, "The note could not be exported.");
-    }
-  }
-
-  async function exportZip(): Promise<void> {
-    if (!vault || transferState === "working") return;
-    transferState = "working";
-    transferMessage = "";
-    if (!(await settleDraft())) {
-      transferState = "idle";
-      return;
-    }
-    try {
-      const { createMarkdownExport, createMarkdownZip } = await import("#lib/markdown-transfer.ts");
-      const files = await createMarkdownExport(vault);
-      const archive = await createMarkdownZip(files);
-      downloadBlob(archive, `onyx-markdown-${new Date().toISOString().slice(0, 10)}.zip`);
-      transferState = "idle";
-    } catch (error) {
-      showTransferError(error, "The ZIP archive could not be created.");
-    }
-  }
-
-  async function exportFolder(): Promise<void> {
-    if (!vault || transferState === "working") return;
-    const picker = (
-      window as Window & {
-        showDirectoryPicker?: (options?: {
-          mode: "readwrite";
-        }) => Promise<FileSystemDirectoryHandle>;
-      }
-    ).showDirectoryPicker;
-    if (!picker) {
-      showTransferError(
-        undefined,
-        "This browser cannot export to a folder. Export a ZIP archive instead.",
-      );
-      return;
-    }
-    try {
-      const directory = await picker.call(window, { mode: "readwrite" });
-      transferState = "working";
-      transferMessage = "";
-      if (!(await settleDraft())) {
-        transferState = "idle";
-        return;
-      }
-      const { createMarkdownExport, writeMarkdownFolder } =
-        await import("#lib/markdown-transfer.ts");
-      const files = await createMarkdownExport(vault);
-      await writeMarkdownFolder(directory, files);
-      transferState = "idle";
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      showTransferError(error, "The notes could not be exported to that folder.");
-    } finally {
-      if (transferState === "working") transferState = "idle";
-    }
-  }
-
-  function showTransferError(error: unknown, fallback: string): void {
-    transferState = "error";
-    transferMessage = error instanceof Error && error.message ? error.message : fallback;
+    await transferController.copyToClipboard(() => navigator.clipboard.writeText(path));
   }
 
   async function settleDraft(): Promise<boolean> {
@@ -2388,7 +2276,7 @@ export function createPageController() {
     const clipboard = navigator.clipboard;
     if (!clipboard || typeof clipboard.writeText !== "function") return false;
     void Promise.resolve(clipboard.writeText(text)).catch((error: unknown) => {
-      showTransferError(error, "The clipboard could not be written.");
+      transferController.showTransferError(error, "The clipboard could not be written.");
     });
     return true;
   }
@@ -2465,7 +2353,13 @@ export function createPageController() {
   }
 
   async function attachFiles(files: File[], selection?: EditorSelection): Promise<void> {
-    if (!vault || !activeNoteId || files.length === 0 || transferState === "working") return;
+    if (
+      !vault ||
+      !activeNoteId ||
+      files.length === 0 ||
+      transferController.transferState === "working"
+    )
+      return;
     const currentVault = vault;
     const noteId = activeNoteId;
     const target = selection ??
@@ -2572,7 +2466,7 @@ export function createPageController() {
     const previous = attachmentFolder;
     if (next === previous) return true;
     if (!vault) return false;
-    if (transferState === "working" || !(await settleDraft())) return false;
+    if (transferController.transferState === "working" || !(await settleDraft())) return false;
     const currentVault = vault;
     try {
       if (folders.some((folder) => isPathWithin(folder.path, next)))
@@ -2885,14 +2779,19 @@ export function createPageController() {
     else if (action === "findInNote") {
       if (find.isOpen) find.close();
       else openFind();
-    } else if (action === "saveNote" && transferState !== "working" && !workspaceOperation)
+    } else if (
+      action === "saveNote" &&
+      transferController.transferState !== "working" &&
+      !workspaceOperation
+    )
       void saveDraft();
-    else if (action === "newNote" && transferState !== "working")
+    else if (action === "newNote" && transferController.transferState !== "working")
       void workspaceCommand(createNote)();
     else if (action === "searchNotes" || action === "focusSearch") focusSearch();
     else if (action === "cycleTheme") setTheme(nextThemePreference(theme));
     else if (action === "toggleSidebar") toggleSidebar();
-    else if (action === "openTrash" && transferState !== "working") toggleTrash();
+    else if (action === "openTrash" && transferController.transferState !== "working")
+      toggleTrash();
     else if (action === "bold") insertSyntax("**", "**", "bold text");
     else if (action === "italic") insertSyntax("_", "_", "italic text");
     else if (action === "togglePreview") toggleRenderedPane();
@@ -3056,7 +2955,7 @@ export function createPageController() {
 
   return {
     get printHtml() {
-      return printHtml;
+      return transferController.printHtml;
     },
     get saveConflict() {
       return saveFailure === "conflict";
@@ -3138,7 +3037,7 @@ export function createPageController() {
       return saveState;
     },
     get transferState() {
-      return transferState;
+      return transferController.transferState;
     },
     get storageError() {
       return storageError;
@@ -3328,7 +3227,7 @@ export function createPageController() {
       return renderedBlockLines;
     },
     get printing() {
-      return printing;
+      return transferController.printing;
     },
     get paletteItems() {
       return paletteItems;
@@ -3395,10 +3294,10 @@ export function createPageController() {
       noteList = value;
     },
     get folderInput() {
-      return folderInput;
+      return transferController.folderInput;
     },
     set folderInput(value: HTMLInputElement | undefined) {
-      folderInput = value;
+      transferController.folderInput = value;
     },
     get attachmentInput() {
       return attachmentInput;
@@ -3428,10 +3327,10 @@ export function createPageController() {
       if (value !== trashOpen) toggleTrash();
     },
     get zipInput() {
-      return zipInput;
+      return transferController.zipInput;
     },
     set zipInput(value: HTMLInputElement | undefined) {
-      zipInput = value;
+      transferController.zipInput = value;
     },
     selectVault: workspaceCommand(selectVault, "navigation"),
     createVault: workspaceCommand(createVault),
@@ -3506,8 +3405,8 @@ export function createPageController() {
     swapPanes,
     togglePaneLayout,
     placePane,
-    copyNoteAs,
-    exportNoteAs: workspaceCommand(exportNoteAs),
+    copyNoteAs: transferController.copyNoteAs,
+    exportNoteAs: workspaceCommand(transferController.exportNoteAs),
     toggleScrollSync,
     handleEditorChange,
     handleEditorHistory,
@@ -3540,10 +3439,10 @@ export function createPageController() {
     setAutoBackup: githubController.setAutoBackup,
     beginBackup: githubController.beginBackup,
     openRestore: workspaceCommand(githubController.openRestore),
-    importFolder: workspaceCommand(importFolder),
-    importZip: workspaceCommand(importZip),
-    exportFolder: workspaceCommand(exportFolder),
-    exportZip: workspaceCommand(exportZip),
+    importFolder: workspaceCommand(transferController.importFolder),
+    importZip: workspaceCommand(transferController.importZip),
+    exportFolder: workspaceCommand(transferController.exportFolder),
+    exportZip: workspaceCommand(transferController.exportZip),
     prepareVaultDeletion,
     clearVault: workspaceCommand(clearVault, "mutation", true),
     loadRestoreCommits: githubController.loadRestoreCommits,
@@ -3558,10 +3457,10 @@ export function createPageController() {
     confirmAction: confirmation.confirm,
     cancelAction: confirmation.cancel,
     get transferMessage() {
-      return transferMessage;
+      return transferController.transferMessage;
     },
     dismissTransferMessage() {
-      transferMessage = "";
+      transferController.transferMessage = "";
     },
   };
 }
