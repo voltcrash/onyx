@@ -131,3 +131,27 @@ function isInstalledApp(environment: PersistenceEnvironment): boolean {
     return false;
   }
 }
+
+export interface SidebarSort {
+  by: "name" | "updatedAt" | "createdAt";
+  direction: "asc" | "desc";
+}
+export function readSidebarSort(): SidebarSort {
+  try {
+    const value = JSON.parse(
+      readLocalStorage("onyx:sidebar-sort") ?? "null",
+    ) as Partial<SidebarSort> | null;
+    if (
+      value &&
+      ["name", "updatedAt", "createdAt"].includes(value.by ?? "") &&
+      (value.direction === "asc" || value.direction === "desc")
+    )
+      return value as SidebarSort;
+  } catch {
+    /* Invalid preferences fall back to name order. */
+  }
+  return { by: "name", direction: "asc" };
+}
+export function writeSidebarSort(value: SidebarSort): boolean {
+  return writeLocalStorage("onyx:sidebar-sort", JSON.stringify(value));
+}
