@@ -254,3 +254,17 @@ test("reports a preference write failure after startup", async ({ page }) => {
     "Browser preferences could not be saved",
   );
 });
+
+test("opens each settings section scrolled to the top", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 700 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const panel = page.locator(".settings-panel");
+  await expect(panel.getByRole("heading", { name: "Fonts" })).toBeVisible();
+  await panel.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  expect(await panel.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: "Themes", exact: true }).click();
+  await expect(panel.getByRole("heading", { name: "Themes" })).toBeInViewport();
+  expect(await panel.evaluate((element) => element.scrollTop)).toBe(0);
+});
