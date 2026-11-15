@@ -59,3 +59,18 @@ test("scrolls a wide table on mobile without splitting header words", async ({ p
       .evaluate((element) => element.scrollWidth <= element.clientWidth),
   ).toBe(true);
 });
+
+test("rounds each line of wrapped inline code on mobile", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill(
+    "Run the command `pnpm dlx some-very-long-package-name --with-a-flag` before you continue.",
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Show the rendered pane" }).click();
+
+  const code = page.locator(".rendered-pane p code");
+  expect(await code.evaluate((element) => element.getClientRects().length)).toBeGreaterThan(1);
+  await expect(code).toHaveCSS("box-decoration-break", "clone");
+});
