@@ -222,8 +222,8 @@ test("keeps newly created vaults discoverable without localStorage", async ({ pa
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(editor).toBeEnabled();
   await page.locator(".vault-trigger").click();
-  await page.getByRole("menuitem", { name: "New repository" }).click();
-  await expect(page.getByRole("tablist", { name: /Repositories/ }).getByRole("tab")).toHaveCount(2);
+  await page.getByRole("menuitem", { name: "New vault" }).click();
+  await expect(page.getByRole("tablist", { name: /Vaults/ }).getByRole("tab")).toHaveCount(2);
   await expect(editor).toBeEnabled();
   await editor.fill("# Durable vault");
   await page.keyboard.press("ControlOrMeta+S");

@@ -1054,7 +1054,7 @@
 		</div>
 	{/if}
 	{#if vaults.length > 1 && !paletteOpen}
-		<div class="vault-dots flex justify-center gap-0.5 pt-2 px-1 pb-1 [&_button]:grid [&_button]:place-items-center [&_button]:w-4 [&_button]:h-4 [&_button]:p-0 [&_button]:border-0 [&_button]:[background:none] [&_button]:cursor-pointer [&_button::after]:[content:''] [&_button::after]:w-1.5 [&_button::after]:h-1.5 [&_button::after]:rounded-3xl [&_button::after]:bg-line-soft [&_button::after]:[transition:background_150ms,_transform_150ms] [&_button:hover::after]:bg-faint [&_button.active::after]:bg-faint [&_button.active::after]:[transform:scale(1.25)]" role="tablist" aria-label="Repositories (swipe the sidebar, or use the mouse back and forward buttons, to switch)">
+		<div class="vault-dots flex justify-center gap-0.5 pt-2 px-1 pb-1 [&_button]:grid [&_button]:place-items-center [&_button]:w-4 [&_button]:h-4 [&_button]:p-0 [&_button]:border-0 [&_button]:[background:none] [&_button]:cursor-pointer [&_button::after]:[content:''] [&_button::after]:w-1.5 [&_button::after]:h-1.5 [&_button::after]:rounded-3xl [&_button::after]:bg-line-soft [&_button::after]:[transition:background_150ms,_transform_150ms] [&_button:hover::after]:bg-faint [&_button.active::after]:bg-faint [&_button.active::after]:[transform:scale(1.25)]" role="tablist" aria-label="Vaults (swipe the sidebar, or use the mouse back and forward buttons, to switch)">
 			{#each vaults as vault (vault.id)}
 				<button role="tab" aria-selected={vault.id === activeVaultId} aria-label={vault.name} title={vault.name} class:active={vault.id === activeVaultId} disabled={transferState === 'working'} onclick={() => { if (vault.id !== activeVaultId) onSelectVault(vault.id); }}></button>
 			{/each}

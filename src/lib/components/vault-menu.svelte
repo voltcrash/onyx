@@ -10,7 +10,7 @@
 <Menu.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
   <Menu.Content class="vault-menu min-w-50 max-w-65" customAnchor={anchor} align="start" sideOffset={5}
     onInteractOutside={(event) => { if (event.target instanceof Node && anchor.contains(event.target)) event.preventDefault(); }}
-    aria-label="Repositories" onCloseAutoFocus={(event) => { event.preventDefault(); if (document.activeElement === document.body) anchor.focus(); }}>
+    aria-label="Vaults" onCloseAutoFocus={(event) => { event.preventDefault(); if (document.activeElement === document.body) anchor.focus(); }}>
     <Menu.RadioGroup value={activeVaultId}>
     {#each vaults as vault (vault.id)}
       <Menu.RadioItem value={vault.id} class="justify-between" onSelect={() => onSelect(vault.id)}>
@@ -19,6 +19,6 @@
     {/each}
     </Menu.RadioGroup>
     <Menu.Separator />
-    <Menu.Item class="vault-create text-muted" onSelect={onCreate}><Plus size={15} /><span>New repository</span></Menu.Item>
+    <Menu.Item class="vault-create text-muted" onSelect={onCreate}><Plus size={15} /><span>New vault</span></Menu.Item>
   </Menu.Content>
 </Menu.Root>

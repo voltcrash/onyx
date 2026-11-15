@@ -130,7 +130,7 @@ test("navigates nested context menus and the vault switcher from the keyboard", 
   await expect(folder).toBeFocused();
 
   const vault = page.locator(".vault-trigger");
-  const menu = page.getByRole("menu", { name: "Repositories" });
+  const menu = page.getByRole("menu", { name: "Vaults" });
   await vault.click();
   await expect(menu).toBeVisible();
   await vault.click({ delay: 50 });
@@ -142,12 +142,12 @@ test("navigates nested context menus and the vault switcher from the keyboard", 
     .poll(() => menu.evaluate((element) => element.contains(document.activeElement)))
     .toBe(true);
   await page.keyboard.press("End");
-  await expect(menu.getByRole("menuitem", { name: "New repository" })).toBeFocused();
+  await expect(menu.getByRole("menuitem", { name: "New vault" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(menu).toBeHidden();
   await expect(vault).toBeFocused();
   await vault.dblclick();
-  const rename = page.getByRole("textbox", { name: "Repository name" });
+  const rename = page.getByRole("textbox", { name: "Vault name" });
   await expect(rename).toBeFocused();
   await rename.fill("Research");
   await rename.press("Enter");

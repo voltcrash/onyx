@@ -144,13 +144,13 @@ test("chooses the sidebar position from the command palette", async ({ page }) =
   await expect(app).not.toHaveClass(/(?:^|\s)sidebar-right(?:\s|$)/);
 });
 
-test("switches repositories by swiping horizontally on the sidebar", async ({ page }) => {
+test("switches vaults by swiping horizontally on the sidebar", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
   await page.locator(".vault-trigger").click();
-  await page.getByRole("menuitem", { name: "New repository" }).click();
-  const dots = page.getByRole("tablist", { name: /Repositories/ }).getByRole("tab");
+  await page.getByRole("menuitem", { name: "New vault" }).click();
+  const dots = page.getByRole("tablist", { name: /Vaults/ }).getByRole("tab");
   await expect(dots).toHaveCount(2);
   await expect(dots.nth(1)).toHaveAttribute("aria-selected", "true");
 
@@ -159,7 +159,7 @@ test("switches repositories by swiping horizontally on the sidebar", async ({ pa
   await page.mouse.wheel(-120, 0);
   await expect(dots.nth(0)).toHaveAttribute("aria-selected", "true");
 
-  // Vertical scrolling must not switch repositories.
+  // Vertical scrolling must not switch vaults.
   await page.waitForTimeout(250);
   await page.mouse.wheel(0, 120);
   await page.waitForTimeout(250);
@@ -169,13 +169,13 @@ test("switches repositories by swiping horizontally on the sidebar", async ({ pa
   await expect(dots.nth(1)).toHaveAttribute("aria-selected", "true");
 });
 
-test("switches repositories with mouse back and forward buttons", async ({ page }) => {
+test("switches vaults with mouse back and forward buttons", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
   await page.locator(".vault-trigger").click();
-  await page.getByRole("menuitem", { name: "New repository" }).click();
-  const dots = page.getByRole("tablist", { name: /Repositories/ }).getByRole("tab");
+  await page.getByRole("menuitem", { name: "New vault" }).click();
+  const dots = page.getByRole("tablist", { name: /Vaults/ }).getByRole("tab");
   await expect(dots).toHaveCount(2);
   await expect(dots.nth(1)).toHaveAttribute("aria-selected", "true");
 
