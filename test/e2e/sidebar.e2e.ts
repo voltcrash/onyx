@@ -195,3 +195,15 @@ test("switches repositories with mouse back and forward buttons", async ({ page 
   await pressMouseButton(4);
   await expect(dots.nth(1)).toHaveAttribute("aria-selected", "true");
 });
+
+test("keeps the save status text in the sidebar footer on a phone", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await page.getByRole("button", { name: "Show notes sidebar" }).click();
+
+  const status = page.locator(".doc-status-text");
+  await expect(status).toBeVisible();
+  await expect(status).toHaveText(/\d+ words? · \d+ min · \S/);
+  expect(await status.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+});
