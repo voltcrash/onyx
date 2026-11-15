@@ -300,3 +300,15 @@ test("punctuates the System theme hint", async ({ page }) => {
     page.getByRole("radiogroup", { name: "Color mode" }).getByRole("radio", { name: /System/ }),
   ).toHaveText("SystemFollow your operating system automatically. Currently dark.");
 });
+
+test("names the units in the storage counts", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await page.getByRole("button", { name: "Open local storage settings" }).click();
+
+  const facts = page.locator(".settings-facts");
+  await expect(facts.locator("div", { hasText: "Notes" }).locator("dd")).toHaveText(/^1 note · \d/);
+  await expect(facts.locator("div", { hasText: "Attachments" }).locator("dd")).toHaveText(
+    /^0 files · 0 B$/,
+  );
+});
