@@ -154,6 +154,12 @@
       untrack(() => { usageGeneration += 1; usage = undefined; usageState = 'idle'; usageMessage = ''; clearTarget = undefined; clearState = 'idle'; });
     });
 
+	let panel = $state<HTMLElement>();
+	$effect(() => {
+		void section;
+		if (panel) panel.scrollTop = 0;
+	});
+
 	$effect(() => {
 		if (section === 'github' && connected && isOnline && !repositoriesLoaded) void loadRepositories();
 		if (section === 'storage' && !usage && usageState === 'idle') void loadUsage();
@@ -354,7 +360,7 @@
 				{/each}
 			</nav>
 
-			<div class="settings-panel pt-5 px-5.5 pb-6 overflow-y-auto [&_h3]:mt-0 [&_h3]:mx-0 [&_h3]:mb-1 [&_h3]:[font-family:'Newsreader_Variable',_Georgia,_serif] [&_h3]:text-ui-16 [&_h3]:font-medium [&_h3]:[letter-spacing:-0.01em]">
+			<div bind:this={panel} class="settings-panel pt-5 px-5.5 pb-6 overflow-y-auto [&_h3]:mt-0 [&_h3]:mx-0 [&_h3]:mb-1 [&_h3]:[font-family:'Newsreader_Variable',_Georgia,_serif] [&_h3]:text-ui-16 [&_h3]:font-medium [&_h3]:[letter-spacing:-0.01em]">
 				{#if !isOnline && section !== 'editor' && section !== 'themes' && section !== 'shortcuts' && section !== 'storage' && section !== 'transfer' && section !== 'vault'}
 					<div class="settings-banner flex items-center gap-2 mb-3.5 py-2.25 px-2.75 border border-warn-border rounded-lg bg-warn-bg text-warn-text text-ui-12"><WifiOff size={15} /><span>GitHub settings are paused until your connection returns.</span></div>
 				{/if}
