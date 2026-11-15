@@ -105,6 +105,16 @@ test("applies every code font to nested code content", async ({ page }) => {
   }
 });
 
+test("shows only the language label in the preview code header", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+
+  const header = page.locator(".type-specimen-code-header");
+  await expect(header).toHaveText("Rust");
+  await expect(header.locator("svg")).toHaveCount(1);
+  await expect(header.locator("svg")).toHaveAttribute("width", "16");
+});
+
 test("filters typefaces by selected font type", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Settings", exact: true }).click();
