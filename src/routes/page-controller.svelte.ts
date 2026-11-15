@@ -764,6 +764,9 @@ export function createPageController() {
   const paletteActions: PaletteActions = {
     shortcutLabel: preferencesController.shortcutLabel,
     createNote: workspaceCommand(fileTreeController.createNote),
+    createNoteFromTemplate: () => void workspaceCommand(creation.showTemplates)(),
+    openDailyNote: () => void workspaceCommand(creation.openDailyNote)(),
+    showNoteHistory: () => void history.show(),
     saveDraft,
     toggleTrash: fileTreeController.toggleTrash,
     emptyTrash: workspaceCommand(fileTreeController.emptyTrash),
@@ -796,32 +799,6 @@ export function createPageController() {
   };
 
   const paletteItems = $derived<PaletteCommand[]>([
-    {
-      id: "note-history",
-      group: "Notes",
-      label: "Show note history",
-      keywords: "versions snapshots restore",
-      icon: FileText,
-      disabled: !activeNoteId,
-      run: () => void history.show(),
-    },
-    {
-      id: "note-from-template",
-      group: "Notes",
-      label: "New note from template",
-      icon: FileText,
-      keywords: "template create variables",
-      run: () => void workspaceCommand(creation.showTemplates)(),
-    },
-    {
-      id: "daily-note",
-      group: "Notes",
-      label: "Open today's daily note",
-      icon: FileText,
-      shortcut: preferencesController.shortcutLabel("dailyNote"),
-      keywords: "today journal diary",
-      run: () => void workspaceCommand(creation.openDailyNote)(),
-    },
     ...paletteNoteItems,
     ...paletteCommands(
       {
