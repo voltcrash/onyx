@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  createWikiLinkResolver,
   linksToNote,
   rewriteMovedWikiLinks,
   resolveWikiLink,
@@ -129,5 +130,45 @@ describe("rewriteMovedWikiLinks", () => {
     expect(
       rewriteMovedWikiLinks("[[a/Old#Heading|label]]", before, after, "b/Index.md", "b/Index.md"),
     ).toBe("[[a/New#Heading|label]]");
+  });
+});
+
+describe("indexed wiki link targets", () => {
+  it("preserves folder preference, path suffixes, extension handling and fallback titles", () => {
+    const resolve = createWikiLinkResolver(notes);
+    for (const name of [
+      "Plan",
+      "plan.md",
+      "./projects/Plan",
+      "old/Plan",
+      "Ideas",
+      "Loose thought",
+      "",
+      "missing",
+    ]) {
+      for (const from of [undefined, "projects/Other.md", "archive/old/Other.md"]) {
+        expect(resolve(name, from)).toEqual(resolveWikiLink(notes, name, from));
+      }
+    }
+    expect(linksToNote("[[Plan]]", "projects/Other.md", notes[0]!, notes, resolve)).toBe(true);
+    expect(linksToNote("[[Plan]]", "archive/old/Other.md", notes[0]!, notes, resolve)).toBe(false);
+  });
+
+  it("does not read every note path again for each link in a 10,000-note vault", () => {
+    let reads = 0;
+    const many = Array.from({ length: 10_000 }, (_, index) => ({
+      id: String(index),
+      title: String(index),
+      get sourcePath() {
+        reads += 1;
+        return `folder/Note ${index}.md`;
+      },
+    }));
+    const resolve = createWikiLinkResolver(many);
+    const indexedReads = reads;
+    for (let index = 0; index < 10_000; index += 1) {
+      expect(resolve(`Note ${index}`)?.id).toBe(String(index));
+    }
+    expect(reads).toBe(indexedReads);
   });
 });
