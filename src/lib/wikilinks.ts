@@ -73,6 +73,40 @@ export function resolveWikiLink<T extends LinkableNote>(
   return candidates[0]?.note;
 }
 
+/** Reuses path candidates when resolving many links against the same vault snapshot. */
+export function createWikiLinkResolver<T extends LinkableNote>(notes: T[]) {
+  const bySuffix = new Map<string, Array<{ note: T; path: string; folder: string }>>();
+  for (const note of notes) {
+    const path = withoutExtension(noteFilePath(note)).toLocaleLowerCase();
+    const candidate = { note, path, folder: parentPath(path) };
+    const parts = path.split("/");
+    for (let index = 0; index < parts.length; index += 1) {
+      const suffix = parts.slice(index).join("/");
+      const candidates = bySuffix.get(suffix) ?? [];
+      candidates.push(candidate);
+      bySuffix.set(suffix, candidates);
+    }
+  }
+  return (name: string, fromPath?: string): T | undefined => {
+    const wanted = withoutExtension(name.trim().replace(/^\.?\/+/, "")).toLocaleLowerCase();
+    const folder = parentPath(fromPath ?? "").toLocaleLowerCase();
+    let best: { note: T; path: string; folder: string } | undefined;
+    for (const candidate of bySuffix.get(wanted) ?? []) {
+      if (
+        !best ||
+        Number(best.folder === folder) - Number(candidate.folder === folder) < 0 ||
+        ((best.folder === folder) === (candidate.folder === folder) &&
+          (candidate.path.length < best.path.length ||
+            (candidate.path.length === best.path.length &&
+              candidate.path.localeCompare(best.path) < 0)))
+      ) {
+        best = candidate;
+      }
+    }
+    return best?.note;
+  };
+}
+
 /** The note's text with code blocks and code spans blanked, so links inside code are ignored. */
 export function stripCode(markdown: string): string {
   let cursor = 0;
@@ -96,6 +130,7 @@ export function linksToNote<T extends LinkableNote>(
   sourcePath: string,
   target: T,
   notes: T[],
+  resolve = (name: string, fromPath?: string) => resolveWikiLink(notes, name, fromPath),
 ): boolean {
   if (!markdown.includes("[[") && !/\]\s*[:(]/.test(markdown)) return false;
   const tree = parseMarkdownSource(markdown);
@@ -123,7 +158,7 @@ export function linksToNote<T extends LinkableNote>(
         )
           continue;
         const { name } = splitWikiTarget(match[2]!);
-        if (name && resolveWikiLink(notes, name, sourcePath)?.id === target.id) found = true;
+        if (name && resolve(name, sourcePath)?.id === target.id) found = true;
       }
     }
     const destination =

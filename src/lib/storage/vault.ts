@@ -13,7 +13,7 @@ import {
   rewriteLocalLinks,
 } from "../markdown-utils.js";
 import { isPathWithin, movePath, noteFilePath, parentPath } from "../paths.js";
-import { linksToNote, rewriteMovedWikiLinks } from "../wikilinks.js";
+import { createWikiLinkResolver, linksToNote, rewriteMovedWikiLinks } from "../wikilinks.js";
 import { extractTags, normalizeTag, parseSearchQuery } from "../tags.js";
 import { VaultCoordination } from "./coordination.js";
 import { MirroredVaultFilesystem, VaultFilesystem } from "./filesystem.js";
@@ -456,11 +456,12 @@ export class Vault {
             title: note.title,
           })),
         );
+      const resolve = createWikiLinkResolver(notes);
       const backlinks = notes
         .filter(
           (note) =>
             note.id !== noteId &&
-            linksToNote(byId.get(note.id) ?? "", noteFilePath(note), target, notes),
+            linksToNote(byId.get(note.id) ?? "", noteFilePath(note), target, notes, resolve),
         )
         .sort((left, right) => left.title.localeCompare(right.title));
       return { backlinks, mentions };
