@@ -289,3 +289,14 @@ test("fits typeface names in the font selects on a phone", async ({ page }) => {
     expect(fits, role).toBe(true);
   }
 });
+
+test("punctuates the System theme hint", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Themes", exact: true }).click();
+
+  await expect(
+    page.getByRole("radiogroup", { name: "Color mode" }).getByRole("radio", { name: /System/ }),
+  ).toHaveText("SystemFollow your operating system automatically. Currently dark.");
+});
