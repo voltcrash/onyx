@@ -620,8 +620,11 @@
 .prose li > p + p {
   margin-top: 10px;
 }
+/* Hang the checkbox in the item's padding so wrapped lines align with the text. */
 .prose li.task-list-item {
+  position: relative;
   list-style: none;
+  padding-left: 26px;
 }
 .prose ul.contains-task-list {
   padding-left: 2px;
@@ -629,12 +632,19 @@
 .prose li ul.contains-task-list {
   padding-left: 24px;
 }
+.prose li.task-list-item > ul.contains-task-list {
+  padding-left: 2px;
+}
 .prose .task-list-item input {
+  position: absolute;
+  /* Center on the first line; font: inherit makes lh the item's line height. */
+  top: calc(0.5lh - 7.5px);
+  left: 3px;
   width: 15px;
   height: 15px;
-  margin: 0 8px 0 0;
+  margin: 0;
+  font: inherit;
   accent-color: var(--accent);
-  vertical-align: -2px;
 }
 .prose .task-list-item input:disabled {
   cursor: default;
