@@ -493,3 +493,23 @@ it("preserves the current encryption setting when completing an older backup", a
     ["operation"],
   );
 });
+
+describe("Vault browsing", () => {
+  it("lists metadata without reading every searchable body, including notes missing an index entry", async () => {
+    const notes = [
+      { id: "old", updatedAt: "2026-01-01" },
+      { id: "deleted", updatedAt: "2026-03-01", deletedAt: "2026-03-02" },
+      { id: "new", updatedAt: "2026-02-01" },
+    ];
+    const database = {
+      getNotes: vi.fn().mockResolvedValue(notes),
+      getSearchDocuments: vi.fn().mockRejectedValue(new Error("Body reads are unnecessary")),
+    };
+    const coordination = { runExclusive: <T>(task: () => Promise<T>) => task() };
+    const vault = Reflect.construct(Vault, [database, {}, coordination]) as Vault;
+    for (const query of ["", "  "]) {
+      expect((await vault.search(query)).map((result) => result.note.id)).toEqual(["new", "old"]);
+    }
+    expect(database.getSearchDocuments).not.toHaveBeenCalled();
+  });
+});
