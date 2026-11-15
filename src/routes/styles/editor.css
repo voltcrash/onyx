@@ -653,6 +653,9 @@
 .prose code {
   padding: 0.2em 0.4em;
   border-radius: 6px;
+  /* Give each line of wrapped inline code its own padding and rounded ends. */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
   background: var(--subtle-strong);
   color: var(--accent-quiet);
   font-family: var(--font-code);
