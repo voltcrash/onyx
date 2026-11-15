@@ -205,7 +205,16 @@ test("keeps the save status text in the sidebar footer on a phone", async ({ pag
   const status = page.locator(".doc-status-text");
   await expect(status).toBeVisible();
   await expect(status).toHaveText(/\d+ words? · \d+ min · \S/);
-  expect(await status.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  // The counts may truncate on narrow drawers, but the save state must stay readable.
+  const state = page.locator(".doc-status-state");
+  await expect(state).toHaveText(/^ · \S/);
+  expect(
+    await state.evaluate((element) => {
+      const button = element.closest("button")!.getBoundingClientRect();
+      const bounds = element.getBoundingClientRect();
+      return element.scrollWidth <= element.clientWidth && bounds.right <= button.right;
+    }),
+  ).toBe(true);
 });
 
 test("reports no reading time for an empty note", async ({ page }) => {
