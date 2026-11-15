@@ -638,7 +638,7 @@ export function createPageController() {
     vaults.find((candidate) => candidate.id === activeVaultId) ?? vaults[0],
   );
   const wordCount = $derived(countWords(markdown));
-  const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
+  const readingMinutes = $derived(Math.ceil(wordCount / 220));
   const preview = createPreviewRenderer({
     source: () => previewMarkdown,
     attachments: () => localAttachmentUrls,

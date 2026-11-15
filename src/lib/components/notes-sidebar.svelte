@@ -315,6 +315,7 @@
 
 	let treeRows = $derived(buildTreeRows());
 
+	const wordLabel = $derived(`${wordCount} ${wordCount === 1 ? 'word' : 'words'}`);
 	const docStatusLabel = $derived(
 		saveState === 'loading'
 			? 'Opening…'
@@ -1065,9 +1066,9 @@
 			data-tone={docStatusTone}
 			class:offline={!isOnline}
 			title={githubState === 'connected' && githubUser ? `Synced as @${githubUser.login}` : githubMessage || 'Notes are saved on this device'}
-			aria-label={`${wordCount} words, ${readingMinutes} minute reading time, ${docStatusLabel}. Open local storage settings.`}
+			aria-label={`${wordLabel}${readingMinutes ? `, ${readingMinutes} minute reading time` : ''}, ${docStatusLabel}. Open local storage settings.`}
 			onclick={onOpenStorageSettings}
-		><span class="doc-status-text min-w-0 overflow-hidden text-ellipsis">{wordCount} {wordCount === 1 ? 'word' : 'words'} · {readingMinutes} min · {docStatusLabel}</span><i class="doc-status-dot w-1.25 h-1.25 flex-none rounded-full bg-faint opacity-70 [.doc-status[data-tone='ok']_&]:[background:var(--ok,_#4caf7d)] [.doc-status[data-tone='ok']_&]:opacity-100 [.doc-status[data-tone='busy']_&]:[background:var(--warn,_#d9a13b)] [.doc-status[data-tone='busy']_&]:opacity-100 [.doc-status[data-tone='error']_&]:bg-danger [.doc-status[data-tone='error']_&]:opacity-100" aria-hidden="true"></i></button>
+		><span class="doc-status-text min-w-0 overflow-hidden text-ellipsis">{wordLabel}{readingMinutes ? ` · ${readingMinutes} min` : ''} · {docStatusLabel}</span><i class="doc-status-dot w-1.25 h-1.25 flex-none rounded-full bg-faint opacity-70 [.doc-status[data-tone='ok']_&]:[background:var(--ok,_#4caf7d)] [.doc-status[data-tone='ok']_&]:opacity-100 [.doc-status[data-tone='busy']_&]:[background:var(--warn,_#d9a13b)] [.doc-status[data-tone='busy']_&]:opacity-100 [.doc-status[data-tone='error']_&]:bg-danger [.doc-status[data-tone='error']_&]:opacity-100" aria-hidden="true"></i></button>
 		<button class="icon-button border-0 bg-transparent cursor-pointer w-8.5 h-8.5 grid place-items-center rounded-md text-muted [transition:background_0.15s_ease,_color_0.15s_ease] [&:hover]:bg-subtle-strong [&:hover]:text-ink [.sidebar-footer_&]:w-7 [.sidebar-footer_&]:h-7" aria-label="Settings" aria-haspopup="dialog" aria-expanded={settingsOpen} aria-controls="settings-dialog" title="Settings" onclick={onOpenSettings}><Settings size={18} /></button>
 	</div>
 </aside>
