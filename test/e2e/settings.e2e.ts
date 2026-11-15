@@ -84,6 +84,10 @@ test("applies every code font to nested code content", async ({ page }) => {
       "font-family",
       new RegExp(family),
     );
+    await expect(page.locator(".source-editor .cm-scroller")).toHaveCSS(
+      "font-family",
+      new RegExp(family),
+    );
   }
 });
 
