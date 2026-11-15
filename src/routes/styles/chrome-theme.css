@@ -83,6 +83,12 @@
   --color-on-solid: var(--on-solid);
   --color-scrim: var(--scrim);
   --color-overlay: var(--overlay);
+  /* Set inline on each settings theme swatch. */
+  --color-theme-preview-border: var(--theme-preview-border);
+  --color-theme-preview-paper: var(--theme-preview-paper);
+  --color-theme-preview-light: var(--theme-preview-light);
+  --color-theme-preview-dark: var(--theme-preview-dark);
+  --color-theme-preview-accent: var(--theme-preview-accent);
   --color-background: var(--paper);
   --color-foreground: var(--ink);
   --color-popover: var(--surface);
