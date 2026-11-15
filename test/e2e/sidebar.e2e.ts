@@ -207,3 +207,19 @@ test("keeps the save status text in the sidebar footer on a phone", async ({ pag
   await expect(status).toHaveText(/\d+ words? · \d+ min · \S/);
   expect(await status.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 });
+
+test("reports no reading time for an empty note", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  const status = page.locator(".doc-status");
+
+  await editor.fill("");
+  await expect(status).toHaveText(/^0 words · \S/);
+  await expect(status).not.toHaveText(/min/);
+  await expect(status).toHaveAttribute("aria-label", /^0 words, (?!.*minute)/);
+
+  await editor.fill("one");
+  await expect(status).toHaveText(/^1 word · 1 min · /);
+  await expect(status).toHaveAttribute("aria-label", /^1 word, 1 minute reading time, /);
+});
