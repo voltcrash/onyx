@@ -429,7 +429,7 @@
 						{#each modeOptions as option (option.id)}
 							<button class="theme-mode-option [&_strong]:block [&_strong]:text-ui-13 [&_small]:block [&_small]:mt-0.75 [&_small]:text-muted [&_small]:text-ui-11 [&_small]:[line-height:1.4] [&_small]:[font-weight:400] flex items-start gap-2.5 min-w-0 p-3.25 border border-line rounded-lg bg-surface text-ink-soft cursor-pointer text-left [&_>_svg]:flex-none [&_>_svg]:mt-0.25 [&_>_svg]:text-muted [&:hover]:border-line-hover [&:hover]:text-ink [&:hover_>_svg]:text-accent [&.active_>_svg]:text-accent [&.active]:border-accent-border [&.active]:bg-accent-bg [&.active]:text-accent [&.active]:font-semibold" class:active={theme === option.id} role="radio" aria-checked={theme === option.id} aria-label={option.label} onclick={() => onThemeChange(option.id)}>
 								{#if option.id === 'light'}<Sun size={18} />{:else if option.id === 'dark'}<Moon size={18} />{:else}<Monitor size={18} />{/if}
-								<span><strong>{option.label}</strong><small>{option.id === 'system' ? `${option.hint} (currently ${resolvedTheme}).` : option.hint}</small></span>
+								<span><strong>{option.label}</strong><small>{option.id === 'system' ? `${option.hint} Currently ${resolvedTheme}.` : option.hint}</small></span>
 							</button>
 						{/each}
 					</div>
