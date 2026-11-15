@@ -6,6 +6,8 @@ type SortableNote = Pick<
   NoteMetadata,
   "id" | "title" | "sourcePath" | "pinned" | "createdAt" | "updatedAt"
 >;
+const noteNames = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+
 export function compareSidebarNotes(
   left: SortableNote,
   right: SortableNote,
@@ -15,7 +17,7 @@ export function compareSidebarNotes(
   if (pinned) return pinned;
   const leftName = left.title || fileStem(noteFilePath(left));
   const rightName = right.title || fileStem(noteFilePath(right));
-  const name = leftName.localeCompare(rightName, undefined, { sensitivity: "base", numeric: true });
+  const name = noteNames.compare(leftName, rightName);
   const order = sort.by === "name" ? name : left[sort.by].localeCompare(right[sort.by]);
   return (
     (sort.direction === "asc" ? order : -order) ||
