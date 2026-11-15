@@ -52,6 +52,7 @@
 	}
 
 	const nextShortcut = $derived(formatShortcut({ key: 'g', primary: true }, primaryModifier));
+	const strictOptions = $derived([matchCase && 'Match case', wholeWord && 'Whole word'].filter(Boolean).join(' and '));
 	const previousShortcut = $derived(formatShortcut({ key: 'g', primary: true, shift: true }, primaryModifier));
 </script>
 
@@ -90,7 +91,7 @@
 		{#if !query}
 			<span>Type a word or phrase to search this note.</span>
 		{:else if !matchCount}
-			<span>No matches in this note.</span>
+			<span>{strictOptions ? `Try again without ${strictOptions}.` : 'Check the spelling, or try fewer words.'}</span>
 		{:else}
 			<span>Enter for next · Shift+Enter for previous</span>
 		{/if}
