@@ -346,6 +346,33 @@ test("indents lines with Tab and outdents with Shift+Tab", async ({ page }) => {
   await expectMarkdown(editor, "- a\n- b");
 });
 
+test("moves focus out of the editor with Escape then Tab", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await expect(editor).toHaveAccessibleDescription(/Press Escape, then Tab/);
+
+  await editor.fill("- a");
+  await editor.press("End");
+  await editor.press("Escape");
+  await editor.press("x");
+  await editor.press("Tab");
+  await expectMarkdown(editor, "  - ax");
+  await expect(editor).toBeFocused();
+
+  await editor.press("Escape");
+  await page.keyboard.press("Tab");
+  await expect(editor).not.toBeFocused();
+  await expect(page.locator(".cm-editor :focus")).toHaveCount(0);
+  await expectMarkdown(editor, "  - ax");
+
+  await editor.click();
+  await editor.press("Escape");
+  await page.keyboard.press("Shift+Tab");
+  await expect(editor).not.toBeFocused();
+  await expectMarkdown(editor, "  - ax");
+});
+
 test("toggles checkboxes without leaving the editor", async ({ page }) => {
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
