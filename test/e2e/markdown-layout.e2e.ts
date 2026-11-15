@@ -61,3 +61,20 @@ test("aligns the wrapped lines of a task item with its text", async ({ page }) =
     expect(layout!.gap).toBeGreaterThanOrEqual(6);
   }
 });
+
+test("left-aligns wrapped outline entries", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill(`# ${"A long heading that wraps in the outline ".repeat(3)}\n\n## Short`);
+  await page.locator(".note-outline summary").click();
+
+  const entry = page.getByRole("navigation", { name: "Outline" }).getByRole("button").first();
+  const lefts = await entry.evaluate((button) => {
+    const range = document.createRange();
+    range.selectNodeContents(button);
+    return [...range.getClientRects()].map((rect) => Math.round(rect.left));
+  });
+  expect(lefts.length).toBeGreaterThan(1);
+  expect(new Set(lefts).size).toBe(1);
+});
