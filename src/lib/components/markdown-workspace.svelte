@@ -143,6 +143,7 @@
 		const instance = new MarkdownEditor(node, {
 			doc: untrack(() => markdown),
 			label: 'Markdown editor',
+			describedBy: 'editor-keyboard-hint',
 			placeholder: EDITOR_PLACEHOLDER,
 			onChange: (value) => {
 				scrollDriver = 'source';
@@ -520,6 +521,7 @@
 		<div bind:this={sourcePaneElement} class="source-pane" class:dragged={drag?.moving && drag.pane === 'source'} data-source-theme={resolvedTheme} data-color-theme={colorTheme} style={drag?.moving && drag.pane === 'source' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined}>
 			<div class="source-body" onscrollcapture={(event) => handlePaneScroll(event, 'source')} onwheelcapture={() => handlePaneInteraction('source')} onpointerdowncapture={() => handlePaneInteraction('source')} ontouchstartcapture={() => handlePaneInteraction('source')} onkeydowncapture={() => handlePaneInteraction('source')} onloadcapture={() => queueScrollSync(scrollDriver)}>
 					<div class="source-editor" {@attach mountEditor}></div>
+					<p id="editor-keyboard-hint" class="visually-hidden">Tab indents. Press Escape, then Tab, to move focus out of the editor.</p>
 			</div>
 		</div>
 		<div class="pane-divider [@media((max-width:_900px)_and_(pointer:_coarse))]:sticky! [@media((max-width:_900px)_and_(pointer:_coarse))]:top-0! [@media((max-width:_900px)_and_(pointer:_coarse))]:[align-self:start]! [@media((max-width:_900px)_and_(pointer:_coarse))]:h-dvh! [@media((max-width:_900px)_and_(pointer:_coarse))]:z-5!">
