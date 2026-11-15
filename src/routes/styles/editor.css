@@ -777,10 +777,12 @@
   text-decoration-color: var(--accent-underline);
   text-underline-offset: 3px;
 }
+/* Keep words whole so a wide table scrolls instead of splitting them. */
 .prose table {
   width: 100%;
   display: block;
   overflow-x: auto;
+  overflow-wrap: normal;
   margin: 24px 0;
   border-collapse: collapse;
   font-family: var(--font-content);
