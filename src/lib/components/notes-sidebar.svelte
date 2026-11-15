@@ -1061,7 +1061,7 @@
 	{/if}
 	<div class="sidebar-footer flex items-center gap-1.75 mt-1 pt-2 px-1 pb-0 [&_>_:first-child]:min-w-0 [&_>_:first-child]:flex-1 [&_.github-account]:overflow-hidden [&_.github-account_>_span]:flex-1">
 		<button
-			class="doc-status h-7 flex items-center gap-1.75 border-0 rounded-md bg-transparent text-faint text-ui-11 whitespace-nowrap pt-0 pr-2 pb-0 pl-1 cursor-pointer no-underline [&:hover]:bg-subtle [&:hover]:text-muted [&[data-tone='error']]:text-danger [&.offline]:text-muted [.sidebar-footer_&]:overflow-hidden [@media((max-width:_700px))]:[&_>_span]:hidden! [@media((max-width:_700px))]:w-8.5! [@media((max-width:_700px))]:justify-center! [@media((max-width:_700px))]:p-0!"
+			class="doc-status h-7 flex items-center gap-1.75 border-0 rounded-md bg-transparent text-faint text-ui-11 whitespace-nowrap pt-0 pr-2 pb-0 pl-1 cursor-pointer no-underline [&:hover]:bg-subtle [&:hover]:text-muted [&[data-tone='error']]:text-danger [&.offline]:text-muted [.sidebar-footer_&]:overflow-hidden"
 			data-tone={docStatusTone}
 			class:offline={!isOnline}
 			title={githubState === 'connected' && githubUser ? `Synced as @${githubUser.login}` : githubMessage || 'Notes are saved on this device'}
