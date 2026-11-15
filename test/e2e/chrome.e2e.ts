@@ -131,8 +131,10 @@ test("navigates nested context menus and the vault switcher from the keyboard", 
 
   const vault = page.locator(".vault-trigger");
   const menu = page.getByRole("menu", { name: "Vaults" });
+  await expect(vault).toHaveAttribute("title", "Switch vault, double-click to rename");
   await vault.click();
   await expect(menu).toBeVisible();
+  await expect(menu).not.toContainText(/repositor/i);
   await vault.click({ delay: 50 });
   await expect(menu).toBeHidden();
   await vault.focus();
