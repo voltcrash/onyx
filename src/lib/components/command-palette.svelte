@@ -54,6 +54,12 @@
 
 
 	let selected = $state('');
+  let notePage = $state(0);
+  const notePageSize = 50;
+  $effect(() => {
+    void query;
+    notePage = 0;
+  });
 	let listRef = $state<HTMLElement | null>(null);
 	let inputRef = $state<HTMLElement | null>(null);
 
@@ -67,8 +73,20 @@
 					.map((entry) => entry.item)
 			: entries
 	);
+  const noteCount = $derived(filtered.filter((item) => item.group === 'Notes').length);
+  const notePageCount = $derived(Math.max(1, Math.ceil(noteCount / notePageSize)));
+  const currentNotePage = $derived(Math.min(notePage, notePageCount - 1));
+  const displayed = $derived.by(() => {
+    let noteIndex = 0;
+    return filtered.filter((item) => {
+      if (item.group !== 'Notes') return true;
+      const index = noteIndex++;
+      return index >= currentNotePage * notePageSize && index < (currentNotePage + 1) * notePageSize;
+    });
+  });
+  const resultCount = $derived(filtered.filter(isPaletteItem).length);
 	const groups = $derived(
-		filtered.reduce<Array<{ name: string; items: PaletteEntry[] }>>((accumulator, item) => {
+		displayed.reduce<Array<{ name: string; items: PaletteEntry[] }>>((accumulator, item) => {
 			const group = accumulator.find((candidate) => candidate.name === item.group);
 			if (group) group.items.push(item);
 			else accumulator.push({ name: item.group, items: [item] });
@@ -134,6 +152,14 @@
     document.getElementById(`palette-${selected}`)?.scrollIntoView({ block: 'nearest' });
   }
 
+  async function changeNotePage(direction: number): Promise<void> {
+    notePage = Math.max(0, Math.min(notePageCount - 1, currentNotePage + direction));
+    selected = '';
+    await tick();
+    if (listRef) listRef.scrollTop = 0;
+    searchInput?.focus();
+  }
+
 	function choose(item: PaletteItem): void {
 		if (item.disabled) return;
 		onClose();
@@ -168,7 +194,7 @@
 			{#if loading && query.trim()}
 				Searching notes…
 			{:else if query.trim()}
-				{matches.length} result{matches.length === 1 ? '' : 's'}
+				{resultCount} result{resultCount === 1 ? '' : 's'}
 			{:else}
 				All commands and notes
 			{/if}
@@ -217,5 +243,12 @@
 				</div>
 			{/if}
 		</Command.List>
+    {#if notePageCount > 1}
+      <nav class="flex items-center justify-between gap-2 px-2 py-2 text-ui-11 text-muted" aria-label="Palette note pages">
+        <button type="button" aria-label="Previous note results" disabled={currentNotePage === 0} onclick={() => void changeNotePage(-1)}>Previous</button>
+        <span role="status">Notes {currentNotePage * notePageSize + 1}–{Math.min((currentNotePage + 1) * notePageSize, noteCount)} of {noteCount}</span>
+        <button type="button" aria-label="Next note results" disabled={currentNotePage === notePageCount - 1} onclick={() => void changeNotePage(1)}>Next</button>
+      </nav>
+    {/if}
 	</Command.Root>
 </section>

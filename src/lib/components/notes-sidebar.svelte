@@ -250,13 +250,20 @@
 
 	function buildTreeRows(): TreeRow[] {
 		const folderPaths = new Set<string>();
-		const folderIcons = new Map(folders.map((folder) => [folder.path, folder.icon]));
+		const folderMetadata = new Map(folders.map((folder) => [folder.path, folder]));
+		const childFoldersByParent = new Map<string, string[]>();
+		const labels = new Intl.Collator(undefined, { sensitivity: 'base' });
 		const notesByFolder = new Map<string, VaultSearchResult[]>();
 		const addFolder = (path: string): void => {
 			let current = '';
 			for (const part of pathParts(path)) {
 				current = joinPath(current, part);
+				if (folderPaths.has(current)) continue;
 				folderPaths.add(current);
+				const parent = parentPath(current);
+				const children = childFoldersByParent.get(parent) ?? [];
+				children.push(current);
+				childFoldersByParent.set(parent, children);
 			}
 		};
 		for (const folder of folders) addFolder(folder.path);
@@ -283,17 +290,16 @@
 
 		const rows: TreeRow[] = [];
 		const visit = (parent: string, depth: number): void => {
-			const childFolders = [...folderPaths]
-				.filter((path) => parentPath(path) === parent)
+			const childFolders = (childFoldersByParent.get(parent) ?? [])
 				.sort((left, right) =>
-					Number(folderPinnedForPath(right)) - Number(folderPinnedForPath(left)) ||
-					folderLabel(left).localeCompare(folderLabel(right), undefined, { sensitivity: 'base' }),
+					Number(folderMetadata.get(right)?.pinned === true) - Number(folderMetadata.get(left)?.pinned === true) ||
+					labels.compare(folderLabel(left), folderLabel(right)),
 				);
 			for (const path of childFolders) {
-				const hasChildren = [...folderPaths].some((candidate) => parentPath(candidate) === path) || Boolean(notesByFolder.get(path)?.length) || Boolean(attachmentsByFolder.get(path)?.length);
+				const hasChildren = Boolean(childFoldersByParent.get(path)?.length) || Boolean(notesByFolder.get(path)?.length) || Boolean(attachmentsByFolder.get(path)?.length);
 				const expanded = !collapsedFolders.has(path);
-				const customIcon = folderIcons.get(path);
-				rows.push({ kind: 'folder', key: `folder:${path}`, path, label: folderLabel(path), depth, expanded, hasChildren, attachments: isAttachmentPath(path), pinned: folderPinnedForPath(path), icon: isFolderIcon(customIcon) ? customIcon : isAttachmentPath(path) ? 'paperclip' : undefined });
+				const customIcon = folderMetadata.get(path)?.icon;
+				rows.push({ kind: 'folder', key: `folder:${path}`, path, label: folderLabel(path), depth, expanded, hasChildren, attachments: isAttachmentPath(path), pinned: folderMetadata.get(path)?.pinned === true, icon: isFolderIcon(customIcon) ? customIcon : isAttachmentPath(path) ? 'paperclip' : undefined });
 				if (expanded) visit(path, depth + 1);
 			}
 			const childNotes = (notesByFolder.get(parent) ?? []).toSorted((left, right) =>
@@ -303,7 +309,7 @@
 				rows.push({ kind: 'file', key: `file:${result.note.id}`, path: notePath(result), label: noteLabel(result), depth, result });
 			}
 			const childAttachments = (attachmentsByFolder.get(parent) ?? []).toSorted((left, right) =>
-				left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }),
+				labels.compare(left.name, right.name),
 			);
 			for (const attachment of childAttachments) {
 				rows.push({ kind: 'attachment', key: `attachment:${attachment.id}`, path: attachment.sourcePath ?? attachment.name, label: basename(attachment.sourcePath ?? attachment.name), depth, attachment });
