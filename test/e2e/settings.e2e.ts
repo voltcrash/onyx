@@ -268,3 +268,24 @@ test("opens each settings section scrolled to the top", async ({ page }) => {
   await expect(panel.getByRole("heading", { name: "Themes" })).toBeInViewport();
   expect(await panel.evaluate((element) => element.scrollTop)).toBe(0);
 });
+
+test("fits typeface names in the font selects on a phone", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  for (const role of ["heading", "content", "code"]) {
+    const typeface = page.locator(`#font-${role}`);
+    await expect(typeface).toBeVisible();
+    const fits = await typeface.evaluate((select: HTMLSelectElement) => {
+      const context = document.createElement("canvas").getContext("2d")!;
+      context.font = getComputedStyle(select).font;
+      const longest = Math.max(
+        ...[...select.options].map((option) => context.measureText(option.text).width),
+      );
+      // Leave room for the padding and the dropdown arrow.
+      return select.getBoundingClientRect().width >= longest + 48;
+    });
+    expect(fits, role).toBe(true);
+  }
+});
