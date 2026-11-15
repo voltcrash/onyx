@@ -1236,6 +1236,13 @@ export class Vault {
       const parsed = parseSearchQuery(query);
       const terms = tokenize(normalizeSearchText(parsed.text));
       const requiredTags = normalizeTags([...tags, ...parsed.tags]);
+      if (terms.length === 0 && requiredTags.length === 0) {
+        return activeNotes(await this.#database.getNotes()).map((note) => ({
+          note,
+          excerpt: "",
+          score: 0,
+        }));
+      }
       if (terms.length === 0) {
         const [documents, notes] = await Promise.all([
           this.#database.getSearchDocuments(),
