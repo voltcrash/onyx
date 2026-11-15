@@ -4,7 +4,7 @@
   import BackupEncryptionSettings from "./backup-encryption-settings.svelte";
 	import { untrack } from 'svelte';
 	import {
-		CloudDownload, CloudOff, CloudUpload, Code2, Copy, Database, Download, ExternalLink, FileArchive,
+		CloudDownload, CloudOff, CloudUpload, Code2, Database, Download, ExternalLink, FileArchive,
 		FolderInput, FolderOutput, HardDrive, LoaderCircle, LogOut, Monitor, Moon, RefreshCw, ShieldCheck,
 		Sun, Trash2, TriangleAlert, WifiOff, X
 	} from '@lucide/svelte';
@@ -376,9 +376,8 @@
 			<h4>The <code class="type-specimen-token [display:inline-block] [padding:0.08em_0.27em] rounded-sm bg-subtle-strong text-ink-strong [font:0.88em_var(--font-code)] [.type-specimen_blockquote_&]:[padding:0.04em_0.24em] [.type-specimen_blockquote_&]:[font-size:0.92em] [.type-specimen_code:not(&)]:m-0 [.type-specimen_code:not(&)]:p-0">?</code> Operator Shortcut</h4>
 			<blockquote>“This pattern of propagating errors is so common in Rust that Rust provides the question mark operator <code class="type-specimen-token [display:inline-block] [padding:0.08em_0.27em] rounded-sm bg-subtle-strong text-ink-strong [font:0.88em_var(--font-code)] [.type-specimen_blockquote_&]:[padding:0.04em_0.24em] [.type-specimen_blockquote_&]:[font-size:0.92em] [.type-specimen_code:not(&)]:m-0 [.type-specimen_code:not(&)]:p-0">?</code> to make this easier.”</blockquote>
 			<div class="type-specimen-code overflow-hidden border border-line-strong rounded-lg bg-code-bg text-code-text [&_pre]:[overflow-x:auto] [&_pre]:m-0 [&_pre]:pt-2.25 [&_pre]:px-3.5 [&_pre]:pb-3.75 [&_pre]:[font:13px_/_1.6_var(--font-code)] [&_pre]:[white-space:pre] [&_pre_code]:[font:inherit]" aria-label="Rust code example">
-				<div class="type-specimen-code-header flex items-center justify-between pt-3 px-3.5 pb-2 text-code-text [font-family:var(--font-content)] text-ui-13 [&_>_span]:inline-flex [&_>_span]:items-center [&_>_span]:gap-2 [&_>_svg]:text-inverse-muted">
-					<span><Code2 size={18} aria-hidden="true" /> Rust</span>
-					<Copy size={24} aria-hidden="true" />
+				<div class="type-specimen-code-header flex items-center pt-3 px-3.5 pb-2 text-code-text [font-family:var(--font-content)] text-ui-13 [&_>_span]:inline-flex [&_>_span]:items-center [&_>_span]:gap-2">
+					<span><Code2 size={16} aria-hidden="true" /> Rust</span>
 				</div>
 				<pre><code><span class="type-specimen-code-keyword [color:#e79ab6]">let mut</span> <span class="type-specimen-code-variable [color:#b9a5ee]">username_file</span> = <span class="type-specimen-code-type text-code-text">File</span>::<span class="type-specimen-code-function [color:#b9a5ee]">open</span>(<span class="type-specimen-code-string [color:#8fcf9e]">"hello.txt"</span>)?;</code></pre>
 			</div>
