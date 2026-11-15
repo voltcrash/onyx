@@ -58,6 +58,27 @@ test("supports match case and whole-word find options", async ({ page }) => {
   await expect(page.locator(".find-count")).toHaveText("1 of 2");
 });
 
+test("explains what to try when nothing matches", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill("cat");
+  await editor.focus();
+  await page.keyboard.press("ControlOrMeta+f");
+
+  const findPanel = page.getByRole("search", { name: "Find and replace" });
+  await page.getByRole("searchbox", { name: "Find in note" }).fill("dog");
+  await expect(page.locator(".find-count")).toHaveText("No matches");
+  await expect(findPanel.getByText(/No matches/)).toHaveCount(1);
+  await expect(page.locator(".find-status")).toHaveText("Check the spelling, or try fewer words.");
+
+  await page.getByRole("button", { name: /Match case/ }).click();
+  await page.getByRole("button", { name: /Whole word/ }).click();
+  await expect(page.locator(".find-status")).toHaveText(
+    "Try again without Match case and Whole word.",
+  );
+});
+
 test("keeps replacement input focused when match navigation finishes", async ({ page }) => {
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Markdown editor" });

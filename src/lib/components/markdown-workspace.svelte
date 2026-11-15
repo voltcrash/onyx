@@ -143,6 +143,7 @@
 		const instance = new MarkdownEditor(node, {
 			doc: untrack(() => markdown),
 			label: 'Markdown editor',
+			describedBy: 'editor-keyboard-hint',
 			placeholder: EDITOR_PLACEHOLDER,
 			onChange: (value) => {
 				scrollDriver = 'source';
@@ -504,7 +505,7 @@
 <main class="workspace relative [grid-row:1] [grid-column:2] min-w-0 min-h-0 flex flex-col bg-paper [.sidebar-right_&]:[grid-column:1] [@media((max-width:_900px))]:[grid-column:1]!">
 	<button class="collapsed-sidebar-toggle border-0 bg-transparent cursor-pointer [touch-action:none] [-webkit-touch-callout:none] select-none [@media((max-width:_900px))]:[.workspace_>_&]:grid! [@media((max-width:_900px)_and_(pointer:_coarse))]:[.workspace_>_&]:fixed!" onpointerdown={onSidebarDragStart} aria-label="Show notes sidebar" title={`Show sidebar (${formatShortcut(shortcuts.toggleSidebar, primaryModifier)})`} onclick={onToggleSidebar}><PanelLeft size={19} /></button>
 	{#if storageNotice}
-		<div class="storage-notice flex items-center gap-2.25 py-2.5 px-4.5 [border-bottom:1px_solid_var(--border)] bg-surface-raised text-muted text-ui-12 [&_svg]:flex-none [&_span]:flex-1 [@media((max-width:_900px))]:[.workspace_>_&]:pl-13.5! [@media((max-width:_900px))]:[.sidebar-right_.workspace_>_&]:pr-13.5! [@media((max-width:_900px))]:[.sidebar-right_.workspace_>_&]:pl-4.5!" role="status"><HardDrive size={16} /><span>{storageNotice}</span><button class="storage-dismiss grid flex-none place-items-center p-1 border-0 rounded-md bg-transparent [color:inherit] cursor-pointer [&:hover]:bg-subtle-strong [&:hover]:text-ink" aria-label="Dismiss storage warning" title="Dismiss" onclick={onDismissStorageNotice}><X size={14} /></button></div>
+		<div class="storage-notice flex items-center gap-2.25 py-2.5 px-4.5 [border-bottom:1px_solid_var(--line-soft)] bg-surface text-muted text-ui-12 [&_svg]:flex-none [&_span]:flex-1 [@media((max-width:_900px))]:[.workspace_>_&]:pl-13.5! [@media((max-width:_900px))]:[.sidebar-right_.workspace_>_&]:pr-13.5! [@media((max-width:_900px))]:[.sidebar-right_.workspace_>_&]:pl-4.5!" role="status"><HardDrive size={16} /><span>{storageNotice}</span><button class="storage-dismiss relative grid flex-none place-items-center size-8 -my-1.25 -mr-2 p-0 border-0 rounded-md after:absolute after:-inset-1.5 bg-transparent [color:inherit] cursor-pointer [&:hover]:bg-subtle-strong [&:hover]:text-ink" aria-label="Dismiss storage warning" title="Dismiss" onclick={onDismissStorageNotice}><X size={14} /></button></div>
 	{/if}
 	{#if storageError}
 		<div class="storage-error flex items-center gap-2.25 py-2.5 px-4.5 [border-bottom:1px_solid_var(--danger-border)] bg-danger-bg text-danger-strong text-ui-12 [&_svg]:flex-none [&_span]:flex-1 [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-danger-deep [&_button]:[font-weight:650] [&_button]:cursor-pointer [&_button]:[text-decoration:underline] [&_button]:whitespace-nowrap [@media((max-width:_900px))]:[.workspace_>_&]:pl-13.5! [@media((max-width:_900px))]:[.sidebar-right_.workspace_>_&]:pr-13.5! [@media((max-width:_900px))]:[.sidebar-right_.workspace_>_&]:pl-4.5!" role="alert">
@@ -520,6 +521,7 @@
 		<div bind:this={sourcePaneElement} class="source-pane" class:dragged={drag?.moving && drag.pane === 'source'} data-source-theme={resolvedTheme} data-color-theme={colorTheme} style={drag?.moving && drag.pane === 'source' ? `translate: ${drag.dx}px ${drag.dy}px; transform-origin: ${drag.originX}px ${drag.originY}px; --lift-scale: ${drag.scale}` : undefined}>
 			<div class="source-body" onscrollcapture={(event) => handlePaneScroll(event, 'source')} onwheelcapture={() => handlePaneInteraction('source')} onpointerdowncapture={() => handlePaneInteraction('source')} ontouchstartcapture={() => handlePaneInteraction('source')} onkeydowncapture={() => handlePaneInteraction('source')} onloadcapture={() => queueScrollSync(scrollDriver)}>
 					<div class="source-editor" {@attach mountEditor}></div>
+					<p id="editor-keyboard-hint" class="visually-hidden">Tab indents. Press Escape, then Tab, to move focus out of the editor.</p>
 			</div>
 		</div>
 		<div class="pane-divider [@media((max-width:_900px)_and_(pointer:_coarse))]:sticky! [@media((max-width:_900px)_and_(pointer:_coarse))]:top-0! [@media((max-width:_900px)_and_(pointer:_coarse))]:[align-self:start]! [@media((max-width:_900px)_and_(pointer:_coarse))]:h-dvh! [@media((max-width:_900px)_and_(pointer:_coarse))]:z-5!">

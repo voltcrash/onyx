@@ -24,4 +24,18 @@ for (const { device, width, top, side, bottom } of [
     expect(offsets.left).toBeCloseTo(side, 0);
     await expect(editor.locator(".cm-line").first()).toHaveCSS("padding", "0px");
   });
+
+  test(`sets the source pane in the code font on ${device}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+
+    const scroller = page.locator(".source-editor .cm-scroller");
+    await expect(scroller).toHaveCSS("font-family", /^"Fira Code Variable"/);
+    const { fontSize, lineHeight } = await scroller.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { fontSize: parseFloat(style.fontSize), lineHeight: parseFloat(style.lineHeight) };
+    });
+    expect(lineHeight / fontSize).toBeCloseTo(1.78, 2);
+  });
 }

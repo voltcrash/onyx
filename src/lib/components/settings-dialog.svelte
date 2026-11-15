@@ -4,7 +4,7 @@
   import BackupEncryptionSettings from "./backup-encryption-settings.svelte";
 	import { untrack } from 'svelte';
 	import {
-		CloudDownload, CloudOff, CloudUpload, Code2, Copy, Database, Download, ExternalLink, FileArchive,
+		CloudDownload, CloudOff, CloudUpload, Code2, Database, Download, ExternalLink, FileArchive,
 		FolderInput, FolderOutput, HardDrive, LoaderCircle, LogOut, Monitor, Moon, RefreshCw, ShieldCheck,
 		Sun, Trash2, TriangleAlert, WifiOff, X
 	} from '@lucide/svelte';
@@ -153,6 +153,12 @@
       void vault;
       untrack(() => { usageGeneration += 1; usage = undefined; usageState = 'idle'; usageMessage = ''; clearTarget = undefined; clearState = 'idle'; });
     });
+
+	let panel = $state<HTMLElement>();
+	$effect(() => {
+		void section;
+		if (panel) panel.scrollTop = 0;
+	});
 
 	$effect(() => {
 		if (section === 'github' && connected && isOnline && !repositoriesLoaded) void loadRepositories();
@@ -354,7 +360,7 @@
 				{/each}
 			</nav>
 
-			<div class="settings-panel pt-5 px-5.5 pb-6 overflow-y-auto [&_h3]:mt-0 [&_h3]:mx-0 [&_h3]:mb-1 [&_h3]:[font-family:'Newsreader_Variable',_Georgia,_serif] [&_h3]:text-ui-16 [&_h3]:font-medium [&_h3]:[letter-spacing:-0.01em]">
+			<div bind:this={panel} class="settings-panel pt-5 px-5.5 pb-6 overflow-y-auto [&_h3]:mt-0 [&_h3]:mx-0 [&_h3]:mb-1 [&_h3]:[font-family:'Newsreader_Variable',_Georgia,_serif] [&_h3]:text-ui-16 [&_h3]:font-medium [&_h3]:[letter-spacing:-0.01em]">
 				{#if !isOnline && section !== 'editor' && section !== 'themes' && section !== 'shortcuts' && section !== 'storage' && section !== 'transfer' && section !== 'vault'}
 					<div class="settings-banner flex items-center gap-2 mb-3.5 py-2.25 px-2.75 border border-warn-border rounded-lg bg-warn-bg text-warn-text text-ui-12"><WifiOff size={15} /><span>GitHub settings are paused until your connection returns.</span></div>
 				{/if}
@@ -370,16 +376,15 @@
 			<h4>The <code class="type-specimen-token [display:inline-block] [padding:0.08em_0.27em] rounded-sm bg-subtle-strong text-ink-strong [font:0.88em_var(--font-code)] [.type-specimen_blockquote_&]:[padding:0.04em_0.24em] [.type-specimen_blockquote_&]:[font-size:0.92em] [.type-specimen_code:not(&)]:m-0 [.type-specimen_code:not(&)]:p-0">?</code> Operator Shortcut</h4>
 			<blockquote>“This pattern of propagating errors is so common in Rust that Rust provides the question mark operator <code class="type-specimen-token [display:inline-block] [padding:0.08em_0.27em] rounded-sm bg-subtle-strong text-ink-strong [font:0.88em_var(--font-code)] [.type-specimen_blockquote_&]:[padding:0.04em_0.24em] [.type-specimen_blockquote_&]:[font-size:0.92em] [.type-specimen_code:not(&)]:m-0 [.type-specimen_code:not(&)]:p-0">?</code> to make this easier.”</blockquote>
 			<div class="type-specimen-code overflow-hidden border border-line-strong rounded-lg bg-code-bg text-code-text [&_pre]:[overflow-x:auto] [&_pre]:m-0 [&_pre]:pt-2.25 [&_pre]:px-3.5 [&_pre]:pb-3.75 [&_pre]:[font:13px_/_1.6_var(--font-code)] [&_pre]:[white-space:pre] [&_pre_code]:[font:inherit]" aria-label="Rust code example">
-				<div class="type-specimen-code-header flex items-center justify-between pt-3 px-3.5 pb-2 text-code-text [font-family:var(--font-content)] text-ui-13 [&_>_span]:inline-flex [&_>_span]:items-center [&_>_span]:gap-2 [&_>_svg]:text-inverse-muted">
-					<span><Code2 size={18} aria-hidden="true" /> Rust</span>
-					<Copy size={24} aria-hidden="true" />
+				<div class="type-specimen-code-header flex items-center pt-3 px-3.5 pb-2 text-code-text [font-family:var(--font-content)] text-ui-13 [&_>_span]:inline-flex [&_>_span]:items-center [&_>_span]:gap-2">
+					<span><Code2 size={16} aria-hidden="true" /> Rust</span>
 				</div>
 				<pre><code><span class="type-specimen-code-keyword [color:#e79ab6]">let mut</span> <span class="type-specimen-code-variable [color:#b9a5ee]">username_file</span> = <span class="type-specimen-code-type text-code-text">File</span>::<span class="type-specimen-code-function [color:#b9a5ee]">open</span>(<span class="type-specimen-code-string [color:#8fcf9e]">"hello.txt"</span>)?;</code></pre>
 			</div>
 		</div>
 
 					{#each fontRoles as role (role.id)}
-						<div class="font-role grid [grid-template-columns:96px_minmax(0,_1fr)] [align-items:baseline] gap-2 mb-2.75 [&_label]:text-ink-soft [&_label]:text-ui-12 [&_label]:[font-weight:650] [&_select]:w-full [&_select]:h-9 [&_select]:py-0 [&_select]:px-2.5 [&_select]:border [&_select]:border-line [&_select]:rounded-md [&_select]:bg-surface [&_select]:text-ink [&_select]:cursor-pointer [&_select]:[appearance:auto] [&_select]:[-webkit-appearance:auto] [&_select]:[font-family:-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif] [&_select]:text-ui-13 [&_select:hover]:border-line-hover [&_select:focus-visible]:border-focus-border [&_select:focus-visible]:[box-shadow:0_0_0_2px_var(--focus-ring)] [&_select:focus-visible]:outline-none">
+						<div class="font-role grid [grid-template-columns:96px_minmax(0,_1fr)] [align-items:baseline] gap-2 mb-2.75 [@media((max-width:_700px))]:[grid-template-columns:minmax(0,_1fr)]! [@media((max-width:_700px))]:gap-1.5! [@media((max-width:_700px))]:mb-3.5! [&_label]:text-ink-soft [&_label]:text-ui-12 [&_label]:[font-weight:650] [&_select]:w-full [&_select]:h-9 [&_select]:py-0 [&_select]:px-2.5 [&_select]:border [&_select]:border-line [&_select]:rounded-md [&_select]:bg-surface [&_select]:text-ink [&_select]:cursor-pointer [&_select]:[appearance:auto] [&_select]:[-webkit-appearance:auto] [&_select]:[font-family:-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif] [&_select]:text-ui-13 [&_select:hover]:border-line-hover [&_select:focus-visible]:border-focus-border [&_select:focus-visible]:[box-shadow:0_0_0_2px_var(--focus-ring)] [&_select:focus-visible]:outline-none">
 							<label for={`font-${role.id}`}>{role.label}</label>
 							<div class="font-selects grid [grid-template-columns:minmax(118px,_5fr)_minmax(0,_8fr)] gap-2 min-w-0">
 								<select id={`font-${role.id}-type`} aria-label={`${role.label} font type`} value={fontCategories[role.id]} onchange={(event) => onFontCategoryChange(role.id, event.currentTarget.value as FontCategory)}>
@@ -423,7 +428,7 @@
 						{#each modeOptions as option (option.id)}
 							<button class="theme-mode-option [&_strong]:block [&_strong]:text-ui-13 [&_small]:block [&_small]:mt-0.75 [&_small]:text-muted [&_small]:text-ui-11 [&_small]:[line-height:1.4] [&_small]:[font-weight:400] flex items-start gap-2.5 min-w-0 p-3.25 border border-line rounded-lg bg-surface text-ink-soft cursor-pointer text-left [&_>_svg]:flex-none [&_>_svg]:mt-0.25 [&_>_svg]:text-muted [&:hover]:border-line-hover [&:hover]:text-ink [&:hover_>_svg]:text-accent [&.active_>_svg]:text-accent [&.active]:border-accent-border [&.active]:bg-accent-bg [&.active]:text-accent [&.active]:font-semibold" class:active={theme === option.id} role="radio" aria-checked={theme === option.id} aria-label={option.label} onclick={() => onThemeChange(option.id)}>
 								{#if option.id === 'light'}<Sun size={18} />{:else if option.id === 'dark'}<Moon size={18} />{:else}<Monitor size={18} />{/if}
-								<span><strong>{option.label}</strong><small>{option.id === 'system' ? `${option.hint} (currently ${resolvedTheme}).` : option.hint}</small></span>
+								<span><strong>{option.label}</strong><small>{option.id === 'system' ? `${option.hint} Currently ${resolvedTheme}.` : option.hint}</small></span>
 							</button>
 						{/each}
 					</div>
@@ -441,6 +446,7 @@
 						<div><h3>Keyboard shortcuts</h3><p class="settings-hint flex items-center gap-1.5 flex-wrap mt-0 mx-0 mb-3.5 text-muted text-ui-12 [line-height:1.55] [&_a]:inline-flex [&_a]:items-center [&_a]:gap-1 [&_a]:text-accent [&_kbd]:py-0.5 [&_kbd]:px-1.25 [&_kbd]:border [&_kbd]:border-line [&_kbd]:rounded-sm [&_kbd]:bg-surface [&_kbd]:text-muted [&_kbd]:text-ui-11">Select a shortcut, then press a new key combination. Your primary modifier is detected automatically.</p></div>
 						<button class="settings-secondary flex-none h-7.5 py-0 px-2.25 border border-line rounded-md bg-surface text-ink-soft cursor-pointer text-ui-11 [&:hover]:border-line-hover [&:hover]:text-ink [@media((max-width:_700px))]:[.settings-section-heading_&]:mb-3!" onclick={() => { onResetShortcuts(); recordingShortcut = undefined; shortcutMessage = ''; }}>Restore defaults</button>
 					</div>
+					<p class="settings-hint flex items-center gap-1.5 flex-wrap mt-0 mx-0 mb-3.5 text-muted text-ui-12 [line-height:1.55] [&_a]:inline-flex [&_a]:items-center [&_a]:gap-1 [&_a]:text-accent [&_kbd]:py-0.5 [&_kbd]:px-1.25 [&_kbd]:border [&_kbd]:border-line [&_kbd]:rounded-sm [&_kbd]:bg-surface [&_kbd]:text-muted [&_kbd]:text-ui-11">In the editor, <kbd>Tab</kbd> indents. Press <kbd>Esc</kbd> then <kbd>Tab</kbd> to move to the next control.</p>
 					{#if shortcutMessage}<p class="settings-hint error flex items-center gap-1.5 flex-wrap mt-0 mx-0 mb-3.5 text-muted text-ui-12 [line-height:1.55] [&_a]:inline-flex [&_a]:items-center [&_a]:gap-1 [&_a]:text-accent [&_kbd]:py-0.5 [&_kbd]:px-1.25 [&_kbd]:border [&_kbd]:border-line [&_kbd]:rounded-sm [&_kbd]:bg-surface [&_kbd]:text-muted [&_kbd]:text-ui-11 [.backup-notice&]:border-danger-border [.backup-notice&]:bg-danger-bg [.backup-notice&]:text-danger-strong [.settings-hint&]:text-danger [.restore-placeholder&]:text-danger-strong" role="alert">{shortcutMessage}</p>{/if}
 					<div class="shortcut-list editable [max-height:min(52vh,_420px)] overflow-y-auto py-2.25 px-5.5 [&_>_div]:flex [&_>_div]:items-center [&_>_div]:justify-between [&_>_div]:gap-3.5 [&_>_div]:py-2.75 [&_>_div]:px-0 [&_>_div]:[border-bottom:1px_solid_var(--line-soft)] [&_>_div]:text-ink-soft [&_>_div]:text-ui-13 [&_>_div:last-child]:border-0 [&_kbd]:min-w-11 [&_kbd]:py-1.25 [&_kbd]:px-1.75 [&_kbd]:border [&_kbd]:border-line-strong [&_kbd]:[border-bottom-width:2px] [&_kbd]:rounded-sm [&_kbd]:bg-surface [&_kbd]:text-muted [&_kbd]:text-ui-11 [&_kbd]:text-center [&_kbd]:whitespace-nowrap [&_kbd]:[box-shadow:var(--shadow-xs)] [.settings-panel_&]:[max-height:none] [.settings-panel_&]:p-0 [.shortcut-list&_>_div]:gap-2.5">
 						{#each shortcutActions as action (action.id)}
@@ -556,8 +562,8 @@
 						</div>
 						<p class="settings-hint flex items-center gap-1.5 flex-wrap mt-0 mx-0 mb-3.5 text-muted text-ui-12 [line-height:1.55] [&_a]:inline-flex [&_a]:items-center [&_a]:gap-1 [&_a]:text-accent [&_kbd]:py-0.5 [&_kbd]:px-1.25 [&_kbd]:border [&_kbd]:border-line [&_kbd]:rounded-sm [&_kbd]:bg-surface [&_kbd]:text-muted [&_kbd]:text-ui-11">{formatBytes(usage.usage)} used{usage.quota ? ` of about ${formatBytes(usage.quota)} available to this site` : ''}.</p>
 						<dl class="settings-facts mt-0 mx-0 mb-3.5 border border-line-soft rounded-lg bg-surface [&_>_div]:flex [&_>_div]:items-center [&_>_div]:justify-between [&_>_div]:gap-3 [&_>_div]:py-2.5 [&_>_div]:px-3.25 [&_>_div]:[border-bottom:1px_solid_var(--line-soft)] [&_>_div]:text-ui-12 [&_>_div:last-child]:border-0 [&_dt]:text-muted [&_dd]:m-0 [&_dd]:text-ink [&_dd]:font-semibold [&_dd]:text-right [&_dd]:[overflow-wrap:anywhere]">
-							<div><dt>Notes</dt><dd>{usage.noteCount} · {formatBytes(usage.noteBytes)}</dd></div>
-							<div><dt>Attachments</dt><dd>{usage.attachmentCount} · {formatBytes(usage.attachmentBytes)}</dd></div>
+							<div><dt>Notes</dt><dd>{usage.noteCount} {usage.noteCount === 1 ? 'note' : 'notes'} · {formatBytes(usage.noteBytes)}</dd></div>
+							<div><dt>Attachments</dt><dd>{usage.attachmentCount} {usage.attachmentCount === 1 ? 'file' : 'files'} · {formatBytes(usage.attachmentBytes)}</dd></div>
 							<div><dt>Persistent storage</dt><dd>{usage.persistent ? 'Granted' : usage.persistentStorageAvailable ? 'Not granted' : 'Unavailable in this browser'}</dd></div>
 							<div><dt>File storage</dt><dd>{usage.fileStorage.mode === 'native-directory' ? usage.fileStorage.nativeDirectoryName : 'Private browser storage (OPFS)'}</dd></div>
 						</dl>

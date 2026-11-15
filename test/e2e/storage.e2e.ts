@@ -222,8 +222,8 @@ test("keeps newly created vaults discoverable without localStorage", async ({ pa
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
   await expect(editor).toBeEnabled();
   await page.locator(".vault-trigger").click();
-  await page.getByRole("menuitem", { name: "New repository" }).click();
-  await expect(page.getByRole("tablist", { name: /Repositories/ }).getByRole("tab")).toHaveCount(2);
+  await page.getByRole("menuitem", { name: "New vault" }).click();
+  await expect(page.getByRole("tablist", { name: /Vaults/ }).getByRole("tab")).toHaveCount(2);
   await expect(editor).toBeEnabled();
   await editor.fill("# Durable vault");
   await page.keyboard.press("ControlOrMeta+S");
@@ -469,4 +469,49 @@ test("mirrors retained OPFS files after permanently deleting a sibling note", as
     };
   });
   expect(mirrored).toEqual({ texts: ["# Retained"], unreadableFiles: 0 });
+});
+
+for (const colorScheme of ["light", "dark"] as const) {
+  test(`sets the storage notice apart from the pane in ${colorScheme} mode`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme });
+    await page.goto("/");
+    const notice = page.locator(".storage-notice");
+    await expect(notice).toBeVisible();
+
+    const styles = await notice.evaluate((element) => {
+      const root = getComputedStyle(document.documentElement);
+      const probe = document.createElement("i");
+      document.body.append(probe);
+      const resolve = (name: string) => {
+        probe.style.color = root.getPropertyValue(name);
+        return getComputedStyle(probe).color;
+      };
+      const notice = getComputedStyle(element);
+      const result = {
+        background: notice.backgroundColor,
+        border: `${notice.borderBottomWidth} ${notice.borderBottomStyle} ${notice.borderBottomColor}`,
+        surface: resolve("--surface"),
+        line: resolve("--line-soft"),
+        pane: getComputedStyle(element.parentElement!).backgroundColor,
+      };
+      probe.remove();
+      return result;
+    });
+    expect(styles.background).toBe(styles.surface);
+    expect(styles.background).not.toBe(styles.pane);
+    expect(styles.border).toBe(`1px solid ${styles.line}`);
+  });
+}
+
+test("gives the storage notice's dismiss button a touch-sized target", async ({ page }) => {
+  await page.goto("/");
+  const dismiss = page.getByRole("button", { name: "Dismiss storage warning" });
+  await expect(dismiss).toBeVisible();
+  const box = (await dismiss.boundingBox())!;
+  expect(box.width).toBeGreaterThanOrEqual(32);
+  expect(box.height).toBeGreaterThanOrEqual(32);
+
+  // The hit area reaches 44px, beyond the visible button.
+  await page.mouse.click(box.x - 5, box.y + box.height / 2);
+  await expect(page.locator(".storage-notice")).toHaveCount(0);
 });

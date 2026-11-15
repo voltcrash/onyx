@@ -144,13 +144,13 @@ test("chooses the sidebar position from the command palette", async ({ page }) =
   await expect(app).not.toHaveClass(/(?:^|\s)sidebar-right(?:\s|$)/);
 });
 
-test("switches repositories by swiping horizontally on the sidebar", async ({ page }) => {
+test("switches vaults by swiping horizontally on the sidebar", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
   await page.locator(".vault-trigger").click();
-  await page.getByRole("menuitem", { name: "New repository" }).click();
-  const dots = page.getByRole("tablist", { name: /Repositories/ }).getByRole("tab");
+  await page.getByRole("menuitem", { name: "New vault" }).click();
+  const dots = page.getByRole("tablist", { name: /Vaults/ }).getByRole("tab");
   await expect(dots).toHaveCount(2);
   await expect(dots.nth(1)).toHaveAttribute("aria-selected", "true");
 
@@ -159,7 +159,7 @@ test("switches repositories by swiping horizontally on the sidebar", async ({ pa
   await page.mouse.wheel(-120, 0);
   await expect(dots.nth(0)).toHaveAttribute("aria-selected", "true");
 
-  // Vertical scrolling must not switch repositories.
+  // Vertical scrolling must not switch vaults.
   await page.waitForTimeout(250);
   await page.mouse.wheel(0, 120);
   await page.waitForTimeout(250);
@@ -169,13 +169,13 @@ test("switches repositories by swiping horizontally on the sidebar", async ({ pa
   await expect(dots.nth(1)).toHaveAttribute("aria-selected", "true");
 });
 
-test("switches repositories with mouse back and forward buttons", async ({ page }) => {
+test("switches vaults with mouse back and forward buttons", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
   await page.locator(".vault-trigger").click();
-  await page.getByRole("menuitem", { name: "New repository" }).click();
-  const dots = page.getByRole("tablist", { name: /Repositories/ }).getByRole("tab");
+  await page.getByRole("menuitem", { name: "New vault" }).click();
+  const dots = page.getByRole("tablist", { name: /Vaults/ }).getByRole("tab");
   await expect(dots).toHaveCount(2);
   await expect(dots.nth(1)).toHaveAttribute("aria-selected", "true");
 
@@ -194,4 +194,41 @@ test("switches repositories with mouse back and forward buttons", async ({ page 
 
   await pressMouseButton(4);
   await expect(dots.nth(1)).toHaveAttribute("aria-selected", "true");
+});
+
+test("keeps the save status text in the sidebar footer on a phone", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await page.getByRole("button", { name: "Show notes sidebar" }).click();
+
+  const status = page.locator(".doc-status-text");
+  await expect(status).toBeVisible();
+  await expect(status).toHaveText(/\d+ words? · \d+ min · \S/);
+  // The counts may truncate on narrow drawers, but the save state must stay readable.
+  const state = page.locator(".doc-status-state");
+  await expect(state).toHaveText(/^ · \S/);
+  expect(
+    await state.evaluate((element) => {
+      const button = element.closest("button")!.getBoundingClientRect();
+      const bounds = element.getBoundingClientRect();
+      return element.scrollWidth <= element.clientWidth && bounds.right <= button.right;
+    }),
+  ).toBe(true);
+});
+
+test("reports no reading time for an empty note", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  const status = page.locator(".doc-status");
+
+  await editor.fill("");
+  await expect(status).toHaveText(/^0 words · \S/);
+  await expect(status).not.toHaveText(/min/);
+  await expect(status).toHaveAttribute("aria-label", /^0 words, (?!.*minute)/);
+
+  await editor.fill("one");
+  await expect(status).toHaveText(/^1 word · 1 min · /);
+  await expect(status).toHaveAttribute("aria-label", /^1 word, 1 minute reading time, /);
 });

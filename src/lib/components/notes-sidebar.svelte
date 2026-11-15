@@ -315,6 +315,7 @@
 
 	let treeRows = $derived(buildTreeRows());
 
+	const wordLabel = $derived(`${wordCount} ${wordCount === 1 ? 'word' : 'words'}`);
 	const docStatusLabel = $derived(
 		saveState === 'loading'
 			? 'Opening…'
@@ -1053,7 +1054,7 @@
 		</div>
 	{/if}
 	{#if vaults.length > 1 && !paletteOpen}
-		<div class="vault-dots flex justify-center gap-0.5 pt-2 px-1 pb-1 [&_button]:grid [&_button]:place-items-center [&_button]:w-4 [&_button]:h-4 [&_button]:p-0 [&_button]:border-0 [&_button]:[background:none] [&_button]:cursor-pointer [&_button::after]:[content:''] [&_button::after]:w-1.5 [&_button::after]:h-1.5 [&_button::after]:rounded-3xl [&_button::after]:bg-line-soft [&_button::after]:[transition:background_150ms,_transform_150ms] [&_button:hover::after]:bg-faint [&_button.active::after]:bg-faint [&_button.active::after]:[transform:scale(1.25)]" role="tablist" aria-label="Repositories (swipe the sidebar, or use the mouse back and forward buttons, to switch)">
+		<div class="vault-dots flex justify-center gap-0.5 pt-2 px-1 pb-1 [&_button]:grid [&_button]:place-items-center [&_button]:w-4 [&_button]:h-4 [&_button]:p-0 [&_button]:border-0 [&_button]:[background:none] [&_button]:cursor-pointer [&_button::after]:[content:''] [&_button::after]:w-1.5 [&_button::after]:h-1.5 [&_button::after]:rounded-3xl [&_button::after]:bg-line-soft [&_button::after]:[transition:background_150ms,_transform_150ms] [&_button:hover::after]:bg-faint [&_button.active::after]:bg-faint [&_button.active::after]:[transform:scale(1.25)]" role="tablist" aria-label="Vaults (swipe the sidebar, or use the mouse back and forward buttons, to switch)">
 			{#each vaults as vault (vault.id)}
 				<button role="tab" aria-selected={vault.id === activeVaultId} aria-label={vault.name} title={vault.name} class:active={vault.id === activeVaultId} disabled={transferState === 'working'} onclick={() => { if (vault.id !== activeVaultId) onSelectVault(vault.id); }}></button>
 			{/each}
@@ -1061,13 +1062,13 @@
 	{/if}
 	<div class="sidebar-footer flex items-center gap-1.75 mt-1 pt-2 px-1 pb-0 [&_>_:first-child]:min-w-0 [&_>_:first-child]:flex-1 [&_.github-account]:overflow-hidden [&_.github-account_>_span]:flex-1">
 		<button
-			class="doc-status h-7 flex items-center gap-1.75 border-0 rounded-md bg-transparent text-faint text-ui-11 whitespace-nowrap pt-0 pr-2 pb-0 pl-1 cursor-pointer no-underline [&:hover]:bg-subtle [&:hover]:text-muted [&[data-tone='error']]:text-danger [&.offline]:text-muted [.sidebar-footer_&]:overflow-hidden [@media((max-width:_700px))]:[&_>_span]:hidden! [@media((max-width:_700px))]:w-8.5! [@media((max-width:_700px))]:justify-center! [@media((max-width:_700px))]:p-0!"
+			class="doc-status h-7 flex items-center gap-1.75 border-0 rounded-md bg-transparent text-faint text-ui-11 whitespace-nowrap pt-0 pr-2 pb-0 pl-1 cursor-pointer no-underline [&:hover]:bg-subtle [&:hover]:text-muted [&[data-tone='error']]:text-danger [&.offline]:text-muted [.sidebar-footer_&]:overflow-hidden"
 			data-tone={docStatusTone}
 			class:offline={!isOnline}
 			title={githubState === 'connected' && githubUser ? `Synced as @${githubUser.login}` : githubMessage || 'Notes are saved on this device'}
-			aria-label={`${wordCount} words, ${readingMinutes} minute reading time, ${docStatusLabel}. Open local storage settings.`}
+			aria-label={`${wordLabel}${readingMinutes ? `, ${readingMinutes} minute reading time` : ''}, ${docStatusLabel}. Open local storage settings.`}
 			onclick={onOpenStorageSettings}
-		><span class="doc-status-text min-w-0 overflow-hidden text-ellipsis">{wordCount} {wordCount === 1 ? 'word' : 'words'} · {readingMinutes} min · {docStatusLabel}</span><i class="doc-status-dot w-1.25 h-1.25 flex-none rounded-full bg-faint opacity-70 [.doc-status[data-tone='ok']_&]:[background:var(--ok,_#4caf7d)] [.doc-status[data-tone='ok']_&]:opacity-100 [.doc-status[data-tone='busy']_&]:[background:var(--warn,_#d9a13b)] [.doc-status[data-tone='busy']_&]:opacity-100 [.doc-status[data-tone='error']_&]:bg-danger [.doc-status[data-tone='error']_&]:opacity-100" aria-hidden="true"></i></button>
+		><span class="doc-status-text flex min-w-0"><span class="min-w-0 shrink-[1000] overflow-hidden text-ellipsis">{wordLabel}{readingMinutes ? ` · ${readingMinutes} min` : ''}</span><span class="doc-status-state min-w-0 overflow-hidden text-ellipsis [white-space:pre]">{` · ${docStatusLabel}`}</span></span><i class="doc-status-dot w-1.25 h-1.25 flex-none rounded-full bg-faint opacity-70 [.doc-status[data-tone='ok']_&]:[background:var(--ok,_#4caf7d)] [.doc-status[data-tone='ok']_&]:opacity-100 [.doc-status[data-tone='busy']_&]:[background:var(--warn,_#d9a13b)] [.doc-status[data-tone='busy']_&]:opacity-100 [.doc-status[data-tone='error']_&]:bg-danger [.doc-status[data-tone='error']_&]:opacity-100" aria-hidden="true"></i></button>
 		<button class="icon-button border-0 bg-transparent cursor-pointer w-8.5 h-8.5 grid place-items-center rounded-md text-muted [transition:background_0.15s_ease,_color_0.15s_ease] [&:hover]:bg-subtle-strong [&:hover]:text-ink [.sidebar-footer_&]:w-7 [.sidebar-footer_&]:h-7" aria-label="Settings" aria-haspopup="dialog" aria-expanded={settingsOpen} aria-controls="settings-dialog" title="Settings" onclick={onOpenSettings}><Settings size={18} /></button>
 	</div>
 </aside>

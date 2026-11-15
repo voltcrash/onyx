@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 import themeCatalog from "../../src/lib/theme-catalog.json" with { type: "json" };
 
+function rgb(hex: string): string {
+  const [r, g, b] = [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
 test("offers additional color themes and persists the selection", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
@@ -17,6 +22,15 @@ test("offers additional color themes and persists the selection", async ({ page 
       has: page.getByText(theme.label, { exact: true }),
     });
     await expect(option).toHaveCount(1);
+    const swatch = option.locator(".theme-preview");
+    await expect(swatch).toHaveCSS("background-color", rgb(theme.preview.paper));
+    await expect(swatch).toHaveCSS("border-top-color", rgb(theme.preview.border));
+    const [light, dark, accent] = await swatch
+      .locator("i")
+      .evaluateAll((parts) => parts.map((part) => getComputedStyle(part).backgroundColor));
+    expect([light, dark, accent]).toEqual(
+      [theme.preview.light, theme.preview.dark, theme.preview.accent].map(rgb),
+    );
     await option.click();
     await expect(page.locator("html")).toHaveAttribute("data-color-theme", id);
     await expect(option).toHaveAttribute("aria-checked", "true");
@@ -84,7 +98,21 @@ test("applies every code font to nested code content", async ({ page }) => {
       "font-family",
       new RegExp(family),
     );
+    await expect(page.locator(".source-editor .cm-scroller")).toHaveCSS(
+      "font-family",
+      new RegExp(family),
+    );
   }
+});
+
+test("shows only the language label in the preview code header", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+
+  const header = page.locator(".type-specimen-code-header");
+  await expect(header).toHaveText("Rust");
+  await expect(header.locator("svg")).toHaveCount(1);
+  await expect(header.locator("svg")).toHaveAttribute("width", "16");
 });
 
 test("filters typefaces by selected font type", async ({ page }) => {
@@ -234,5 +262,63 @@ test("reports a preference write failure after startup", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-color-theme", "ocean");
   await expect(page.locator(".storage-notice")).toContainText(
     "Browser preferences could not be saved",
+  );
+});
+
+test("opens each settings section scrolled to the top", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 700 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const panel = page.locator(".settings-panel");
+  await expect(panel.getByRole("heading", { name: "Fonts" })).toBeVisible();
+  await panel.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  expect(await panel.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: "Themes", exact: true }).click();
+  await expect(panel.getByRole("heading", { name: "Themes" })).toBeInViewport();
+  expect(await panel.evaluate((element) => element.scrollTop)).toBe(0);
+});
+
+test("fits typeface names in the font selects on a phone", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  for (const role of ["heading", "content", "code"]) {
+    const typeface = page.locator(`#font-${role}`);
+    await expect(typeface).toBeVisible();
+    const fits = await typeface.evaluate((select: HTMLSelectElement) => {
+      const context = document.createElement("canvas").getContext("2d")!;
+      context.font = getComputedStyle(select).font;
+      const longest = Math.max(
+        ...[...select.options].map((option) => context.measureText(option.text).width),
+      );
+      // Leave room for the padding and the dropdown arrow.
+      return select.getBoundingClientRect().width >= longest + 48;
+    });
+    expect(fits, role).toBe(true);
+  }
+});
+
+test("punctuates the System theme hint", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Themes", exact: true }).click();
+
+  await expect(
+    page.getByRole("radiogroup", { name: "Color mode" }).getByRole("radio", { name: /System/ }),
+  ).toHaveText("SystemFollow your operating system automatically. Currently dark.");
+});
+
+test("names the units in the storage counts", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await page.getByRole("button", { name: "Open local storage settings" }).click();
+
+  const facts = page.locator(".settings-facts");
+  await expect(facts.locator("div", { hasText: "Notes" }).locator("dd")).toHaveText(/^1 note · \d/);
+  await expect(facts.locator("div", { hasText: "Attachments" }).locator("dd")).toHaveText(
+    /^0 files · 0 B$/,
   );
 });

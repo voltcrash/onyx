@@ -24,3 +24,53 @@ test("wraps long headings and list words on mobile and leaves room for the pane 
       .evaluate((element) => parseFloat(getComputedStyle(element).paddingLeft)),
   ).toBeGreaterThanOrEqual(50);
 });
+
+test("scrolls a wide table on mobile without splitting header words", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill(
+    "| Column one | Column two | Column three | Column four | Column five |\n" +
+      "| --- | --- | --- | --- | --- |\n" +
+      "| Some cell content | More cell content here | Even more content | And yet more | Last one here |",
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Show the rendered pane" }).click();
+
+  const table = page.locator(".rendered-pane table");
+  await expect(table.locator("th")).toHaveCount(5);
+  const layout = await table.evaluate((element) => {
+    const splitWords: string[] = [];
+    for (const header of element.querySelectorAll("th")) {
+      const text = header.firstChild!;
+      for (const match of text.textContent!.matchAll(/\S+/g)) {
+        const range = document.createRange();
+        range.setStart(text, match.index);
+        range.setEnd(text, match.index + match[0].length);
+        if (range.getClientRects().length > 1) splitWords.push(match[0]);
+      }
+    }
+    return { scrolls: element.scrollWidth > element.clientWidth, splitWords };
+  });
+  expect(layout).toEqual({ scrolls: true, splitWords: [] });
+  expect(
+    await page
+      .locator(".rendered-pane")
+      .evaluate((element) => element.scrollWidth <= element.clientWidth),
+  ).toBe(true);
+});
+
+test("rounds each line of wrapped inline code on mobile", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill(
+    "Run the command `pnpm dlx some-very-long-package-name --with-a-flag` before you continue.",
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Show the rendered pane" }).click();
+
+  const code = page.locator(".rendered-pane p code");
+  expect(await code.evaluate((element) => element.getClientRects().length)).toBeGreaterThan(1);
+  await expect(code).toHaveCSS("box-decoration-break", "clone");
+});

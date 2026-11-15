@@ -3,6 +3,7 @@ import {
   ArrowLeftRight,
   Bold,
   Braces,
+  CalendarDays,
   CloudDownload,
   CloudUpload,
   Code2,
@@ -20,9 +21,11 @@ import {
   HardDrive,
   Heading2,
   Highlighter,
+  History,
   ImagePlus,
   Italic,
   Keyboard,
+  LayoutTemplate,
   Link,
   List,
   ListChecks,
@@ -101,6 +104,9 @@ export interface PaletteState {
 export interface PaletteActions {
   shortcutLabel: (action: ShortcutAction) => string | undefined;
   createNote: () => Promise<void>;
+  createNoteFromTemplate: () => void;
+  openDailyNote: () => void;
+  showNoteHistory: () => void;
   saveDraft: () => Promise<boolean>;
   toggleTrash: () => void;
   emptyTrash: () => Promise<void>;
@@ -215,6 +221,32 @@ export function paletteCommands(state: PaletteState, actions: PaletteActions): P
       aliases: ["create note", "quick note"],
       disabled: state.transferState === "working",
       run: () => void actions.createNote(),
+    },
+    {
+      id: "note-from-template",
+      group: "Actions",
+      label: "New note from template",
+      icon: LayoutTemplate,
+      keywords: "template create variables",
+      run: () => actions.createNoteFromTemplate(),
+    },
+    {
+      id: "daily-note",
+      group: "Actions",
+      label: "Open today's daily note",
+      icon: CalendarDays,
+      shortcut: actions.shortcutLabel("dailyNote"),
+      keywords: "today journal diary",
+      run: () => actions.openDailyNote(),
+    },
+    {
+      id: "note-history",
+      group: "Actions",
+      label: "Show note history",
+      keywords: "versions snapshots restore",
+      icon: History,
+      disabled: !state.activeNoteId,
+      run: () => actions.showNoteHistory(),
     },
     {
       id: "save",

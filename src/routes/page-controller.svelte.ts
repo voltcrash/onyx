@@ -582,6 +582,8 @@ export function createPageController() {
   let noteLoadSequence = 0;
   let clearingVault = false;
   let disposed = false;
+  // Escape, then Tab or Shift+Tab, moves focus out of the editor instead of indenting.
+  let editorTabLeaves = false;
   let vaultGeneration = 0;
   let draftVersion = 0;
   let workspaceOperation = $state<string>();
@@ -636,7 +638,7 @@ export function createPageController() {
     vaults.find((candidate) => candidate.id === activeVaultId) ?? vaults[0],
   );
   const wordCount = $derived(countWords(markdown));
-  const readingMinutes = $derived(Math.max(1, Math.ceil(wordCount / 220)));
+  const readingMinutes = $derived(Math.ceil(wordCount / 220));
   const preview = createPreviewRenderer({
     source: () => previewMarkdown,
     attachments: () => localAttachmentUrls,
@@ -762,6 +764,9 @@ export function createPageController() {
   const paletteActions: PaletteActions = {
     shortcutLabel: preferencesController.shortcutLabel,
     createNote: workspaceCommand(fileTreeController.createNote),
+    createNoteFromTemplate: () => void workspaceCommand(creation.showTemplates)(),
+    openDailyNote: () => void workspaceCommand(creation.openDailyNote)(),
+    showNoteHistory: () => void history.show(),
     saveDraft,
     toggleTrash: fileTreeController.toggleTrash,
     emptyTrash: workspaceCommand(fileTreeController.emptyTrash),
@@ -794,32 +799,6 @@ export function createPageController() {
   };
 
   const paletteItems = $derived<PaletteCommand[]>([
-    {
-      id: "note-history",
-      group: "Notes",
-      label: "Show note history",
-      keywords: "versions snapshots restore",
-      icon: FileText,
-      disabled: !activeNoteId,
-      run: () => void history.show(),
-    },
-    {
-      id: "note-from-template",
-      group: "Notes",
-      label: "New note from template",
-      icon: FileText,
-      keywords: "template create variables",
-      run: () => void workspaceCommand(creation.showTemplates)(),
-    },
-    {
-      id: "daily-note",
-      group: "Notes",
-      label: "Open today's daily note",
-      icon: FileText,
-      shortcut: preferencesController.shortcutLabel("dailyNote"),
-      keywords: "today journal diary",
-      run: () => void workspaceCommand(creation.openDailyNote)(),
-    },
     ...paletteNoteItems,
     ...paletteCommands(
       {
@@ -1017,6 +996,9 @@ export function createPageController() {
       event.preventDefault();
     };
     const onKeydown = (event: KeyboardEvent) => handleShortcut(event);
+    const onFocusIn = () => {
+      editorTabLeaves = false;
+    };
     const onOnline = () => {
       isOnline = true;
       scheduleGithubRestore();
@@ -1058,6 +1040,7 @@ export function createPageController() {
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     window.addEventListener("keydown", onKeydown);
+    window.addEventListener("focusin", onFocusIn);
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
     document.addEventListener("visibilitychange", onVisibilityChange);
@@ -1074,6 +1057,7 @@ export function createPageController() {
       if (startupFrame !== undefined) cancelAnimationFrame(startupFrame);
       window.removeEventListener("beforeunload", onBeforeUnload);
       window.removeEventListener("keydown", onKeydown);
+      window.removeEventListener("focusin", onFocusIn);
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
       document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -2407,6 +2391,10 @@ export function createPageController() {
   }
 
   function handleShortcut(event: KeyboardEvent): void {
+    // Track Escape before the editor's own Escape binding can mark the event handled.
+    if (event.key === "Escape") editorTabLeaves = isEditorTarget(event.target);
+    else if (event.key !== "Tab" && !["Shift", "Control", "Alt", "Meta"].includes(event.key))
+      editorTabLeaves = false;
     if (event.defaultPrevented) return;
     if (
       history.open ||
@@ -2442,7 +2430,8 @@ export function createPageController() {
     }
     // Tab indents code and lists instead of leaving the editor.
     if (event.key === "Tab" && !event.isComposing && isEditorTarget(event.target)) {
-      if (runEditorIndent(event.target, event.shiftKey)) event.preventDefault();
+      if (editorTabLeaves) editorTabLeaves = false;
+      else if (runEditorIndent(event.target, event.shiftKey)) event.preventDefault();
       return;
     }
     const action = (Object.keys(preferencesController.shortcuts) as ShortcutAction[]).find(

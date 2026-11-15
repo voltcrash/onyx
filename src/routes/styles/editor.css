@@ -400,8 +400,9 @@
 .source-editor .cm-editor.cm-focused {
   outline: 0;
 }
-/* Show raw markdown as typed; Fira Code ligatures would redraw runs like `***`. */
-.source-editor .cm-scroller {
+/* Show raw markdown as typed; Fira Code ligatures would redraw runs like `***`.
+   The extra .cm-editor outranks CodeMirror's adopted base styles, as below. */
+.source-editor .cm-editor .cm-scroller {
   overflow: auto;
   font-family: var(--font-code);
   font-size: 15px;
@@ -619,8 +620,11 @@
 .prose li > p + p {
   margin-top: 10px;
 }
+/* Hang the checkbox in the item's padding so wrapped lines align with the text. */
 .prose li.task-list-item {
+  position: relative;
   list-style: none;
+  padding-left: 26px;
 }
 .prose ul.contains-task-list {
   padding-left: 2px;
@@ -628,12 +632,19 @@
 .prose li ul.contains-task-list {
   padding-left: 24px;
 }
+.prose li.task-list-item > ul.contains-task-list {
+  padding-left: 2px;
+}
 .prose .task-list-item input {
+  position: absolute;
+  /* Center on the first line; font: inherit makes lh the item's line height. */
+  top: calc(0.5lh - 7.5px);
+  left: 3px;
   width: 15px;
   height: 15px;
-  margin: 0 8px 0 0;
+  margin: 0;
+  font: inherit;
   accent-color: var(--accent);
-  vertical-align: -2px;
 }
 .prose .task-list-item input:disabled {
   cursor: default;
@@ -642,6 +653,9 @@
 .prose code {
   padding: 0.2em 0.4em;
   border-radius: 6px;
+  /* Give each line of wrapped inline code its own padding and rounded ends. */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
   background: var(--subtle-strong);
   color: var(--accent-quiet);
   font-family: var(--font-code);
@@ -776,10 +790,12 @@
   text-decoration-color: var(--accent-underline);
   text-underline-offset: 3px;
 }
+/* Keep words whole so a wide table scrolls instead of splitting them. */
 .prose table {
   width: 100%;
   display: block;
   overflow-x: auto;
+  overflow-wrap: normal;
   margin: 24px 0;
   border-collapse: collapse;
   font-family: var(--font-content);
@@ -991,8 +1007,7 @@
   color: var(--faint);
   font-size: 12px;
 }
-.note-outline summary,
-.note-outline button {
+.note-outline summary {
   cursor: pointer;
 }
 .note-outline ol {
@@ -1004,6 +1019,8 @@
   padding: 4px 0;
   background: transparent;
   color: var(--accent-link);
+  cursor: pointer;
+  text-align: start;
 }
 
 @media (max-width: 900px) {
@@ -1016,7 +1033,7 @@
   .source-editor .cm-editor {
     flex: none;
   }
-  .source-editor .cm-scroller {
+  .source-editor .cm-editor .cm-scroller {
     overflow: visible;
   }
 }
@@ -1024,7 +1041,7 @@
   .source-editor .cm-editor .cm-content {
     padding: 28px 52px 70px;
   }
-  .source-editor .cm-scroller {
+  .source-editor .cm-editor .cm-scroller {
     font-size: 14px;
   }
   .prose {

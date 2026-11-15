@@ -35,6 +35,7 @@ export interface EditorSelection {
 export interface MarkdownEditorOptions {
   doc: string;
   label: string;
+  describedBy?: string;
   placeholder: string;
   onChange: (value: string) => void;
   onSelectionChange: () => void;
@@ -143,6 +144,7 @@ export class MarkdownEditor {
           placeholder(options.placeholder),
           EditorView.contentAttributes.of({
             "aria-label": options.label,
+            ...(options.describedBy ? { "aria-describedby": options.describedBy } : {}),
             "aria-multiline": "true",
             role: "textbox",
             spellcheck: "true",
