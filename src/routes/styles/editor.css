@@ -1004,8 +1004,7 @@
   color: var(--faint);
   font-size: 12px;
 }
-.note-outline summary,
-.note-outline button {
+.note-outline summary {
   cursor: pointer;
 }
 .note-outline ol {
@@ -1017,6 +1016,8 @@
   padding: 4px 0;
   background: transparent;
   color: var(--accent-link);
+  cursor: pointer;
+  text-align: start;
 }
 
 @media (max-width: 900px) {
