@@ -1213,9 +1213,11 @@ export function createPageController() {
     untrack(() => githubController.scheduleAutoBackup(due));
   });
 
+  const noteDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
+
   function formatNoteDate(value: string): string {
     if (!value) return "";
-    return `Edited ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value))}`;
+    return `Edited ${noteDateFormatter.format(new Date(value))}`;
   }
 
   function formatCommitDate(value: string): string {
