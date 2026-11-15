@@ -563,8 +563,8 @@
 						</div>
 						<p class="settings-hint flex items-center gap-1.5 flex-wrap mt-0 mx-0 mb-3.5 text-muted text-ui-12 [line-height:1.55] [&_a]:inline-flex [&_a]:items-center [&_a]:gap-1 [&_a]:text-accent [&_kbd]:py-0.5 [&_kbd]:px-1.25 [&_kbd]:border [&_kbd]:border-line [&_kbd]:rounded-sm [&_kbd]:bg-surface [&_kbd]:text-muted [&_kbd]:text-ui-11">{formatBytes(usage.usage)} used{usage.quota ? ` of about ${formatBytes(usage.quota)} available to this site` : ''}.</p>
 						<dl class="settings-facts mt-0 mx-0 mb-3.5 border border-line-soft rounded-lg bg-surface [&_>_div]:flex [&_>_div]:items-center [&_>_div]:justify-between [&_>_div]:gap-3 [&_>_div]:py-2.5 [&_>_div]:px-3.25 [&_>_div]:[border-bottom:1px_solid_var(--line-soft)] [&_>_div]:text-ui-12 [&_>_div:last-child]:border-0 [&_dt]:text-muted [&_dd]:m-0 [&_dd]:text-ink [&_dd]:font-semibold [&_dd]:text-right [&_dd]:[overflow-wrap:anywhere]">
-							<div><dt>Notes</dt><dd>{usage.noteCount} · {formatBytes(usage.noteBytes)}</dd></div>
-							<div><dt>Attachments</dt><dd>{usage.attachmentCount} · {formatBytes(usage.attachmentBytes)}</dd></div>
+							<div><dt>Notes</dt><dd>{usage.noteCount} {usage.noteCount === 1 ? 'note' : 'notes'} · {formatBytes(usage.noteBytes)}</dd></div>
+							<div><dt>Attachments</dt><dd>{usage.attachmentCount} {usage.attachmentCount === 1 ? 'file' : 'files'} · {formatBytes(usage.attachmentBytes)}</dd></div>
 							<div><dt>Persistent storage</dt><dd>{usage.persistent ? 'Granted' : usage.persistentStorageAvailable ? 'Not granted' : 'Unavailable in this browser'}</dd></div>
 							<div><dt>File storage</dt><dd>{usage.fileStorage.mode === 'native-directory' ? usage.fileStorage.nativeDirectoryName : 'Private browser storage (OPFS)'}</dd></div>
 						</dl>
