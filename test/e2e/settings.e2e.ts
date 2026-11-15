@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 import themeCatalog from "../../src/lib/theme-catalog.json" with { type: "json" };
 
+function rgb(hex: string): string {
+  const [r, g, b] = [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
 test("offers additional color themes and persists the selection", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
@@ -17,6 +22,15 @@ test("offers additional color themes and persists the selection", async ({ page 
       has: page.getByText(theme.label, { exact: true }),
     });
     await expect(option).toHaveCount(1);
+    const swatch = option.locator(".theme-preview");
+    await expect(swatch).toHaveCSS("background-color", rgb(theme.preview.paper));
+    await expect(swatch).toHaveCSS("border-top-color", rgb(theme.preview.border));
+    const [light, dark, accent] = await swatch
+      .locator("i")
+      .evaluateAll((parts) => parts.map((part) => getComputedStyle(part).backgroundColor));
+    expect([light, dark, accent]).toEqual(
+      [theme.preview.light, theme.preview.dark, theme.preview.accent].map(rgb),
+    );
     await option.click();
     await expect(page.locator("html")).toHaveAttribute("data-color-theme", id);
     await expect(option).toHaveAttribute("aria-checked", "true");
