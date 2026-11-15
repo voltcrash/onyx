@@ -400,8 +400,9 @@
 .source-editor .cm-editor.cm-focused {
   outline: 0;
 }
-/* Show raw markdown as typed; Fira Code ligatures would redraw runs like `***`. */
-.source-editor .cm-scroller {
+/* Show raw markdown as typed; Fira Code ligatures would redraw runs like `***`.
+   The extra .cm-editor outranks CodeMirror's adopted base styles, as below. */
+.source-editor .cm-editor .cm-scroller {
   overflow: auto;
   font-family: var(--font-code);
   font-size: 15px;
@@ -1016,7 +1017,7 @@
   .source-editor .cm-editor {
     flex: none;
   }
-  .source-editor .cm-scroller {
+  .source-editor .cm-editor .cm-scroller {
     overflow: visible;
   }
 }
@@ -1024,7 +1025,7 @@
   .source-editor .cm-editor .cm-content {
     padding: 28px 52px 70px;
   }
-  .source-editor .cm-scroller {
+  .source-editor .cm-editor .cm-scroller {
     font-size: 14px;
   }
   .prose {
