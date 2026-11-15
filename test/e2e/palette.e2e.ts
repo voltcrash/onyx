@@ -253,3 +253,26 @@ test("recovers from a search failure without leaving the palette busy", async ({
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(page.getByRole("option", { name: /Welcome to Onyx/ }).first()).toBeVisible();
 });
+
+test("lists note actions under Actions and opens on a note", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await page.getByRole("button", { name: "Open the command palette" }).click();
+  await expect(page.locator("#palette-new-note")).toBeVisible();
+
+  const groupOf = await page.locator("#palette-list").evaluate((list) => {
+    const groups: Record<string, string> = {};
+    let group = "";
+    for (const element of list.querySelectorAll(".palette-group, [role=option]")) {
+      if (element.classList.contains("palette-group")) group = element.textContent!.trim();
+      else groups[element.id] = group;
+    }
+    return groups;
+  });
+  for (const id of ["note-history", "note-from-template", "daily-note"])
+    expect(groupOf[`palette-${id}`], id).toBe("Actions");
+
+  const first = page.getByRole("option").first();
+  await expect(first).toHaveAttribute("aria-selected", "true");
+  expect(["Recent", "Notes"]).toContain(groupOf[(await first.getAttribute("id"))!]);
+});
