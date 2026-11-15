@@ -502,3 +502,16 @@ for (const colorScheme of ["light", "dark"] as const) {
     expect(styles.border).toBe(`1px solid ${styles.line}`);
   });
 }
+
+test("gives the storage notice's dismiss button a touch-sized target", async ({ page }) => {
+  await page.goto("/");
+  const dismiss = page.getByRole("button", { name: "Dismiss storage warning" });
+  await expect(dismiss).toBeVisible();
+  const box = (await dismiss.boundingBox())!;
+  expect(box.width).toBeGreaterThanOrEqual(32);
+  expect(box.height).toBeGreaterThanOrEqual(32);
+
+  // The hit area reaches 44px, beyond the visible button.
+  await page.mouse.click(box.x - 5, box.y + box.height / 2);
+  await expect(page.locator(".storage-notice")).toHaveCount(0);
+});
