@@ -149,12 +149,17 @@ export async function mergeBackupFiles(
     files.push({ path: note.path, contents });
     noteIds.add(note.id);
   }
-  const folders = new Map(
-    [...(remote.manifest.folders ?? []), ...(local.manifest.folders ?? [])].map((folder) => [
-      folder.path,
-      folder,
-    ]),
+  const folderMaps = [base, local, remote].map(
+    (vault) => new Map((vault.manifest.folders ?? []).map((folder) => [folder.path, folder])),
   );
-  manifest.folders = [...folders.values()];
+  const folderPaths = new Set(folderMaps.flatMap((map) => [...map.keys()]));
+  for (const path of folderPaths) {
+    const [b, l, r] = folderMaps.map((map) => map.get(path));
+    const [bs, ls, rs] = [b, l, r].map((folder) =>
+      folder ? JSON.stringify([folder.icon, Boolean(folder.pinned)]) : undefined,
+    );
+    const selected = ls === rs || rs === bs ? l : ls === bs ? r : (l ?? r);
+    if (selected) manifest.folders!.push({ ...selected });
+  }
   return { manifest, files };
 }

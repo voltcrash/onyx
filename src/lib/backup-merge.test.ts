@@ -143,3 +143,29 @@ it("retains attachment metadata edits even when the bytes are unchanged", async 
   const merged = await mergeBackupFiles(base, local, remote);
   expect(merged.manifest.attachments).toMatchObject([{ name: "renamed.png", type: "image/png" }]);
 });
+
+it("merges folder edits and deletions against their baseline", async () => {
+  const base = vault({});
+  base.manifest.folders = ["deleted", "edited", "renamed"].map((path) => ({
+    id: path,
+    path,
+    createdAt: "",
+    updatedAt: "",
+  }));
+  const local = structuredClone(base);
+  const remote = structuredClone(base);
+  remote.manifest.folders = remote.manifest.folders!.filter((folder) => folder.path !== "deleted");
+  remote.manifest.folders[0]!.pinned = true;
+  remote.manifest.folders[1]!.path = "new name";
+  for (const [left, right] of [
+    [local, remote],
+    [remote, local],
+  ]) {
+    const merged = await mergeBackupFiles(base, left!, right!);
+    expect(merged.manifest.folders!.map((folder) => folder.path).sort()).toEqual([
+      "edited",
+      "new name",
+    ]);
+    expect(merged.manifest.folders!.find((folder) => folder.path === "edited")!.pinned).toBe(true);
+  }
+});
