@@ -135,3 +135,22 @@ test("undoes and redoes replacements as separate editor transactions", async ({ 
   await editor.press("ControlOrMeta+Shift+z");
   await expectMarkdown(editor, "dog dog dog");
 });
+
+test("whole-word replacement preserves combining marks in other words", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill("cafe\u0301 cafe कि क");
+  await editor.press("ControlOrMeta+f");
+  await page.getByRole("searchbox", { name: "Find in note" }).fill("cafe");
+  await page.getByRole("button", { name: /Whole word/ }).click();
+  await expect(page.locator(".find-count")).toHaveText("1 of 1");
+  await page.getByRole("textbox", { name: "Replace with" }).fill("coffee");
+  await page.getByRole("button", { name: "Replace all" }).click();
+  await expectMarkdown(editor, "cafe\u0301 coffee कि क");
+  await page.getByRole("searchbox", { name: "Find in note" }).fill("क");
+  await expect(page.locator(".find-count")).toHaveText("1 of 1");
+  await page.getByRole("textbox", { name: "Replace with" }).fill("word");
+  await page.getByRole("button", { name: "Replace all" }).click();
+  await expectMarkdown(editor, "cafe\u0301 coffee कि word");
+});

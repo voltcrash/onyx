@@ -513,3 +513,54 @@ describe("Vault browsing", () => {
     expect(database.getSearchDocuments).not.toHaveBeenCalled();
   });
 });
+
+it.each(["notes", "attachments", "files"] as const)(
+  "rejects duplicate restore %s before touching the vault",
+  async (duplicate) => {
+    const note = {
+      id: "n",
+      path: "notes/n.md",
+      title: "Note",
+      tags: [],
+      revision: 1,
+      size: 4,
+      createdAt: "",
+      updatedAt: "",
+    };
+    const attachment = {
+      id: "a",
+      noteId: "n",
+      path: "attachments/n/a",
+      name: "a.png",
+      type: "image/png",
+      size: 3,
+      createdAt: "",
+      updatedAt: "",
+    };
+    const files = [
+      { path: note.path, contents: new Blob(["note"]) },
+      { path: attachment.path, contents: new Blob(["png"]) },
+    ];
+    if (duplicate === "files") files.push({ path: note.path, contents: new Blob(["overwritten"]) });
+    const replace = vi.fn();
+    const vault = Reflect.construct(Vault, [
+      { getVaultVersion: async () => 1 },
+      { replace },
+      { runExclusive: <T>(task: () => Promise<T>) => task(), publish: vi.fn() },
+    ]) as Vault;
+    await expect(
+      vault.restoreBackup(files, {
+        manifest: {
+          version: 1,
+          notes: duplicate === "notes" ? [note, { ...note, title: "Different" }] : [note],
+          attachments:
+            duplicate === "attachments"
+              ? [attachment, { ...attachment, name: "different.png" }]
+              : [attachment],
+        },
+        restoredAt: "now",
+      }),
+    ).rejects.toThrow(/duplicate/i);
+    expect(replace).not.toHaveBeenCalled();
+  },
+);

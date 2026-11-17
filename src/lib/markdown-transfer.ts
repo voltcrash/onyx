@@ -686,12 +686,12 @@ function safeName(value: string): string {
     const code = character.charCodeAt(0);
     withoutControlCharacters += code < 32 || code === 127 ? "-" : character;
   }
-  return (
+  const name =
     withoutControlCharacters
       .replace(/[<>:"/\\|?*]/g, "-")
       .replace(/[. ]+$/g, "")
-      .trim() || "Untitled"
-  );
+      .trim() || "Untitled";
+  return /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu.test(name) ? `_${name}` : name;
 }
 
 function contentType(path: string): string {

@@ -1547,6 +1547,8 @@ export class Vault {
   ): Promise<VaultRestoreResult> {
     return this.#withLock(async () => {
       const filesByPath = new Map(files.map((file) => [file.path, file]));
+      if (filesByPath.size !== files.length)
+        throw new Error("The backup contains duplicate file paths");
       const notes = options.manifest
         ? validateManifestNotes(options.manifest.notes, filesByPath)
         : await inferNotes(files, options.restoredAt);
@@ -1821,7 +1823,10 @@ function validateManifestNotes(
   notes: NoteMetadata[],
   files: Map<string, VaultRestoreFile>,
 ): NoteMetadata[] {
+  const ids = new Set<string>();
   return notes.map((note) => {
+    if (ids.has(note.id)) throw new Error("The backup manifest contains duplicate notes");
+    ids.add(note.id);
     const file = files.get(note.path);
     if (!file || !note.path.match(/^notes\/[^/]+\.md$/) || note.path !== `notes/${note.id}.md`) {
       throw new Error("The backup manifest contains an invalid note");
@@ -1835,7 +1840,11 @@ function validateManifestAttachments(
   files: Map<string, VaultRestoreFile>,
   noteIds: Set<string>,
 ): AttachmentMetadata[] {
+  const ids = new Set<string>();
   return attachments.map((attachment) => {
+    if (ids.has(attachment.id))
+      throw new Error("The backup manifest contains duplicate attachments");
+    ids.add(attachment.id);
     const file = files.get(attachment.path);
     if (
       !file ||

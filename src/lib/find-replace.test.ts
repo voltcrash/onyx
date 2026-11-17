@@ -27,3 +27,15 @@ describe("findTextMatches", () => {
     ).toEqual([{ start: 16, end: 20 }]);
   });
 });
+
+it.each([true, false])(
+  "does not split combining marks during whole-word search (matchCase=%s)",
+  (matchCase) => {
+    expect(findTextMatches("cafe\u0301 cafe", "cafe", { matchCase, wholeWord: true })).toEqual([
+      { start: 6, end: 10 },
+    ]);
+    expect(findTextMatches("कि क", "क", { matchCase, wholeWord: true })).toEqual([
+      { start: 3, end: 4 },
+    ]);
+  },
+);

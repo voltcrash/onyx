@@ -30,7 +30,9 @@ export async function mergeBackupFiles(
     (vault) => new Map(vault.files.map((file) => [file.path, file.contents])),
   );
   const occupied = new Set(
-    local.manifest.notes.map((note) => noteFilePath(note).toLocaleLowerCase()),
+    [...local.manifest.notes, ...remote.manifest.notes].map((note) =>
+      noteFilePath(note).toLocaleLowerCase(),
+    ),
   );
   const siblingPath = (path: string) => {
     const stem = fileStem(path);
@@ -61,6 +63,8 @@ export async function mergeBackupFiles(
             ? JSON.stringify([
                 await fingerprint(maps[index]!.get(entity.path)),
                 entity.sourcePath,
+                "title" in entity ? entity.title : undefined,
+                "name" in entity ? [entity.name, entity.type, entity.noteId] : undefined,
                 "pinned" in entity ? entity.pinned : undefined,
                 "deletedAt" in entity ? entity.deletedAt : undefined,
               ])
@@ -145,12 +149,17 @@ export async function mergeBackupFiles(
     files.push({ path: note.path, contents });
     noteIds.add(note.id);
   }
-  const folders = new Map(
-    [...(remote.manifest.folders ?? []), ...(local.manifest.folders ?? [])].map((folder) => [
-      folder.path,
-      folder,
-    ]),
+  const folderMaps = [base, local, remote].map(
+    (vault) => new Map((vault.manifest.folders ?? []).map((folder) => [folder.path, folder])),
   );
-  manifest.folders = [...folders.values()];
+  const folderPaths = new Set(folderMaps.flatMap((map) => [...map.keys()]));
+  for (const path of folderPaths) {
+    const [b, l, r] = folderMaps.map((map) => map.get(path));
+    const [bs, ls, rs] = [b, l, r].map((folder) =>
+      folder ? JSON.stringify([folder.icon, Boolean(folder.pinned)]) : undefined,
+    );
+    const selected = ls === rs || rs === bs ? l : ls === bs ? r : (l ?? r);
+    if (selected) manifest.folders!.push({ ...selected });
+  }
   return { manifest, files };
 }

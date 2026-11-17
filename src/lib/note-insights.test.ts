@@ -60,3 +60,9 @@ it("does not parse unrelated notes when looking for mentions", () => {
     parse.mockRestore();
   }
 });
+
+it("does not suggest linking part of a word with combining marks", () => {
+  expect(
+    findUnlinkedMentions("cafe\u0301 cafe", ["cafe"]).map(({ start, end }) => [start, end]),
+  ).toEqual([[6, 10]]);
+});

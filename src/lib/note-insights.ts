@@ -40,7 +40,7 @@ export function findUnlinkedMentions(markdown: string, names: string[]): NoteMen
   );
   if (!unique.length) return [];
   const pattern = new RegExp(
-    `(?<![\\p{L}\\p{N}_])(?:${unique.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})(?![\\p{L}\\p{N}_])`,
+    `(?<![\\p{L}\\p{N}\\p{M}_])(?:${unique.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})(?![\\p{L}\\p{N}\\p{M}_])`,
     "giu",
   );
   if (!pattern.test(markdown)) return [];

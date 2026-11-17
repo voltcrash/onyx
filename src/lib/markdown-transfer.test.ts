@@ -211,3 +211,19 @@ it("exports one captured vault generation without rereading live notes", async (
   const files = await createMarkdownExport(vault);
   expect(await files[0].contents.text()).toBe("captured text");
 });
+
+it.each(["CON", "nul", "COM1", "LPT9.txt"])(
+  "exports a legacy note titled %s using a portable fallback",
+  async (title) => {
+    const vault = {
+      captureExport: async () => ({
+        notes: [{ id: "legacy", title, markdown: "kept text" }],
+        attachments: [],
+      }),
+    } as unknown as Vault;
+    const files = await createMarkdownExport(vault);
+    expect(files[0]!.path).toBe(`_${title}.md`);
+    await expect(files[0]!.contents.text()).resolves.toBe("kept text");
+    await expect(readMarkdownZip(await createMarkdownZip(files))).resolves.toHaveLength(1);
+  },
+);
