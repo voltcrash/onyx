@@ -8,7 +8,7 @@ export interface FindOptions {
   wholeWord: boolean;
 }
 
-const wordCharacter = /[\p{L}\p{N}_]/u;
+const wordCharacter = /[\p{L}\p{N}\p{M}_]/u;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
