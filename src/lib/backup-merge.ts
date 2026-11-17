@@ -30,7 +30,9 @@ export async function mergeBackupFiles(
     (vault) => new Map(vault.files.map((file) => [file.path, file.contents])),
   );
   const occupied = new Set(
-    local.manifest.notes.map((note) => noteFilePath(note).toLocaleLowerCase()),
+    [...local.manifest.notes, ...remote.manifest.notes].map((note) =>
+      noteFilePath(note).toLocaleLowerCase(),
+    ),
   );
   const siblingPath = (path: string) => {
     const stem = fileStem(path);

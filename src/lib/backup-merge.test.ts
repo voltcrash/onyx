@@ -97,3 +97,17 @@ it("keeps an edited attachment and its owner when the other device deletes the n
     "edited",
   );
 });
+
+it("reserves remote filenames before naming conflict siblings", async () => {
+  const remote = vault({ a: "remote", existing: "already a conflict" });
+  remote.manifest.notes[1]!.sourcePath = "a (conflict 2026-11-17).md";
+  const merged = await mergeBackupFiles(
+    vault({ a: "base" }),
+    vault({ a: "local" }),
+    remote,
+    "2026-11-17",
+  );
+  const paths = merged.manifest.notes.map((note) => note.sourcePath!.toLowerCase());
+  expect(new Set(paths).size).toBe(3);
+  expect(paths).toContain("a (conflict 2026-11-17) 2.md");
+});
