@@ -122,3 +122,24 @@ it("retains remote title-only edits", async () => {
   );
   expect(merged.manifest.notes[0]!.title).toBe("Renamed title");
 });
+
+it("retains attachment metadata edits even when the bytes are unchanged", async () => {
+  const base = vault({ a: "note" });
+  base.manifest.attachments.push({
+    id: "image",
+    noteId: "a",
+    name: "image.png",
+    path: "attachments/a/image",
+    type: "application/octet-stream",
+    size: 3,
+    createdAt: "",
+    updatedAt: "",
+  });
+  base.files.push({ path: "attachments/a/image", contents: new Blob(["png"]) });
+  const local = structuredClone(base);
+  const remote = structuredClone(base);
+  remote.manifest.attachments[0]!.name = "renamed.png";
+  remote.manifest.attachments[0]!.type = "image/png";
+  const merged = await mergeBackupFiles(base, local, remote);
+  expect(merged.manifest.attachments).toMatchObject([{ name: "renamed.png", type: "image/png" }]);
+});

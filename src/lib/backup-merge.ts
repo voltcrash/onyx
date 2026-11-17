@@ -64,6 +64,7 @@ export async function mergeBackupFiles(
                 await fingerprint(maps[index]!.get(entity.path)),
                 entity.sourcePath,
                 "title" in entity ? entity.title : undefined,
+                "name" in entity ? [entity.name, entity.type, entity.noteId] : undefined,
                 "pinned" in entity ? entity.pinned : undefined,
                 "deletedAt" in entity ? entity.deletedAt : undefined,
               ])
