@@ -111,3 +111,14 @@ it("reserves remote filenames before naming conflict siblings", async () => {
   expect(new Set(paths).size).toBe(3);
   expect(paths).toContain("a (conflict 2026-11-17) 2.md");
 });
+
+it("retains remote title-only edits", async () => {
+  const remote = vault({ a: "unchanged" });
+  remote.manifest.notes[0]!.title = "Renamed title";
+  const merged = await mergeBackupFiles(
+    vault({ a: "unchanged" }),
+    vault({ a: "unchanged" }),
+    remote,
+  );
+  expect(merged.manifest.notes[0]!.title).toBe("Renamed title");
+});
