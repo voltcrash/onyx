@@ -1,3 +1,4 @@
+import { createDraftController } from "./draft-controller.svelte.ts";
 import { compareSidebarNotes } from "#lib/sidebar-sort.ts";
 import { createNoteCreationController } from "./note-creation-controller.svelte.ts";
 import { noteOutline, type NoteMention, type NoteHeading } from "#lib/note-insights.ts";
@@ -8,7 +9,7 @@ import { createTransferController } from "./transfer-controller.svelte.ts";
 import { createGithubController } from "./github-controller.svelte.ts";
 import { createLazyResource } from "#lib/lazy-resource.ts";
 import { FileText } from "@lucide/svelte";
-import type { PaneEdge, PaneLayout, PaneOrder, SaveState } from "#lib/components/app-types.ts";
+import type { PaneEdge, PaneLayout, PaneOrder } from "#lib/components/app-types.ts";
 
 import type { SettingsSection } from "#lib/components/settings-types.ts";
 import {
@@ -54,7 +55,6 @@ import {
   uniqueVaultName,
   vaultOptions,
   Vault,
-  VaultConflictError,
   writeVaultRegistry,
   type VaultChangeEvent,
   type VaultDescriptor,
@@ -78,15 +78,7 @@ import { resolveWikiLink, splitWikiTarget } from "#lib/wikilinks.ts";
 import { paletteCommands, type PaletteActions, type PaletteCommand } from "./palette-commands.ts";
 
 import { createNoteOutput } from "#lib/note-output.ts";
-import {
-  basename,
-  decodePath,
-  fileStem,
-  isPathWithin,
-  normalizeFileName,
-  noteFilePath,
-  parentPath,
-} from "#lib/paths.ts";
+import { basename, decodePath, fileStem, isPathWithin, parentPath } from "#lib/paths.ts";
 
 import { createInitialMarkdown } from "./welcome-note.ts";
 import { startSidebarDrag, type SidebarSide } from "#lib/sidebar-drag.ts";
@@ -138,10 +130,10 @@ export function createPageController() {
       return settleDraft;
     },
     get saveState() {
-      return saveState;
+      return draft.status;
     },
     set saveState(value) {
-      saveState = value;
+      draft.status = value;
     },
     get searchQuery() {
       return searchQuery;
@@ -175,10 +167,7 @@ export function createPageController() {
       markdown = value;
     },
     get lastSavedMarkdown() {
-      return lastSavedMarkdown;
-    },
-    set lastSavedMarkdown(value) {
-      lastSavedMarkdown = value;
+      return draft.lastSavedMarkdown;
     },
     get folders() {
       return folders;
@@ -422,10 +411,7 @@ export function createPageController() {
       markdown = value;
     },
     get lastSavedMarkdown() {
-      return lastSavedMarkdown;
-    },
-    set lastSavedMarkdown(value) {
-      lastSavedMarkdown = value;
+      return draft.lastSavedMarkdown;
     },
     get saveDraft() {
       return saveDraft;
@@ -437,16 +423,10 @@ export function createPageController() {
       return loadDialogStyles;
     },
     get saveState() {
-      return saveState;
+      return draft.status;
     },
     set saveState(value) {
-      saveState = value;
-    },
-    get saveTimer() {
-      return saveTimer;
-    },
-    set saveTimer(value) {
-      saveTimer = value;
+      draft.status = value;
     },
     get searchTimer() {
       return searchTimer;
@@ -490,15 +470,40 @@ export function createPageController() {
   });
 
   const initialMarkdown = createInitialMarkdown("meta");
+  const draft = createDraftController(initialMarkdown, {
+    vault: () => (disposed ? undefined : vault),
+    noteId: () => activeNoteId,
+    markdown: () => markdown,
+    clearing: () => clearingVault,
+    reportError: (message) => {
+      storageError = message;
+    },
+    async saved(opened, note) {
+      appendNativeDirectoryNotice();
+      try {
+        await refreshResultsAfterSave(note);
+        const pending = await opened.countPendingBackupOperations();
+        if (opened === vault && !disposed) pendingBackupCount = pending;
+      } catch {
+        appendStorageNotice(
+          "Your edit was saved, but the note list could not be refreshed. Reload to refresh it.",
+        );
+      }
+    },
+    async openCopy(opened, id) {
+      await loadNote(id);
+      await refreshFileTree();
+      pendingBackupCount = await opened.countPendingBackupOperations();
+    },
+  });
+  const { saveDraft, settleDraft, queueSave, saveConflictCopy } = draft;
 
   let vault = $state<Vault>();
   let vaults = $state<VaultDescriptor[]>([]);
   let activeVaultId = $state("");
   let activeNoteId = $state("");
-  let noteRevision = $state(0);
   let markdown = $state(initialMarkdown);
   let previewMarkdown = $state(initialMarkdown);
-  let lastSavedMarkdown = $state(initialMarkdown);
   let results = $state.raw<VaultSearchResult[]>([]);
   let folders = $state.raw<FolderMetadata[]>([]);
   let notePage = $state(0);
@@ -511,13 +516,8 @@ export function createPageController() {
   let paneOrder = $state<PaneOrder>("source-first");
   let splitRatio = $state(50);
   let contentWidth = $state(DEFAULT_CONTENT_WIDTH);
-  let saveState = $state<SaveState>("loading");
-  let saveFailure = $state<"conflict" | "storage">();
   let observedVaultVersion = 0;
   let notesLoaded = $state(false);
-  let saveTimer: number | undefined = $state();
-  let saveRun: Promise<boolean> | undefined;
-  let saveRequested = false;
   let searchTimer: number | undefined = $state();
   let searchState = $state<
     | { status: "idle" }
@@ -630,7 +630,7 @@ export function createPageController() {
     workspaceOperation !== undefined ||
       (vaultPhase !== "ready" && vaultPhase !== "failed") ||
       (vaultPhase === "ready" && !activeNoteId) ||
-      saveState === "loading" ||
+      draft.status === "loading" ||
       clearingVault,
   );
 
@@ -811,7 +811,7 @@ export function createPageController() {
         hasContent,
         isOnline,
         renderedPaneVisible,
-        saveState,
+        saveState: draft.status,
         scrollSync,
         shortcutsAreDefault,
         sidebarCollapsed,
@@ -906,7 +906,8 @@ export function createPageController() {
     if (preferencesController.primaryModifier === "control" && markdown === initialMarkdown) {
       markdown = createInitialMarkdown(preferencesController.primaryModifier);
       updatePreviewImmediately(markdown);
-      lastSavedMarkdown = markdown;
+      draft.reset(markdown, 0);
+      draft.status = "loading";
     }
     isOnline = navigator.onLine;
     const storageSupport = detectBrowserStorageSupport();
@@ -973,7 +974,7 @@ export function createPageController() {
       .catch((error) => {
         storageError =
           error instanceof Error ? error.message : "The vault registry could not be opened.";
-        saveState = "error";
+        draft.status = "error";
         vaultPhase = "failed";
       })
       .then(async () => {
@@ -992,7 +993,7 @@ export function createPageController() {
     if (isOnline) scheduleGithubRestore();
     else githubController.githubState = "disconnected";
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (markdown === lastSavedMarkdown) return;
+      if (markdown === draft.lastSavedMarkdown) return;
       event.preventDefault();
     };
     const onKeydown = (event: KeyboardEvent) => handleShortcut(event);
@@ -1012,7 +1013,8 @@ export function createPageController() {
       }
     };
     const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden" && markdown !== lastSavedMarkdown) void saveDraft();
+      if (document.visibilityState === "hidden" && markdown !== draft.lastSavedMarkdown)
+        void saveDraft();
       if (document.visibilityState === "visible") {
         const opened = vault;
         if (opened)
@@ -1065,7 +1067,7 @@ export function createPageController() {
       stopThemeWatch();
       stopPreferenceWarnings();
       window.removeEventListener("storage", onPreferenceChange);
-      if (saveTimer) window.clearTimeout(saveTimer);
+      void draft.cancelPending();
       if (searchTimer) window.clearTimeout(searchTimer);
       if (previewFrame !== undefined) window.cancelAnimationFrame(previewFrame);
       if (previewSettleTimer !== undefined) window.clearTimeout(previewSettleTimer);
@@ -1149,10 +1151,7 @@ export function createPageController() {
   async function clearVault(expectedVersion?: number): Promise<void> {
     if (!vault || clearingVault) return;
     clearingVault = true;
-    if (saveTimer) window.clearTimeout(saveTimer);
-    saveTimer = undefined;
-    saveRequested = false;
-    const pendingSave = saveRun;
+    const pendingSave = draft.cancelPending();
     try {
       if (pendingSave) await pendingSave;
       await vault.clear(expectedVersion);
@@ -1183,14 +1182,12 @@ export function createPageController() {
     fileTreeController.trashOpen = false;
     paletteNotes = [];
     activeNoteId = "";
-    noteRevision = 0;
     activeNoteSourcePath = undefined;
     releaseLocalAttachmentUrls();
     closeImagePreview();
     markdown = "";
-    lastSavedMarkdown = "";
+    draft.reset("", 0);
     updatePreviewImmediately("");
-    saveState = "saved";
     storageError = "";
     editor?.resetHistory();
   }
@@ -1205,7 +1202,7 @@ export function createPageController() {
       githubController.backupState !== "backing-up" &&
       workspaceOperation === undefined &&
       vaultPhase === "ready" &&
-      saveState === "saved" &&
+      draft.status === "saved" &&
       !githubController.restoreModalOpen &&
       !confirmation.request;
     // Each new pending change restarts the wait, so backups run once editing settles.
@@ -1231,7 +1228,7 @@ export function createPageController() {
     const generation = ++vaultGeneration;
     vaultPhase = "opening";
     storageError = "";
-    saveState = "loading";
+    draft.status = "loading";
     notesLoaded = false;
     try {
       if (vaults.length === 0) {
@@ -1283,7 +1280,7 @@ export function createPageController() {
       await failed?.close();
       vaultPhase = "failed";
       storageError = error instanceof Error ? error.message : "Your notes could not be opened.";
-      saveState = "error";
+      draft.status = "error";
     }
   }
 
@@ -1344,9 +1341,7 @@ export function createPageController() {
   async function reopenVault(): Promise<void> {
     unsubscribeVault?.();
     unsubscribeVault = undefined;
-    if (saveTimer) window.clearTimeout(saveTimer);
-    saveTimer = undefined;
-    saveRequested = false;
+    await draft.cancelPending();
     remoteChanges.length = 0;
     remoteSyncRequested = false;
     vaultPhase = "closing";
@@ -1459,14 +1454,11 @@ export function createPageController() {
     localAttachmentUrls = nextUrls;
     activeNoteSourcePath = note.sourcePath;
     activeNoteId = note.id;
-    noteRevision = note.revision;
     draftVersion += 1;
     markdown = note.markdown;
     updatePreviewImmediately(note.markdown);
-    lastSavedMarkdown = note.markdown;
+    draft.reset(note.markdown, note.revision);
     editor?.resetHistory();
-    saveState = "saved";
-    saveFailure = undefined;
     storageError = "";
     sidebarOpen = false;
   }
@@ -1502,13 +1494,11 @@ export function createPageController() {
       const activeChanged = changes.some(
         (change) => change.kind === "vault" || change.noteId === activeNoteId,
       );
-      const hasUnsavedDraft = markdown !== lastSavedMarkdown;
+      const hasUnsavedDraft = markdown !== draft.lastSavedMarkdown;
       const changedRevision =
-        tree.notes.find((note) => note.id === activeNoteId)?.revision !== noteRevision;
+        tree.notes.find((note) => note.id === activeNoteId)?.revision !== draft.revision;
       if (activeChanged && hasUnsavedDraft && changedRevision) {
-        storageError = "This note changed in another tab. Reload it before saving.";
-        saveState = "error";
-        saveFailure = "conflict";
+        draft.markConflict();
       } else if (activeChanged && activeNoteId && !hasUnsavedDraft) {
         const activeNote = notes.find((note) => note.id === activeNoteId);
         if (activeNote) await loadNote(activeNote.id);
@@ -1538,12 +1528,10 @@ export function createPageController() {
     releaseLocalAttachmentUrls();
     activeNoteSourcePath = undefined;
     activeNoteId = "";
-    noteRevision = 0;
     markdown = "";
     updatePreviewImmediately("");
-    lastSavedMarkdown = "";
+    draft.reset("", 0);
     editor?.resetHistory();
-    saveState = "saved";
   }
 
   function resolveAttachmentUrl(destination: string): string | undefined {
@@ -1740,111 +1728,6 @@ export function createPageController() {
     paletteNotes = tree.notes;
     await runSearch(searchQuery);
     return tree.notes;
-  }
-
-  async function settleDraft(): Promise<boolean> {
-    if (saveTimer) window.clearTimeout(saveTimer);
-    saveTimer = undefined;
-    while (saveRun || markdown !== lastSavedMarkdown) {
-      if (!(await saveDraft())) return false;
-    }
-    return true;
-  }
-
-  function queueSave(): void {
-    if (clearingVault) return;
-    saveState = "unsaved";
-    if (saveRun) saveRequested = true;
-    if (saveTimer) window.clearTimeout(saveTimer);
-    saveTimer = window.setTimeout(() => void saveDraft(), 700);
-  }
-
-  async function saveDraft(): Promise<boolean> {
-    if (clearingVault || !vault || !activeNoteId) return false;
-    if (saveTimer) window.clearTimeout(saveTimer);
-    saveTimer = undefined;
-    saveRequested = true;
-    if (saveRun) return saveRun;
-    const run = flushDrafts();
-    saveRun = run;
-    try {
-      return await run;
-    } finally {
-      if (saveRun === run) saveRun = undefined;
-    }
-  }
-
-  async function flushDrafts(): Promise<boolean> {
-    while (saveRequested) {
-      if (clearingVault) {
-        saveRequested = false;
-        return true;
-      }
-      saveRequested = false;
-      if (!vault || !activeNoteId) return false;
-      const currentVault = vault;
-      const generation = vaultGeneration;
-      const noteId = activeNoteId;
-      const contents = markdown;
-      const expectedRevision = noteRevision;
-      saveState = "saving";
-      try {
-        const savedNote = await currentVault.saveNote({
-          id: noteId,
-          title: titleFromMarkdown(contents),
-          markdown: contents,
-          expectedRevision,
-        });
-        if (disposed || currentVault !== vault || generation !== vaultGeneration) return false;
-        if (activeNoteId === noteId) {
-          noteRevision = savedNote.revision;
-          lastSavedMarkdown = contents;
-          saveState = markdown === contents ? "saved" : "unsaved";
-          if (markdown !== contents) saveRequested = true;
-          storageError = "";
-          saveFailure = undefined;
-        }
-        appendNativeDirectoryNotice();
-        try {
-          await refreshResultsAfterSave(savedNote);
-          const pending = await currentVault.countPendingBackupOperations();
-          if (currentVault === vault && !disposed) pendingBackupCount = pending;
-        } catch {
-          appendStorageNotice(
-            "Your edit was saved, but the note list could not be refreshed. Reload to refresh it.",
-          );
-        }
-      } catch (error) {
-        saveRequested = false;
-        if (activeNoteId === noteId) {
-          storageError = error instanceof Error ? error.message : "Autosave failed.";
-          saveState = "error";
-          saveFailure = error instanceof VaultConflictError ? "conflict" : "storage";
-        }
-        return false;
-      }
-    }
-    return true;
-  }
-
-  async function saveConflictCopy(): Promise<void> {
-    const opened = vault;
-    if (!opened || saveFailure !== "conflict") return;
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = undefined;
-    saveRequested = false;
-    const contents = markdown;
-    const base = `${titleFromMarkdown(contents).replace(/[\\/]/g, "-")} (conflict copy)`;
-    const taken = new Set(
-      (await opened.listNotes()).map((note) => noteFilePath(note).toLocaleLowerCase()),
-    );
-    let name = normalizeFileName(base);
-    for (let index = 2; taken.has(name.toLocaleLowerCase()); index += 1)
-      name = normalizeFileName(`${base} ${index}`);
-    const copy = await opened.saveNote({ title: base, markdown: contents, sourcePath: name });
-    await loadNote(copy.id);
-    await refreshFileTree();
-    pendingBackupCount = await opened.countPendingBackupOperations();
   }
 
   function updateMarkdown(value: string): void {
@@ -2683,7 +2566,7 @@ export function createPageController() {
       return transferController.printHtml;
     },
     get saveConflict() {
-      return saveFailure === "conflict";
+      return draft.conflict;
     },
     saveConflictCopy: workspaceCommand(saveConflictCopy),
     get editorBlocked() {
@@ -2756,7 +2639,7 @@ export function createPageController() {
       return notesLoaded;
     },
     get saveState() {
-      return saveState;
+      return draft.status;
     },
     get transferState() {
       return transferController.transferState;

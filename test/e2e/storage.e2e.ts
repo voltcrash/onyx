@@ -250,6 +250,63 @@ test("keeps newly created vaults discoverable without localStorage", async ({ pa
   await expectMarkdown(editor, "# Durable vault");
 });
 
+for (const target of ["note", "vault"] as const) {
+  test(`keeps the latest draft when an overlapping save fails while switching ${target}s`, async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const editor = page.getByRole("textbox", { name: "Markdown editor" });
+    await expect(editor).toBeEnabled();
+    const tabs = page.getByRole("tablist", { name: /Vaults/ }).getByRole("tab");
+    const files = page.locator(".file-tree-row.file");
+    if (target === "vault") {
+      await page.locator(".vault-trigger").click();
+      await page.getByRole("menuitem", { name: "New vault" }).click();
+      await expect(tabs.nth(1)).toHaveAttribute("aria-selected", "true");
+    } else {
+      await page.keyboard.press("ControlOrMeta+Enter");
+      await expectMarkdown(editor, "");
+    }
+    const destination =
+      target === "vault" ? tabs.first() : files.filter({ hasText: "Welcome to Onyx" });
+    await expect(editor).toBeEnabled();
+
+    await blockNextVaultWrite(page);
+    await editor.fill("# Earlier edit");
+    await page.keyboard.press("ControlOrMeta+S");
+    await waitForBlockedVaultWrite(page);
+    await page.evaluate(() => {
+      const put = Reflect.get(IDBObjectStore.prototype, "put") as IDBObjectStore["put"];
+      IDBObjectStore.prototype.put = function (...args) {
+        if (this.name === "noteContents") {
+          IDBObjectStore.prototype.put = put;
+          throw new DOMException("Note storage is full", "QuotaExceededError");
+        }
+        return put.apply(this, args);
+      };
+    });
+    await editor.fill("# Keep this draft");
+    await destination.click();
+    await expect(editor).toBeDisabled();
+    await releaseVaultWrite(page);
+    await expect(page.getByRole("alert")).toContainText("Note storage is full");
+    if (target === "vault") await expect(tabs.nth(1)).toHaveAttribute("aria-selected", "true");
+    await expectMarkdown(editor, "# Keep this draft");
+    await expect(editor).toBeEnabled();
+
+    await destination.click();
+    if (target === "vault") await expect(tabs.first()).toHaveAttribute("aria-selected", "true");
+    await expectMarkdown(editor, /# Welcome to Onyx/);
+    await expect(editor).toBeEnabled();
+    const source = target === "vault" ? tabs.nth(1) : files.filter({ hasText: "Keep this draft" });
+    await source.click();
+    await expectMarkdown(editor, "# Keep this draft");
+    await page.reload();
+    if (target === "note") await source.click();
+    await expectMarkdown(editor, "# Keep this draft");
+  });
+}
+
 test("settles the latest draft before creating another note", async ({ page }) => {
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Markdown editor" });
