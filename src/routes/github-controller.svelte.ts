@@ -43,7 +43,6 @@ interface ControllerHost {
   activeVault: VaultDescriptor;
   loadDialogStyles: () => Promise<void>;
   saveState: SaveState;
-  saveTimer: number | undefined;
   searchTimer: number | undefined;
   searchSequence: number;
   folders: FolderMetadata[];
@@ -555,9 +554,7 @@ export function createGithubController(host: ControllerHost) {
     const sha = selectedRestoreSha;
     if (!(await host.settleDraft())) return;
     const previousSaveState = host.saveState;
-    if (host.saveTimer) window.clearTimeout(host.saveTimer);
     if (host.searchTimer) window.clearTimeout(host.searchTimer);
-    host.saveTimer = undefined;
     host.searchTimer = undefined;
     host.searchSequence += 1;
     host.saveState = "loading";
