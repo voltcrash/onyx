@@ -11,7 +11,7 @@
       <p>Local snapshots, saved at most every five minutes. Rewrites and restores preserve the prior text.</p>
       <nav class="flex flex-wrap gap-2 [&_button]:h-7.5 [&_button]:py-0 [&_button]:px-2.25 [&_button]:border [&_button]:border-line [&_button]:rounded-md [&_button]:bg-surface [&_button]:text-ink-soft [&_button]:cursor-pointer [&_button]:text-ui-11 [&_button:hover]:border-line-hover [&_button:hover]:text-ink [&_button[aria-pressed=true]]:border-accent-border [&_button[aria-pressed=true]]:bg-accent-bg [&_button[aria-pressed=true]]:text-ink" aria-label="Snapshots">
         {#each history.snapshots as snapshot (snapshot.id)}
-          <button aria-pressed={history.selected?.id === snapshot.id} onclick={() => history.select(snapshot)}>{new Date(snapshot.createdAt).toLocaleString()}</button>
+          <button disabled={history.busy} aria-pressed={history.selected?.id === snapshot.id} onclick={() => history.select(snapshot)}>{new Date(snapshot.createdAt).toLocaleString()}</button>
         {:else}<p>No snapshots yet.</p>{/each}
       </nav>
       {#if history.selected}<pre class="m-0 py-2.5 px-3 whitespace-pre-wrap overflow-auto max-h-[40vh] border border-line-soft rounded-md bg-surface text-ink-soft text-ui-12 [line-height:1.6] [font-family:var(--font-code)]" aria-label="Snapshot preview">{history.selected.markdown}</pre>{/if}
