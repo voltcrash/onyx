@@ -241,8 +241,9 @@ TypeScript 7 provides the `tsc` command through the `@typescript/native` alias. 
 `svelte-check` still need the JavaScript compiler API, so the `typescript` alias uses Microsoft’s
 [`@typescript/typescript6` compatibility package](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6.0).
 
-`vp test` runs the unit tests. The end-to-end tests drive Chromium through Playwright; install it
-once with `vp run test:e2e:install`, then run `vp run test:e2e`. `vp run test` runs both suites.
+`vp test` runs the unit tests. Playwright runs the full suite in Chromium and the offline note and
+ZIP smoke test in Firefox and WebKit. Install the browsers once with `vp run test:e2e:install`, then
+run `vp run test:e2e`. `vp run test` runs both suites.
 
 The variables in `.env.example` enable optional GitHub backup and sync. Onyx runs locally without
 them.
@@ -253,15 +254,15 @@ them.
 and pushes to `main`, and can also be started manually. Two independent Ubuntu validation jobs
 run in parallel:
 
-| Job                                | Validation                                                                                                   |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Lint, types and unit tests         | `vp check`, `vp run check`, and `vp test`                                                                    |
-| Production build and browser tests | `vp run test:e2e` builds once, then tests the Worker in Chromium; `vp run deploy:check` validates its bundle |
+| Job                                | Validation                                                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Lint, types and unit tests         | `vp check`, `vp run check`, and `vp test`                                                               |
+| Production build and browser tests | `vp run test:e2e` builds once, then runs the browser suites; `vp run deploy:check` validates its bundle |
 
 All jobs use `setup-vp` to select Node.js from `package.json`, Vite+ from the workspace catalog,
 and pnpm from `packageManager`. Dependencies are installed through `vp` with a frozen lockfile;
 the pnpm download store is cached by platform and lockfile. Browser binaries and test results
-are not cached. Chromium and its system dependencies are installed only in the browser job.
+are not cached. Only the browser job installs browsers and their system dependencies.
 
 Checks have a ten-minute timeout; the build and browser tests have twenty minutes. New commits
 cancel older runs on the same pull request. Pushes to `main` do not cancel an in-progress run.
@@ -287,7 +288,7 @@ To reproduce CI locally on Ubuntu:
 
 ```sh
 vp install --frozen-lockfile
-vp exec playwright install --with-deps chromium
+vp exec playwright install --with-deps chromium firefox webkit
 CI=1 vp run ci
 ```
 

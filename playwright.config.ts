@@ -28,6 +28,14 @@ export default defineConfig({
     env: { CLOUDFLARE_SEND_METRICS: "false" },
   },
   testMatch: "**/*.e2e.{ts,js}",
+  projects: [
+    { name: "chromium", use: { browserName: "chromium" } },
+    ...(["firefox", "webkit"] as const).map((browserName) => ({
+      name: browserName,
+      testMatch: "**/offline-transfer.e2e.ts",
+      use: { browserName },
+    })),
+  ],
   // Hosted CI runners are small, and parallel workers there starve the preview server of CPU.
   workers: env.CI ? 1 : undefined,
   use: {
