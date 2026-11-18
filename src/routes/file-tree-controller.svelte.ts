@@ -30,7 +30,7 @@ interface ControllerHost {
     copyToClipboard: (write: () => Promise<void>) => Promise<void>;
     copyNoteAs: (
       id: string,
-      format: Exclude<import("../lib/components/note-formats.ts").NoteFormat, "pdf">,
+      format: import("../lib/components/note-formats.ts").CopyableNoteFormat,
     ) => Promise<void>;
     exportNoteAs: (
       id: string,
