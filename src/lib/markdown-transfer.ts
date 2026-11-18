@@ -350,7 +350,7 @@ async function rollbackFolderExport(
   }
   for (const directory of createdDirectories.toReversed()) {
     try {
-      await directory.parent.removeEntry(directory.name, { recursive: true });
+      await directory.parent.removeEntry(directory.name);
     } catch (error) {
       if (!isMissingEntry(error)) errors.push(error);
     }

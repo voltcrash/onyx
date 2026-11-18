@@ -137,6 +137,25 @@ describe("Markdown archives", () => {
     ).rejects.toThrow("disk full");
     expect(rootNode.entries.size).toBe(0);
   });
+
+  it("preserves unrelated files added to an export directory during rollback", async () => {
+    const rootNode: MemoryDirectory = { kind: "directory", entries: new Map() };
+    const root = createMemoryDirectoryHandle(rootNode, new Set(), (name) => {
+      if (name !== "second.md") return;
+      const directory = rootNode.entries.get("nested") as MemoryDirectory;
+      directory.entries.set("unrelated.txt", { kind: "file" });
+      throw new Error("disk full");
+    });
+
+    await expect(
+      writeMarkdownFolder(root, [
+        { contents: new Blob(["first"]), path: "nested/first.md" },
+        { contents: new Blob(["second"]), path: "nested/second.md" },
+      ]),
+    ).rejects.toThrow();
+    const directory = rootNode.entries.get("nested") as MemoryDirectory | undefined;
+    expect([...(directory?.entries.keys() ?? [])]).toEqual(["unrelated.txt"]);
+  });
 });
 
 async function createTestZip(path: string, contents = "content"): Promise<Blob> {
@@ -160,26 +179,29 @@ interface MemoryFile {
 function createMemoryDirectoryHandle(
   node: MemoryDirectory,
   failWrites: Set<string>,
+  beforeWrite?: (name: string) => void,
 ): FileSystemDirectoryHandle {
   const handle = {
     getDirectoryHandle: async (name: string, options?: { create?: boolean }) => {
       const entry = node.entries.get(name);
-      if (entry?.kind === "directory") return createMemoryDirectoryHandle(entry, failWrites);
+      if (entry?.kind === "directory")
+        return createMemoryDirectoryHandle(entry, failWrites, beforeWrite);
       if (entry?.kind === "file") throw new DOMException("File exists", "TypeMismatchError");
       if (!options?.create) throw new DOMException("Missing", "NotFoundError");
       const directory: MemoryDirectory = { kind: "directory", entries: new Map() };
       node.entries.set(name, directory);
-      return createMemoryDirectoryHandle(directory, failWrites);
+      return createMemoryDirectoryHandle(directory, failWrites, beforeWrite);
     },
     getFileHandle: async (name: string, options?: { create?: boolean }) => {
       const entry = node.entries.get(name);
       if (entry?.kind === "directory")
         throw new DOMException("Directory exists", "TypeMismatchError");
-      if (entry?.kind === "file") return createMemoryFileHandle(name, entry, failWrites);
+      if (entry?.kind === "file")
+        return createMemoryFileHandle(name, entry, failWrites, beforeWrite);
       if (!options?.create) throw new DOMException("Missing", "NotFoundError");
       const file: MemoryFile = { kind: "file", contents: new Blob() };
       node.entries.set(name, file);
-      return createMemoryFileHandle(name, file, failWrites);
+      return createMemoryFileHandle(name, file, failWrites, beforeWrite);
     },
     removeEntry: async (name: string, options?: { recursive?: boolean }) => {
       const entry = node.entries.get(name);
@@ -197,12 +219,14 @@ function createMemoryFileHandle(
   name: string,
   file: MemoryFile,
   failWrites: Set<string>,
+  beforeWrite?: (name: string) => void,
 ): FileSystemFileHandle {
   return {
     createWritable: async () => ({
       abort: async () => undefined,
       close: async () => undefined,
       write: async (contents: Blob) => {
+        beforeWrite?.(name);
         if (failWrites.has(name)) throw new Error("disk full");
         file.contents = contents;
       },
