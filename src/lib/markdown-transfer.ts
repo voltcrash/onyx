@@ -178,26 +178,23 @@ export async function createMarkdownExport(vault: Vault): Promise<MarkdownTransf
   const paths: TransferPaths = new Map();
 
   for (const note of notes.toReversed()) {
-    const sourcePath = normalizeExportPath(note.sourcePath, `${safeName(note.title)}.md`);
+    const sourcePath = note.sourcePath || `${safeName(note.title.trim())}.md`;
     records.push({
       contents: new Blob([note.markdown], { type: "text/markdown;charset=utf-8" }),
       kind: "note",
       linkSourcePath: note.sourcePath,
-      path: sourcePath,
+      path: portableExportPath(sourcePath),
       sourcePath,
     });
   }
 
   for (const { metadata, file } of attachments) {
-    const sourcePath = normalizeExportPath(
-      metadata.sourcePath,
-      `attachments/${safeName(metadata.name)}`,
-    );
+    const sourcePath = metadata.sourcePath || `attachments/${safeName(metadata.name.trim())}`;
     records.push({
       contents: file,
       kind: "attachment",
       name: metadata.name,
-      path: sourcePath,
+      path: portableExportPath(sourcePath),
       sourcePath,
     });
   }
@@ -624,8 +621,8 @@ function resolveLinkPath(directory: string, destination: string): string | undef
   return resolveRelativePath(directory, destination);
 }
 
-function normalizeExportPath(sourcePath: string | undefined, fallback: string): string {
-  return validateRelativePath(sourcePath || fallback);
+function portableExportPath(sourcePath: string): string {
+  return sourcePath.split("/").map(safeName).join("/");
 }
 
 function uniquePath(path: string, paths: TransferPaths): string {
@@ -682,10 +679,7 @@ function safeName(value: string): string {
     withoutControlCharacters += code < 32 || code === 127 ? "-" : character;
   }
   const name =
-    withoutControlCharacters
-      .replace(/[<>:"/\\|?*]/g, "-")
-      .replace(/[. ]+$/g, "")
-      .trim() || "Untitled";
+    withoutControlCharacters.replace(/[<>:"/\\|?*]/g, "-").replace(/[. ]+$/g, "") || "Untitled";
   return /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu.test(name) ? `_${name}` : name;
 }
 

@@ -243,6 +243,30 @@ it.each(["CON", "nul", "COM1", "LPT9.txt"])(
   },
 );
 
+it("exports stored nonportable paths and keeps relative links working", async () => {
+  const vault = {
+    captureExport: async () => ({
+      notes: [
+        {
+          id: "plan",
+          title: "Plan",
+          sourcePath: "Trips: 2026/Plan?.md",
+          markdown: "![Map](../CON/Map%3F.png)",
+        },
+      ],
+      attachments: [
+        {
+          metadata: { id: "map", name: "Map?.png", sourcePath: "CON/Map?.png" },
+          file: new Blob(["map"]),
+        },
+      ],
+    }),
+  } as unknown as Vault;
+  const files = await readMarkdownZip(await createMarkdownZip(await createMarkdownExport(vault)));
+  expect(files.map(({ path }) => path)).toEqual(["Trips- 2026/Plan-.md", "_CON/Map-.png"]);
+  await expect(files[0]!.contents.text()).resolves.toBe("![Map](../_CON/Map-.png)");
+});
+
 it("suffixes a file that collides with a directory while retaining its links", async () => {
   const vault = {
     captureExport: async () => ({
