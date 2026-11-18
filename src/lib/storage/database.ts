@@ -307,6 +307,26 @@ export class VaultDatabase {
     return this.#getAll<{ noteId: string; markdown: string }>("noteContents");
   }
 
+  async getNoteFileBatch(afterId?: string) {
+    const transaction = this.#transaction(["noteContents", "notes"], "readonly");
+    const done = transactionDone(transaction);
+    const contents = await requestResult<Array<{ noteId: string; markdown: string }>>(
+      transaction
+        .objectStore("noteContents")
+        .getAll(afterId === undefined ? undefined : IDBKeyRange.lowerBound(afterId, true), 32),
+    );
+    const files = await Promise.all(
+      contents.map(async ({ noteId, markdown }) => {
+        const note = await requestResult<NoteMetadata | undefined>(
+          transaction.objectStore("notes").get(noteId),
+        );
+        return note && { id: noteId, path: note.path, markdown };
+      }),
+    );
+    await done;
+    return { files: files.filter((file) => file !== undefined), lastId: contents.at(-1)?.noteId };
+  }
+
   async getNoteMarkdown(noteId: string): Promise<string | undefined> {
     const record = await this.#get<{ markdown: string }>("noteContents", noteId);
     return record?.markdown;

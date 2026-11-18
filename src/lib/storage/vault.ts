@@ -110,7 +110,6 @@ export class Vault {
         options.databaseName ?? DEFAULT_DATABASE_NAME,
         options.directoryName ?? DEFAULT_DIRECTORY_NAME,
       );
-      await coordination.runExclusive(async () => opfs.recover(await database.getFileGeneration()));
       let vault: Vault;
       const filesystem = new MirroredVaultFilesystem(opfs, (reason) => {
         vault.#nativeDirectoryPermission = reason === "permission" ? "prompt" : "error";
@@ -124,7 +123,6 @@ export class Vault {
           `${options.directoryName ?? DEFAULT_DIRECTORY_NAME}:backups`,
         ),
       );
-      await vault.#repairNoteFiles();
       await vault.#restoreNativeDirectory();
       // Tags only make search and filtering better, so a failed backfill must not block opening.
       await vault.#deriveMissingTags().catch(() => undefined);
@@ -157,7 +155,7 @@ export class Vault {
     }
     return this.#withLock(async () => {
       const nativeFilesystem = await VaultFilesystem.fromDirectory(handle);
-      await this.#filesystem.copyTo(nativeFilesystem);
+      await nativeFilesystem.replace(await this.#listCommittedFiles(), async () => undefined);
       await this.#database.setNativeDirectoryHandle(handle);
       this.#filesystem.attach(nativeFilesystem);
       this.#nativeHandle = handle;
@@ -195,12 +193,33 @@ export class Vault {
     return this.#withLock(() => this.#getVaultVersion());
   }
 
-  async #repairNoteFiles(): Promise<void> {
-    await this.#withLock(async () => {
-      for (const id of await repairNoteFiles(this.#database, this.#filesystem)) {
-        this.#pendingNoteFiles.add(id);
-      }
-    });
+  async verifyNoteFiles(): Promise<void> {
+    let afterId: string | undefined;
+    do {
+      afterId = await this.#withLock(() => this.#repairNoteFileBatch(afterId));
+    } while (afterId !== undefined);
+  }
+
+  async #repairNoteFileBatch(afterId?: string): Promise<string | undefined> {
+    const { files, lastId } = await this.#database.getNoteFileBatch(afterId);
+    await repairNoteFiles(files, this.#filesystem, this.#pendingNoteFiles);
+    return lastId;
+  }
+
+  async #listCommittedFiles(): Promise<Array<{ path: string; contents: Blob }>> {
+    const [files, notes, contents] = await Promise.all([
+      this.#filesystem.listFiles(),
+      this.#database.getNotes(),
+      this.#database.getNoteContents(),
+    ]);
+    // OPFS can contain an interrupted write until verification reaches the note.
+    const byPath = new Map(files.map((file) => [file.path, file]));
+    const markdownById = new Map(contents.map((note) => [note.noteId, note.markdown]));
+    for (const { id, path } of notes) {
+      const markdown = markdownById.get(id);
+      if (markdown !== undefined) byPath.set(path, { path, contents: new Blob([markdown]) });
+    }
+    return [...byPath.values()];
   }
 
   subscribe(listener: (event: VaultChangeEvent) => void): () => void {
@@ -277,8 +296,11 @@ export class Vault {
   }
 
   async #restoreNativeDirectory(): Promise<void> {
-    await this.#withLock(() => this.#syncNativeDirectory());
-    this.#storageReady = true;
+    await this.#withLock(async () => {
+      await this.#filesystem.fallback.recover(await this.#database.getFileGeneration());
+      await this.#syncNativeDirectory();
+      this.#storageReady = true;
+    });
   }
 
   async #syncNativeDirectory(): Promise<void> {
@@ -303,7 +325,7 @@ export class Vault {
       this.#nativeDirectoryPermission = permission;
       if (permission !== "granted") return;
       const mirror = await VaultFilesystem.fromDirectory(handle);
-      await this.#filesystem.copyTo(mirror);
+      await mirror.replace(await this.#listCommittedFiles(), async () => undefined);
       this.#filesystem.attach(mirror);
       this.#nativeHandle = handle;
     } catch {
@@ -632,9 +654,7 @@ export class Vault {
       ];
 
       const removed = new Set([note.path, ...attachments.map((attachment) => attachment.path)]);
-      const retained = (await this.#filesystem.listFiles()).filter(
-        (file) => !removed.has(file.path),
-      );
+      const retained = (await this.#listCommittedFiles()).filter((file) => !removed.has(file.path));
       await this.#filesystem.replace(retained, (generation) =>
         this.#database.deleteNote(
           noteId,
@@ -1158,7 +1178,7 @@ export class Vault {
         revision: 1,
         createdAt: now,
       };
-      const retained = (await this.#filesystem.listFiles()).filter(
+      const retained = (await this.#listCommittedFiles()).filter(
         (file) => file.path !== attachment.path,
       );
       await this.#filesystem.replace(retained, (generation) =>
@@ -1191,9 +1211,7 @@ export class Vault {
         createdAt: now,
       }));
       const removed = new Set(targeted.map((attachment) => attachment.path));
-      const retained = (await this.#filesystem.listFiles()).filter(
-        (file) => !removed.has(file.path),
-      );
+      const retained = (await this.#listCommittedFiles()).filter((file) => !removed.has(file.path));
       await this.#filesystem.replace(retained, (generation) =>
         this.#database.deleteAttachments(
           targeted.map((attachment) => attachment.id),
