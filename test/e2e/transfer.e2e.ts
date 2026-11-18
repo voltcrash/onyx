@@ -208,3 +208,21 @@ test("explains why an import failed", async ({ page }) => {
   await expect(page.getByRole("alert")).toHaveCount(0);
   expect(pageErrors).toEqual([]);
 });
+
+test("downloads a vault ZIP when a file name contains punctuation", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
+  await page.getByRole("button", { name: "New file", exact: true }).click();
+  const name = page.getByRole("textbox", { name: "File name" });
+  await name.fill("Trip: Ready?.md");
+  await name.press("Enter");
+  await expect(
+    page.locator(".note-list").getByRole("button", { name: "Trip: Ready?" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Import & export", exact: true }).click();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download ZIP" }).click();
+  expect((await download).suggestedFilename()).toMatch(/^onyx-markdown-.*\.zip$/);
+});

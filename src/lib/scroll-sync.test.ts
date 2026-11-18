@@ -68,6 +68,11 @@ describe("syncedScrollTop", () => {
     expect(syncedScrollTop({ ...source, scrollTop: 1500 }, target)).toBe(1600);
   });
 
+  it.each([1500, 1499.6])("reaches the bottom from a source offset of %s", (scrollTop) => {
+    const padded = { ...target, anchors: scrollAnchors([{ line: 100, top: 1900 }], 100, 2000) };
+    expect(syncedScrollTop({ ...source, scrollTop }, padded)).toBe(1600);
+  });
+
   it("follows the content rather than the scroll proportion", () => {
     // Line 10.5 sits at the reference point of the source, and halfway through the tall block.
     const scrollTop = (210 * 1500) / 2000;

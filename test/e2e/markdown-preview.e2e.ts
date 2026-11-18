@@ -12,13 +12,49 @@ test.beforeEach(async ({ page }) => {
           this,
           type,
           type === "message"
-            ? (event: Event) => setTimeout(() => listener.call(this, event), 150)
+            ? (event: Event) => {
+                const deliver = () => listener.call(this, event);
+                if (
+                  event instanceof MessageEvent &&
+                  event.data.blocks?.some((block: { html: string }) =>
+                    block.html.includes("Transient edit"),
+                  )
+                ) {
+                  Reflect.set(window, "deliverTransientPreview", deliver);
+                } else {
+                  setTimeout(deliver, 150);
+                }
+              }
             : listener,
           options,
         );
       },
     });
   });
+});
+
+test("keeps the displayed preview when an edit is undone before the worker answers", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill("# Original\n\n| A | B |\n| - | - |\n| one | two |");
+  const preview = page.locator(".rendered-pane article");
+  await expect(preview.locator("table")).toHaveCount(1);
+
+  await editor.fill("# Transient edit");
+  await expect
+    .poll(() => page.evaluate(() => typeof Reflect.get(window, "deliverTransientPreview")))
+    .toBe("function");
+  await editor.press("ControlOrMeta+z");
+  await expect(editor).toContainText("Original");
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    Reflect.get(window, "deliverTransientPreview")();
+  });
+  await expect(preview.locator("h1")).toHaveText("Original");
+  await expect(preview.locator("table")).toHaveCount(1);
 });
 
 test("shows progress before sustained typing ends when worker results lag behind input", async ({

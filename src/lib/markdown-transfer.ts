@@ -45,7 +45,7 @@ interface ResolvedTransferLimits {
 
 interface ExportRecord extends MarkdownTransferFile {
   kind: "attachment" | "note";
-  linkSourcePath: string;
+  linkSourcePath?: string;
   name?: string;
   sourcePath: string;
 }
@@ -55,6 +55,8 @@ interface ExportPathLookup {
   attachmentsBySourcePath: Map<string, string | undefined>;
   bySourcePath: Map<string, string | undefined>;
 }
+
+type TransferPaths = Map<string, "file" | "directory">;
 
 interface CreatedDirectory {
   name: string;
@@ -119,7 +121,7 @@ export async function readMarkdownZip(
     }
 
     validateTransferPaths(files);
-    return stripCommonRoot(files);
+    return stripCommonRoot(files.filter(({ path }) => !isMacMetadata(path)));
   } finally {
     await reader.close();
   }
@@ -149,11 +151,28 @@ export async function importMarkdownFiles(
     notes.map(async (file) => ({ file, text: await file.contents.text() })),
   );
   const attachmentsByNote = new Map<string, MarkdownTransferFile[]>();
-  for (const attachment of attachments) {
-    const ownerPath = findAttachmentOwner(attachment.path, markdown).file.path;
-    const owned = attachmentsByNote.get(ownerPath) ?? [];
-    owned.push(attachment);
-    attachmentsByNote.set(ownerPath, owned);
+  if (attachments.length > 0) {
+    const firstReference = new Map<string, string>();
+    const firstInDirectory = new Map<string, string>();
+    for (const { file, text } of markdown) {
+      for (const path of referencedPaths(text, file.path)) {
+        if (!firstReference.has(path)) firstReference.set(path, file.path);
+      }
+      let directory = parentPath(file.path);
+      while (!firstInDirectory.has(directory)) {
+        firstInDirectory.set(directory, file.path);
+        if (!directory) break;
+        directory = parentPath(directory);
+      }
+    }
+    for (const attachment of attachments) {
+      let directory = parentPath(attachment.path);
+      while (!firstInDirectory.has(directory)) directory = parentPath(directory);
+      const ownerPath = firstReference.get(attachment.path) ?? firstInDirectory.get(directory)!;
+      const owned = attachmentsByNote.get(ownerPath) ?? [];
+      owned.push(attachment);
+      attachmentsByNote.set(ownerPath, owned);
+    }
   }
 
   return vault.importNotes(
@@ -171,56 +190,41 @@ export async function importMarkdownFiles(
 }
 
 export async function createMarkdownExport(vault: Vault): Promise<MarkdownTransferFile[]> {
-  const snapshot =
-    typeof vault.captureExport === "function" ? await vault.captureExport() : undefined;
-  const [notes, attachments] = snapshot
-    ? [snapshot.notes, snapshot.attachments.map((attachment) => attachment.metadata)]
-    : await Promise.all([vault.listNotes(), vault.listAttachments()]);
+  const { notes, attachments } = await vault.captureExport();
   const records: ExportRecord[] = [];
-  const paths = new Set<string>();
+  const paths: TransferPaths = new Map();
 
   for (const note of notes.toReversed()) {
-    const value = snapshot
-      ? snapshot.notes.find((candidate) => candidate.id === note.id)
-      : await vault.getNote(note.id);
-    if (!value) continue;
-    const fallback = `${safeName(note.title)}.md`;
-    const sourcePath = normalizeExportPath(note.sourcePath, fallback);
-    const path = uniquePath(sourcePath, paths);
+    const sourcePath = note.sourcePath || `${safeName(note.title.trim())}.md`;
     records.push({
-      contents: new Blob([value.markdown], { type: "text/markdown;charset=utf-8" }),
+      contents: new Blob([note.markdown], { type: "text/markdown;charset=utf-8" }),
       kind: "note",
-      linkSourcePath: note.sourcePath ? sourcePath : path,
-      path,
+      linkSourcePath: note.sourcePath,
+      path: portableExportPath(sourcePath),
       sourcePath,
     });
   }
 
-  for (const metadata of attachments) {
-    const attachment = snapshot
-      ? snapshot.attachments.find((candidate) => candidate.metadata.id === metadata.id)
-      : await vault.getAttachment(metadata.id);
-    if (!attachment) continue;
-    const fallback = `attachments/${safeName(metadata.name)}`;
-    const sourcePath = normalizeExportPath(metadata.sourcePath, fallback);
-    const path = uniquePath(sourcePath, paths);
+  for (const { metadata, file } of attachments) {
+    const sourcePath = metadata.sourcePath || `attachments/${safeName(metadata.name.trim())}`;
     records.push({
-      contents: attachment.file,
+      contents: file,
       kind: "attachment",
-      linkSourcePath: sourcePath,
       name: metadata.name,
-      path,
+      path: portableExportPath(sourcePath),
       sourcePath,
     });
   }
 
+  for (const { path } of records) recordTransferDirectories(pathKey(path), paths);
+  for (const record of records) record.path = uniquePath(record.path, paths);
   const lookup = createExportPathLookup(records);
   return Promise.all(
     records.map(async (record) => {
       if (record.kind !== "note") return record;
       const markdown = await rewriteMarkdownLinks(
         record.contents,
-        record.linkSourcePath,
+        record.linkSourcePath || record.path,
         record.path,
         lookup,
       );
@@ -363,7 +367,7 @@ async function rollbackFolderExport(
   }
   for (const directory of createdDirectories.toReversed()) {
     try {
-      await directory.parent.removeEntry(directory.name, { recursive: true });
+      await directory.parent.removeEntry(directory.name);
     } catch (error) {
       if (!isMissingEntry(error)) errors.push(error);
     }
@@ -382,11 +386,15 @@ function isTypeMismatch(error: unknown): boolean {
 function normalizeEntries(files: MarkdownTransferFile[]): MarkdownTransferFile[] {
   const entries = files.flatMap((file) => {
     const path = validateRelativePath(file.path);
-    if (path === "__MACOSX" || path.startsWith("__MACOSX/")) return [];
+    if (isMacMetadata(path)) return [];
     return [{ ...file, path }];
   });
   validateTransferFiles(entries, resolveTransferLimits());
   return entries;
+}
+
+function isMacMetadata(path: string): boolean {
+  return path === "__MACOSX" || path.startsWith("__MACOSX/");
 }
 
 function stripCommonRoot(files: MarkdownTransferFile[]): MarkdownTransferFile[] {
@@ -409,17 +417,17 @@ function validateTransferFiles(
 }
 
 function validateTransferPaths(files: MarkdownTransferFile[]): void {
-  const paths = new Set<string>();
+  const paths: TransferPaths = new Map();
   for (const file of files) {
     const path = validateRelativePath(file.path);
     if (path !== file.path) throw new Error(`Unsafe transfer path: ${file.path}`);
     const key = pathKey(path);
-    if (hasPathCollision(path, paths)) {
+    if (paths.has(key) || hasExistingAncestor(key, paths)) {
       throw new Error(
-        `${paths.has(key) ? "Duplicate" : "Conflicting"} transfer path: ${file.path}`,
+        `${paths.get(key) === "file" ? "Duplicate" : "Conflicting"} transfer path: ${file.path}`,
       );
     }
-    paths.add(key);
+    recordTransferPath(key, paths);
   }
 }
 
@@ -519,26 +527,18 @@ function createLimitedBlobWriter(
   };
 }
 
-function findAttachmentOwner(
-  path: string,
-  notes: Array<{ file: MarkdownTransferFile; text: string }>,
-): { file: MarkdownTransferFile; text: string } {
-  const linked = notes.find((note) => referencedPaths(note.text, note.file.path).has(path));
-  if (linked) return linked;
-  return notes.toSorted(
-    (left, right) =>
-      commonDirectoryDepth(path, right.file.path) - commonDirectoryDepth(path, left.file.path),
-  )[0];
-}
-
 function referencedPaths(markdown: string, notePath: string): Set<string> {
   const references = new Set<string>();
+  if (!markdown.includes("](") && !markdown.includes("[[")) return references;
   const directory = parentPath(notePath);
-  for (const destination of markdownLinkDestinations(markdown)) {
-    const withoutSuffix = destination.split(/[?#]/, 1)[0];
-    const resolved = resolveLinkPath(directory, decodePath(withoutSuffix));
-    if (resolved) references.add(resolved);
-  }
+  mapMarkdownProse(markdown, (prose) => {
+    for (const destination of markdownLinkDestinations(prose)) {
+      const withoutSuffix = destination.split(/[?#]/, 1)[0];
+      const resolved = resolveLinkPath(directory, withoutSuffix);
+      if (resolved) references.add(resolved);
+    }
+    return prose;
+  });
   return references;
 }
 
@@ -592,7 +592,7 @@ async function rewriteMarkdownLinks(
     const suffixIndex = destination.search(/[?#]/);
     const path = suffixIndex === -1 ? destination : destination.slice(0, suffixIndex);
     const suffix = suffixIndex === -1 ? "" : destination.slice(suffixIndex);
-    const resolved = resolveLinkPath(directory, decodePath(path));
+    const resolved = resolveLinkPath(directory, path);
     if (!resolved) return;
 
     let exportPath: string | undefined;
@@ -605,7 +605,10 @@ async function rewriteMarkdownLinks(
       exportPath = lookup.attachmentsByName.get(pathKey(basename(resolved)));
     }
     if (!exportPath) return;
-    return `${encodePath(relativePath(exportDirectory, exportPath))}${suffix}`;
+    const relative = encodePath(relativePath(exportDirectory, exportPath))
+      .replaceAll("(", "%28")
+      .replaceAll(")", "%29");
+    return `${relative}${suffix}`;
   };
 
   return mapMarkdownProse(markdown, (prose) => {
@@ -631,53 +634,52 @@ async function rewriteMarkdownLinks(
 
 function resolveLinkPath(directory: string, destination: string): string | undefined {
   if (/^(?:[a-z][a-z\d+.-]*:|[\\/])/i.test(destination)) return;
-  return resolveRelativePath(directory, destination);
+  const path = decodePath(destination);
+  if (path.startsWith("/")) return;
+  return resolveRelativePath(directory, path);
 }
 
-function normalizeExportPath(sourcePath: string | undefined, fallback: string): string {
-  return validateRelativePath(sourcePath || fallback);
+function portableExportPath(sourcePath: string): string {
+  return sourcePath.split("/").map(safeName).join("/");
 }
 
-function uniquePath(path: string, paths: Set<string>): string {
-  if (!hasPathCollision(path, paths)) {
-    paths.add(pathKey(path));
+function uniquePath(path: string, paths: TransferPaths): string {
+  const key = pathKey(path);
+  if (!paths.has(key)) {
+    paths.set(key, "file");
     return path;
-  }
-  if (hasExistingAncestor(path, paths)) {
-    throw new Error(`Conflicting export paths: ${path}`);
   }
 
   const dot = path.lastIndexOf(".");
   const base = dot > path.lastIndexOf("/") ? path.slice(0, dot) : path;
   const extension = dot > path.lastIndexOf("/") ? path.slice(dot) : "";
   let index = 2;
-  while (hasPathCollision(`${base}-${index}${extension}`, paths)) index += 1;
+  while (paths.has(pathKey(`${base}-${index}${extension}`))) index += 1;
   const result = `${base}-${index}${extension}`;
-  paths.add(pathKey(result));
+  paths.set(pathKey(result), "file");
   return result;
 }
 
-function hasPathCollision(path: string, paths: Set<string>): boolean {
-  const key = pathKey(path);
-  return [...paths].some(
-    (existingKey) =>
-      existingKey === key || existingKey.startsWith(`${key}/`) || key.startsWith(`${existingKey}/`),
-  );
+function recordTransferPath(key: string, paths: TransferPaths): void {
+  paths.set(key, "file");
+  recordTransferDirectories(key, paths);
 }
 
-function hasExistingAncestor(path: string, paths: Set<string>): boolean {
-  const parts = path.split("/");
-  return parts
-    .slice(0, -1)
-    .some((_, index) => paths.has(pathKey(parts.slice(0, index + 1).join("/"))));
+function recordTransferDirectories(key: string, paths: TransferPaths): void {
+  for (
+    let directory = parentPath(key);
+    directory && !paths.has(directory);
+    directory = parentPath(directory)
+  ) {
+    paths.set(directory, "directory");
+  }
 }
 
-function commonDirectoryDepth(left: string, right: string): number {
-  const leftParts = parentPath(left).split("/");
-  const rightParts = parentPath(right).split("/");
-  let depth = 0;
-  while (leftParts[depth] && leftParts[depth] === rightParts[depth]) depth += 1;
-  return depth;
+function hasExistingAncestor(key: string, paths: TransferPaths): boolean {
+  for (let directory = parentPath(key); directory; directory = parentPath(directory)) {
+    if (paths.get(directory) === "file") return true;
+  }
+  return false;
 }
 
 function safeName(value: string): string {
@@ -687,10 +689,7 @@ function safeName(value: string): string {
     withoutControlCharacters += code < 32 || code === 127 ? "-" : character;
   }
   const name =
-    withoutControlCharacters
-      .replace(/[<>:"/\\|?*]/g, "-")
-      .replace(/[. ]+$/g, "")
-      .trim() || "Untitled";
+    withoutControlCharacters.replace(/[<>:"/\\|?*]/g, "-").replace(/[. ]+$/g, "") || "Untitled";
   return /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu.test(name) ? `_${name}` : name;
 }
 

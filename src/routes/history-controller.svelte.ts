@@ -35,15 +35,18 @@ export function createHistoryController(host: {
   async function restore(): Promise<void> {
     if (!source || !selected || busy) return;
     const { vault, noteId } = source;
+    const snapshotId = selected.id;
     if (vault !== host.vault() || noteId !== host.noteId()) return;
     busy = true;
+    error = "";
     try {
       if (!(await host.settle())) return;
-      await vault.restoreNoteSnapshot(noteId, selected.id);
+      if (vault !== host.vault() || noteId !== host.noteId()) return;
+      await vault.restoreNoteSnapshot(noteId, snapshotId);
       if (vault !== host.vault() || noteId !== host.noteId()) return;
       await host.reload();
       snapshots = await vault.listNoteSnapshots(noteId);
-      selected = snapshots.find((snapshot) => snapshot.id === selected?.id);
+      selected = snapshots.find((snapshot) => snapshot.id === snapshotId);
     } catch (cause) {
       error = cause instanceof Error ? cause.message : "The snapshot could not be restored.";
     } finally {
@@ -70,7 +73,7 @@ export function createHistoryController(host: {
     show,
     restore,
     select(snapshot: NoteSnapshot) {
-      selected = snapshot;
+      if (!busy) selected = snapshot;
     },
     close() {
       if (!busy) {

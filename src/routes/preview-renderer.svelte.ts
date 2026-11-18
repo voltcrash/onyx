@@ -115,7 +115,14 @@ export function createPreviewRenderer(host: PreviewRendererHost) {
   ): Promise<void> {
     if (disposed) return;
     const { attachments, noteSourcePath } = context;
-    if (workerPreview && matches(workerPreview, source, attachments, noteSourcePath)) return;
+    if (workerPreview && matches(workerPreview, source, attachments, noteSourcePath)) {
+      // Returning to the displayed content invalidates any different render still in flight.
+      if (pendingWorkerPreview) {
+        displayedSequence = ++renderSequence;
+        pendingWorkerPreview = undefined;
+      }
+      return;
+    }
     const pending = pendingWorkerPreview;
     if (pending && matches(pending, source, attachments, noteSourcePath)) return pending.done;
     const done = renderInWorker(source, attachments, noteSourcePath, ++renderSequence);
