@@ -45,7 +45,7 @@ interface ResolvedTransferLimits {
 
 interface ExportRecord extends MarkdownTransferFile {
   kind: "attachment" | "note";
-  linkSourcePath: string;
+  linkSourcePath?: string;
   name?: string;
   sourcePath: string;
 }
@@ -55,6 +55,8 @@ interface ExportPathLookup {
   attachmentsBySourcePath: Map<string, string | undefined>;
   bySourcePath: Map<string, string | undefined>;
 }
+
+type TransferPaths = Map<string, "file" | "directory">;
 
 interface CreatedDirectory {
   name: string;
@@ -173,42 +175,42 @@ export async function importMarkdownFiles(
 export async function createMarkdownExport(vault: Vault): Promise<MarkdownTransferFile[]> {
   const { notes, attachments } = await vault.captureExport();
   const records: ExportRecord[] = [];
-  const paths = new Set<string>();
+  const paths: TransferPaths = new Map();
 
   for (const note of notes.toReversed()) {
-    const fallback = `${safeName(note.title)}.md`;
-    const sourcePath = normalizeExportPath(note.sourcePath, fallback);
-    const path = uniquePath(sourcePath, paths);
+    const sourcePath = normalizeExportPath(note.sourcePath, `${safeName(note.title)}.md`);
     records.push({
       contents: new Blob([note.markdown], { type: "text/markdown;charset=utf-8" }),
       kind: "note",
-      linkSourcePath: note.sourcePath ? sourcePath : path,
-      path,
+      linkSourcePath: note.sourcePath,
+      path: sourcePath,
       sourcePath,
     });
   }
 
   for (const { metadata, file } of attachments) {
-    const fallback = `attachments/${safeName(metadata.name)}`;
-    const sourcePath = normalizeExportPath(metadata.sourcePath, fallback);
-    const path = uniquePath(sourcePath, paths);
+    const sourcePath = normalizeExportPath(
+      metadata.sourcePath,
+      `attachments/${safeName(metadata.name)}`,
+    );
     records.push({
       contents: file,
       kind: "attachment",
-      linkSourcePath: sourcePath,
       name: metadata.name,
-      path,
+      path: sourcePath,
       sourcePath,
     });
   }
 
+  for (const { path } of records) recordTransferDirectories(pathKey(path), paths);
+  for (const record of records) record.path = uniquePath(record.path, paths);
   const lookup = createExportPathLookup(records);
   return Promise.all(
     records.map(async (record) => {
       if (record.kind !== "note") return record;
       const markdown = await rewriteMarkdownLinks(
         record.contents,
-        record.linkSourcePath,
+        record.linkSourcePath || record.path,
         record.path,
         lookup,
       );
@@ -397,17 +399,17 @@ function validateTransferFiles(
 }
 
 function validateTransferPaths(files: MarkdownTransferFile[]): void {
-  const paths = new Set<string>();
+  const paths: TransferPaths = new Map();
   for (const file of files) {
     const path = validateRelativePath(file.path);
     if (path !== file.path) throw new Error(`Unsafe transfer path: ${file.path}`);
     const key = pathKey(path);
-    if (hasPathCollision(path, paths)) {
+    if (paths.has(key) || hasExistingAncestor(key, paths)) {
       throw new Error(
-        `${paths.has(key) ? "Duplicate" : "Conflicting"} transfer path: ${file.path}`,
+        `${paths.get(key) === "file" ? "Duplicate" : "Conflicting"} transfer path: ${file.path}`,
       );
     }
-    paths.add(key);
+    recordTransferPath(key, paths);
   }
 }
 
@@ -626,38 +628,43 @@ function normalizeExportPath(sourcePath: string | undefined, fallback: string): 
   return validateRelativePath(sourcePath || fallback);
 }
 
-function uniquePath(path: string, paths: Set<string>): string {
-  if (!hasPathCollision(path, paths)) {
-    paths.add(pathKey(path));
+function uniquePath(path: string, paths: TransferPaths): string {
+  const key = pathKey(path);
+  if (!paths.has(key)) {
+    paths.set(key, "file");
     return path;
-  }
-  if (hasExistingAncestor(path, paths)) {
-    throw new Error(`Conflicting export paths: ${path}`);
   }
 
   const dot = path.lastIndexOf(".");
   const base = dot > path.lastIndexOf("/") ? path.slice(0, dot) : path;
   const extension = dot > path.lastIndexOf("/") ? path.slice(dot) : "";
   let index = 2;
-  while (hasPathCollision(`${base}-${index}${extension}`, paths)) index += 1;
+  while (paths.has(pathKey(`${base}-${index}${extension}`))) index += 1;
   const result = `${base}-${index}${extension}`;
-  paths.add(pathKey(result));
+  paths.set(pathKey(result), "file");
   return result;
 }
 
-function hasPathCollision(path: string, paths: Set<string>): boolean {
-  const key = pathKey(path);
-  return [...paths].some(
-    (existingKey) =>
-      existingKey === key || existingKey.startsWith(`${key}/`) || key.startsWith(`${existingKey}/`),
-  );
+function recordTransferPath(key: string, paths: TransferPaths): void {
+  paths.set(key, "file");
+  recordTransferDirectories(key, paths);
 }
 
-function hasExistingAncestor(path: string, paths: Set<string>): boolean {
-  const parts = path.split("/");
-  return parts
-    .slice(0, -1)
-    .some((_, index) => paths.has(pathKey(parts.slice(0, index + 1).join("/"))));
+function recordTransferDirectories(key: string, paths: TransferPaths): void {
+  for (
+    let directory = parentPath(key);
+    directory && !paths.has(directory);
+    directory = parentPath(directory)
+  ) {
+    paths.set(directory, "directory");
+  }
+}
+
+function hasExistingAncestor(key: string, paths: TransferPaths): boolean {
+  for (let directory = parentPath(key); directory; directory = parentPath(directory)) {
+    if (paths.get(directory) === "file") return true;
+  }
+  return false;
 }
 
 function commonDirectoryDepth(left: string, right: string): number {

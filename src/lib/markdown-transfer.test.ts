@@ -79,6 +79,16 @@ describe("Markdown archives", () => {
     ).rejects.toThrow("Unsafe transfer path");
   });
 
+  it.each([
+    [["Notes/Plan.md", "notes/plan.MD"], "Duplicate"],
+    [["Notes", "notes/Plan.md"], "Conflicting"],
+    [["notes/Plan.md", "Notes"], "Conflicting"],
+  ])("rejects collisions between %j", async (paths, error) => {
+    await expect(
+      createMarkdownZip(paths.map((path) => ({ path, contents: new Blob() }))),
+    ).rejects.toThrow(`${error} transfer path`);
+  });
+
   it("rewrites local links when an export path is collision-suffixed", async () => {
     const vault = {
       captureExport: async () => ({
@@ -232,3 +242,23 @@ it.each(["CON", "nul", "COM1", "LPT9.txt"])(
     await expect(readMarkdownZip(await createMarkdownZip(files))).resolves.toHaveLength(1);
   },
 );
+
+it("suffixes a file that collides with a directory while retaining its links", async () => {
+  const vault = {
+    captureExport: async () => ({
+      notes: [
+        {
+          id: "agenda",
+          title: "Agenda",
+          sourcePath: "Meeting.md/Agenda.md",
+          markdown: "[Minutes](../Meeting.md)",
+        },
+        { id: "minutes", title: "Minutes", sourcePath: "Meeting.md", markdown: "# Minutes" },
+      ],
+      attachments: [],
+    }),
+  } as unknown as Vault;
+  const files = await createMarkdownExport(vault);
+  expect(files.map(({ path }) => path)).toEqual(["Meeting-2.md", "Meeting.md/Agenda.md"]);
+  await expect(files[1]?.contents.text()).resolves.toBe("[Minutes](../Meeting-2.md)");
+});
