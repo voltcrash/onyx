@@ -121,7 +121,7 @@ export async function readMarkdownZip(
     }
 
     validateTransferPaths(files);
-    return stripCommonRoot(files);
+    return stripCommonRoot(files.filter(({ path }) => !isMacMetadata(path)));
   } finally {
     await reader.close();
   }
@@ -386,11 +386,15 @@ function isTypeMismatch(error: unknown): boolean {
 function normalizeEntries(files: MarkdownTransferFile[]): MarkdownTransferFile[] {
   const entries = files.flatMap((file) => {
     const path = validateRelativePath(file.path);
-    if (path === "__MACOSX" || path.startsWith("__MACOSX/")) return [];
+    if (isMacMetadata(path)) return [];
     return [{ ...file, path }];
   });
   validateTransferFiles(entries, resolveTransferLimits());
   return entries;
+}
+
+function isMacMetadata(path: string): boolean {
+  return path === "__MACOSX" || path.startsWith("__MACOSX/");
 }
 
 function stripCommonRoot(files: MarkdownTransferFile[]): MarkdownTransferFile[] {

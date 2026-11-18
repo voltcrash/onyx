@@ -19,6 +19,19 @@ describe("Markdown archives", () => {
     await expect(readMarkdownZip(malformed)).rejects.toBeInstanceOf(Error);
   });
 
+  it("strips a ZIP wrapper directory even when macOS metadata sits beside it", async () => {
+    const contents = new Blob(["test"]);
+    const archive = await createMarkdownZip([
+      { path: "Export/Plan.md", contents },
+      { path: "Export/assets/map.png", contents },
+      { path: "__MACOSX/Export/._Plan.md", contents },
+    ]);
+    expect((await readMarkdownZip(archive)).map(({ path }) => path)).toEqual([
+      "Plan.md",
+      "assets/map.png",
+    ]);
+  });
+
   it("stops before writing when an export would overwrite a file", async () => {
     const existingFile = {} as FileSystemFileHandle;
     const root = {
