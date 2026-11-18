@@ -185,10 +185,6 @@ export class MirroredVaultFilesystem implements VaultFileStorage {
     this.#mirror = undefined;
   }
 
-  async copyTo(mirror: VaultFilesystem): Promise<void> {
-    await mirror.replace(await this.fallback.listFiles(), async () => undefined);
-  }
-
   listFiles(): Promise<Array<{ contents: Blob; path: string }>> {
     return this.fallback.listFiles();
   }

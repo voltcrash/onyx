@@ -240,6 +240,8 @@ describe("Native directory configuration changes", () => {
     vi.stubGlobal("showDirectoryPicker", async () => native);
     let stored: FileSystemDirectoryHandle | undefined;
     const database = {
+      getNotes: async () => [{ id: "existing", path: "notes/existing.md" }],
+      getNoteContents: async () => [{ noteId: "existing", markdown: "committed" }],
       getNativeDirectoryHandle: async () => stored,
       getFileGeneration: async () => undefined,
       setNativeDirectoryHandle: async (handle: FileSystemDirectoryHandle) => {
@@ -253,7 +255,11 @@ describe("Native directory configuration changes", () => {
     const coordination = { runExclusive: <T>(task: () => Promise<T>) => task(), publish: vi.fn() };
     const vault = Reflect.construct(Vault, [database, filesystem, coordination]) as Vault;
     try {
+      await fallback.writeText("notes/existing.md", "interrupted write");
       await vault.connectNativeDirectory();
+      expect(
+        await (await VaultFilesystem.fromDirectory(native)).readText("notes/existing.md"),
+      ).toBe("committed");
       await vault.saveNote({ id: "n", title: "N", markdown: "mirrored" });
       stored = undefined;
       await vault.saveNote({ id: "n", title: "N", markdown: "local only" });

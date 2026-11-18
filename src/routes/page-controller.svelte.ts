@@ -634,6 +634,24 @@ export function createPageController() {
       clearingVault,
   );
 
+  let verificationStartedFor: Vault | undefined;
+  $effect(() => {
+    if (editorBlocked || !vault || vault === verificationStartedFor) return;
+    const opened = vault;
+    verificationStartedFor = opened;
+    void opened.verifyNoteFiles().then(
+      () => {
+        if (!disposed && vault === opened) appendNativeDirectoryNotice();
+      },
+      () => {
+        if (!disposed && vault === opened)
+          appendStorageNotice(
+            "Some note files could not be verified. The latest saved text is in the browser database. Reload to retry.",
+          );
+      },
+    );
+  });
+
   const activeVault = $derived(
     vaults.find((candidate) => candidate.id === activeVaultId) ?? vaults[0],
   );
@@ -1243,7 +1261,6 @@ export function createPageController() {
         return;
       }
       vault = opened;
-      appendNativeDirectoryNotice();
       unsubscribeVault?.();
       unsubscribeVault = vault.subscribe(queueRemoteVaultSync);
       let tree = await vault.listFileTree();
@@ -1272,6 +1289,7 @@ export function createPageController() {
       ]);
       observedVaultVersion = await vault.getVersion();
       vaultPhase = "ready";
+      appendNativeDirectoryNotice();
       if (detectBrowserStorageSupport().persistentStorage) void ensurePersistentStorage();
     } catch (error) {
       if (generation !== vaultGeneration || disposed) return;

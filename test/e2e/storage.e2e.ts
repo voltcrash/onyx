@@ -572,3 +572,62 @@ test("gives the storage notice's dismiss button a touch-sized target", async ({ 
   await page.mouse.click(box.x - 5, box.y + box.height / 2);
   await expect(page.locator(".storage-notice")).toHaveCount(0);
 });
+
+test("accepts edits while an inactive file from an interrupted save awaits repair", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown editor" });
+  await expect(editor).toBeEnabled();
+  await editor.fill("# Inactive");
+  await editor.press("ControlOrMeta+s");
+  await expect(page.locator(".file-tree-row.file")).toContainText("Inactive");
+  const name = await page.evaluate(async () => {
+    const root = await (await navigator.storage.getDirectory()).getDirectoryHandle("onyx");
+    const notes = await root.getDirectoryHandle("notes");
+    for await (const name of notes.keys()) return name;
+    throw new Error("Missing saved note");
+  });
+  await editor.press("ControlOrMeta+Enter");
+  await expectMarkdown(editor, "");
+  await editor.fill("# Foreground");
+  await editor.press("ControlOrMeta+s");
+  await expect(page.locator(".file-tree-row.file").filter({ hasText: "Foreground" })).toBeVisible();
+  await expect(page.locator(".doc-status-state")).toContainText("Saved");
+  await page.evaluate(async (name) => {
+    const root = await (await navigator.storage.getDirectory()).getDirectoryHandle("onyx");
+    const notes = await root.getDirectoryHandle("notes");
+    const writer = await (await notes.getFileHandle(name)).createWritable();
+    await writer.write("# Uncommitted file contents");
+    await writer.close();
+  }, name);
+  await page.addInitScript((name) => {
+    const read = Reflect.get(
+      FileSystemFileHandle.prototype,
+      "getFile",
+    ) as FileSystemFileHandle["getFile"];
+    FileSystemFileHandle.prototype.getFile = async function () {
+      if (this.name === name) {
+        FileSystemFileHandle.prototype.getFile = read;
+        await new Promise<void>((resolve) => Reflect.set(window, "releaseNoteRead", resolve));
+      }
+      return read.call(this);
+    };
+  }, name);
+  await page.reload();
+  await page.waitForFunction(() => Reflect.has(window, "releaseNoteRead"));
+  await expectMarkdown(editor, "# Foreground");
+  await editor.press("End");
+  await editor.press("x");
+  await expectMarkdown(editor, "# Foregroundx");
+  await page.evaluate(() => Reflect.get(window, "releaseNoteRead")());
+  await expect
+    .poll(() =>
+      page.evaluate(async (name) => {
+        const root = await (await navigator.storage.getDirectory()).getDirectoryHandle("onyx");
+        const notes = await root.getDirectoryHandle("notes");
+        return (await (await notes.getFileHandle(name)).getFile()).text();
+      }, name),
+    )
+    .toBe("# Inactive");
+});

@@ -1,21 +1,13 @@
 import { expect, it, vi } from "vite-plus/test";
 import { repairNoteFiles } from "./repair.js";
-import type { NoteMetadata } from "./types.js";
 
-const notes = Array.from(
-  { length: 25 },
-  (_, index) => ({ id: `${index}`, path: `${index}.md` }) as NoteMetadata,
-);
+const files = Array.from({ length: 24 }, (_, index) => ({
+  id: String(index),
+  path: `${index}.md`,
+  markdown: `note ${index}`,
+}));
 
-it("batches database reads and bounds concurrent file reads while preserving recovery", async () => {
-  const database = {
-    getNotes: vi.fn().mockResolvedValue(notes),
-    getNoteContents: vi
-      .fn()
-      .mockResolvedValue(
-        notes.slice(0, 24).map((note) => ({ noteId: note.id, markdown: `note ${note.id}` })),
-      ),
-  };
+it("bounds concurrent file reads while repairing stale and missing files", async () => {
   let active = 0;
   let maximum = 0;
   const filesystem = {
@@ -32,9 +24,9 @@ it("batches database reads and bounds concurrent file reads while preserving rec
       if (path === "2.md") throw new DOMException("full", "QuotaExceededError");
     }),
   };
-  expect(await repairNoteFiles(database, filesystem)).toEqual(new Set(["2"]));
-  expect(database.getNotes).toHaveBeenCalledTimes(1);
-  expect(database.getNoteContents).toHaveBeenCalledTimes(1);
+  const pending = new Set(["0"]);
+  await repairNoteFiles(files, filesystem, pending);
+  expect(pending).toEqual(new Set(["2"]));
   expect(filesystem.readText).toHaveBeenCalledTimes(24);
   expect(maximum).toBe(8);
   expect(filesystem.writeText.mock.calls).toEqual([
@@ -43,20 +35,18 @@ it("batches database reads and bounds concurrent file reads while preserving rec
   ]);
 });
 
-it("reports non-quota repair failures instead of silently opening inconsistent files", async () => {
+it("propagates non-quota repair failures", async () => {
   const failure = new Error("disk error");
   await expect(
     repairNoteFiles(
-      {
-        getNotes: async () => notes.slice(0, 1),
-        getNoteContents: async () => [{ noteId: "0", markdown: "saved" }],
-      },
+      files.slice(0, 1),
       {
         readText: async () => "stale",
         writeText: async () => {
           throw failure;
         },
       },
+      new Set(),
     ),
   ).rejects.toBe(failure);
 });
