@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { BlobReader, BlobWriter, ZipWriter } from "@zip.js/zip.js";
 
@@ -6,6 +6,7 @@ import type { Vault } from "./storage/vault.js";
 import {
   createMarkdownExport,
   createMarkdownZip,
+  importMarkdownFiles,
   readMarkdownFolder,
   readMarkdownZip,
   writeMarkdownFolder,
@@ -289,6 +290,30 @@ it("exports stored nonportable paths and keeps relative links working", async ()
   const files = await readMarkdownZip(await createMarkdownZip(await createMarkdownExport(vault)));
   expect(files.map(({ path }) => path)).toEqual(["Trips- 2026/Plan-.md", "_CON/Map-.png"]);
   await expect(files[0]!.contents.text()).resolves.toBe("![Map](../_CON/Map-.png)");
+});
+
+it("assigns attachments to an actual link before falling back to the closest folder", async () => {
+  const importNotes = vi.fn();
+  const vault = { importNotes } as unknown as Vault;
+  const files = [
+    { path: "Root.md", contents: new Blob(["`![example](Trips/assets/map.png)`"]) },
+    { path: "Trips/Plan.md", contents: new Blob(["![Map](assets/map.png)"]) },
+    { path: "Trips/Other.md", contents: new Blob(["Other"]) },
+    { path: "Trips/assets/map.png", contents: new Blob(["map"]) },
+    { path: "Trips/assets/extra.png", contents: new Blob(["extra"]) },
+  ];
+  await importMarkdownFiles(vault, files);
+  expect(importNotes).toHaveBeenCalledWith([
+    expect.objectContaining({ sourcePath: "Root.md", attachments: [] }),
+    expect.objectContaining({
+      sourcePath: "Trips/Plan.md",
+      attachments: [
+        expect.objectContaining({ name: "map.png" }),
+        expect.objectContaining({ name: "extra.png" }),
+      ],
+    }),
+    expect.objectContaining({ sourcePath: "Trips/Other.md", attachments: [] }),
+  ]);
 });
 
 it("suffixes a file that collides with a directory while retaining its links", async () => {

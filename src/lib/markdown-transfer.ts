@@ -151,11 +151,28 @@ export async function importMarkdownFiles(
     notes.map(async (file) => ({ file, text: await file.contents.text() })),
   );
   const attachmentsByNote = new Map<string, MarkdownTransferFile[]>();
-  for (const attachment of attachments) {
-    const ownerPath = findAttachmentOwner(attachment.path, markdown).file.path;
-    const owned = attachmentsByNote.get(ownerPath) ?? [];
-    owned.push(attachment);
-    attachmentsByNote.set(ownerPath, owned);
+  if (attachments.length > 0) {
+    const firstReference = new Map<string, string>();
+    const firstInDirectory = new Map<string, string>();
+    for (const { file, text } of markdown) {
+      for (const path of referencedPaths(text, file.path)) {
+        if (!firstReference.has(path)) firstReference.set(path, file.path);
+      }
+      let directory = parentPath(file.path);
+      while (!firstInDirectory.has(directory)) {
+        firstInDirectory.set(directory, file.path);
+        if (!directory) break;
+        directory = parentPath(directory);
+      }
+    }
+    for (const attachment of attachments) {
+      let directory = parentPath(attachment.path);
+      while (!firstInDirectory.has(directory)) directory = parentPath(directory);
+      const ownerPath = firstReference.get(attachment.path) ?? firstInDirectory.get(directory)!;
+      const owned = attachmentsByNote.get(ownerPath) ?? [];
+      owned.push(attachment);
+      attachmentsByNote.set(ownerPath, owned);
+    }
   }
 
   return vault.importNotes(
@@ -506,26 +523,18 @@ function createLimitedBlobWriter(
   };
 }
 
-function findAttachmentOwner(
-  path: string,
-  notes: Array<{ file: MarkdownTransferFile; text: string }>,
-): { file: MarkdownTransferFile; text: string } {
-  const linked = notes.find((note) => referencedPaths(note.text, note.file.path).has(path));
-  if (linked) return linked;
-  return notes.toSorted(
-    (left, right) =>
-      commonDirectoryDepth(path, right.file.path) - commonDirectoryDepth(path, left.file.path),
-  )[0];
-}
-
 function referencedPaths(markdown: string, notePath: string): Set<string> {
   const references = new Set<string>();
+  if (!markdown.includes("](") && !markdown.includes("[[")) return references;
   const directory = parentPath(notePath);
-  for (const destination of markdownLinkDestinations(markdown)) {
-    const withoutSuffix = destination.split(/[?#]/, 1)[0];
-    const resolved = resolveLinkPath(directory, decodePath(withoutSuffix));
-    if (resolved) references.add(resolved);
-  }
+  mapMarkdownProse(markdown, (prose) => {
+    for (const destination of markdownLinkDestinations(prose)) {
+      const withoutSuffix = destination.split(/[?#]/, 1)[0];
+      const resolved = resolveLinkPath(directory, decodePath(withoutSuffix));
+      if (resolved) references.add(resolved);
+    }
+    return prose;
+  });
   return references;
 }
 
@@ -662,14 +671,6 @@ function hasExistingAncestor(key: string, paths: TransferPaths): boolean {
     if (paths.get(directory) === "file") return true;
   }
   return false;
-}
-
-function commonDirectoryDepth(left: string, right: string): number {
-  const leftParts = parentPath(left).split("/");
-  const rightParts = parentPath(right).split("/");
-  let depth = 0;
-  while (leftParts[depth] && leftParts[depth] === rightParts[depth]) depth += 1;
-  return depth;
 }
 
 function safeName(value: string): string {
