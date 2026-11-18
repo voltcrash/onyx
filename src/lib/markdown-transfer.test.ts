@@ -366,3 +366,25 @@ it("suffixes a file that collides with a directory while retaining its links", a
   expect(files.map(({ path }) => path)).toEqual(["Meeting-2.md", "Meeting.md/Agenda.md"]);
   await expect(files[1]?.contents.text()).resolves.toBe("[Minutes](../Meeting-2.md)");
 });
+
+it("rewrites local links with an escaped colon in the first path segment", async () => {
+  const vault = {
+    captureExport: async () => ({
+      notes: [
+        {
+          id: "index",
+          title: "Index",
+          sourcePath: "Index.md",
+          markdown: "[Log](Trip%3A2026.md) [External](https://example.com)",
+        },
+        { id: "log", title: "Log", sourcePath: "Trip:2026.md", markdown: "# Log" },
+      ],
+      attachments: [],
+    }),
+  } as unknown as Vault;
+  const files = await createMarkdownExport(vault);
+  const index = files.find(({ path }) => path === "Index.md");
+  await expect(index?.contents.text()).resolves.toBe(
+    "[Log](Trip-2026.md) [External](https://example.com)",
+  );
+});

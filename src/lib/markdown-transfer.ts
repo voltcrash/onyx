@@ -534,7 +534,7 @@ function referencedPaths(markdown: string, notePath: string): Set<string> {
   mapMarkdownProse(markdown, (prose) => {
     for (const destination of markdownLinkDestinations(prose)) {
       const withoutSuffix = destination.split(/[?#]/, 1)[0];
-      const resolved = resolveLinkPath(directory, decodePath(withoutSuffix));
+      const resolved = resolveLinkPath(directory, withoutSuffix);
       if (resolved) references.add(resolved);
     }
     return prose;
@@ -592,7 +592,7 @@ async function rewriteMarkdownLinks(
     const suffixIndex = destination.search(/[?#]/);
     const path = suffixIndex === -1 ? destination : destination.slice(0, suffixIndex);
     const suffix = suffixIndex === -1 ? "" : destination.slice(suffixIndex);
-    const resolved = resolveLinkPath(directory, decodePath(path));
+    const resolved = resolveLinkPath(directory, path);
     if (!resolved) return;
 
     let exportPath: string | undefined;
@@ -634,7 +634,9 @@ async function rewriteMarkdownLinks(
 
 function resolveLinkPath(directory: string, destination: string): string | undefined {
   if (/^(?:[a-z][a-z\d+.-]*:|[\\/])/i.test(destination)) return;
-  return resolveRelativePath(directory, destination);
+  const path = decodePath(destination);
+  if (path.startsWith("/")) return;
+  return resolveRelativePath(directory, path);
 }
 
 function portableExportPath(sourcePath: string): string {
