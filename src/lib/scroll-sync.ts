@@ -89,9 +89,10 @@ export function syncedScrollTop(
   const sourceRange = source.scrollHeight - source.clientHeight;
   const targetRange = target.scrollHeight - target.clientHeight;
   if (targetRange <= 0) return 0;
-  if (sourceRange <= 0) return 0;
-  const reference =
-    (Math.min(Math.max(source.scrollTop, 0), sourceRange) * source.scrollHeight) / sourceRange;
+  if (sourceRange <= 0 || source.scrollTop <= 0) return 0;
+  // Scroll offsets can be fractional even when the reported dimensions are rounded.
+  if (sourceRange - source.scrollTop <= 1) return targetRange;
+  const reference = (source.scrollTop * source.scrollHeight) / sourceRange;
   const line = interpolateAnchor(source.anchors, "top", reference);
   const targetReference = interpolateAnchor(target.anchors, "line", line);
   return Math.min(Math.max((targetReference * targetRange) / target.scrollHeight, 0), targetRange);
