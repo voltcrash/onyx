@@ -18,6 +18,82 @@ async function fingerprint(blob: Blob | undefined): Promise<string | undefined> 
     .join("");
 }
 
+function fileMaps(vaults: MergeVault[]) {
+  return vaults.map((vault) => new Map(vault.files.map((file) => [file.path, file.contents])));
+}
+
+async function* compareEntities<T extends NoteMetadata | AttachmentMetadata>(
+  vaults: MergeVault[],
+  maps: Map<string, Blob>[],
+  kind: "notes" | "attachments",
+) {
+  const entities = vaults.map(
+    (vault) => new Map((vault.manifest[kind] as T[]).map((entity) => [entity.id, entity])),
+  );
+  const ids = new Set(entities.flatMap((map) => [...map.keys()]));
+  for (const id of ids) {
+    const [b, l, r] = entities.map((map) => map.get(id));
+    const signatures = await Promise.all(
+      [b, l, r].map(async (entity, index) =>
+        entity
+          ? JSON.stringify([
+              await fingerprint(maps[index]!.get(entity.path)),
+              entity.sourcePath,
+              "title" in entity ? entity.title : undefined,
+              "name" in entity ? [entity.name, entity.type, entity.noteId] : undefined,
+              "pinned" in entity ? entity.pinned : undefined,
+              "deletedAt" in entity ? entity.deletedAt : undefined,
+            ])
+          : undefined,
+      ),
+    );
+    yield { id, l, r, bs: signatures[0], ls: signatures[1], rs: signatures[2] };
+  }
+}
+
+export interface BackupNoteChange {
+  id: string;
+  path: string;
+  localChange: string;
+  remoteChange: string;
+  versions?: { note?: NoteMetadata; markdown?: string }[];
+}
+
+export async function compareBackupNotes(base: MergeVault, local: MergeVault, remote: MergeVault) {
+  const vaults = [base, local, remote];
+  const maps = fileMaps(vaults);
+  const changes: BackupNoteChange[] = [];
+  function describe(base: string | undefined, side: string | undefined) {
+    if (base === side) return side ? "Unchanged" : "Absent";
+    if (!side) return "Deleted";
+    return base ? "Edited" : "Added";
+  }
+  for await (const { id, l, r, bs, ls, rs } of compareEntities<NoteMetadata>(
+    vaults,
+    maps,
+    "notes",
+  )) {
+    if (ls === rs) continue;
+    const versions =
+      ls !== bs && rs !== bs
+        ? await Promise.all(
+            [l, r].map(async (note, index) => ({
+              note,
+              markdown: note ? await maps[index + 1]!.get(note.path)!.text() : undefined,
+            })),
+          )
+        : undefined;
+    changes.push({
+      id,
+      path: noteFilePath((l ?? r)!),
+      localChange: describe(bs, ls),
+      remoteChange: describe(bs, rs),
+      versions,
+    });
+  }
+  return changes;
+}
+
 export async function mergeBackupFiles(
   base: MergeVault,
   local: MergeVault,
@@ -26,9 +102,7 @@ export async function mergeBackupFiles(
 ): Promise<MergeVault> {
   const files: VaultRestoreFile[] = [];
   const manifest: VaultBackupManifest = { version: 1, notes: [], attachments: [], folders: [] };
-  const maps = [base, local, remote].map(
-    (vault) => new Map(vault.files.map((file) => [file.path, file.contents])),
-  );
+  const maps = fileMaps([base, local, remote]);
   const occupied = new Set(
     [...local.manifest.notes, ...remote.manifest.notes].map((note) =>
       noteFilePath(note).toLocaleLowerCase(),
@@ -51,27 +125,11 @@ export async function mergeBackupFiles(
     kind: "notes" | "attachments",
     destination: T[],
   ): Promise<void> {
-    const entities = [base, local, remote].map(
-      (vault) => new Map((vault.manifest[kind] as T[]).map((entity) => [entity.id, entity])),
-    );
-    const ids = new Set(entities.flatMap((map) => [...map.keys()]));
-    for (const id of ids) {
-      const [b, l, r] = entities.map((map) => map.get(id));
-      const signatures = await Promise.all(
-        [b, l, r].map(async (entity, index) =>
-          entity
-            ? JSON.stringify([
-                await fingerprint(maps[index]!.get(entity.path)),
-                entity.sourcePath,
-                "title" in entity ? entity.title : undefined,
-                "name" in entity ? [entity.name, entity.type, entity.noteId] : undefined,
-                "pinned" in entity ? entity.pinned : undefined,
-                "deletedAt" in entity ? entity.deletedAt : undefined,
-              ])
-            : undefined,
-        ),
-      );
-      const [bs, ls, rs] = signatures;
+    for await (const { id, l, r, bs, ls, rs } of compareEntities<T>(
+      [base, local, remote],
+      maps,
+      kind,
+    )) {
       let selected: T | undefined,
         side = 1;
       let conflict = false;

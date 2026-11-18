@@ -1,9 +1,12 @@
+import type { BackupNoteChange } from "#lib/backup-merge.ts";
+
 export interface ConfirmationOptions {
   eyebrow: string;
   title: string;
   message: string;
   confirmLabel: string;
   danger?: boolean;
+  backupPreview?: () => Promise<BackupNoteChange[]>;
   alternatives?: Array<{ label: string; action(): void }>;
 }
 

@@ -105,6 +105,12 @@ export async function createBackupKey(passphrase: string): Promise<BackupKey> {
   unlocked.set(cacheId(encryption), key);
   return { key, encryption };
 }
+export class LockedBackupError extends Error {
+  constructor(readonly encryption: BackupEncryption) {
+    super("This backup is encrypted. Enter its backup passphrase to unlock it.");
+  }
+}
+
 export async function unlockBackupKey(
   encryption: BackupEncryption,
   passphrase?: string,
@@ -112,7 +118,7 @@ export async function unlockBackupKey(
   if (!passphrase) {
     const cached = unlocked.get(cacheId(encryption));
     if (cached) return cached;
-    throw new Error("This backup is encrypted. Enter its backup passphrase to unlock it.");
+    throw new LockedBackupError(encryption);
   }
   const key = await derive(passphrase, encryption);
   const check = await decryptBackupFile(
