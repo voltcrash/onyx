@@ -21,7 +21,7 @@
     "themes:generate": "node scripts/generate-themes.mjs",
     "themes:check": "node scripts/generate-themes.mjs --check",
     "test:unit": "vp test",
-    "test:e2e:install": "playwright install chromium",
+    "test:e2e:install": "playwright install chromium firefox webkit",
     "test:e2e": "playwright test",
     "test": "vp run test:unit && vp run test:e2e"
   },
