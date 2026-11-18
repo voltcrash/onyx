@@ -62,6 +62,7 @@ test("saves a note, edits it offline and restores the exported ZIP in a new vaul
   const vaultTabs = page.getByRole("tablist", { name: /Vaults/ }).getByRole("tab");
   await expect(vaultTabs.nth(1)).toHaveAttribute("aria-selected", "true");
   await expectMarkdown(editor, /^# Welcome to Onyx/);
+  await expect(editor).toBeEnabled();
   await page.locator('input[type="file"][accept^=".zip"]').setInputFiles(archive);
   await expectMarkdown(editor, edited);
   await page.reload();
