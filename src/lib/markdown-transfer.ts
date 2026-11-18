@@ -171,24 +171,16 @@ export async function importMarkdownFiles(
 }
 
 export async function createMarkdownExport(vault: Vault): Promise<MarkdownTransferFile[]> {
-  const snapshot =
-    typeof vault.captureExport === "function" ? await vault.captureExport() : undefined;
-  const [notes, attachments] = snapshot
-    ? [snapshot.notes, snapshot.attachments.map((attachment) => attachment.metadata)]
-    : await Promise.all([vault.listNotes(), vault.listAttachments()]);
+  const { notes, attachments } = await vault.captureExport();
   const records: ExportRecord[] = [];
   const paths = new Set<string>();
 
   for (const note of notes.toReversed()) {
-    const value = snapshot
-      ? snapshot.notes.find((candidate) => candidate.id === note.id)
-      : await vault.getNote(note.id);
-    if (!value) continue;
     const fallback = `${safeName(note.title)}.md`;
     const sourcePath = normalizeExportPath(note.sourcePath, fallback);
     const path = uniquePath(sourcePath, paths);
     records.push({
-      contents: new Blob([value.markdown], { type: "text/markdown;charset=utf-8" }),
+      contents: new Blob([note.markdown], { type: "text/markdown;charset=utf-8" }),
       kind: "note",
       linkSourcePath: note.sourcePath ? sourcePath : path,
       path,
@@ -196,16 +188,12 @@ export async function createMarkdownExport(vault: Vault): Promise<MarkdownTransf
     });
   }
 
-  for (const metadata of attachments) {
-    const attachment = snapshot
-      ? snapshot.attachments.find((candidate) => candidate.metadata.id === metadata.id)
-      : await vault.getAttachment(metadata.id);
-    if (!attachment) continue;
+  for (const { metadata, file } of attachments) {
     const fallback = `attachments/${safeName(metadata.name)}`;
     const sourcePath = normalizeExportPath(metadata.sourcePath, fallback);
     const path = uniquePath(sourcePath, paths);
     records.push({
-      contents: attachment.file,
+      contents: file,
       kind: "attachment",
       linkSourcePath: sourcePath,
       name: metadata.name,

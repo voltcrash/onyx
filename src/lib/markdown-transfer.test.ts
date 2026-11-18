@@ -80,24 +80,29 @@ describe("Markdown archives", () => {
   });
 
   it("rewrites local links when an export path is collision-suffixed", async () => {
-    const notes = [
-      { id: "collision", title: "Collision", sourcePath: "notes/assets/map.png" },
-      { id: "plan", title: "Plan", sourcePath: "notes/plan.md" },
-    ];
-    const attachments = [{ id: "map", name: "map.png", sourcePath: "notes/assets/map.png" }];
     const vault = {
-      listNotes: async () => notes,
-      listAttachments: async () => attachments,
-      getNote: async (id: string) => ({
-        ...notes.find((note) => note.id === id),
-        markdown:
-          id === "plan"
-            ? "![Map](assets/map.png#crop) [Map](assets/map.png?download=1) ![[assets/map.png|Map]]"
-            : "collision",
-      }),
-      getAttachment: async () => ({
-        metadata: attachments[0],
-        file: new Blob(["map"]) as File,
+      captureExport: async () => ({
+        notes: [
+          {
+            id: "collision",
+            title: "Collision",
+            sourcePath: "notes/assets/map.png",
+            markdown: "collision",
+          },
+          {
+            id: "plan",
+            title: "Plan",
+            sourcePath: "notes/plan.md",
+            markdown:
+              "![Map](assets/map.png#crop) [Map](assets/map.png?download=1) ![[assets/map.png|Map]]",
+          },
+        ],
+        attachments: [
+          {
+            metadata: { name: "map.png", sourcePath: "notes/assets/map.png" },
+            file: new Blob(["map"]),
+          },
+        ],
       }),
     } as unknown as Vault;
 
