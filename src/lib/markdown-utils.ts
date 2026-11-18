@@ -159,22 +159,32 @@ export function resolveLocalAttachmentUrl(
   noteSourcePath: string | undefined,
   attachments: LocalAttachmentUrl[],
 ): string | undefined {
+  const attachment = findLocalAttachment(destination, noteSourcePath, attachments);
+  if (!attachment) return;
+  const suffix = destination.match(/[?#].*$/)?.[0] ?? "";
+  return attachment.url + suffix;
+}
+
+export function findLocalAttachment<T extends Pick<LocalAttachmentUrl, "name" | "sourcePath">>(
+  destination: string,
+  noteSourcePath: string | undefined,
+  attachments: T[],
+): T | undefined {
   if (/^(?:[a-z][a-z\d+.-]*:|#|[\\/])/i.test(destination)) return;
   const suffixIndex = destination.search(/[?#]/);
   const path = suffixIndex === -1 ? destination : destination.slice(0, suffixIndex);
-  const suffix = suffixIndex === -1 ? "" : destination.slice(suffixIndex);
   const decodedPath = decodePath(path);
   const resolvedPath = resolveRelativePath(parentPath(noteSourcePath ?? ""), decodedPath);
   if (!resolvedPath) return;
-  const attachment =
+  return (
     attachments.find(
       (candidate) =>
         candidate.sourcePath !== undefined && normalizePath(candidate.sourcePath) === resolvedPath,
     ) ??
     attachments.find(
       (candidate) => candidate.sourcePath === undefined && candidate.name === basename(decodedPath),
-    );
-  return attachment ? `${attachment.url}${suffix}` : undefined;
+    )
+  );
 }
 
 function normalizePath(path: string): string | undefined {

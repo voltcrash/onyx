@@ -1,15 +1,14 @@
 import { createLazyResource } from "./lazy-resource.js";
-import type { NoteFormat } from "./components/note-formats.js";
+import type { CopyableNoteFormat } from "./components/note-formats.js";
 import { outputFileName } from "./output-utils.js";
 
 type MarkdownModule = typeof import("./markdown.js");
 type MarkdownOutputModule = typeof import("./markdown-output.js");
 
-export type CopyableNoteFormat = Exclude<NoteFormat, "pdf">;
-
 export interface NoteSource {
   markdown: string;
   title: string;
+  sourcePath?: string;
 }
 
 export function downloadBlob(blob: Blob, name: string): void {
@@ -65,6 +64,15 @@ export function createNoteOutput(loadMarkdownModule: () => Promise<MarkdownModul
     },
   };
 
+  async function downloadHtml(source: NoteSource, embedImages?: (body: string) => Promise<string>) {
+    const [body, output] = await withRenderers(source);
+    const html = output.createHtmlDocument({
+      title: source.title,
+      body: output.formatHtmlSource(embedImages ? await embedImages(body) : body),
+    });
+    downloadBlob(new Blob([html], { type: "text/html" }), outputFileName(source.title, "html"));
+  }
+
   const downloaders: Record<CopyableNoteFormat, (source: NoteSource) => void | Promise<void>> = {
     markdown: (source) => {
       downloadBlob(
@@ -88,17 +96,11 @@ export function createNoteOutput(loadMarkdownModule: () => Promise<MarkdownModul
         outputFileName(source.title, "rtf"),
       );
     },
-    html: async (source) => {
-      const [body, output] = await withRenderers(source);
-      const html = output.createHtmlDocument({
-        title: source.title,
-        body: output.formatHtmlSource(body),
-      });
-      downloadBlob(new Blob([html], { type: "text/html" }), outputFileName(source.title, "html"));
-    },
+    html: downloadHtml,
   };
 
   return {
+    downloadHtml,
     copy: (source: NoteSource, format: CopyableNoteFormat) => copiers[format](source),
     download: (source: NoteSource, format: CopyableNoteFormat) => downloaders[format](source),
   };

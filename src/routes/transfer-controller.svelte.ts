@@ -1,5 +1,5 @@
 import type { TransferState } from "#lib/components/app-types.ts";
-import type { NoteFormat } from "#lib/components/note-formats.ts";
+import type { CopyableNoteFormat, NoteFormat } from "#lib/components/note-formats.ts";
 import {
   resolveLocalAttachmentUrl,
   titleFromMarkdown,
@@ -34,16 +34,7 @@ interface ControllerHost {
   };
   activeNoteId: string;
   noteTitle: string;
-  noteOutput: {
-    copy: (
-      source: NoteSource,
-      format: import("#lib/note-output.ts").CopyableNoteFormat,
-    ) => Promise<void>;
-    download: (
-      source: NoteSource,
-      format: import("#lib/note-output.ts").CopyableNoteFormat,
-    ) => void | Promise<void>;
-  };
+  noteOutput: ReturnType<typeof import("#lib/note-output.ts").createNoteOutput>;
   selectNote: (id: string) => Promise<void>;
 }
 export function createTransferController(host: ControllerHost) {
@@ -131,9 +122,20 @@ export function createTransferController(host: ControllerHost) {
   }
 
   async function noteSource(id: string): Promise<NoteSource | undefined> {
-    if (id === host.activeNoteId) return { markdown: host.markdown, title: host.noteTitle };
+    if (id === host.activeNoteId)
+      return {
+        markdown: host.markdown,
+        title: host.noteTitle,
+        sourcePath: host.activeNoteSourcePath,
+      };
     const note = await host.vault?.getNote(id);
-    return note && { markdown: note.markdown, title: titleFromMarkdown(note.markdown) };
+    return (
+      note && {
+        markdown: note.markdown,
+        title: titleFromMarkdown(note.markdown),
+        sourcePath: note.sourcePath,
+      }
+    );
   }
 
   async function copyToClipboard(write: () => Promise<void>): Promise<void> {
@@ -146,7 +148,7 @@ export function createTransferController(host: ControllerHost) {
     }
   }
 
-  async function copyNoteAs(id: string, format: Exclude<NoteFormat, "pdf">): Promise<void> {
+  async function copyNoteAs(id: string, format: CopyableNoteFormat): Promise<void> {
     await copyToClipboard(async () => {
       const source = await noteSource(id);
       if (source) await host.noteOutput.copy(source, format);
@@ -160,8 +162,17 @@ export function createTransferController(host: ControllerHost) {
         if (id === host.activeNoteId) await savePdf();
         return;
       }
+      const vault = host.vault;
       const source = await noteSource(id);
-      if (source) await host.noteOutput.download(source, format);
+      if (!source) return;
+      if (format === "html-images" && vault) {
+        const { embedLocalImages } = await import("#lib/embed-local-images.ts");
+        await host.noteOutput.downloadHtml(source, (body) =>
+          embedLocalImages(body, vault, id, source.sourcePath),
+        );
+      } else {
+        await host.noteOutput.download(source, format === "html-images" ? "html" : format);
+      }
     } catch (error) {
       showTransferError(error, "The note could not be exported.");
     }

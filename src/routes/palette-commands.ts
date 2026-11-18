@@ -59,7 +59,11 @@ import type {
   SaveState,
   TransferState,
 } from "#lib/components/app-types.ts";
-import { noteFormats, type NoteFormat } from "#lib/components/note-formats.ts";
+import {
+  noteFormats,
+  type NoteFormat,
+  type CopyableNoteFormat,
+} from "#lib/components/note-formats.ts";
 import type { SettingsSection } from "#lib/components/settings-types.ts";
 import type { ShortcutAction } from "#lib/keyboard-shortcuts.ts";
 import type { ThemePreference } from "#lib/theme.ts";
@@ -134,13 +138,14 @@ export interface PaletteActions {
   resetFonts: () => void;
   resetShortcuts: () => void;
   ensurePersistentStorage: () => Promise<void>;
-  copyNoteAs: (id: string, format: Exclude<NoteFormat, "pdf">) => Promise<void>;
+  copyNoteAs: (id: string, format: CopyableNoteFormat) => Promise<void>;
   exportNoteAs: (id: string, format: NoteFormat) => Promise<void>;
 }
 
 const noteFormatPaletteNames: Record<NoteFormat, string> = {
   markdown: "Markdown",
   html: "HTML",
+  "html-images": "HTML with local images",
   text: "plain text",
   "rich-text": "rich text",
   pdf: "PDF",
@@ -149,6 +154,7 @@ const noteFormatPaletteNames: Record<NoteFormat, string> = {
 const noteFormatPaletteKeywords: Record<NoteFormat, string> = {
   markdown: "markdown md source",
   html: "html web page source",
+  "html-images": "html web page include local images offline",
   text: "plain text txt",
   "rich-text": "rtf rich text formatted word document email paste",
   pdf: "pdf paper print",
@@ -157,6 +163,7 @@ const noteFormatPaletteKeywords: Record<NoteFormat, string> = {
 const noteFormatExportLabels: Record<NoteFormat, string> = {
   markdown: "Download this note as Markdown",
   html: "Download this note as HTML",
+  "html-images": "Download this note as HTML · Include local images",
   text: "Download this note as plain text",
   "rich-text": "Download this note as rich text",
   pdf: "Save this note as a PDF",
@@ -165,6 +172,7 @@ const noteFormatExportLabels: Record<NoteFormat, string> = {
 const noteFormatExportIds: Record<NoteFormat, string> = {
   markdown: "download-markdown",
   html: "download-html",
+  "html-images": "download-html-images",
   text: "download-text",
   "rich-text": "download-rtf",
   pdf: "save-pdf",
@@ -173,6 +181,7 @@ const noteFormatExportIds: Record<NoteFormat, string> = {
 const noteFormatExportIcons: Record<NoteFormat, LucideIcon> = {
   markdown: FileText,
   html: Code2,
+  "html-images": Code2,
   text: Type,
   "rich-text": Pilcrow,
   pdf: Printer,
@@ -183,8 +192,8 @@ function noteTransferCommands(state: PaletteState, actions: PaletteActions): Pal
     const name = noteFormatPaletteNames[format.id];
     const keywords = noteFormatPaletteKeywords[format.id];
     const items: PaletteCommand[] = [];
-    if (format.id !== "pdf" && format.copyable) {
-      const copyFormat = format.id as Exclude<NoteFormat, "pdf">;
+    if (format.copyable) {
+      const copyFormat = format.id;
       items.push({
         id: `copy-${copyFormat}`,
         group: "Transfer",

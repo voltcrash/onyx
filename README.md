@@ -25,7 +25,7 @@ adds private backup and cross-device restore.
 - Copy or export notes as plain text, rich text, generated HTML, or a printed-page PDF. Plain text
   copies to the clipboard or downloads as a text file, rich
   text copies with its formatting or downloads as an RTF document, HTML downloads as a standalone
-  file, and the PDF view prints through the browser's print dialog, where it can be saved as a PDF.
+  file with an **Include local images** option for offline viewing, and the PDF view prints through the browser's print dialog, where it can be saved as a PDF.
 - Choose a light, dark, or system theme. System follows the operating system preference, updates
   when that preference changes, and the selected mode is saved in this browser.
 - Choose from twelve color themes. Ember is the default: Ember, Monochrome, Ocean, Forest,

@@ -27,7 +27,10 @@ test("copies and downloads the Markdown source from the file menu", async ({ pag
 async function useFileMenu(page: Page, submenu: "Export as" | "Copy as", format: string) {
   await page.locator(".file.active").click({ button: "right" });
   await page.getByRole("menuitem", { name: submenu }).hover();
-  await page.getByRole("menu", { name: submenu }).getByRole("menuitem", { name: format }).click();
+  await page
+    .getByRole("menu", { name: submenu })
+    .getByRole("menuitem", { name: format, exact: true })
+    .click();
 }
 
 test("copies and exports a note as plain text from the file menu", async ({ page }) => {
@@ -138,23 +141,30 @@ test("prints a note as PDF from the file menu", async ({ page }) => {
     .toContain("Everything is in order.");
 });
 
-test("imports a Markdown folder and exports its structure and attachments as ZIP", async ({
-  page,
-}) => {
+const mapPng =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNwaPgPAALDAcBv0mA2AAAAAElFTkSuQmCC";
+
+async function importIllustratedNote(page: Page) {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Markdown editor" })).toBeEnabled();
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Import & export", exact: true }).click();
-  await page.locator('input[type="file"][webkitdirectory]').evaluate((element) => {
+  await page.locator('input[type="file"][webkitdirectory]').evaluate((element, mapPng) => {
     const input = element as HTMLInputElement;
     const transfer = new DataTransfer();
     const note = new File(
-      ["# Trip plans\n\nThe walking route is in ![the map](assets/map.png)."],
+      [
+        "# Trip plans\n\nThe walking route is in ![the map](assets/map.png). [Original](assets/map.png)",
+      ],
       "plan.md",
       { type: "text/markdown" },
     );
-    const attachment = new File(["attachment fixture"], "map.png", { type: "image/png" });
+    const attachment = new File(
+      [Uint8Array.from(atob(mapPng), (char) => char.charCodeAt(0))],
+      "map.png",
+      { type: "image/png" },
+    );
     Object.defineProperty(note, "webkitRelativePath", {
       value: "markdown-import/travel/plan.md",
     });
@@ -165,11 +175,52 @@ test("imports a Markdown folder and exports its structure and attachments as ZIP
     transfer.items.add(attachment);
     input.files = transfer.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
-  });
+  }, mapPng);
   await expect(page.getByText("Imported 1 note and 1 attachment.")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Trip plans/ })).toBeVisible();
   await expect(page.locator('.rendered-pane img[alt="the map"]')).toHaveAttribute("src", /^blob:/);
+}
 
+test("downloads an illustrated HTML note that opens in a fresh offline profile", async ({
+  page,
+  browser,
+}, testInfo) => {
+  await importIllustratedNote(page);
+  await page.getByRole("button", { name: "Close settings" }).click();
+
+  const offline = await browser.newContext({ offline: true });
+  try {
+    const reader = await offline.newPage();
+    for (const format of ["HTML", "HTML · Include local images"]) {
+      const pending = page.waitForEvent("download");
+      await useFileMenu(page, "Export as", format);
+      const download = await pending;
+      expect(download.suggestedFilename()).toBe("trip-plans.html");
+      const path = testInfo.outputPath(format + ".html");
+      await download.saveAs(path);
+      await reader.goto(`file://${path}`);
+      await expect(reader.getByRole("link", { name: "Original" })).toHaveAttribute(
+        "href",
+        "assets/map.png",
+      );
+      const map = reader.getByRole("img", { name: "the map" });
+      if (format === "HTML") {
+        await expect(map).toHaveAttribute("src", "assets/map.png");
+      } else {
+        await expect(map).toHaveAttribute("src", `data:image/png;base64,${mapPng}`);
+        await map.evaluate(async (element: HTMLImageElement) => element.decode());
+        await expect(map).toHaveJSProperty("naturalWidth", 1);
+      }
+    }
+  } finally {
+    await offline.close();
+  }
+});
+
+test("imports a Markdown folder and exports its structure and attachments as ZIP", async ({
+  page,
+}) => {
+  await importIllustratedNote(page);
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download ZIP" }).click();
   const download = await downloadPromise;

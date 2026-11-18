@@ -14,7 +14,7 @@
 	import type { PaletteControl, PaletteItem } from './command-palette.svelte';
 	import type { MenuEntry } from './file-context-menu.svelte';
 	import type { GithubState, SaveState, TransferState } from './app-types';
-	import { noteFormats, type NoteFormat } from './note-formats';
+	import { noteFormats, type NoteFormat, type CopyableNoteFormat } from './note-formats';
 
 	interface Props {
     sidebarSort: SidebarSort;
@@ -90,7 +90,7 @@
 		onPurgeFile: (id: string) => void;
 		onEmptyTrash: () => void;
 		onCopyFilePath: (path: string) => void;
-		onCopyFileAs: (id: string, format: Exclude<NoteFormat, 'pdf'>) => void;
+		onCopyFileAs: (id: string, format: CopyableNoteFormat) => void;
 		onExportFileAs: (id: string, format: NoteFormat) => void;
 		onSearch: (value: string) => void;
 		onFindQueryChange: (value: string) => void;
@@ -624,9 +624,9 @@
 		contextAction(() => onExportFileAs(menu.id, format));
 	}
 
-	function contextCopyAs(format: NoteFormat): void {
+	function contextCopyAs(format: CopyableNoteFormat): void {
 		const menu = contextMenu;
-		if (menu?.kind !== 'file' || format === 'pdf') return;
+		if (menu?.kind !== 'file') return;
 		contextAction(() => onCopyFileAs(menu.id, format));
 	}
 
