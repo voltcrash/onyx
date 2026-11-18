@@ -601,7 +601,10 @@ async function rewriteMarkdownLinks(
       exportPath = lookup.attachmentsByName.get(pathKey(basename(resolved)));
     }
     if (!exportPath) return;
-    return `${encodePath(relativePath(exportDirectory, exportPath))}${suffix}`;
+    const relative = encodePath(relativePath(exportDirectory, exportPath))
+      .replaceAll("(", "%28")
+      .replaceAll(")", "%29");
+    return `${relative}${suffix}`;
   };
 
   return mapMarkdownProse(markdown, (prose) => {

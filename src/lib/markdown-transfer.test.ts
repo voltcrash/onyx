@@ -316,6 +316,24 @@ it("assigns attachments to an actual link before falling back to the closest fol
   ]);
 });
 
+it("keeps parentheses escaped in exported Markdown link destinations", async () => {
+  const vault = {
+    captureExport: async () => ({
+      notes: [
+        { id: "plan", title: "Plan", sourcePath: "Plan.md", markdown: "![Map](Map%20%29.png)" },
+      ],
+      attachments: [
+        {
+          metadata: { name: "Map ).png", sourcePath: "Map ).png" },
+          file: new Blob(["map"]),
+        },
+      ],
+    }),
+  } as unknown as Vault;
+  const [plan] = await createMarkdownExport(vault);
+  await expect(plan?.contents.text()).resolves.toBe("![Map](Map%20%29.png)");
+});
+
 it("suffixes a file that collides with a directory while retaining its links", async () => {
   const vault = {
     captureExport: async () => ({
