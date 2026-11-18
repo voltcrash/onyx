@@ -8,7 +8,7 @@ import type {
 } from "#lib/components/app-types.ts";
 import type { SettingsSection } from "#lib/components/settings-types.ts";
 import { suggestedRepositoryName, Vault, type VaultDescriptor } from "#lib/storage/index.ts";
-import type { GithubBackupCommit, GithubUser } from "#lib/github.ts";
+import type { GithubBackupCommit, GithubBackupConflictError, GithubUser } from "#lib/github.ts";
 import { githubTargetKey } from "#lib/storage/types.ts";
 import type { AttachmentMetadata, FolderMetadata, GithubBackupState } from "#lib/storage/types.ts";
 import { goto } from "$app/navigation";
@@ -294,7 +294,12 @@ export function createGithubController(host: ControllerHost) {
 
   async function runBackup(
     configuration: GithubBackupState,
-    options: { replaceNewerBackup?: boolean; mergeNewerBackup?: boolean; automatic?: boolean } = {},
+    options: {
+      replaceNewerBackup?: boolean;
+      mergeNewerBackup?: boolean;
+      reviewedHead?: string;
+      automatic?: boolean;
+    } = {},
   ): Promise<void> {
     if (host.disposed || !host.isOnline || !host.vault || backupState === "backing-up") return;
     const opened = host.vault;
@@ -335,12 +340,12 @@ export function createGithubController(host: ControllerHost) {
         backupCommitUrl = "";
         backupMessage =
           github && error instanceof github.GithubBackupConflictError
-            ? "Automatic backup paused because GitHub has a newer backup. Restore it from Settings → Backup & sync, or back up now to replace it."
+            ? "Automatic backup paused because GitHub has a newer backup. Back up now to review the changes and choose how to continue."
             : `Automatic backup paused: ${error instanceof Error ? error.message : "the GitHub backup failed."} Back up now to try again.`;
         return;
       }
       if (github && error instanceof github.GithubBackupConflictError) {
-        await resolveBackupConflict(configuration);
+        await resolveBackupConflict(configuration, error);
         return;
       }
       showBackupError(error);
@@ -397,7 +402,10 @@ export function createGithubController(host: ControllerHost) {
     }
   }
 
-  async function resolveBackupConflict(configuration: GithubBackupState): Promise<void> {
+  async function resolveBackupConflict(
+    configuration: GithubBackupState,
+    conflict: GithubBackupConflictError,
+  ): Promise<void> {
     const opened = host.vault;
     backupState = "idle";
     backupMessage = "";
@@ -406,6 +414,7 @@ export function createGithubController(host: ControllerHost) {
       eyebrow: "Backup & sync",
       title: "GitHub has a newer backup",
       message: `Another device backed up to ${configuration.owner}/${configuration.repository} after this device last backed up or restored. Merge to combine both devices and preserve conflicts as sibling notes. Restore that backup to bring its notes here, which replaces the notes on this device. Or back up anyway to make this device's notes the latest backup; the other backup stays in the repository history.`,
+      backupPreview: conflict.preview,
       alternatives: [
         {
           label: "Merge (recommended)",
@@ -433,7 +442,10 @@ export function createGithubController(host: ControllerHost) {
     )
       return;
     if (choice === "merge") {
-      await runBackup(configuration, { mergeNewerBackup: true });
+      await runBackup(configuration, {
+        mergeNewerBackup: true,
+        reviewedHead: conflict.remoteCommitSha,
+      });
       return;
     }
     if (choice === "restore") {
@@ -441,12 +453,15 @@ export function createGithubController(host: ControllerHost) {
       return;
     }
     if (replace) {
-      await runBackup(configuration, { replaceNewerBackup: true });
+      await runBackup(configuration, {
+        replaceNewerBackup: true,
+        reviewedHead: conflict.remoteCommitSha,
+      });
       return;
     }
     backupState = "error";
     backupMessage =
-      "Backup paused because GitHub has a newer backup. Restore it from Settings → Backup & sync, or back up again to replace it.";
+      "Backup paused because GitHub has a newer backup. Back up again to review the changes and choose how to continue.";
   }
 
   function showBackupError(error: unknown): void {

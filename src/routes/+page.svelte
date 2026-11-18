@@ -318,6 +318,7 @@
 				message={page.confirmation.message}
 				confirmLabel={page.confirmation.confirmLabel}
 				danger={page.confirmation.danger}
+        backupPreview={page.confirmation.backupPreview}
         alternatives={page.confirmation.alternatives}
 				onConfirm={page.confirmAction}
 				onCancel={page.cancelAction}

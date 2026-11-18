@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { mergeBackupFiles, type MergeVault } from "./backup-merge.ts";
+import { compareBackupNotes, mergeBackupFiles, type MergeVault } from "./backup-merge.ts";
 
 function vault(values: Record<string, string>): MergeVault {
   return {
@@ -168,4 +168,25 @@ it("merges folder edits and deletions against their baseline", async () => {
     ]);
     expect(merged.manifest.folders!.find((folder) => folder.path === "edited")!.pinned).toBe(true);
   }
+});
+
+it("summarizes only differing notes and compares both sides of conflicts", async () => {
+  const base = vault({ edited: "before", removed: "before", same: "before" });
+  const local = vault({ edited: "left", same: "after", new: "" });
+  const remote = vault({ edited: "right", removed: "after", same: "after" });
+  expect(await compareBackupNotes(base, local, remote)).toMatchObject([
+    {
+      path: "edited.md",
+      localChange: "Edited",
+      remoteChange: "Edited",
+      versions: [{ markdown: "left" }, { markdown: "right" }],
+    },
+    {
+      path: "removed.md",
+      localChange: "Deleted",
+      remoteChange: "Edited",
+      versions: [{ note: undefined }, { markdown: "after" }],
+    },
+    { path: "new.md", localChange: "Added", remoteChange: "Absent", versions: undefined },
+  ]);
 });

@@ -5,7 +5,7 @@ import {
   forgetBackupKeys,
   type BackupEncryption,
 } from "./backup-crypto.ts";
-import { mergeBackupFiles, type MergeVault } from "./backup-merge.ts";
+import { compareBackupNotes, mergeBackupFiles, type MergeVault } from "./backup-merge.ts";
 import type {
   GithubBackupState,
   Vault,
@@ -131,9 +131,12 @@ export interface GithubRestoreResult {
 
 /** The backup branch holds an Onyx backup this device has not restored or made. */
 export class GithubBackupConflictError extends Error {
-  constructor(readonly remoteCommitSha: string) {
+  constructor(
+    readonly remoteCommitSha: string,
+    readonly preview: () => ReturnType<typeof compareBackupNotes>,
+  ) {
     super(
-      "GitHub has a newer backup from another device. Restore it first, or back up anyway to replace it with this device's notes.",
+      "GitHub has a newer backup from another device. Review the changes, then choose merge, restore or back up anyway.",
     );
     this.name = "GithubBackupConflictError";
   }
@@ -143,6 +146,7 @@ export interface GithubBackupOptions {
   /** Back up even when the branch moved past this device's last backup or restore. */
   replaceNewerBackup?: boolean;
   mergeNewerBackup?: boolean;
+  reviewedHead?: string;
   onLocalMerge?: () => Promise<void>;
   requestPassphrase?: (encryption: BackupEncryption) => Promise<string | undefined>;
 }
@@ -299,6 +303,7 @@ async function backupVaultToGithubUnlocked(
 
   const prefix = backupState.directory.replace(/^\/+|\/+$/g, "");
   const manifestPath = prefix ? `${prefix}/.onyx.json` : ".onyx.json";
+  const reviewedHeadMatches = !options.reviewedHead || options.reviewedHead === parentSha;
   // Each backup rewrites the manifest from this device's notes, so building on a backup this device
   // has not seen would drop the other device's notes from the next restore.
   if (
@@ -306,33 +311,35 @@ async function backupVaultToGithubUnlocked(
     parentSha !== backupState.lastCommitSha &&
     parentSha !== backupState.pendingCommitSha &&
     remoteBlobs.has(manifestPath) &&
-    !options.replaceNewerBackup
+    (!options.replaceNewerBackup || !reviewedHeadMatches)
   ) {
-    if (options.mergeNewerBackup) {
-      const remote = await readGithubBackup(
-        repositoryPath,
-        backupState.directory,
-        parentSha,
-        options.requestPassphrase,
-      );
+    const remoteSha = parentSha;
+    const readVersions = async (
+      notesOnly: boolean,
+    ): Promise<[MergeVault, MergeVault, MergeVault]> => {
+      const read = (sha: string) =>
+        readGithubBackup(
+          repositoryPath,
+          backupState.directory,
+          sha,
+          notesOnly ? undefined : options.requestPassphrase,
+          notesOnly,
+        );
+      const remote = await read(remoteSha);
       const base = backupState.lastCommitSha
-        ? await readGithubBackup(
-            repositoryPath,
-            backupState.directory,
-            backupState.lastCommitSha,
-            options.requestPassphrase,
-          )
+        ? await read(backupState.lastCommitSha)
         : { manifest: { version: 1 as const, notes: [], attachments: [] }, files: [] };
-      const merged = await mergeBackupFiles(
-        base,
-        {
-          manifest: backupManifest,
-          files: snapshot.changes.flatMap((change) =>
-            change.contents ? [{ path: change.path, contents: change.contents }] : [],
-          ),
-        },
-        remote,
-      );
+      const local = {
+        manifest: backupManifest,
+        files: snapshot.changes.flatMap((change) =>
+          change.contents ? [{ path: change.path, contents: change.contents }] : [],
+        ),
+      };
+      return [base, local, remote];
+    };
+    if (options.mergeNewerBackup && reviewedHeadMatches) {
+      const [base, local, remote] = await readVersions(false);
+      const merged = await mergeBackupFiles(base, local, remote);
       await vault.restoreBackup(merged.files, {
         manifest: merged.manifest,
         preserveTrash: true,
@@ -348,7 +355,9 @@ async function backupVaultToGithubUnlocked(
         { ...options, mergeNewerBackup: false },
       );
     }
-    throw new GithubBackupConflictError(parentSha);
+    throw new GithubBackupConflictError(parentSha, async () =>
+      compareBackupNotes(...(await readVersions(true))),
+    );
   }
   const pendingTree = (
     await mapWithConcurrency(snapshot.changes, GITHUB_FILE_CONCURRENCY, async (change) => {
@@ -1075,6 +1084,7 @@ async function readGithubBackup(
   directory: string,
   commitSha: string,
   requestPassphrase?: GithubBackupOptions["requestPassphrase"],
+  notesOnly = false,
 ): Promise<MergeVault> {
   const commit = await githubRequest<GithubCommitResponse>(
     `${repositoryPath}/git/commits/${commitSha}`,
@@ -1088,13 +1098,15 @@ async function readGithubBackup(
     ? await unlockMergeKey(manifest.encryption, requestPassphrase)
     : undefined;
   const files = await mapWithConcurrency(
-    manifestBlobs(blobs, manifest),
+    manifestBlobs(blobs, notesOnly ? { ...manifest, attachments: [] } : manifest),
     GITHUB_FILE_CONCURRENCY,
     async ([path, sha]) => ({
       path,
       contents: await readBackupFile(repositoryPath, path, sha, encryptionKey),
     }),
   );
+  if (notesOnly && files.length !== manifest.notes.length)
+    throw new Error("A note is missing from the backup.");
   return { manifest, files };
 }
 

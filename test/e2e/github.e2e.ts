@@ -338,6 +338,9 @@ for (const mode of ["overwrite", "merge"] as const)
       releaseMerge = resolve;
     });
     let mergeDownloading = false;
+    let holdMerge = false;
+    let note: { id: string; path: string };
+    const remoteText = "# Remote <script>example</script>";
 
     await mockGithubSession(page);
     await page.route("https://api.github.com/**", async (route) => {
@@ -376,14 +379,24 @@ for (const mode of ["overwrite", "merge"] as const)
           tree: { sha: "base" },
         });
       } else if (url.pathname.endsWith("/git/trees/base")) {
-        await json({ sha: "base", tree: [{ path: "vault/.onyx.json", type: "blob", sha: "m" }] });
+        await json({
+          sha: "base",
+          tree: [
+            { path: "vault/.onyx.json", type: "blob", sha: "m" },
+            { path: "vault/" + note.path, type: "blob", sha: "remote-note" },
+          ],
+        });
       } else if (url.pathname.endsWith("/git/blobs/m")) {
-        mergeDownloading = true;
-        if (mode === "merge") await mergeGate;
+        if (holdMerge) {
+          mergeDownloading = true;
+          await mergeGate;
+        }
         await json({
           encoding: "base64",
-          content: btoa(JSON.stringify({ version: 1, notes: [], attachments: [] })),
+          content: btoa(JSON.stringify({ version: 1, notes: [note], attachments: [] })),
         });
+      } else if (url.pathname.endsWith("/git/blobs/remote-note")) {
+        await json({ encoding: "base64", content: btoa(remoteText) });
       } else if (url.pathname.endsWith("/git/blobs")) {
         await json({ sha: crypto.randomUUID() });
       } else if (url.pathname.endsWith("/git/trees")) {
@@ -403,6 +416,18 @@ for (const mode of ["overwrite", "merge"] as const)
 
     await page.goto("/");
     await expect(page.getByText("@octocat").first()).toBeVisible({ timeout: 12_000 });
+    note = await page.evaluate(async () => {
+      const db = await new Promise<IDBDatabase>((resolve) => {
+        const request = indexedDB.open("onyx-vault");
+        request.onsuccess = () => resolve(request.result);
+      });
+      const notes = await new Promise<Array<{ id: string; path: string }>>((resolve) => {
+        const request = db.transaction("notes").objectStore("notes").getAll();
+        request.onsuccess = () => resolve(request.result);
+      });
+      db.close();
+      return notes[0]!;
+    });
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: "Backup & sync", exact: true }).click();
     await page.getByLabel("Repository", { exact: true }).selectOption("octocat/onyx-vault");
@@ -411,7 +436,10 @@ for (const mode of ["overwrite", "merge"] as const)
 
     await page.getByRole("button", { name: "Back up now" }).click();
     const dialog = page.getByRole("alertdialog", { name: "GitHub has a newer backup" });
-    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText("1 note differs between this device and GitHub")).toBeVisible();
+    await dialog.getByText("Compare versions").click();
+    await expect(dialog.locator("pre").first()).toContainText("# Welcome to Onyx");
+    await expect(dialog.locator("pre").last()).toHaveText(remoteText);
     expect(writes).toEqual([]);
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(
@@ -421,6 +449,8 @@ for (const mode of ["overwrite", "merge"] as const)
 
     await expect(page.locator('[aria-label="Markdown editor"]')).toBeEnabled();
     await page.getByRole("button", { name: "Back up now" }).click();
+    await expect(dialog.getByText("Compare versions")).toBeVisible();
+    holdMerge = mode === "merge";
     await dialog
       .getByRole("button", { name: mode === "merge" ? "Merge (recommended)" : "Back up anyway" })
       .click();

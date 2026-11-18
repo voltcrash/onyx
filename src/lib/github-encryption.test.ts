@@ -1,6 +1,17 @@
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { createBackupKey, encryptBackupFile, forgetBackupKeys } from "./backup-crypto.ts";
-import { backupVaultToGithub, restoreGithubSession, restoreVaultFromGithub } from "./github.ts";
+import {
+  createBackupKey,
+  encryptBackupFile,
+  forgetBackupKeys,
+  LockedBackupError,
+  unlockBackupKey,
+} from "./backup-crypto.ts";
+import {
+  GithubBackupConflictError,
+  backupVaultToGithub,
+  restoreGithubSession,
+  restoreVaultFromGithub,
+} from "./github.ts";
 import type { GithubBackupState, Vault, VaultBackupManifest } from "./storage/index.ts";
 
 vi.mock("./auth-client.js", () => ({
@@ -178,4 +189,20 @@ it("notifies the workspace immediately after local merge and before uploading", 
     backupVaultToGithub(vault, state, { mergeNewerBackup: true, onLocalMerge }),
   ).rejects.toThrow("upload stopped");
   expect(onLocalMerge).toHaveBeenCalledOnce();
+});
+
+it("allows a read-only preview after unlocking the remote and base backups", async () => {
+  const { vault, state, restoreBackup, requests, manifests } = await encryptedFixture();
+  forgetBackupKeys();
+  const conflict = await backupVaultToGithub(vault, state).catch((error: unknown) => error);
+  if (!(conflict instanceof GithubBackupConflictError)) throw new Error("Expected conflict");
+  for (const manifest of manifests) {
+    await expect(conflict.preview()).rejects.toBeInstanceOf(LockedBackupError);
+    await unlockBackupKey(manifest.encryption!, "secret");
+  }
+  await expect(conflict.preview()).resolves.toMatchObject([
+    { id: "remote", remoteChange: "Added" },
+  ]);
+  expect(requests.some((path) => path.endsWith("/git/blobs/plaintext"))).toBe(false);
+  expect(restoreBackup).not.toHaveBeenCalled();
 });

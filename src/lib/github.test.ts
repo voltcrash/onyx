@@ -481,6 +481,7 @@ describe("backupVaultToGithub conflicts", () => {
     lastCommitSha: string | undefined,
     replaceNewerBackup = false,
     mergeNewerBackup = false,
+    reviewedHead?: string,
   ) {
     auth.accessToken = "token";
     class TestFileReader {
@@ -561,7 +562,7 @@ describe("backupVaultToGithub conflicts", () => {
     const result = backupVaultToGithub(
       vault,
       { ...state, lastCommitSha },
-      { replaceNewerBackup, mergeNewerBackup },
+      { replaceNewerBackup, mergeNewerBackup, reviewedHead },
     );
     return { result, writes, acknowledgeBackupOperations, restoreBackup };
   }
@@ -574,6 +575,21 @@ describe("backupVaultToGithub conflicts", () => {
     expect(writes).toEqual([]);
     expect(acknowledgeBackupOperations).not.toHaveBeenCalled();
   });
+
+  it.each(["merge", "overwrite"])(
+    "asks again if GitHub moves after preview before %s",
+    async (action) => {
+      const { result, writes, restoreBackup } = await backUp(
+        undefined,
+        action === "overwrite",
+        action === "merge",
+        "old-head",
+      );
+      await expect(result).rejects.toMatchObject({ remoteCommitSha: remoteSha });
+      expect(writes).toEqual([]);
+      expect(restoreBackup).not.toHaveBeenCalled();
+    },
+  );
 
   it("refuses when this device has never backed up to a branch that has a backup", async () => {
     const { result } = await backUp(undefined);

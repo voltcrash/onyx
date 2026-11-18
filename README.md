@@ -115,9 +115,10 @@ IndexedDB metadata and search index. Current backups contain an Onyx manifest; o
 reconstructed from their `notes/` and `attachments/` paths.
 
 Each device remembers the commit it last backed up or restored. If another device has backed up to
-the branch since then, Onyx does not build on that backup, because each backup's manifest lists
-only the backing-up device's notes. It asks instead: restore the newer backup, which replaces this
-device's notes, or back up anyway, which keeps the other backup in the repository history.
+the branch since then, review the affected notes and compare conflicting versions side by side.
+Choose **Merge (recommended)** to combine changes, **Restore** to replace the local vault from a
+backup commit, or **Back up anyway** to make this device's vault the latest backup. Earlier
+commits remain available in the repository history.
 
 With **Back up automatically** on, Onyx backs up pending changes two minutes after editing stops
 while the device is online. A failed or conflicting automatic backup pauses automatic backups until
@@ -180,7 +181,7 @@ When another device has backed up first, choose **Merge (recommended)** to combi
 changes against the last backed-up or restored commit. Concurrent edits keep the local
 note and add the remote version as a dated conflict sibling. Edits survive deletions;
 unchanged files accept deletions. The union is committed on the remote head without a
-force push. Restore and overwrite remain available.
+force push.
 
 ## Local note history
 
